@@ -1,0 +1,482 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* نظام التصميم الفاخر للوحات الإعلانية - ذهبي وأسود */
+
+@layer base {
+  :root {
+    /* خلفيات أساسية - ألوان فاتحة */
+    --background: 0 0% 98%;
+    --foreground: 0 0% 15%;
+
+    /* البطاقات والعناصر */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 20%;
+
+    /* النوافذ المنبثقة */
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 20%;
+
+    /* الألوان الأساسية - ذهبي مناسب للخلفية الفاتحة */
+    --primary: 45 85% 45%;
+    --primary-foreground: 0 0% 100%;
+    --primary-glow: 45 90% 55%;
+
+    /* الألوان الثانوية */
+    --secondary: 45 40% 90%;
+    --secondary-foreground: 0 0% 20%;
+
+    /* الألوان المكتومة */
+    --muted: 0 0% 95%;
+    --muted-foreground: 0 0% 45%;
+
+    /* ألوان التأكيد */
+    --accent: 45 85% 50%;
+    --accent-foreground: 0 0% 100%;
+
+    /* ألوان التحذير */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* الحدود والمدخلات */
+    --border: 0 0% 88%;
+    --input: 0 0% 92%;
+    --ring: 45 85% 45%;
+
+    --radius: 0.6rem;
+
+    /* Gradients فاتحة */
+    --gradient-primary: linear-gradient(135deg, hsl(45 85% 45%), hsl(45 90% 55%));
+    --gradient-secondary: linear-gradient(135deg, hsl(45 40% 90%), hsl(45 85% 50%));
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 98%), hsl(0 0% 95%));
+    --gradient-luxury: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(45 40% 90%) 50%, hsl(45 85% 50%) 100%);
+    
+    /* ظلال خفيفة */
+    --shadow-gold: 0 6px 20px -3px hsl(45 85% 45% / 0.2);
+    --shadow-luxury: 0 12px 40px -6px hsl(45 85% 45% / 0.25);
+    --shadow-card: 0 4px 15px -3px hsl(0 0% 0% / 0.1);
+    
+    /* انتقالات ناعمة */
+    --transition-luxury: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-glow: all 0.3s ease-in-out;
+
+    /* ألوان الشريط الجانبي */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 30%;
+    --sidebar-primary: 45 85% 45%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 20%;
+    --sidebar-border: 0 0% 88%;
+    --sidebar-ring: 45 85% 45%;
+
+    /* ✅ NEW: ألوان إضافية للعقود */
+    --green: 120 60% 50%;
+    --yellow: 45 90% 60%;
+    --red: 0 80% 60%;
+    --orange: 25 95% 53%;
+    --purple: 270 95% 60%;
+    --blue: 210 95% 60%;
+  }
+
+  .dark {
+    /* خلفيات داكنة */
+    --background: 0 0% 8%;
+    --foreground: 45 93% 80%;
+
+    /* البطاقات والعناصر */
+    --card: 0 0% 12%;
+    --card-foreground: 45 93% 85%;
+
+    /* النوافذ المنبثقة */
+    --popover: 0 0% 10%;
+    --popover-foreground: 45 93% 85%;
+
+    /* الألوان الأساسية - ذهبي فاخر */
+    --primary: 45 93% 58%;
+    --primary-foreground: 0 0% 8%;
+    --primary-glow: 45 100% 68%;
+
+    /* الألوان الثانوية */
+    --secondary: 42 87% 25%;
+    --secondary-foreground: 45 93% 85%;
+
+    /* الألوان المكتومة */
+    --muted: 45 0% 8%;
+    --muted-foreground: 45 30% 65%;
+
+    /* ألوان التأكيد */
+    --accent: 45 93% 58%;
+    --accent-foreground: 0 0% 8%;
+
+    /* ألوان التحذير */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 45 93% 95%;
+
+    /* الحدود والمدخلات */
+    --border: 42 20% 25%;
+    --input: 42 20% 22%;
+    --ring: 45 93% 58%;
+
+    /* Gradients فاخرة */
+    --gradient-primary: linear-gradient(135deg, hsl(45 93% 58%), hsl(45 100% 68%));
+    --gradient-secondary: linear-gradient(135deg, hsl(42 87% 25%), hsl(45 93% 58%));
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 8%), hsl(0 0% 15%));
+    --gradient-luxury: linear-gradient(135deg, hsl(0 0% 8%) 0%, hsl(42 87% 25%) 50%, hsl(45 93% 58%) 100%);
+    
+    /* ظلال فاخرة */
+    --shadow-gold: 0 10px 30px -5px hsl(45 93% 58% / 0.3);
+    --shadow-luxury: 0 20px 60px -10px hsl(45 93% 58% / 0.4);
+    --shadow-card: 0 8px 25px -5px hsl(0 0% 0% / 0.6);
+
+    /* ألوان الشريط الجانبي */
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 45 30% 65%;
+    --sidebar-primary: 45 93% 58%;
+    --sidebar-primary-foreground: 0 0% 8%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 45 93% 85%;
+    --sidebar-border: 42 20% 25%;
+    --sidebar-ring: 45 93% 58%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* تصغير بنسبة 20% */
+    font-size: 80%;
+  }
+
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    /* تصغير بنسبة 20% */
+    font-size: 80%;
+  }
+
+  html {
+    /* تصغير بنسبة 20% */
+    font-size: 80%;
+  }
+}
+
+/* ✅ NEW: إضافة فئات CSS للألوان الجديدة */
+.text-green {
+  color: hsl(var(--green));
+}
+
+.text-yellow {
+  color: hsl(var(--yellow));
+}
+
+.text-red {
+  color: hsl(var(--red));
+}
+
+.text-orange {
+  color: hsl(var(--orange));
+}
+
+.text-purple {
+  color: hsl(var(--purple));
+}
+
+.text-blue {
+  color: hsl(var(--blue));
+}
+
+/* ✅ تحسين النوافذ المنبثقة - نمط فاتح */
+.system-dialog {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(200, 160, 0, 0.3);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15), 0 0 15px rgba(200, 160, 0, 0.1);
+}
+
+.system-dialog-header {
+  background: linear-gradient(135deg, rgba(200, 160, 0, 0.08), rgba(200, 160, 0, 0.04));
+  border-bottom: 1px solid rgba(200, 160, 0, 0.2);
+  padding: 12px 20px;
+  border-radius: 6px 6px 0 0;
+}
+
+.system-dialog-title {
+  color: #B8860B;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: right;
+  direction: rtl;
+}
+
+.system-dialog-content {
+  padding: 20px;
+  color: #333;
+  text-align: right;
+  direction: rtl;
+}
+
+.system-dialog-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid rgba(200, 160, 0, 0.1);
+}
+
+.system-btn-primary {
+  background: linear-gradient(135deg, #B8860B, #DAA520);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.system-btn-primary:hover {
+  background: linear-gradient(135deg, #DAA520, #B8860B);
+  box-shadow: 0 3px 10px rgba(200, 160, 0, 0.3);
+}
+
+.system-btn-secondary {
+  background: rgba(240, 240, 240, 0.9);
+  color: #333;
+  border: 1px solid rgba(200, 160, 0, 0.3);
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.system-btn-secondary:hover {
+  background: rgba(230, 230, 230, 0.9);
+  border-color: rgba(200, 160, 0, 0.5);
+}
+
+/* ✅ تحسين window.confirm - نمط فاتح */
+.custom-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-confirm-dialog {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(200, 160, 0, 0.3);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15), 0 0 15px rgba(200, 160, 0, 0.1);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+/* Expenses Page Styles */
+.expenses-container {
+  @apply space-y-6;
+  direction: rtl;
+}
+
+.expenses-stats-grid {
+  @apply grid grid-cols-1 md:grid-cols-4 gap-4;
+}
+
+.expenses-stat-card {
+  @apply p-6;
+}
+
+.expenses-stat-content {
+  @apply flex items-center justify-between;
+}
+
+.expenses-stat-text {
+  @apply text-sm font-medium text-muted-foreground;
+}
+
+.expenses-stat-value {
+  @apply text-2xl font-bold;
+}
+
+.expenses-stat-icon {
+  @apply h-8 w-8;
+}
+
+.expenses-actions {
+  @apply flex gap-4;
+}
+
+.expenses-action-btn {
+  @apply flex items-center gap-2;
+}
+
+/* Preview Card Styles */
+.expenses-preview-card {
+  @apply border-2 border-primary/30 bg-gradient-to-br from-card to-primary/10 shadow-lg rounded-lg;
+}
+
+.expenses-preview-title {
+  @apply text-xl font-bold text-primary text-center;
+}
+
+.expenses-preview-grid {
+  @apply grid grid-cols-1 md:grid-cols-4 gap-6;
+}
+
+.expenses-preview-item {
+  @apply bg-card/80 backdrop-blur-sm rounded-lg p-4 shadow-md border border-primary/20;
+}
+
+.expenses-preview-label {
+  @apply text-sm font-semibold text-primary mb-2;
+}
+
+.expenses-preview-value {
+  @apply text-2xl font-bold text-foreground;
+}
+
+.expenses-preview-text {
+  @apply text-sm font-medium text-muted-foreground;
+}
+
+.expenses-table-container {
+  @apply overflow-x-auto;
+}
+
+.expenses-contract-number {
+  @apply font-medium;
+}
+
+.expenses-amount-calculated {
+  @apply font-medium text-primary;
+}
+
+.expenses-amount-excluded {
+  @apply text-muted-foreground line-through;
+}
+
+.expenses-actions-cell {
+  @apply flex items-center gap-2;
+}
+
+.expenses-dialog-content {
+  @apply max-w-md;
+}
+
+.expenses-dialog-form {
+  @apply space-y-4;
+}
+
+.expenses-form-label {
+  @apply text-sm font-medium;
+}
+
+.expenses-form-grid {
+  @apply grid grid-cols-2 gap-4;
+}
+
+.expenses-loading {
+  @apply flex items-center justify-center h-64;
+  direction: rtl;
+}
+
+.expenses-loading-spinner {
+  @apply h-6 w-6 animate-spin ml-2;
+}
+
+.expenses-empty-state {
+  @apply text-center text-muted-foreground;
+}
+
+/* Custom Colors for Expenses */
+.stat-blue {
+  @apply text-blue-400;
+}
+
+.stat-green {
+  @apply text-green-400;
+}
+
+.stat-red {
+  @apply text-red-400;
+}
+
+.stat-purple {
+  @apply text-purple-400;
+}
+
+/* ✅ NEW: إضافة فئات CSS للبطاقات والتفاعلات */
+.card-elegant {
+  @apply bg-card border border-border rounded-lg shadow-sm hover:shadow-md transition-shadow;
+}
+
+.card-hover {
+  @apply hover:bg-muted/50 transition-colors;
+}
+
+.btn-primary {
+  @apply bg-primary text-primary-foreground hover:bg-primary/90;
+}
+
+.section-header {
+  @apply text-2xl font-bold text-foreground;
+}
+
+.text-muted {
+  @apply text-muted-foreground;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .expenses-stats-grid {
+    @apply grid-cols-1;
+  }
+  
+  .expenses-preview-grid {
+    @apply grid-cols-2;
+  }
+  
+  .expenses-actions {
+    @apply flex-col;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .expenses-actions,
+  .expenses-dialog-content {
+    @apply hidden;
+  }
+  
+  .expenses-table-container {
+    @apply overflow-visible;
+  }
+}
+
+/* تصغير المسافات والحشوات بنسبة 20% */
+@layer utilities {
+  .container {
+    padding-left: 1.6rem !important;
+    padding-right: 1.6rem !important;
+  }
+}
