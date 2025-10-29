@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { AlertTriangle, Calendar, DollarSign } from 'lucide-react';
+import { AlertTriangle, Calendar, DollarSign, ChevronDown, ChevronUp } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { useNavigate } from 'react-router-dom';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
 interface OverduePayment {
   customerId: string;
@@ -18,6 +19,7 @@ interface OverduePayment {
 export function TopOverduePayments() {
   const [overduePayments, setOverduePayments] = useState<OverduePayment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -106,63 +108,79 @@ export function TopOverduePayments() {
   }
 
   return (
-    <Card className="bg-gradient-to-br from-red-500/10 to-orange-500/5 border-red-500/20">
-      <CardHeader>
-        <CardTitle className="text-red-400 flex items-center gap-2">
-          <AlertTriangle className="h-5 w-5" />
-          أقدم 5 دفعات متأخرة
-        </CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          {overduePayments.map((payment, index) => (
-            <div
-              key={`${payment.customerId}-${payment.contractNumber}`}
-              className="bg-card/50 border border-red-500/30 rounded-lg p-3 hover:bg-card/70 transition-colors cursor-pointer"
-              onClick={() => navigate(`/admin/customer-billing?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`)}
-            >
-              <div className="flex items-start justify-between mb-2">
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
+      <Card className="bg-gradient-to-br from-red-500/10 to-orange-500/5 border-red-500/20">
+        <CollapsibleTrigger className="w-full">
+          <CardHeader className="cursor-pointer hover:bg-red-500/5 transition-colors">
+            <CardTitle className="text-red-400 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5" />
+                <span>أقدم 5 دفعات متأخرة</span>
                 <Badge variant="destructive" className="text-xs">
-                  {index + 1}. متأخر {payment.daysOverdue} يوم
+                  {overduePayments.length}
                 </Badge>
               </div>
-              
-              <div className="space-y-1">
-                <p className="text-sm font-semibold text-foreground truncate">
-                  {payment.customerName}
-                </p>
-                
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  عقد #{payment.contractNumber}
+              {isOpen ? (
+                <ChevronUp className="h-5 w-5" />
+              ) : (
+                <ChevronDown className="h-5 w-5" />
+              )}
+            </CardTitle>
+          </CardHeader>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+              {overduePayments.map((payment, index) => (
+                <div
+                  key={`${payment.customerId}-${payment.contractNumber}`}
+                  className="bg-card/50 border border-red-500/30 rounded-lg p-3 hover:bg-card/70 transition-colors cursor-pointer"
+                  onClick={() => navigate(`/admin/customer-billing?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`)}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <Badge variant="destructive" className="text-xs">
+                      {index + 1}. متأخر {payment.daysOverdue} يوم
+                    </Badge>
+                  </div>
+                  
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground truncate">
+                      {payment.customerName}
+                    </p>
+                    
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Calendar className="h-3 w-3" />
+                      عقد #{payment.contractNumber}
+                    </div>
+                    
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Calendar className="h-3 w-3" />
+                      {new Date(payment.dueDate).toLocaleDateString('ar-LY')}
+                    </div>
+                    
+                    <div className="flex items-center gap-1 font-bold text-red-400 mt-2">
+                      <DollarSign className="h-4 w-4" />
+                      {payment.amount.toLocaleString('ar-LY')} د.ل
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    className="w-full mt-2 text-xs h-7"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/admin/customer-billing?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`);
+                    }}
+                  >
+                    عرض الفواتير
+                  </Button>
                 </div>
-                
-                <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                  <Calendar className="h-3 w-3" />
-                  {new Date(payment.dueDate).toLocaleDateString('ar-LY')}
-                </div>
-                
-                <div className="flex items-center gap-1 font-bold text-red-400 mt-2">
-                  <DollarSign className="h-4 w-4" />
-                  {payment.amount.toLocaleString('ar-LY')} د.ل
-                </div>
-              </div>
-              
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="w-full mt-2 text-xs h-7"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  navigate(`/admin/customer-billing?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`);
-                }}
-              >
-                عرض الفواتير
-              </Button>
+              ))}
             </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Card>
+    </Collapsible>
   );
 }

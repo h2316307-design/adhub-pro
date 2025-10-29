@@ -224,30 +224,56 @@ export function SendOverdueRemindersDialog({
   const loadCustomerPhones = async () => {
     setLoadingPhones(true);
     try {
+      // جلب أرقام الهواتف بناءً على IDs والأسماء
       const customerIds = customerOverdues
         .map(c => c.customerId)
         .filter(id => id !== null) as string[];
 
-      if (customerIds.length === 0) {
-        setCustomersWithPhone([]);
-        return;
+      const customerNames = customerOverdues
+        .filter(c => !c.customerId)
+        .map(c => c.customerName);
+
+      const phoneMap = new Map<string, string>();
+
+      // جلب بناءً على IDs
+      if (customerIds.length > 0) {
+        const { data: customers, error } = await supabase
+          .from('customers')
+          .select('id, name, phone')
+          .in('id', customerIds);
+
+        if (!error && customers) {
+          customers.forEach(c => {
+            if (c.phone) phoneMap.set(c.id, c.phone);
+          });
+        }
       }
 
-      const { data: customers, error } = await supabase
-        .from('customers')
-        .select('id, phone')
-        .in('id', customerIds);
+      // جلب بناءً على الأسماء
+      if (customerNames.length > 0) {
+        const { data: customersByName } = await supabase
+          .from('customers')
+          .select('id, name, phone')
+          .in('name', customerNames);
 
-      if (error) throw error;
-
-      const phoneMap = new Map(customers?.map(c => [c.id, c.phone]) || []);
+        if (customersByName) {
+          customersByName.forEach(c => {
+            if (c.phone) phoneMap.set(c.name, c.phone);
+          });
+        }
+      }
 
       const withPhones = customerOverdues
         .map(c => ({
           ...c,
-          phone: c.customerId ? phoneMap.get(c.customerId) : undefined,
+          phone: c.customerId 
+            ? phoneMap.get(c.customerId) 
+            : phoneMap.get(c.customerName),
         }))
         .filter(c => c.phone && c.phone.trim() !== '');
+
+      console.log('عدد الزبائن المتأخرين:', customerOverdues.length);
+      console.log('عدد الزبائن الذين لديهم أرقام:', withPhones.length);
 
       setCustomersWithPhone(withPhones);
     } catch (error) {

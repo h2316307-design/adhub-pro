@@ -21,8 +21,9 @@ import { useOverduePayments } from '@/hooks/useOverduePayments';
 import { TopOverduePayments } from '@/components/customers/TopOverduePayments';
 import { SendAccountStatementDialog } from '@/components/customers/SendAccountStatementDialog';
 import { SendOverdueRemindersDialog } from '@/components/billing/SendOverdueRemindersDialog';
+import { SendDebtRemindersDialog } from '@/components/billing/SendDebtRemindersDialog';
 import { BulkAccountStatementDialog } from '@/components/customers/BulkAccountStatementDialog';
-import { Mail, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { Mail, FileSpreadsheet, AlertTriangle, DollarSign } from 'lucide-react';
 
 interface PaymentRow {
   id: string;
@@ -81,7 +82,10 @@ function CustomerRow({
   );
 
   const isOverdue = overdueInfo.hasOverdue;
-  const rowClassName = isOverdue 
+  const hasUnpaidDebt = remaining > 0;
+  const isHighlighted = isOverdue || hasUnpaidDebt;
+  
+  const rowClassName = isHighlighted
     ? "hover:bg-destructive/5 transition-colors bg-destructive/10 border-r-4 border-r-destructive" 
     : "hover:bg-card/50 transition-colors";
 
@@ -94,8 +98,8 @@ function CustomerRow({
     <TableRow className={rowClassName}>
       <TableCell className="font-medium">
         <div className="flex items-center gap-2">
-          {isOverdue && <AlertCircle className="h-4 w-4 text-destructive" />}
-          <span className={isOverdue ? "text-destructive font-bold" : ""}>{customer.name}</span>
+          {isHighlighted && <AlertCircle className="h-4 w-4 text-destructive" />}
+          <span className={isHighlighted ? "text-destructive font-bold" : ""}>{customer.name}</span>
           <div className="flex gap-1">
             {customer.isCustomer && (
               <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 text-xs">
@@ -139,6 +143,15 @@ function CustomerRow({
             </div>
             <div className="text-xs text-muted-foreground">
               {overdueInfo.oldestDueDate ? new Date(overdueInfo.oldestDueDate).toLocaleDateString('ar-LY') : ''}
+            </div>
+          </div>
+        ) : hasUnpaidDebt ? (
+          <div className="flex flex-col gap-1">
+            <Badge variant="destructive" className="text-xs bg-orange-500">
+              دين غير مسدد
+            </Badge>
+            <div className="text-xs text-muted-foreground">
+              {remaining.toLocaleString('ar-LY')} د.ل
             </div>
           </div>
         ) : (
@@ -222,6 +235,9 @@ export default function Customers() {
 
   // overdue reminders dialog state
   const [overdueRemindersOpen, setOverdueRemindersOpen] = useState(false);
+  
+  // debt reminders dialog state
+  const [debtRemindersOpen, setDebtRemindersOpen] = useState(false);
   
   // bulk account statement dialog
   const [bulkStatementOpen, setBulkStatementOpen] = useState(false);
@@ -1075,9 +1091,6 @@ export default function Customers() {
           </CardContent>
         </Card>
       </div>
-
-      {/* تنبيه الدفعات المتأخرة */}
-      <OverduePaymentsAlert />
       
       <Card className="bg-gradient-card border-0 shadow-card">
         <CardHeader>
@@ -1096,14 +1109,27 @@ export default function Customers() {
             onFilterStatusChange={setFilterStatus}
           />
           
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-              <Button onClick={() => { setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setEditingCustomerId(null); setNewCustomerOpen(true); }}>إضافة زبون جديد</Button>
+          {/* Action buttons */}
+          <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button onClick={() => { setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setEditingCustomerId(null); setNewCustomerOpen(true); }}>
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة زبون جديد
+              </Button>
               <Button 
                 variant="destructive" 
                 onClick={() => setOverdueRemindersOpen(true)}
               >
-                إرسال تذكيرات المتأخرين
+                <AlertTriangle className="h-4 w-4 ml-2" />
+                تذكيرات المتأخرين
+              </Button>
+              <Button 
+                variant="default"
+                className="bg-orange-600 hover:bg-orange-700"
+                onClick={() => setDebtRemindersOpen(true)}
+              >
+                <DollarSign className="h-4 w-4 ml-2" />
+                تذكيرات الديون
               </Button>
               <Button disabled={syncing} onClick={async () => {
                 try {
@@ -1150,8 +1176,19 @@ export default function Customers() {
                 {syncing ? 'جاري المزامنة...' : 'مزامنة العملاء'}
               </Button>
             </div>
-            <div className="flex items-center text-sm text-muted-foreground">إجمالي المدفوعات: {totalAllPaid.toLocaleString('ar-LY')} د.ل</div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <Button 
+                variant="outline"
+                onClick={() => setBulkStatementOpen(true)}
+              >
+                <FileSpreadsheet className="h-4 w-4 ml-2" />
+                كشوفات جماعية
+              </Button>
+            </div>
           </div>
+          
+          {/* Collapsible Overdue Payments Alert */}
+          <TopOverduePayments />
 
           {/* Add/Edit customer dialog */}
           <Dialog open={newCustomerOpen} onOpenChange={(open) => {
@@ -1904,6 +1941,12 @@ export default function Customers() {
       <SendOverdueRemindersDialog 
         open={overdueRemindersOpen} 
         onOpenChange={setOverdueRemindersOpen} 
+      />
+      
+      {/* Debt Reminders Dialog */}
+      <SendDebtRemindersDialog 
+        open={debtRemindersOpen} 
+        onOpenChange={setDebtRemindersOpen} 
       />
       
       {/* Bulk Account Statement Dialog */}
