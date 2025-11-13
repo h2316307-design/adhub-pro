@@ -120,23 +120,73 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
         return;
       }
 
-      // جلب التصاميم من design_data لكل لوحة
-      const getDesignsForBillboard = (billboardId: number) => {
-        if (!designData || !Array.isArray(designData)) return { faceA: null, faceB: null };
-        const design = designData.find((d: any) => Number(d.billboardId) === billboardId);
-        return {
-          faceA: design?.faceA || null,
-          faceB: design?.faceB || null
-        };
+      // جلب التصاميم من design_data أو مباشرة من اللوحة أو من taskItems
+      const getDesignsForBillboard = async (billboardId: number) => {
+        // أولاً: محاولة الحصول على التصاميم من taskItems (من task_designs table)
+        const taskItem = taskItems.find(item => item.billboard_id === billboardId);
+        if (taskItem) {
+          // إذا كان هناك selected_design_id، جلب التصميم من task_designs
+          if (taskItem.selected_design_id) {
+            try {
+              const { data: selectedDesign } = await supabase
+                .from('task_designs')
+                .select('design_face_a_url, design_face_b_url')
+                .eq('id', taskItem.selected_design_id)
+                .single();
+              
+              if (selectedDesign) {
+                return {
+                  faceA: selectedDesign.design_face_a_url || null,
+                  faceB: selectedDesign.design_face_b_url || null
+                };
+              }
+            } catch (error) {
+              console.warn('Failed to load design from task_designs:', error);
+            }
+          }
+          
+          // إذا كان في taskItem تصاميم مباشرة
+          if (taskItem.design_face_a || taskItem.design_face_b) {
+            return {
+              faceA: taskItem.design_face_a || null,
+              faceB: taskItem.design_face_b || null
+            };
+          }
+        }
+
+        // ثانياً: محاولة الحصول من اللوحة نفسها
+        const billboard = billboards.find((b: any) => (b.ID || b.id) === billboardId);
+        if (billboard?.design_face_a || billboard?.design_face_b) {
+          return {
+            faceA: billboard.design_face_a || null,
+            faceB: billboard.design_face_b || null
+          };
+        }
+
+        // ثالثاً: محاولة الحصول من design_data (من العقد)
+        if (designData && Array.isArray(designData)) {
+          const design = designData.find((d: any) => Number(d.billboardId) === billboardId);
+          if (design) {
+            return {
+              faceA: design?.faceA || null,
+              faceB: design?.faceB || null
+            };
+          }
+        }
+
+        return { faceA: null, faceB: null };
       };
 
-      const hasAnyDesigns = sortedBillboards.some((b: any) => {
+      // Check if any billboard has designs (async check)
+      let hasAnyDesigns = false;
+      for (const b of sortedBillboards) {
         const billboardId = b.ID || b.id;
-        const taskItem = taskItems.find(item => item.billboard_id === billboardId);
-        const designs = getDesignsForBillboard(billboardId);
-        return designs.faceA || designs.faceB || b.design_face_a || b.design_face_b || 
-               taskItem?.design_face_a || taskItem?.design_face_b;
-      });
+        const designs = await getDesignsForBillboard(billboardId);
+        if (designs.faceA || designs.faceB || b.design_face_a || b.design_face_b) {
+          hasAnyDesigns = true;
+          break;
+        }
+      }
       const imageHeight = includeDesigns && hasAnyDesigns ? '80mm' : '140mm';
       
       const pagesHtml = await Promise.all(
@@ -144,30 +194,31 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
           const billboardId = billboard.ID || billboard.id;
           const name = billboard.Billboard_Name || billboard.name || `لوحة ${billboardId}`;
           
-          // ✅ استخدام صورة اللوحة بعد التركيب أو بعد الإزالة إذا كانت متوفرة
+          // جلب taskItem للحصول على صور التركيب
           const taskItem = taskItems.find(item => item.billboard_id === billboardId);
-          const installedImage = taskItem?.installed_image_url;
-          const removedImage = taskItem?.removed_image_url;
+          const installedImageFaceA = taskItem?.installed_image_face_a_url;
+          const installedImageFaceB = taskItem?.installed_image_face_b_url;
           
-          // في حالة الإزالة: إذا توفرت installed_image_url (صورة التركيب) استخدمها كصورة للوحة، وإلا استخدم الصورة الأصلية
-          // في حالة التركيب: إذا توفرت installed_image_url استخدمها، وإلا استخدم الصورة الأصلية
-          const image = printMode === 'removal' 
-            ? (installedImage || billboard.Image_URL || billboard.image || '')
-            : (installedImage || billboard.Image_URL || billboard.image || '');
+          // منطق اختيار الصورة:
+          // 1. إذا كانت هناك صورة تركيب للوجه الأمامي فقط، تظهر بدل صورة اللوحة الأصلية
+          // 2. إذا كانت هناك صورتان (أمامي وخلفي)، يتم عرضهما بجانب بعض فوق التصاميم
+          const mainImage = installedImageFaceA && !installedImageFaceB 
+            ? installedImageFaceA 
+            : (billboard.Image_URL || billboard.image || '');
           
           const municipality = billboard.Municipality || billboard.municipality || '';
           const district = billboard.District || billboard.district || '';
           const landmark = billboard.Nearest_Landmark || billboard.nearest_landmark || '';
           const size = billboard.Size || billboard.size || '';
-          // ✅ جلب الإحداثيات من GPS_Coordinates فقط
+          const facesCount = billboard.Faces_Count || billboard.faces_count || 1;
+          
           const coords = billboard.GPS_Coordinates || '';
-          // ✅ إنشاء رابط خرائط جوجل (حتى لو كان فارغاً)
           const mapLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : 'https://www.google.com/maps?q=';
 
-          // جلب تصاميم اللوحة من design_data أو من taskItem أو من اللوحة مباشرة
-          const designs = getDesignsForBillboard(billboardId);
-          const billboardDesignA = taskItem?.design_face_a || billboard.design_face_a || designs.faceA;
-          const billboardDesignB = taskItem?.design_face_b || billboard.design_face_b || designs.faceB;
+          // جلب تصاميم اللوحة من جميع المصادر
+          const designs = await getDesignsForBillboard(billboardId);
+          const billboardDesignA = designs.faceA;
+          const billboardDesignB = designs.faceB;
 
           let qrCodeDataURL = '';
           if (mapLink) {
@@ -185,17 +236,10 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
             <div class="page">
               <div class="background"></div>
 
-              <!-- رقم العقد -->
+              <!-- رقم العقد ونوع الإعلان معاً -->
               <div class="absolute-field contract-number" style="top: 39.869mm;right: 22mm;">
-                عقد رقم: ${contractNumber}
+                عقد رقم: ${contractNumber}${adType ? ' - نوع الإعلان: ' + adType : ''}
               </div>
-
-              <!-- نوع الإعلان -->
-              ${adType ? `
-                <div class="absolute-field ad-type" style="top: 40mm;right: 46mm;">
-                  نوع الإعلان: ${adType}
-                </div>
-              ` : ''}
 
               <!-- اسم اللوحة -->
               <div class="absolute-field billboard-name" style="top: 55.588mm;left: 15.5%;transform: translateX(-50%);width: 120mm;text-align: center;">
@@ -203,8 +247,13 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
               </div>
 
               <!-- المقاس -->
-              <div class="absolute-field size" style="top: 52mm;left: 63%;transform: translateX(-50%);width: 80mm;text-align: center;">
+              <div class="absolute-field size" style="top: 51mm;left: 63%;transform: translateX(-50%);width: 80mm;text-align: center;">
                 ${size}
+              </div>
+              
+              <!-- عدد الأوجه تحت المقاس -->
+              <div class="absolute-field faces-count" style="top: 63mm;left: 64%;transform: translateX(-50%);width: 80mm;text-align: center;font-size: 12px;color: #000;">
+                ${facesCount} ${facesCount === 1 ? 'وجه' : 'أوجه'}
               </div>
 
               <!-- النوع (عميل/فريق تركيب) -->
@@ -214,10 +263,27 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
                 </div>
               ` : ''}
 
-              <!-- صورة اللوحة (حجم متغير حسب التصاميم) -->
-              ${image ? `
+              <!-- صورة اللوحة أو صور التركيب للوجهين -->
+              ${installedImageFaceA && installedImageFaceB ? `
+                <!-- عرض صورتي التركيب بجانب بعض -->
+                <div class="absolute-field" style="top: 88mm; left: 50%; transform: translateX(-50%); width: 180mm; display: flex; gap: 5mm;">
+                  <div style="flex: 1; text-align: center;">
+                    <div style="font-size: 12px; font-weight: 600; color: #000; margin-bottom: 3mm;">التركيب - الوجه الأمامي</div>
+                    <div style="height: ${imageHeight}; overflow: hidden; border: 2px solid #000; border-radius: 8px;">
+                      <img src="${installedImageFaceA}" alt="التركيب - الوجه الأمامي" style="width: 100%; height: 100%; object-fit: contain;" />
+                    </div>
+                  </div>
+                  <div style="flex: 1; text-align: center;">
+                    <div style="font-size: 12px; font-weight: 600; color: #000; margin-bottom: 3mm;">التركيب - الوجه الخلفي</div>
+                    <div style="height: ${imageHeight}; overflow: hidden; border: 2px solid #000; border-radius: 8px;">
+                      <img src="${installedImageFaceB}" alt="التركيب - الوجه الخلفي" style="width: 100%; height: 100%; object-fit: contain;" />
+                    </div>
+                  </div>
+                </div>
+              ` : mainImage ? `
+                <!-- عرض الصورة الواحدة (صورة أصلية أو صورة تركيب وجه أمامي) -->
                 <div class="absolute-field image-container" style="top: 90mm; left: 50%; transform: translateX(-50%); width: 120mm; height: ${imageHeight};">
-                  <img src="${image}" alt="صورة اللوحة" class="billboard-image" />
+                  <img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />
                 </div>
               ` : ''}
 
@@ -238,19 +304,19 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
                 </div>
               ` : ''}
 
-              <!-- التصاميم -->
+              <!-- التصاميم (فقط) - لا تعرض صور التركيب هنا إذا كانت معروضة أعلاه -->
               ${includeDesigns && hasDesigns ? `
-                <div class="absolute-field designs-section" style="top: 180mm; left: 20mm; width: 170mm; display: flex; gap: 10mm;">
+                <div class="absolute-field designs-section" style="top: 178mm; left: 16mm; width: 178mm; display: flex; gap: 10mm;">
                   ${billboardDesignA ? `
                     <div class="design-item">
-                      <div class="design-label">الوجه الأمامي</div>
-                      <img src="${billboardDesignA}" alt="الوجه الأمامي" class="design-image" />
+                      <div class="design-label">التصميم - الوجه الأمامي</div>
+                      <img src="${billboardDesignA}" alt="التصميم - الوجه الأمامي" class="design-image" />
                     </div>
                   ` : ''}
                   ${billboardDesignB ? `
                     <div class="design-item">
-                      <div class="design-label">الوجه الخلفي</div>
-                      <img src="${billboardDesignB}" alt="الوجه الخلفي" class="design-image" />
+                      <div class="design-label">التصميم - الوجه الخلفي</div>
+                      <img src="${billboardDesignB}" alt="التصميم - الوجه الخلفي" class="design-image" />
                     </div>
                   ` : ''}
                 </div>
@@ -400,10 +466,31 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
 
             .design-image {
               width: 100%;
-              max-height: 60mm;
+              max-height: 42mm;
               object-fit: contain;
               border: 1px solid #ddd;
               border-radius: 4px;
+            }
+            
+            .installed-image-label {
+              font-family: 'Doran', Arial, sans-serif;
+              font-size: 11px;
+              font-weight: 600;
+              margin-bottom: 3px;
+              color: #000;
+              background: rgba(0, 0, 0, 0.05);
+              padding: 2px 6px;
+              border-radius: 3px;
+            }
+            
+            .installed-image {
+              width: 100%;
+              max-height: 35mm;
+              object-fit: contain;
+              border: 2px solid #000;
+              border-radius: 4px;
+              margin-bottom: 4mm;
+              background: rgba(0, 0, 0, 0.02);
             }
 
             @page {
@@ -612,7 +699,7 @@ ${image ? `
     left: 0;
     right: 0;
     width: min(650px, 95vw);
-    height: ${imageHeight === '80mm' ? '350px' : '650px'};
+    height: ${imageHeight === '85mm' ? '350px' : '650px'};
     margin: 0 auto;
     overflow: hidden;
     background: rgba(255,255,255,0.95);
@@ -656,13 +743,13 @@ ${image ? `
                 ${billboardDesignA ? `
                   <div style="flex: 1; min-width: 260px; text-align: center;">
                     <div style="font-family: 'Doran', Arial, sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 15px; color: #111; text-shadow: 0 1px 2px rgba(255,255,255,0.8);">الوجه الأمامي</div>
-                    <img src="${billboardDesignA}" alt="الوجه الأمامي" style="width: 100%; max-height: 226px; object-fit: contain; border: 3px solid #ccc; border-radius: 6px; background: white;" crossorigin="anonymous" />
+                    <img src="${billboardDesignA}" alt="الوجه الأمامي" style="width: 100%; max-height: 159px; object-fit: contain; border: 3px solid #ccc; border-radius: 6px; background: white;" crossorigin="anonymous" />
                   </div>
                 ` : ''}
                 ${billboardDesignB ? `
                   <div style="flex: 1; min-width: 260px; text-align: center;">
                     <div style="font-family: 'Doran', Arial, sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 15px; color: #111; text-shadow: 0 1px 2px rgba(255,255,255,0.8);">الوجه الخلفي</div>
-                    <img src="${billboardDesignB}" alt="الوجه الخلفي" style="width: 100%; max-height: 226px; object-fit: contain; border: 3px solid #ccc; border-radius: 6px; background: white;" crossorigin="anonymous" />
+                    <img src="${billboardDesignB}" alt="الوجه الخلفي" style="width: 100%; max-height: 159px; object-fit: contain; border: 3px solid #ccc; border-radius: 6px; background: white;" crossorigin="anonymous" />
                   </div>
                 ` : ''}
               </div>

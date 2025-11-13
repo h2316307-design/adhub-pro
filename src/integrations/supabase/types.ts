@@ -1246,8 +1246,11 @@ export type Database = {
           design_face_b: string | null
           id: string
           installation_date: string | null
+          installed_image_face_a_url: string | null
+          installed_image_face_b_url: string | null
           installed_image_url: string | null
           notes: string | null
+          selected_design_id: string | null
           status: string
           task_id: string
         }
@@ -1259,8 +1262,11 @@ export type Database = {
           design_face_b?: string | null
           id?: string
           installation_date?: string | null
+          installed_image_face_a_url?: string | null
+          installed_image_face_b_url?: string | null
           installed_image_url?: string | null
           notes?: string | null
+          selected_design_id?: string | null
           status?: string
           task_id: string
         }
@@ -1272,8 +1278,11 @@ export type Database = {
           design_face_b?: string | null
           id?: string
           installation_date?: string | null
+          installed_image_face_a_url?: string | null
+          installed_image_face_b_url?: string | null
           installed_image_url?: string | null
           notes?: string | null
+          selected_design_id?: string | null
           status?: string
           task_id?: string
         }
@@ -1291,6 +1300,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "billboards"
             referencedColumns: ["ID"]
+          },
+          {
+            foreignKeyName: "installation_task_items_selected_design_id_fkey"
+            columns: ["selected_design_id"]
+            isOneToOne: false
+            referencedRelation: "task_designs"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "installation_task_items_task_fk"
@@ -3153,6 +3169,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      task_designs: {
+        Row: {
+          created_at: string
+          design_face_a_url: string
+          design_face_b_url: string | null
+          design_name: string
+          design_order: number | null
+          id: string
+          task_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          design_face_a_url: string
+          design_face_b_url?: string | null
+          design_name: string
+          design_order?: number | null
+          id?: string
+          task_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          design_face_a_url?: string
+          design_face_b_url?: string | null
+          design_name?: string
+          design_order?: number | null
+          id?: string
+          task_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_designs_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "installation_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       tasks: {
         Row: {
