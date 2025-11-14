@@ -173,6 +173,7 @@ export function TaskCard({ task, onEdit, onDelete, onUpdate }: TaskCardProps) {
       <TaskCompletionDialog
         open={completionDialogOpen}
         onOpenChange={setCompletionDialogOpen}
+        selectedCount={1}
         onComplete={(result, notes, reason) => {
           onUpdate({
             status: result === 'completed' ? 'completed' : 'cancelled',

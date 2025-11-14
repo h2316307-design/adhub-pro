@@ -27,20 +27,12 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
   taskItems = [],
   printMode = 'installation' // ✅ NEW: القيمة الافتراضية تركيب
 }) => {
-  const [open, setOpen] = useState(false);
   const [includeDesigns, setIncludeDesigns] = useState(true);
   const [printType, setPrintType] = useState<'client' | 'installation'>('client');
   const [installationTeams, setInstallationTeams] = useState<any[]>([]);
   const [selectedTeam, setSelectedTeam] = useState<string>('all');
   const [adType, setAdType] = useState<string>('');
   const [isDownloading, setIsDownloading] = useState(false);
-
-  // فتح Dialog تلقائياً عند توفر البيانات
-  useEffect(() => {
-    if (billboards && billboards.length > 0) {
-      setOpen(true);
-    }
-  }, [billboards]);
 
   // جلب فرق التركيب ونوع الإعلان من العقد
   useEffect(() => {
@@ -558,8 +550,7 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
       }, 1000);
 
       const teamName = selectedTeam !== 'all' ? installationTeams.find(t => t.id === selectedTeam)?.team_name : '';
-      toast.success(`تم تحضير ${sortedBillboards.length} صفحة للط    عة ${printType === 'installation' ? `(فريق التركيب${teamName ? ': ' + teamName : ''})` : '(العميل)'}`);
-      setOpen(false);
+      toast.success(`تم تحضير ${sortedBillboards.length} صفحة للطباعة ${printType === 'installation' ? `(فريق التركيب${teamName ? ': ' + teamName : ''})` : '(العميل)'}`);
     } catch (error) {
       console.error('Print error:', error);
       toast.error('حدث خطأ أثناء الطباعة');
@@ -699,7 +690,7 @@ ${image ? `
     left: 0;
     right: 0;
     width: min(650px, 95vw);
-    height: ${imageHeight === '85mm' ? '350px' : '650px'};
+    height: ${imageHeight === '80mm' ? '350px' : '650px'};
     margin: 0 auto;
     overflow: hidden;
     background: rgba(255,255,255,0.95);
@@ -807,7 +798,6 @@ ${image ? `
       
       const teamName = selectedTeam !== 'all' ? installationTeams.find(t => t.id === selectedTeam)?.team_name : '';
       toast.success(`تم تحميل ${sortedBillboards.length} صفحة كملف PDF ${printType === 'installation' ? `(فريق التركيب${teamName ? ': ' + teamName : ''})` : '(العميل)'}`);
-      setOpen(false);
     } catch (error) {
       console.error('Download PDF error:', error);
       toast.error('حدث خطأ أثناء تحميل PDF');
@@ -817,11 +807,9 @@ ${image ? `
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="bg-background border-border">
-        <DialogHeader>
-          <DialogTitle className="text-primary">خيارات طباعة اللوحات</DialogTitle>
-        </DialogHeader>
+    <div className="space-y-4">
+      <div>
+        <h3 className="text-xl font-bold text-primary mb-4">خيارات طباعة اللوحات</h3>
 
         <div className="space-y-4 py-4">
           <p className="text-sm text-muted-foreground">
@@ -966,9 +954,6 @@ ${image ? `
           </div>
 
           <div className="flex justify-end gap-2 pt-4 flex-wrap">
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              إلغاء
-            </Button>
             <SendBillboardPDFWhatsApp
               contractNumber={contractNumber}
               customerPhone={customerPhone}
@@ -1007,7 +992,7 @@ ${image ? `
             </Button>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 };

@@ -77,6 +77,87 @@ export type Database = {
         }
         Relationships: []
       }
+      billboard_history: {
+        Row: {
+          ad_type: string | null
+          billboard_id: number
+          billboard_rent_price: number | null
+          contract_number: number | null
+          created_at: string | null
+          customer_name: string | null
+          design_face_a_url: string | null
+          design_face_b_url: string | null
+          design_name: string | null
+          discount_amount: number | null
+          discount_percentage: number | null
+          duration_days: number | null
+          end_date: string | null
+          id: string
+          installation_cost: number | null
+          installation_date: string | null
+          installed_image_face_a_url: string | null
+          installed_image_face_b_url: string | null
+          notes: string | null
+          rent_amount: number | null
+          start_date: string | null
+          team_name: string | null
+          total_before_discount: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          ad_type?: string | null
+          billboard_id: number
+          billboard_rent_price?: number | null
+          contract_number?: number | null
+          created_at?: string | null
+          customer_name?: string | null
+          design_face_a_url?: string | null
+          design_face_b_url?: string | null
+          design_name?: string | null
+          discount_amount?: number | null
+          discount_percentage?: number | null
+          duration_days?: number | null
+          end_date?: string | null
+          id?: string
+          installation_cost?: number | null
+          installation_date?: string | null
+          installed_image_face_a_url?: string | null
+          installed_image_face_b_url?: string | null
+          notes?: string | null
+          rent_amount?: number | null
+          start_date?: string | null
+          team_name?: string | null
+          total_before_discount?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          ad_type?: string | null
+          billboard_id?: number
+          billboard_rent_price?: number | null
+          contract_number?: number | null
+          created_at?: string | null
+          customer_name?: string | null
+          design_face_a_url?: string | null
+          design_face_b_url?: string | null
+          design_name?: string | null
+          discount_amount?: number | null
+          discount_percentage?: number | null
+          duration_days?: number | null
+          end_date?: string | null
+          id?: string
+          installation_cost?: number | null
+          installation_date?: string | null
+          installed_image_face_a_url?: string | null
+          installed_image_face_b_url?: string | null
+          notes?: string | null
+          rent_amount?: number | null
+          start_date?: string | null
+          team_name?: string | null
+          total_before_discount?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       billboard_levels: {
         Row: {
           created_at: string | null
@@ -3607,6 +3688,7 @@ export type Database = {
         Returns: boolean
       }
       is_admin: { Args: never; Returns: boolean }
+      round: { Args: { digits: number; val: number }; Returns: number }
       safe_delete_billboard: {
         Args: { input_billboard_id: number }
         Returns: boolean

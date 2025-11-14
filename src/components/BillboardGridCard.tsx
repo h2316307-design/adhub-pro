@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { BillboardImage } from './BillboardImage';
+import { BillboardHistoryDialog } from './billboards/BillboardHistoryDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -35,6 +37,88 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   showBookingActions = true
 }) => {
   const { isAdmin } = useAuth();
+  const [installationStatusOpen, setInstallationStatusOpen] = useState(false);
+  const [latestTask, setLatestTask] = useState<any>(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+
+  console.log('🔍 BillboardGridCard - isAdmin:', isAdmin, 'Billboard:', billboard.Billboard_Name);
+
+  useEffect(() => {
+    const loadTaskData = async () => {
+      if (!billboard.ID) {
+        console.warn('Billboard ID is missing');
+        return;
+      }
+      
+      setLoadingTask(true);
+      try {
+        console.log('🔍 Loading task for billboard ID:', billboard.ID);
+        
+        // First get the task item
+        const { data: taskItem, error: taskError } = await supabase
+          .from('installation_task_items')
+          .select('*')
+          .eq('billboard_id', billboard.ID)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        
+        if (taskError) {
+          console.error('❌ Supabase error loading task:', taskError);
+          return;
+        }
+        
+        if (!taskItem) {
+          console.log('⚠️ No task data found for billboard:', billboard.ID);
+          setLatestTask(null);
+          return;
+        }
+
+        // Get the design if selected_design_id exists
+        let designData = null;
+        if (taskItem.selected_design_id) {
+          const { data: design } = await supabase
+            .from('task_designs')
+            .select('*')
+            .eq('id', taskItem.selected_design_id)
+            .single();
+          designData = design;
+        }
+
+        // Get the task details
+        let taskDetails = null;
+        if (taskItem.task_id) {
+          const { data: task } = await supabase
+            .from('installation_tasks')
+            .select(`
+              *,
+              team:installation_teams(*)
+            `)
+            .eq('id', taskItem.task_id)
+            .single();
+          taskDetails = task;
+        }
+
+        const enrichedTask = {
+          ...taskItem,
+          selected_design: designData,
+          task: taskDetails
+        };
+
+        console.log('✅ Task data loaded successfully for billboard', billboard.ID, ':', enrichedTask);
+        setLatestTask(enrichedTask);
+      } catch (error) {
+        console.error('❌ Error loading task:', error);
+      } finally {
+        setLoadingTask(false);
+      }
+    };
+    
+    if (isAdmin && billboard.ID) {
+      loadTaskData();
+    }
+  }, [billboard.ID, isAdmin]);
   
   // استخدام بيانات العقد المرتبط أو البيانات المباشرة في اللوحة
   const contractInfo = billboard.contract;
@@ -217,7 +301,8 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   );
 
   return (
-    <Card className="overflow-hidden rounded-2xl bg-card border-border shadow-lg hover:shadow-xl transition-all duration-300">
+    <>
+      <Card className="overflow-hidden rounded-2xl bg-card border-border shadow-lg hover:shadow-xl transition-all duration-300">
       <div className="relative">
         {/* صورة اللوحة */}
         <div className="aspect-video bg-muted relative overflow-hidden">
@@ -460,6 +545,181 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             </div>
           )}
 
+          {/* قسم حالة التركيب في الواقع */}
+          {isAdmin && (
+            <Collapsible open={installationStatusOpen} onOpenChange={setInstallationStatusOpen} className="mt-4">
+              <CollapsibleTrigger className="flex items-center justify-between w-full p-3 bg-muted/50 rounded-lg hover:bg-muted transition-colors">
+                <div className="flex items-center gap-2">
+                  <Camera className="h-4 w-4" />
+                  <span className="font-semibold text-sm">حالة التركيب في الواقع</span>
+                </div>
+                {installationStatusOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="mt-3 space-y-4 p-3 bg-background rounded-lg border">
+                  {loadingTask ? (
+                    <div className="text-center py-4 text-sm text-muted-foreground">جاري التحميل...</div>
+                  ) : latestTask ? (
+                    <>
+                      {/* حالة ومعلومات المهمة */}
+                      <div className="space-y-3 pb-3 border-b">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">حالة التركيب:</span>
+                          {latestTask.status === 'completed' ? (
+                            <Badge className="bg-green-500 hover:bg-green-600">
+                              <CheckCircle2 className="h-3 w-3 ml-1" />
+                              مكتمل
+                            </Badge>
+                          ) : (
+                            <Badge variant="secondary">
+                              <XCircle className="h-3 w-3 ml-1" />
+                              معلق
+                            </Badge>
+                          )}
+                        </div>
+
+                        {latestTask.installation_date && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">تاريخ التركيب:</span>
+                            <span className="font-medium">{formatGregorianDate(latestTask.installation_date)}</span>
+                          </div>
+                        )}
+
+                        {latestTask.task?.team?.team_name && (
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">الفريق:</span>
+                            <Badge variant="outline">{latestTask.task.team.team_name}</Badge>
+                          </div>
+                        )}
+
+                        {latestTask.notes && (
+                          <div className="text-sm">
+                            <span className="text-muted-foreground block mb-1">ملاحظات:</span>
+                            <p className="text-xs p-2 bg-muted/50 rounded">{latestTask.notes}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* التصاميم المختارة */}
+                      {(latestTask.selected_design || latestTask.design_face_a || latestTask.design_face_b) && (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-semibold text-sm">التصاميم المختارة</h4>
+                            {latestTask.selected_design?.design_name && (
+                              <Badge variant="secondary" className="text-xs">
+                                {latestTask.selected_design.design_name}
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            {(latestTask.design_face_a || latestTask.selected_design?.design_face_a_url) && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground font-medium">الوجه الأمامي</p>
+                                <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-primary/20 shadow-sm">
+                                  <img 
+                                    src={latestTask.design_face_a || latestTask.selected_design?.design_face_a_url} 
+                                    alt="التصميم الأمامي" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.src = "/placeholder.svg";
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {(latestTask.design_face_b || latestTask.selected_design?.design_face_b_url) && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
+                                <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-primary/20 shadow-sm">
+                                  <img 
+                                    src={latestTask.design_face_b || latestTask.selected_design?.design_face_b_url} 
+                                    alt="التصميم الخلفي" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.src = "/placeholder.svg";
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* صور التركيب الفعلية */}
+                      {(latestTask.installed_image_face_a_url || latestTask.installed_image_face_b_url) && (
+                        <div className="space-y-2 pt-3 border-t">
+                          <h4 className="font-semibold text-sm flex items-center gap-2">
+                            <Camera className="h-4 w-4 text-green-500" />
+                            صور التركيب الفعلية
+                          </h4>
+                          <div className="grid grid-cols-2 gap-2">
+                            {latestTask.installed_image_face_a_url && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground font-medium">الوجه الأمامي</p>
+                                <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-green-500/30 shadow-sm">
+                                  <img 
+                                    src={latestTask.installed_image_face_a_url} 
+                                    alt="صورة التركيب الأمامي" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.src = "/placeholder.svg";
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                            {latestTask.installed_image_face_b_url && (
+                              <div className="space-y-1">
+                                <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
+                                <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-green-500/30 shadow-sm">
+                                  <img 
+                                    src={latestTask.installed_image_face_b_url} 
+                                    alt="صورة التركيب الخلفي" 
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      const target = e.target as HTMLImageElement;
+                                      target.src = "/placeholder.svg";
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <XCircle className="h-12 w-12 text-muted-foreground/50 mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground font-medium">لا توجد بيانات تركيب</p>
+                      <p className="text-xs text-muted-foreground mt-1">لم يتم إضافة هذه اللوحة إلى أي مهمة تركيب</p>
+                    </div>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </Collapsible>
+          )}
+
+          {/* زر تاريخ اللوحة - أسفل قسم التركيب */}
+          {isAdmin && (
+            <div className="mt-3">
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setHistoryOpen(true)}
+                className="w-full"
+              >
+                <History className="h-4 w-4 ml-2" />
+                عرض تاريخ اللوحة الكامل
+              </Button>
+            </div>
+          )}
+
           {/* أزرار الإجراءات */}
           {showBookingActions && (
             <div className="flex gap-2">
@@ -494,31 +754,30 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               >
                 <Eye className="h-4 w-4" />
               </Button>
-
-              {/* ✅ زر إعادة التصوير */}
-              <Button 
-                size="sm" 
-                variant={needsRephotography ? "destructive" : "outline"}
-                onClick={handleMarkForRephotography}
-                title={needsRephotography ? "إزالة من قائمة إعادة التصوير" : "إضافة لقائمة إعادة التصوير"}
-              >
-                <Camera className="h-4 w-4" />
-              </Button>
             </div>
           )}
         </CardContent>
       </div>
-
-      {/* Image Preview Dialog */}
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-4xl p-0">
-          <BillboardImage 
-            billboard={billboard} 
-            alt={billboard.Billboard_Name} 
-            className="w-full h-auto object-contain" 
-          />
-        </DialogContent>
-      </Dialog>
     </Card>
+
+    {/* Image Preview Dialog */}
+    <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+      <DialogContent className="max-w-4xl p-0">
+        <BillboardImage 
+          billboard={billboard} 
+          alt={billboard.Billboard_Name} 
+          className="w-full h-auto object-contain" 
+        />
+      </DialogContent>
+    </Dialog>
+
+    {/* Dialog تاريخ اللوحة */}
+    <BillboardHistoryDialog
+      open={historyOpen}
+      onOpenChange={setHistoryOpen}
+      billboardId={billboard.ID}
+      billboardName={billboard.Billboard_Name || `لوحة #${billboard.ID}`}
+    />
+  </>
   );
 };

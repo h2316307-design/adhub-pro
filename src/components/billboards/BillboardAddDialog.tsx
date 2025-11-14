@@ -198,6 +198,84 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       }
     }
     
+    // ✅ Resolve size_id from database (sizes table), with robust fallbacks
+    let sizeId: number | null = null;
+    if (Size) {
+      try {
+        const raw = String(Size).trim();
+        const normalize = (s: string) => s.toLowerCase().replace(/\s+/g, '').replace(/[×\*]/g, 'x');
+        const norm = normalize(raw);
+        const m = norm.match(/^(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/);
+        const variants = new Set<string>([norm, raw]);
+        if (m) {
+          const a = m[1];
+          const b = m[2];
+          variants.add(`${a}x${b}`);
+          variants.add(`${b}x${a}`);
+          variants.add(`${a}*${b}`);
+          variants.add(`${b}*${a}`);
+        }
+
+        // 1) Try sizes table by exact/variant name
+        const { data: sizesByName, error: sizesByNameErr } = await supabase
+          .from('sizes')
+          .select('id, name')
+          .in('name', Array.from(variants));
+
+        if (!sizesByNameErr && sizesByName && sizesByName.length > 0) {
+          sizeId = Number(sizesByName[0].id);
+          console.log('✅ size_id resolved from sizes.name:', { sizeId, matched: sizesByName[0].name });
+        }
+
+        // 2) If still null and we have numbers, try width/height match (both orientations)
+        if (!sizeId && m) {
+          const a = Number(m[1]);
+          const b = Number(m[2]);
+          const { data: sizesByDim } = await supabase
+            .from('sizes')
+            .select('id, name, width, height')
+            .or(`and(width.eq.${a},height.eq.${b}),and(width.eq.${b},height.eq.${a})`);
+          if (sizesByDim && sizesByDim.length > 0) {
+            sizeId = Number(sizesByDim[0].id);
+            console.log('✅ size_id resolved from sizes dimensions:', { sizeId, match: sizesByDim[0] });
+          }
+        }
+
+        // 3) Fallback: try installation_print_pricing.size -> size_id
+        if (!sizeId) {
+          const { data: pricingByName } = await supabase
+            .from('installation_print_pricing')
+            .select('size_id, size')
+            .in('size', Array.from(variants));
+          const rowWithId = pricingByName?.find((r: any) => r.size_id);
+          if (rowWithId) {
+            sizeId = Number(rowWithId.size_id);
+            console.log('✅ size_id resolved from installation_print_pricing:', rowWithId);
+          }
+        }
+
+        // 4) Last resort: look at existing billboards with same Size text
+        if (!sizeId) {
+          const { data: bbMatch } = await supabase
+            .from('billboards')
+            .select('size_id')
+            .eq('Size', raw)
+            .not('size_id', 'is', null)
+            .limit(1);
+          if (bbMatch && bbMatch.length > 0) {
+            sizeId = Number(bbMatch[0].size_id);
+            console.log('✅ size_id copied from existing billboard record:', sizeId);
+          }
+        }
+
+        if (!sizeId) {
+          console.warn('⚠️ size_id could not be resolved for Size:', raw);
+        }
+      } catch (e) {
+        console.error('❌ Exception resolving size_id:', e);
+      }
+    }
+
     const payload: any = {
       ID: Number(ID),
       Billboard_Name,
@@ -208,6 +286,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       GPS_Coordinates: GPS_Coordinates || null,
       Faces_Count: Faces_Count ? parseInt(String(Faces_Count)) : null,
       Size,
+      size_id: sizeId, // ✅ سيتم حفظه بشكل صحيح
       Level,
       Image_URL,
       image_name: finalImageName,
@@ -219,7 +298,10 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       capital_remaining: Number(capital_remaining)||Number(capital)||0
     };
 
-    console.log('🔧 Add billboard payload:', payload);
+    console.log('🔧 Add billboard payload with size_id:', {
+      ...payload,
+      size_id_check: sizeId ? '✅ موجود' : '❌ غير موجود'
+    });
     
     try {
       const { error } = await supabase.from('billboards').insert(payload).select().single();

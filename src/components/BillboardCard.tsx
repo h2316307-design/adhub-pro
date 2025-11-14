@@ -1,13 +1,15 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, History, CheckCircle2, XCircle } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { BillboardHistoryDialog } from './billboards/BillboardHistoryDialog';
 
 interface BillboardGridCardProps {
   billboard: Billboard & {
@@ -32,6 +34,101 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   showBookingActions = true
 }) => {
   const { isAdmin } = useAuth();
+  
+  // State للأقسام المطوية
+  const [designsOpen, setDesignsOpen] = useState(false);
+  const [installationOpen, setInstallationOpen] = useState(false);
+  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  
+  // State للبيانات
+  const [latestTask, setLatestTask] = useState<any>(null);
+  const [latestHistory, setLatestHistory] = useState<any>(null);
+  const [loadingTask, setLoadingTask] = useState(false);
+  
+  // جلب آخر مهمة تركيب وآخر سجل تاريخي للوحة
+  useEffect(() => {
+    const loadBillboardData = async () => {
+      if (!billboard.ID) {
+        console.warn('Billboard ID is missing');
+        return;
+      }
+      
+      setLoadingTask(true);
+      try {
+        console.log('🔍 Loading task for billboard ID:', billboard.ID);
+        
+        // جلب آخر مهمة تركيب
+        const { data: taskData, error: taskError } = await supabase
+          .from('installation_task_items' as any)
+          .select(`
+            id,
+            billboard_id,
+            task_id,
+            status,
+            selected_design_id,
+            design_face_a,
+            design_face_b,
+            installation_date,
+            completed_at,
+            notes,
+            installed_image_face_a_url,
+            installed_image_face_b_url,
+            created_at,
+            task:installation_tasks(
+              id,
+              status,
+              created_at,
+              team_id,
+              contract_id,
+              team:installation_teams(
+                id,
+                team_name
+              )
+            ),
+            selected_design:task_designs(
+              id,
+              design_name,
+              design_face_a_url,
+              design_face_b_url
+            )
+          `)
+          .eq('billboard_id', billboard.ID)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (taskError) {
+          console.error('❌ Supabase error loading task:', taskError);
+        } else if (taskData) {
+          console.log('✅ Task data loaded successfully for billboard', billboard.ID, ':', taskData);
+          setLatestTask(taskData);
+        } else {
+          console.log('⚠️ No task data found for billboard:', billboard.ID);
+        }
+        
+        // جلب آخر سجل تاريخي
+        const { data: historyData } = await supabase
+          .from('billboard_history' as any)
+          .select('*')
+          .eq('billboard_id', billboard.ID)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+          
+        if (historyData) {
+          setLatestHistory(historyData);
+        }
+      } catch (error) {
+        console.error('❌ Error loading billboard data:', error);
+      } finally {
+        setLoadingTask(false);
+      }
+    };
+
+    if (billboard.ID) {
+      loadBillboardData();
+    }
+  }, [billboard.ID]);
   
   // استخدام بيانات العقد المرتبط أو البيانات المباشرة في اللوحة
   const contractInfo = billboard.contract;
@@ -154,6 +251,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   const needsRephotography = (billboard as any).needs_rephotography || false;
 
   return (
+    <>
     <Card className="overflow-hidden rounded-2xl bg-gradient-card border-0 shadow-card hover:shadow-luxury transition-smooth">
       <div className="relative">
         {/* صورة اللوحة */}
@@ -365,13 +463,267 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             </div>
           )}
 
+          {/* أقسام قابلة للطي: التصاميم وصور التركيب */}
+          <div className="space-y-2 mb-4">
+            {/* قسم التصاميم */}
+            {(latestTask?.selected_design || latestTask?.design_face_a || latestTask?.design_face_b || latestHistory?.design_face_a_url || latestHistory?.design_face_b_url || (billboard as any).design_face_a || (billboard as any).design_face_b) && (
+              <Collapsible open={designsOpen} onOpenChange={setDesignsOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between text-sm border-border hover:bg-accent"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Camera className="h-4 w-4" />
+                      التصاميم المحفوظة
+                      {latestTask?.selected_design?.design_name && (
+                        <Badge variant="secondary" className="text-xs">
+                          {latestTask.selected_design.design_name}
+                        </Badge>
+                      )}
+                    </span>
+                    {designsOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-2">
+                  {/* التصاميم من آخر مهمة تركيب */}
+                  {latestTask?.selected_design && (
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold text-muted-foreground mb-2">
+                        التصميم المحدد: {latestTask.selected_design.design_name}
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        {latestTask.selected_design.design_face_a_url && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-muted-foreground">الوجه الأمامي (A)</div>
+                            <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-primary/30">
+                              <img 
+                                src={latestTask.selected_design.design_face_a_url} 
+                                alt="تصميم الوجه الأمامي" 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => window.open(latestTask.selected_design.design_face_a_url, '_blank')}
+                              />
+                            </div>
+                          </div>
+                        )}
+                        {latestTask.selected_design.design_face_b_url && (
+                          <div className="space-y-1">
+                            <div className="text-xs text-muted-foreground">الوجه الخلفي (B)</div>
+                            <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-primary/30">
+                              <img 
+                                src={latestTask.selected_design.design_face_b_url} 
+                                alt="تصميم الوجه الخلفي" 
+                                className="w-full h-full object-cover cursor-pointer hover:scale-105 transition-transform"
+                                onClick={() => window.open(latestTask.selected_design.design_face_b_url, '_blank')}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* التصاميم القديمة من الـ task items */}
+                  {(latestTask?.design_face_a || latestTask?.design_face_b) && (
+                    <div className="pt-2 border-t space-y-2">
+                      <div className="text-xs font-semibold text-muted-foreground">تصاميم سابقة</div>
+                      {latestTask.design_face_a && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">تصميم الوجه الأمامي (A)</div>
+                          <a
+                            href={latestTask.design_face_a}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                      {latestTask.design_face_b && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">تصميم الوجه الخلفي (B)</div>
+                          <a
+                            href={latestTask.design_face_b}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* التصاميم من السجل التاريخي */}
+                  {(latestHistory?.design_face_a_url || latestHistory?.design_face_b_url) && !latestTask && (
+                    <div className="space-y-2">
+                      {latestHistory.design_face_a_url && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">تصميم الوجه الأمامي (A)</div>
+                          <a
+                            href={latestHistory.design_face_a_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                      {latestHistory.design_face_b_url && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">تصميم الوجه الخلفي (B)</div>
+                          <a
+                            href={latestHistory.design_face_b_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* التصاميم من بيانات اللوحة مباشرة (fallback) */}
+                  {!latestTask && !latestHistory && ((billboard as any).design_face_a || (billboard as any).design_face_b) && (
+                    <div className="space-y-2">
+                      {(billboard as any).design_face_a && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">تصميم الوجه الأمامي (A)</div>
+                          <a
+                            href={(billboard as any).design_face_a}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                      {(billboard as any).design_face_b && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1">تصميم الوجه الخلفي (B)</div>
+                          <a
+                            href={(billboard as any).design_face_b}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+
+            {/* قسم صور التركيب */}
+            {(latestTask || latestHistory) && (
+              <Collapsible open={installationOpen} onOpenChange={setInstallationOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between text-sm border-border hover:bg-accent"
+                  >
+                    <span className="flex items-center gap-2">
+                      <CheckCircle2 className={`h-4 w-4 ${
+                        (latestTask?.status === 'completed' || latestHistory?.installation_status === 'completed') 
+                          ? 'text-green-500' 
+                          : 'text-amber-500'
+                      }`} />
+                      صور التركيب
+                      {(latestTask?.status === 'completed' || latestHistory?.installation_status === 'completed') 
+                        ? ' (مكتمل)' 
+                        : ' (قيد التنفيذ)'}
+                    </span>
+                    {installationOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-2 space-y-2">
+                  {(latestTask?.status === 'completed' || latestHistory?.installation_status === 'completed') ? (
+                    <>
+                      {(latestHistory?.installed_image_face_a || latestTask?.installed_image_face_a_url) && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            صورة الوجه الأمامي بعد التركيب
+                          </div>
+                          <a
+                            href={latestHistory?.installed_image_face_a || latestTask?.installed_image_face_a_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                      {(latestHistory?.installed_image_face_b || latestTask?.installed_image_face_b_url) && (
+                        <div className="p-2 bg-muted/30 rounded border border-border">
+                          <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-green-500" />
+                            صورة الوجه الخلفي بعد التركيب
+                          </div>
+                          <a
+                            href={latestHistory?.installed_image_face_b || latestTask?.installed_image_face_b_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-primary hover:underline flex items-center gap-1"
+                          >
+                            <Eye className="h-3 w-3" />
+                            معاينة
+                          </a>
+                        </div>
+                      )}
+                      {(latestHistory?.installation_date || latestTask?.installation_date) && (
+                        <div className="text-xs text-muted-foreground flex items-center gap-1 p-2">
+                          <Calendar className="h-3 w-3" />
+                          تاريخ التركيب: {formatGregorianDate(latestHistory?.installation_date || latestTask?.installation_date)}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="p-2 text-sm text-amber-600 flex items-center gap-1">
+                      <XCircle className="h-4 w-4" />
+                      لم يتم إكمال التركيب بعد
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            )}
+          </div>
+
+          {/* زر عرض تاريخ اللوحة - متاح للجميع */}
+          <Button
+            onClick={() => setHistoryDialogOpen(true)}
+            variant="outline"
+            size="sm"
+            className="w-full mb-4 border-primary text-primary hover:bg-primary/10"
+          >
+            <History className="ml-2 h-4 w-4" />
+            عرض تاريخ اللوحة
+          </Button>
+
           {/* أزرار الإجراءات */}
           {showBookingActions && (
             <div className="space-y-2">
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 <Button
                   size="sm"
-                  className="flex-1"
+                  className="flex-1 min-w-[100px]"
                   variant={isAvailable ? "default" : "secondary"}
                   onClick={() => onBooking?.(billboard)}
                 >
@@ -393,24 +745,48 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                   size="sm" 
                   variant="outline"
                   onClick={() => onViewDetails?.(billboard)}
+                  title="عرض التفاصيل"
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
 
-                {/* ✅ زر إعادة التصوير للمدير - دائماً ظاهر */}
-                <Button 
-                  size="sm" 
-                  variant={needsRephotography ? "destructive" : "outline"}
-                  onClick={handleMarkForRephotography}
-                  title={needsRephotography ? "إزالة من قائمة إعادة التصوير" : "إضافة لقائمة إعادة التصوير"}
-                >
-                  <Camera className="h-4 w-4" />
-                </Button>
+                {/* ✅ زر إعادة التصوير */}
+                {isAdmin && (
+                  <Button 
+                    size="sm" 
+                    variant={needsRephotography ? "destructive" : "outline"}
+                    onClick={handleMarkForRephotography}
+                    title={needsRephotography ? "إزالة من قائمة إعادة التصوير" : "إضافة لقائمة إعادة التصوير"}
+                  >
+                    <Camera className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
+              
+              {/* ✅ زر تاريخ اللوحة - صف منفصل وواضح */}
+              <Button 
+                size="sm" 
+                variant="outline"
+                onClick={() => setHistoryDialogOpen(true)}
+                className="w-full border-primary/50 text-primary hover:bg-primary/10 hover:border-primary"
+                title="عرض تاريخ عقود اللوحة"
+              >
+                <History className="ml-2 h-4 w-4" />
+                عرض تاريخ اللوحة
+              </Button>
             </div>
           )}
         </CardContent>
       </div>
     </Card>
+
+    {/* نافذة تاريخ اللوحة */}
+    <BillboardHistoryDialog
+      open={historyDialogOpen}
+      onOpenChange={setHistoryDialogOpen}
+      billboardId={billboard.ID}
+      billboardName={billboard.Billboard_Name || `لوحة ${billboard.ID}`}
+    />
+    </>
   );
 };
