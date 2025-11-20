@@ -1,0 +1,5 @@
+project_id = "atqjaiebixuzomrfwilu"
+
+# Security: Require JWT authentication for WhatsApp service
+[functions.whatsapp-service]
+verify_jwt = true
