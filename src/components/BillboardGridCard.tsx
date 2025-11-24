@@ -349,6 +349,16 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               </Badge>
             </div>
           )}
+
+          {/* اسم الشركة الصديقة */}
+          {(billboard as any).friend_companies?.name && (
+            <div className="absolute bottom-3 left-3">
+              <Badge variant="outline" className="bg-secondary/90 text-secondary-foreground border-secondary">
+                <Building className="h-3 w-3 mr-1" />
+                {(billboard as any).friend_companies.name}
+              </Badge>
+            </div>
+          )}
         </div>
 
         <CardContent className="p-4">
@@ -413,6 +423,15 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                     <input type="checkbox" checked readOnly className="accent-primary w-4 h-4" />
                     <span>مشتركة</span>
                   </label>
+                </div>
+              )}
+              
+              {(billboard as any).friend_companies?.name && (
+                <div className="flex justify-between items-center">
+                  <span className="text-muted-foreground">الشركة الصديقة:</span>
+                  <Badge variant="outline" className="text-xs font-medium">
+                    {(billboard as any).friend_companies.name}
+                  </Badge>
                 </div>
               )}
             </div>

@@ -37,6 +37,11 @@ interface InstallationTask {
   team_id: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   created_at: string;
+  print_task_id?: string | null;
+  cutout_task_id?: string | null;
+  print_tasks?: { id: string; status: string } | null;
+  cutout_tasks?: { id: string; status: string } | null;
+  installation_teams?: { team_name: string };
 }
 
 interface InstallationTaskItem {
@@ -292,7 +297,11 @@ export default function InstallationTasks() {
       
       const { data: allTasks, error } = await supabase
         .from('installation_tasks')
-        .select('*')
+        .select(`
+          *,
+          print_tasks!installation_tasks_print_task_id_fkey(id, status),
+          cutout_tasks!installation_tasks_cutout_task_id_fkey(id, status)
+        `)
         .gte('created_at', oct2025.toISOString())
         .order('created_at', { ascending: false });
       
@@ -300,7 +309,7 @@ export default function InstallationTasks() {
       
       console.log(`📋 Loaded ${allTasks?.length || 0} installation tasks`);
       
-      return allTasks as InstallationTask[];
+      return allTasks as any[];
     },
   });
 
@@ -713,6 +722,47 @@ export default function InstallationTasks() {
     },
   });
 
+  // Uncomplete task item (التراجع عن إكمال لوحة)
+  const uncompleteItemMutation = useMutation({
+    mutationFn: async ({ itemId, taskId }: { itemId: string; taskId: string }) => {
+      // Update the item to pending
+      const { error: itemError } = await supabase
+        .from('installation_task_items')
+        .update({ 
+          status: 'pending',
+          installation_date: null 
+        })
+        .eq('id', itemId);
+
+      if (itemError) throw itemError;
+
+      // Check if any items are still pending
+      const { data: items } = await supabase
+        .from('installation_task_items')
+        .select('status')
+        .eq('task_id', taskId);
+
+      const hasPending = items?.some(i => i.status === 'pending');
+
+      // Update task status if needed
+      if (hasPending) {
+        await supabase
+          .from('installation_tasks')
+          .update({ status: 'in_progress' })
+          .eq('id', taskId);
+      }
+    },
+    onSuccess: () => {
+      toast.success('تم التراجع عن إكمال اللوحة بنجاح');
+      refetchTaskItems();
+      refetchTasks();
+    },
+    onError: (error) => {
+      console.error('Error uncompleting item:', error);
+      toast.error('فشل في التراجع عن إكمال اللوحة');
+    }
+  });
+
   // Delete task mutation
   const deleteTaskMutation = useMutation({
     mutationFn: async (taskId: string) => {
@@ -1025,18 +1075,141 @@ export default function InstallationTasks() {
                                       طباعة
                                     </Button>
                                     <Button
-                                      variant="outline"
+                                      variant="destructive"
                                       size="sm"
-                                      className="bg-primary/10"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedTaskForPrint(task.id);
-                                        setCreatePrintTaskDialogOpen(true);
+                                        if (window.confirm('هل أنت متأكد من حذف مهمة التركيب؟ سيتم حذف جميع البيانات المرتبطة بها.')) {
+                                          deleteTaskMutation.mutate(task.id);
+                                        }
                                       }}
                                     >
-                                      <Printer className="h-4 w-4 mr-2" />
-                                      إنشاء مهمة طباعة
+                                      <Trash2 className="h-4 w-4 mr-2" />
+                                      حذف
                                     </Button>
+                                    
+                                    {/* أزرار مهام الطباعة والمجسمات */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      {/* مهمة الطباعة */}
+                                      {task.print_tasks ? (
+                                        <Badge 
+                                          variant={
+                                            task.print_tasks.status === 'completed' ? 'default' : 
+                                            task.print_tasks.status === 'in_progress' ? 'secondary' : 
+                                            'destructive'
+                                          }
+                                          className={`cursor-pointer ${
+                                            task.print_tasks.status === 'completed' ? 'bg-green-500 hover:bg-green-600' : 
+                                            task.print_tasks.status === 'in_progress' ? 'bg-orange-500 hover:bg-orange-600' : 
+                                            'bg-red-500 hover:bg-red-600'
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.location.href = '/admin/print-tasks';
+                                          }}
+                                        >
+                                          <Printer className="h-3 w-3 ml-1" />
+                                          طباعة ({
+                                            task.print_tasks.status === 'completed' ? 'مكتملة' : 
+                                            task.print_tasks.status === 'in_progress' ? 'قيد التنفيذ' : 
+                                            'معلقة'
+                                          })
+                                        </Badge>
+                                      ) : null}
+
+                                      {/* مهمة المجسمات */}
+                                      {task.cutout_tasks ? (
+                                        <Badge 
+                                          variant={
+                                            task.cutout_tasks.status === 'completed' ? 'default' : 
+                                            task.cutout_tasks.status === 'in_progress' ? 'secondary' : 
+                                            'destructive'
+                                          }
+                                          className={`cursor-pointer ${
+                                            task.cutout_tasks.status === 'completed' ? 'bg-green-500 hover:bg-green-600' : 
+                                            task.cutout_tasks.status === 'in_progress' ? 'bg-orange-500 hover:bg-orange-600' : 
+                                            'bg-red-500 hover:bg-red-600'
+                                          }`}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            window.location.href = '/admin/cutout-tasks';
+                                          }}
+                                        >
+                                          <Package className="h-3 w-3 ml-1" />
+                                          مجسمات ({
+                                            task.cutout_tasks.status === 'completed' ? 'مكتملة' : 
+                                            task.cutout_tasks.status === 'in_progress' ? 'قيد التنفيذ' : 
+                                            'معلقة'
+                                          })
+                                        </Badge>
+                                      ) : null}
+                                      
+                                      {/* زر إنشاء مهام جديد */}
+                                      {!task.print_tasks && !task.cutout_tasks && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="bg-primary/10"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setSelectedTaskForPrint(task.id);
+                                            setCreatePrintTaskDialogOpen(true);
+                                          }}
+                                        >
+                                          <Printer className="h-4 w-4 mr-2" />
+                                          إنشاء مهام
+                                        </Button>
+                                      )}
+                                      
+                                      {/* زر حذف مهمة الطباعة */}
+                                      {task.print_task_id && (
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          className="border-red-500 text-red-500 hover:bg-red-50"
+                                          onClick={async (e) => {
+                                            e.stopPropagation();
+                                            if (confirm('هل أنت متأكد من حذف مهمة الطباعة؟')) {
+                                              try {
+                                                // Delete print task items first
+                                                const { error: itemsError } = await supabase
+                                                  .from('print_task_items')
+                                                  .delete()
+                                                  .eq('task_id', task.print_task_id);
+                                                
+                                                if (itemsError) throw itemsError;
+                                                
+                                                // Delete print task
+                                                const { error: taskError } = await supabase
+                                                  .from('print_tasks')
+                                                  .delete()
+                                                  .eq('id', task.print_task_id);
+                                                
+                                                if (taskError) throw taskError;
+                                                
+                                                // Update installation task
+                                                const { error: updateError } = await supabase
+                                                  .from('installation_tasks')
+                                                  .update({ print_task_id: null })
+                                                  .eq('id', task.id);
+                                                
+                                                if (updateError) throw updateError;
+                                                
+                                                toast.success('تم حذف مهمة الطباعة بنجاح');
+                                                queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
+                                                queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+                                              } catch (error) {
+                                                console.error('Error deleting print task:', error);
+                                                toast.error('فشل في حذف مهمة الطباعة');
+                                              }
+                                            }
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4 mr-2" />
+                                          حذف مهمة الطباعة
+                                        </Button>
+                                      )}
+                                    </div>
                                   {taskItems.filter(i => i.status !== 'completed').length > 0 && (
                                     <>
                                       <Button
@@ -1131,20 +1304,8 @@ export default function InstallationTasks() {
                                                 }
                                               }
                                             }}
-                                          onUncomplete={item.status === 'completed' ? async () => {
-                                            try {
-                                              const { error } = await supabase
-                                                .from('installation_task_items')
-                                                .update({ status: 'pending', installation_date: null })
-                                                .eq('id', item.id);
-                                              
-                                              if (error) throw error;
-                                              toast.success('تم التراجع عن إكمال اللوحة');
-                                              refetchTaskItems();
-                                            } catch (error) {
-                                              console.error('Error:', error);
-                                              toast.error('فشل في التراجع عن الإكمال');
-                                            }
+                                          onUncomplete={item.status === 'completed' ? () => {
+                                            uncompleteItemMutation.mutate({ itemId: item.id, taskId: task.id });
                                           } : undefined}
                                           onEditDesign={() => {
                                             setSelectedTaskForDesign(item.task_id);

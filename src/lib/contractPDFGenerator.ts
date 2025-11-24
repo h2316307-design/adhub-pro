@@ -11,12 +11,13 @@ interface ContractPDFData {
   year: string;
   phoneNumber?: string;
   billboards?: any[];
+  useInstallationImage?: boolean; // استخدام صور التركيب الفعلية بدلاً من الصور الافتراضية
 }
 
 /**
  * توليد HTML للعقد مع دعم كامل للعربية
  */
-export function generateContractHTML(data: ContractPDFData): string {
+export async function generateContractHTML(data: ContractPDFData): Promise<string> {
   const {
     contractNumber,
     customerName,
@@ -27,12 +28,45 @@ export function generateContractHTML(data: ContractPDFData): string {
     duration = '',
     year,
     phoneNumber = '0912612255',
-    billboards = []
+    billboards = [],
+    useInstallationImage = false
   } = data;
 
-  // الحصول على أول صورة لوحة إذا وجدت
+  // الحصول على صورة اللوحة (إما من التركيب أو الصورة الافتراضية)
   let billboardImage = '';
-  if (billboards && billboards.length > 0) {
+  
+  if (useInstallationImage && billboards && billboards.length > 0) {
+    // جلب صورة التركيب الفعلية من installation_task_items
+    try {
+      const { supabase } = await import('@/integrations/supabase/client');
+      
+      for (const billboard of billboards) {
+        const billboardId = billboard.ID || billboard.id;
+        if (!billboardId) continue;
+        
+        // جلب آخر صورة تركيب مكتملة للوجه الأمامي
+        const { data: installationData, error } = await supabase
+          .from('installation_task_items')
+          .select('installed_image_face_a_url')
+          .eq('billboard_id', billboardId)
+          .eq('status', 'completed')
+          .not('installed_image_face_a_url', 'is', null)
+          .order('installation_date', { ascending: false })
+          .limit(1)
+          .single();
+        
+        if (!error && installationData?.installed_image_face_a_url) {
+          billboardImage = installationData.installed_image_face_a_url;
+          break;
+        }
+      }
+    } catch (error) {
+      console.warn('Failed to fetch installation image:', error);
+    }
+  }
+  
+  // إذا لم نجد صورة تركيب أو لم يتم تفعيل الخيار، استخدم الصورة الافتراضية
+  if (!billboardImage && billboards && billboards.length > 0) {
     for (const billboard of billboards) {
       const img = billboard.image || billboard.Image || billboard.Image_URL || billboard.image_url;
       if (img && typeof img === 'string' && img.trim() !== '') {
@@ -295,8 +329,8 @@ export function generateContractHTML(data: ContractPDFData): string {
 /**
  * فتح PDF في نافذة جديدة للطباعة أو الحفظ
  */
-export function openContractPDF(data: ContractPDFData): Window | null {
-  const htmlContent = generateContractHTML(data);
+export async function openContractPDF(data: ContractPDFData): Promise<Window | null> {
+  const htmlContent = await generateContractHTML(data);
   
   const printWindow = window.open('', '_blank');
   if (!printWindow) {
@@ -319,8 +353,8 @@ export function openContractPDF(data: ContractPDFData): Window | null {
 /**
  * تنزيل PDF مباشرة (يتطلب دعم المتصفح للطباعة إلى PDF)
  */
-export function downloadContractPDF(data: ContractPDFData, filename?: string): void {
-  const printWindow = openContractPDF(data);
+export async function downloadContractPDF(data: ContractPDFData, filename?: string): Promise<void> {
+  const printWindow = await openContractPDF(data);
   
   if (!printWindow) {
     throw new Error('فشل فتح نافذة الطباعة. يرجى السماح بالنوافذ المنبثقة.');

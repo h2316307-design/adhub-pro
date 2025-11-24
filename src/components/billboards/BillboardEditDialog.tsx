@@ -74,6 +74,10 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
   // State for partners list from database
   const [partners, setPartners] = useState<Array<{id: string, name: string}>>([]);
   const [loadingPartners, setLoadingPartners] = useState(false);
+  
+  // State for friend companies
+  const [friendCompanies, setFriendCompanies] = useState<Array<{id: string, name: string}>>([]);
+  const [loadingFriendCompanies, setLoadingFriendCompanies] = useState(false);
 
   // ✅ NEW: Get unique districts from all billboards
   const availableDistricts = useMemo(() => {
@@ -161,7 +165,8 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
         is_partnership: !!bb.is_partnership,
         partner_companies: bb.partner_companies || bb.partners || bb.partner_company || [],
         capital: bb.capital || bb.Capital || 0,
-        capital_remaining: bb.capital_remaining || bb.capitalRemaining || bb.remaining_capital || bb.capital || 0
+        capital_remaining: bb.capital_remaining || bb.capitalRemaining || bb.remaining_capital || bb.capital || 0,
+        friend_company_id: bb.friend_company_id || ''
       });
       
       // ✅ NEW: Set district input
@@ -232,7 +237,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
     if (!editing) return;
     setSaving(true);
     const id = editing.ID ?? editing.id;
-    const { City, Municipality, District, Nearest_Landmark, GPS_Coordinates, Faces_Count, Size, Level, Image_URL, image_name, billboard_type, is_partnership, partner_companies, capital, capital_remaining } = editForm as any;
+    const { City, Municipality, District, Nearest_Landmark, GPS_Coordinates, Faces_Count, Size, Level, Image_URL, image_name, billboard_type, is_partnership, partner_companies, capital, capital_remaining, friend_company_id } = editForm as any;
     
     await addMunicipalityIfNew(Municipality, municipalities, setMunicipalities, setDbMunicipalities);
     
@@ -259,7 +264,8 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
       is_partnership: !!is_partnership, 
       partner_companies: Array.isArray(partner_companies) ? partner_companies : String(partner_companies).split(',').map(s=>s.trim()).filter(Boolean), 
       capital: Number(capital)||0, 
-      capital_remaining: Number(capital_remaining)||Number(capital)||0 
+      capital_remaining: Number(capital_remaining)||Number(capital)||0,
+      friend_company_id: friend_company_id || null
     };
 
     console.log('🔧 Saving edit payload:', payload);
@@ -282,28 +288,40 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
     setSaving(false);
   };
 
-  // Load partners from database
+  // Load partners and friend companies from database
   useEffect(() => {
-    const loadPartners = async () => {
+    const loadData = async () => {
       setLoadingPartners(true);
+      setLoadingFriendCompanies(true);
       try {
-        const { data, error } = await supabase
+        // Load partners
+        const { data: partnersData, error: partnersError } = await supabase
           .from('partners')
           .select('id, name')
           .order('name');
 
-        if (error) throw error;
-        setPartners(data || []);
+        if (partnersError) throw partnersError;
+        setPartners(partnersData || []);
+        
+        // Load friend companies
+        const { data: friendData, error: friendError } = await supabase
+          .from('friend_companies')
+          .select('id, name')
+          .order('name');
+
+        if (friendError) throw friendError;
+        setFriendCompanies(friendData || []);
       } catch (error) {
-        console.error('Error loading partners:', error);
-        toast.error('فشل تحميل قائمة الشركاء');
+        console.error('Error loading data:', error);
+        toast.error('فشل تحميل البيانات');
       } finally {
         setLoadingPartners(false);
+        setLoadingFriendCompanies(false);
       }
     };
 
     if (editOpen) {
-      loadPartners();
+      loadData();
     }
   }, [editOpen]);
 
@@ -610,6 +628,32 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
               </div>
             </>
           )}
+
+          {/* Friend Company Selection - Outside partnership section */}
+          <div className="lg:col-span-3">
+            <Label className="text-foreground">الشركة الصديقة (اختياري)</Label>
+            <Select 
+              value={editForm.friend_company_id || 'none'} 
+              onValueChange={(v) => setEditForm((p: any) => ({ ...p, friend_company_id: v === 'none' ? null : v }))}
+            >
+              <SelectTrigger className="text-sm bg-input border-border text-foreground">
+                <SelectValue placeholder="اختر الشركة الصديقة" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="none" className="text-popover-foreground">بدون شركة صديقة</SelectItem>
+                {friendCompanies.map((company) => (
+                  <SelectItem 
+                    key={company.id} 
+                    value={company.id}
+                    className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                  >
+                    {company.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
 
         </div>
         <div className="flex justify-end gap-2 mt-4">

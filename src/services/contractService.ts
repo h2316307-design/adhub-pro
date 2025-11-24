@@ -204,6 +204,7 @@ export async function createContract(contractData: ContractData) {
     'Payment 2': (contractData as any)['Payment 2'] || null,
     'Payment 3': (contractData as any)['Payment 3'] || null,
     Remaining: (contractData as any)['Remaining'] || finalTotal,
+    payment_status: 'unpaid', // ✅ FIX: إضافة حالة الدفع الافتراضية
     customer_id: customer_id,
     billboard_id: null,
     // ✅ FIXED: حفظ بيانات اللوحات و billboard_ids

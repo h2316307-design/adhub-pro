@@ -31,5 +31,12 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <!-- Keyless Google Maps API - No API key needed -->
+    <script>
+      // Global initMap callback required by Google Maps / Keyless loader
+      // React will initialize the map separately; this prevents "initMap is not a function" errors.
+      window.initMap = function () {};
+    </script>
+    <script src="https://cdn.jsdelivr.net/gh/somanchiu/Keyless-Google-Maps-API@v7.1/mapsJavaScriptAPI.js" async defer></script>
   </body>
 </html>

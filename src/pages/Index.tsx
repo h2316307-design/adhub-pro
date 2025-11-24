@@ -42,16 +42,22 @@ const Index = () => {
   }, []);
 
   const loadBillboards = async () => {
+    console.log('🎬 Index.tsx: loadBillboards started');
+    setLoading(true);
     try {
+      console.log('📞 Calling fetchAllBillboards...');
       const data = await fetchAllBillboards();
+      console.log('✅ fetchAllBillboards returned:', data?.length, 'billboards');
       setBillboards(data);
     } catch (error) {
+      console.error('❌ Error in loadBillboards:', error);
       toast({
         title: "خطأ في تحميل البيانات",
-        description: "تعذر تحميل اللوحا   الإعلانية",
+        description: "تعذر تحميل اللوحات الإعلانية",
         variant: "destructive"
       });
     } finally {
+      console.log('🏁 loadBillboards finished, setting loading to false');
       setLoading(false);
     }
   };

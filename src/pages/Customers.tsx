@@ -1640,12 +1640,12 @@ export default function Customers() {
             {addType !== 'account_payment' && (
               <div>
                 <label className="text-sm font-medium">العقد</label>
-                <Select value={addContract} onValueChange={setAddContract}>
+                <Select value={addContract || 'none'} onValueChange={(v) => setAddContract(v === 'none' ? '' : v)}>
                   <SelectTrigger>
                     <SelectValue placeholder="اختر عقدًا أو اتركه فارغاً للحساب العام" />
                   </SelectTrigger>
                   <SelectContent className="max-h-60">
-                    <SelectItem value="">حساب عام (بدون عقد محدد)</SelectItem>
+                    <SelectItem value="none">حساب عام (بدون عقد محدد)</SelectItem>
                     {customerContracts.map((ct)=> (
                       <SelectItem key={String(ct.Contract_Number)} value={String(ct.Contract_Number)}>{String(ct.Contract_Number)}</SelectItem>
                     ))}

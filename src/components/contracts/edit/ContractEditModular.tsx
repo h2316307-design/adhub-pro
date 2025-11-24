@@ -17,6 +17,7 @@ import type { Billboard } from '@/types';
 import { ContractEditHeader } from '@/components/contracts/edit/ContractEditHeader';
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
 import { InstallationCostSummary } from '@/components/contracts/InstallationCostSummary';
+import { PrintCostSummary } from '@/components/contracts/edit/PrintCostSummary';
 import { BillboardFilters } from '@/components/contracts/edit/BillboardFilters';
 import { AvailableBillboardsGrid } from '@/components/contracts/edit/AvailableBillboardsGrid';
 import { CustomerInfoForm } from '@/components/contracts/edit/CustomerInfoForm';
@@ -109,6 +110,19 @@ export default function ContractEditModular() {
     dueDate: string; 
   }>>([]);
 
+  // Friend company costs state
+  const [friendBillboardCosts, setFriendBillboardCosts] = useState<Array<{
+    billboardId: string;
+    friendCompanyId: string;
+    friendCompanyName: string;
+    friendRentalCost: number;
+  }>>([]);
+
+  // Print cost state
+  const [printCostEnabled, setPrintCostEnabled] = useState<boolean>(false);
+  const [printPricePerMeter, setPrintPricePerMeter] = useState<number>(0);
+  const [customPrintCosts, setCustomPrintCosts] = useState<Map<string, number>>(new Map());
+
   // Load contract number from URL
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -185,6 +199,29 @@ export default function ContractEditModular() {
         const savedPricingCategory = c.customer_category || c['customer_category'] || 'عادي';
         setPricingCategory(savedPricingCategory);
         
+        // Load print cost settings
+        setPrintCostEnabled(Boolean(c.print_cost_enabled));
+        const savedPrintPrice = Number(c.print_price_per_meter || 0);
+        setPrintPricePerMeter(savedPrintPrice);
+        
+        // Load custom print costs if available
+        if (c.print_cost_details) {
+          try {
+            const details = typeof c.print_cost_details === 'string' 
+              ? JSON.parse(c.print_cost_details) 
+              : c.print_cost_details;
+            const customCosts = new Map<string, number>();
+            Object.entries(details).forEach(([size, data]: [string, any]) => {
+              if (data.unitCost) {
+                customCosts.set(size, data.unitCost);
+              }
+            });
+            setCustomPrintCosts(customCosts);
+          } catch (e) {
+            console.error('Failed to parse print_cost_details:', e);
+          }
+        }
+        
         const s = c.start_date || c['Contract Date'] || '';
         const e = c.end_date || c['End Date'] || '';
         setStartDate(s);
@@ -228,6 +265,11 @@ export default function ContractEditModular() {
         console.log('✅ MODULAR: Loading installation enabled:', savedInstallationEnabled);
 
         setSelected((c.billboards || []).map((b: any) => String(b.ID)));
+        
+        // Load friend billboard costs from contract
+        if (c.friend_rental_data && Array.isArray(c.friend_rental_data)) {
+          setFriendBillboardCosts(c.friend_rental_data);
+        }
         
         if (c.installments_data && Array.isArray(c.installments_data)) {
           setInstallments(c.installments_data);
@@ -411,7 +453,72 @@ export default function ContractEditModular() {
       : Math.max(0, discountValue);
   }, [discountType, discountValue, baseTotal]);
 
-  const finalTotal = useMemo(() => Math.max(0, baseTotal - discountAmount), [baseTotal, discountAmount]);
+  // Calculate print cost details grouped by size BEFORE finalTotal
+  const printCostDetails = useMemo(() => {
+    if (!printCostEnabled || !printPricePerMeter) return [];
+    
+    const sel = billboards.filter((b) => selected.includes(String((b as any).ID)));
+    const detailsMap = new Map<string, {
+      size: string;
+      quantity: number;
+      areaPerBoard: number;
+      totalArea: number;
+      unitCost: number;
+      totalCost: number;
+    }>();
+
+    sel.forEach((b) => {
+      const size = ((b as any).Size || (b as any).size || '') as string;
+      const faces = Number((b as any).Faces_Count || 1);
+      
+      const sizeMatch = size.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+      if (!sizeMatch) return;
+      
+      const width = parseFloat(sizeMatch[1]);
+      const height = parseFloat(sizeMatch[2]);
+      const areaPerBoard = width * height * faces;
+      
+      // Check if there's a custom unit cost for this size
+      const customUnitCost = customPrintCosts.get(size);
+      const unitCost = customUnitCost || (areaPerBoard * printPricePerMeter);
+      
+      if (detailsMap.has(size)) {
+        const existing = detailsMap.get(size)!;
+        existing.quantity += 1;
+        existing.totalArea += areaPerBoard;
+        existing.totalCost += unitCost;
+      } else {
+        detailsMap.set(size, {
+          size,
+          quantity: 1,
+          areaPerBoard,
+          totalArea: areaPerBoard,
+          unitCost,
+          totalCost: unitCost,
+        });
+      }
+    });
+
+    return Array.from(detailsMap.values()).sort((a, b) => b.totalCost - a.totalCost);
+  }, [billboards, selected, printCostEnabled, printPricePerMeter, customPrintCosts]);
+
+  const totalPrintCost = useMemo(() => {
+    return printCostDetails.reduce((sum, detail) => sum + detail.totalCost, 0);
+  }, [printCostDetails]);
+
+  const handleUpdatePrintUnitCost = (size: string, newCost: number) => {
+    setCustomPrintCosts(prev => {
+      const newMap = new Map(prev);
+      newMap.set(size, newCost);
+      return newMap;
+    });
+  };
+
+  const finalTotal = useMemo(() => {
+    const baseAfterDiscount = Math.max(0, baseTotal - discountAmount);
+    const withPrint = printCostEnabled ? baseAfterDiscount + totalPrintCost : baseAfterDiscount;
+    return withPrint;
+  }, [baseTotal, discountAmount, printCostEnabled, totalPrintCost]);
   const actualInstallationCost = useMemo(() => installationEnabled ? installationCost : 0, [installationEnabled, installationCost]);
   const rentalCostOnly = useMemo(() => Math.max(0, finalTotal - actualInstallationCost), [finalTotal, actualInstallationCost]);
 
@@ -515,7 +622,30 @@ export default function ContractEditModular() {
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
-  const removeSelected = (id: string) => setSelected((prev) => prev.filter((x) => x !== id));
+  const removeSelected = (id: string) => {
+    setSelected((prev) => prev.filter((x) => x !== id));
+    // Remove friend cost if exists
+    setFriendBillboardCosts(prev => prev.filter(f => f.billboardId !== id));
+  };
+
+  const handleUpdateFriendCost = (
+    billboardId: string,
+    friendCompanyId: string,
+    friendCompanyName: string,
+    cost: number
+  ) => {
+    setFriendBillboardCosts(prev => {
+      const existing = prev.find(f => f.billboardId === billboardId);
+      if (existing) {
+        return prev.map(f =>
+          f.billboardId === billboardId
+            ? { ...f, friendRentalCost: cost, friendCompanyId, friendCompanyName }
+            : f
+        );
+      }
+      return [...prev, { billboardId, friendCompanyId, friendCompanyName, friendRentalCost: cost }];
+    });
+  };
 
   const handleAddCustomer = async (name: string) => {
     if (!name) return;
@@ -772,10 +902,43 @@ export default function ContractEditModular() {
         customer_category: pricingCategory,
         billboards_data: JSON.stringify(selectedBillboardsData),
         billboards_count: selectedBillboardsData.length,
+        // ✅ Store billboard prices with discount details for history
+        billboard_prices: JSON.stringify(selectedBillboardsData.map(b => {
+          const billboardPrice = calculateBillboardPrice({ ID: b.id } as any);
+          const discountPerBillboard = selected.length > 0 
+            ? discountAmount * (billboardPrice / estimatedTotal) 
+            : 0;
+          
+          return {
+            billboardId: b.id,
+            priceBeforeDiscount: billboardPrice,
+            discountPerBillboard: discountPerBillboard,
+            priceAfterDiscount: billboardPrice - discountPerBillboard
+          };
+        })),
         installation_cost: installationEnabled ? installationCost : 0,
         installation_enabled: installationEnabled,
         fee: operatingFee,
         installments_data: JSON.stringify(installments),
+        friend_rental_data: friendBillboardCosts.length > 0 ? JSON.stringify(friendBillboardCosts) : null,
+        // ✅ Save print cost details
+        print_cost_enabled: printCostEnabled,
+        print_cost: printCostEnabled ? totalPrintCost : 0,
+        print_price_per_meter: printCostEnabled ? printPricePerMeter : 0,
+        print_cost_details: printCostEnabled && printCostDetails.length > 0 
+          ? JSON.stringify(
+              printCostDetails.reduce((acc, detail) => {
+                acc[detail.size] = {
+                  quantity: detail.quantity,
+                  areaPerBoard: detail.areaPerBoard,
+                  totalArea: detail.totalArea,
+                  unitCost: detail.unitCost,
+                  totalCost: detail.totalCost,
+                };
+                return acc;
+              }, {} as Record<string, any>)
+            )
+          : null,
       };
       
       if (installments.length > 0) updates['Payment 1'] = installments[0]?.amount || 0;
@@ -831,6 +994,11 @@ export default function ContractEditModular() {
               durationMonths={durationMonths}
               durationDays={durationDays}
               sizeNames={pricing.sizeNames}
+              totalDiscount={discountAmount}
+              discountType={discountType}
+              discountValue={discountValue}
+              friendBillboardCosts={friendBillboardCosts}
+              onUpdateFriendCost={handleUpdateFriendCost}
             />
 
             {/* الخريطة */}
@@ -846,6 +1014,17 @@ export default function ContractEditModular() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* تكلفة الطباعة */}
+            <PrintCostSummary
+              printCostEnabled={printCostEnabled}
+              setPrintCostEnabled={setPrintCostEnabled}
+              printPricePerMeter={printPricePerMeter}
+              setPrintPricePerMeter={setPrintPricePerMeter}
+              printCostDetails={printCostDetails}
+              onUpdateUnitCost={handleUpdatePrintUnitCost}
+              totalPrintCost={totalPrintCost}
+            />
 
             {/* الفلاتر */}
             <BillboardFilters

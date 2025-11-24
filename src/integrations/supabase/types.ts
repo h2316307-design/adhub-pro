@@ -97,6 +97,7 @@ export type Database = {
           installation_date: string | null
           installed_image_face_a_url: string | null
           installed_image_face_b_url: string | null
+          net_rental_amount: number | null
           notes: string | null
           rent_amount: number | null
           start_date: string | null
@@ -123,6 +124,7 @@ export type Database = {
           installation_date?: string | null
           installed_image_face_a_url?: string | null
           installed_image_face_b_url?: string | null
+          net_rental_amount?: number | null
           notes?: string | null
           rent_amount?: number | null
           start_date?: string | null
@@ -149,6 +151,7 @@ export type Database = {
           installation_date?: string | null
           installed_image_face_a_url?: string | null
           installed_image_face_b_url?: string | null
+          net_rental_amount?: number | null
           notes?: string | null
           rent_amount?: number | null
           start_date?: string | null
@@ -229,6 +232,7 @@ export type Database = {
           design_face_b: string | null
           District: string | null
           Faces_Count: number | null
+          friend_company_id: string | null
           GPS_Coordinates: string | null
           GPS_Link: string | null
           GPS_Link_Click: string | null
@@ -275,6 +279,7 @@ export type Database = {
           design_face_b?: string | null
           District?: string | null
           Faces_Count?: number | null
+          friend_company_id?: string | null
           GPS_Coordinates?: string | null
           GPS_Link?: string | null
           GPS_Link_Click?: string | null
@@ -321,6 +326,7 @@ export type Database = {
           design_face_b?: string | null
           District?: string | null
           Faces_Count?: number | null
+          friend_company_id?: string | null
           GPS_Coordinates?: string | null
           GPS_Link?: string | null
           GPS_Link_Click?: string | null
@@ -352,6 +358,20 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "fk_billboard_friend_company"
+            columns: ["friend_company_id"]
+            isOneToOne: false
+            referencedRelation: "friend_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_billboard_friend_company"
+            columns: ["friend_company_id"]
+            isOneToOne: false
+            referencedRelation: "friend_company_financials"
+            referencedColumns: ["company_id"]
+          },
           {
             foreignKeyName: "fk_billboard_size"
             columns: ["size_id"]
@@ -504,11 +524,14 @@ export type Database = {
           "End Date": string | null
           exchange_rate: string | null
           fee: string | null
+          friend_rental_data: Json | null
           id: number
           installation_cost: number | null
           installation_enabled: boolean | null
           installments_data: string | null
           operating_fee_rate: number | null
+          partnership_data: Json | null
+          partnership_operating_fee_rate: number | null
           "Payment 1": Json | null
           "Payment 2": string | null
           "Payment 3": string | null
@@ -516,6 +539,7 @@ export type Database = {
           Phone: string | null
           "Print Status": string | null
           print_cost: number | null
+          print_cost_details: Json | null
           print_cost_enabled: string | null
           print_price_per_meter: string | null
           Remaining: string | null
@@ -544,11 +568,14 @@ export type Database = {
           "End Date"?: string | null
           exchange_rate?: string | null
           fee?: string | null
+          friend_rental_data?: Json | null
           id?: number
           installation_cost?: number | null
           installation_enabled?: boolean | null
           installments_data?: string | null
           operating_fee_rate?: number | null
+          partnership_data?: Json | null
+          partnership_operating_fee_rate?: number | null
           "Payment 1"?: Json | null
           "Payment 2"?: string | null
           "Payment 3"?: string | null
@@ -556,6 +583,7 @@ export type Database = {
           Phone?: string | null
           "Print Status"?: string | null
           print_cost?: number | null
+          print_cost_details?: Json | null
           print_cost_enabled?: string | null
           print_price_per_meter?: string | null
           Remaining?: string | null
@@ -584,11 +612,14 @@ export type Database = {
           "End Date"?: string | null
           exchange_rate?: string | null
           fee?: string | null
+          friend_rental_data?: Json | null
           id?: number
           installation_cost?: number | null
           installation_enabled?: boolean | null
           installments_data?: string | null
           operating_fee_rate?: number | null
+          partnership_data?: Json | null
+          partnership_operating_fee_rate?: number | null
           "Payment 1"?: Json | null
           "Payment 2"?: string | null
           "Payment 3"?: string | null
@@ -596,6 +627,7 @@ export type Database = {
           Phone?: string | null
           "Print Status"?: string | null
           print_cost?: number | null
+          print_cost_details?: Json | null
           print_cost_enabled?: string | null
           print_price_per_meter?: string | null
           Remaining?: string | null
@@ -889,6 +921,7 @@ export type Database = {
           is_supplier: boolean | null
           last_contract_date: string | null
           last_payment_date: string | null
+          linked_friend_company_id: string | null
           name: string
           phone: string | null
           printer_id: string | null
@@ -907,6 +940,7 @@ export type Database = {
           is_supplier?: boolean | null
           last_contract_date?: string | null
           last_payment_date?: string | null
+          linked_friend_company_id?: string | null
           name: string
           phone?: string | null
           printer_id?: string | null
@@ -925,6 +959,7 @@ export type Database = {
           is_supplier?: boolean | null
           last_contract_date?: string | null
           last_payment_date?: string | null
+          linked_friend_company_id?: string | null
           name?: string
           phone?: string | null
           printer_id?: string | null
@@ -934,7 +969,156 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "customers_linked_friend_company_id_fkey"
+            columns: ["linked_friend_company_id"]
+            isOneToOne: false
+            referencedRelation: "friend_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customers_linked_friend_company_id_fkey"
+            columns: ["linked_friend_company_id"]
+            isOneToOne: false
+            referencedRelation: "friend_company_financials"
+            referencedColumns: ["company_id"]
+          },
+          {
             foreignKeyName: "customers_printer_id_fkey"
+            columns: ["printer_id"]
+            isOneToOne: false
+            referencedRelation: "printers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cutout_task_items: {
+        Row: {
+          billboard_id: number | null
+          created_at: string
+          cutout_image_url: string | null
+          description: string | null
+          id: string
+          notes: string | null
+          quantity: number
+          status: string
+          task_id: string
+          total_cost: number
+          unit_cost: number
+        }
+        Insert: {
+          billboard_id?: number | null
+          created_at?: string
+          cutout_image_url?: string | null
+          description?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          status?: string
+          task_id: string
+          total_cost?: number
+          unit_cost?: number
+        }
+        Update: {
+          billboard_id?: number | null
+          created_at?: string
+          cutout_image_url?: string | null
+          description?: string | null
+          id?: string
+          notes?: string | null
+          quantity?: number
+          status?: string
+          task_id?: string
+          total_cost?: number
+          unit_cost?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cutout_task_items_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "cutout_tasks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cutout_tasks: {
+        Row: {
+          completed_at: string | null
+          contract_id: number | null
+          created_at: string
+          customer_id: string | null
+          customer_name: string | null
+          customer_total_amount: number | null
+          due_date: string | null
+          id: string
+          installation_task_id: string | null
+          invoice_id: string | null
+          notes: string | null
+          printer_id: string | null
+          priority: string
+          status: string
+          total_cost: number
+          total_quantity: number
+          unit_cost: number
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          contract_id?: number | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_total_amount?: number | null
+          due_date?: string | null
+          id?: string
+          installation_task_id?: string | null
+          invoice_id?: string | null
+          notes?: string | null
+          printer_id?: string | null
+          priority?: string
+          status?: string
+          total_cost?: number
+          total_quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          contract_id?: number | null
+          created_at?: string
+          customer_id?: string | null
+          customer_name?: string | null
+          customer_total_amount?: number | null
+          due_date?: string | null
+          id?: string
+          installation_task_id?: string | null
+          invoice_id?: string | null
+          notes?: string | null
+          printer_id?: string | null
+          priority?: string
+          status?: string
+          total_cost?: number
+          total_quantity?: number
+          unit_cost?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cutout_tasks_installation_task_id_fkey"
+            columns: ["installation_task_id"]
+            isOneToOne: false
+            referencedRelation: "installation_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cutout_tasks_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "printed_invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cutout_tasks_printer_id_fkey"
             columns: ["printer_id"]
             isOneToOne: false
             referencedRelation: "printers"
@@ -1295,6 +1479,120 @@ export type Database = {
         }
         Relationships: []
       }
+      friend_billboard_rentals: {
+        Row: {
+          billboard_id: number
+          contract_number: number
+          created_at: string
+          customer_rental_price: number
+          end_date: string
+          friend_company_id: string
+          friend_rental_cost: number
+          id: string
+          notes: string | null
+          profit: number | null
+          start_date: string
+          updated_at: string
+        }
+        Insert: {
+          billboard_id: number
+          contract_number: number
+          created_at?: string
+          customer_rental_price?: number
+          end_date: string
+          friend_company_id: string
+          friend_rental_cost?: number
+          id?: string
+          notes?: string | null
+          profit?: number | null
+          start_date: string
+          updated_at?: string
+        }
+        Update: {
+          billboard_id?: number
+          contract_number?: number
+          created_at?: string
+          customer_rental_price?: number
+          end_date?: string
+          friend_company_id?: string
+          friend_rental_cost?: number
+          id?: string
+          notes?: string | null
+          profit?: number | null
+          start_date?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fk_friend_rentals_billboard"
+            columns: ["billboard_id"]
+            isOneToOne: false
+            referencedRelation: "billboard_partnership_status"
+            referencedColumns: ["billboard_id"]
+          },
+          {
+            foreignKeyName: "fk_friend_rentals_billboard"
+            columns: ["billboard_id"]
+            isOneToOne: false
+            referencedRelation: "billboards"
+            referencedColumns: ["ID"]
+          },
+          {
+            foreignKeyName: "fk_friend_rentals_company"
+            columns: ["friend_company_id"]
+            isOneToOne: false
+            referencedRelation: "friend_companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "fk_friend_rentals_company"
+            columns: ["friend_company_id"]
+            isOneToOne: false
+            referencedRelation: "friend_company_financials"
+            referencedColumns: ["company_id"]
+          },
+          {
+            foreignKeyName: "fk_friend_rentals_contract"
+            columns: ["contract_number"]
+            isOneToOne: false
+            referencedRelation: "Contract"
+            referencedColumns: ["Contract_Number"]
+          },
+        ]
+      }
+      friend_companies: {
+        Row: {
+          contact_person: string | null
+          created_at: string
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          contact_person?: string | null
+          created_at?: string
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       installation_print_pricing: {
         Row: {
           created_at: string
@@ -1390,8 +1688,22 @@ export type Database = {
             foreignKeyName: "installation_task_items_billboard_fk"
             columns: ["billboard_id"]
             isOneToOne: false
+            referencedRelation: "billboard_partnership_status"
+            referencedColumns: ["billboard_id"]
+          },
+          {
+            foreignKeyName: "installation_task_items_billboard_fk"
+            columns: ["billboard_id"]
+            isOneToOne: false
             referencedRelation: "billboards"
             referencedColumns: ["ID"]
+          },
+          {
+            foreignKeyName: "installation_task_items_billboard_id_fkey"
+            columns: ["billboard_id"]
+            isOneToOne: false
+            referencedRelation: "billboard_partnership_status"
+            referencedColumns: ["billboard_id"]
           },
           {
             foreignKeyName: "installation_task_items_billboard_id_fkey"
@@ -1428,7 +1740,9 @@ export type Database = {
           contract_id: number
           contract_ids: number[] | null
           created_at: string
+          cutout_task_id: string | null
           id: string
+          print_task_id: string | null
           status: string
           team_id: string | null
           updated_at: string
@@ -1437,7 +1751,9 @@ export type Database = {
           contract_id: number
           contract_ids?: number[] | null
           created_at?: string
+          cutout_task_id?: string | null
           id?: string
+          print_task_id?: string | null
           status?: string
           team_id?: string | null
           updated_at?: string
@@ -1446,7 +1762,9 @@ export type Database = {
           contract_id?: number
           contract_ids?: number[] | null
           created_at?: string
+          cutout_task_id?: string | null
           id?: string
+          print_task_id?: string | null
           status?: string
           team_id?: string | null
           updated_at?: string
@@ -1465,6 +1783,20 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "Contract"
             referencedColumns: ["Contract_Number"]
+          },
+          {
+            foreignKeyName: "installation_tasks_cutout_task_id_fkey"
+            columns: ["cutout_task_id"]
+            isOneToOne: false
+            referencedRelation: "cutout_tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "installation_tasks_print_task_id_fkey"
+            columns: ["print_task_id"]
+            isOneToOne: false
+            referencedRelation: "print_tasks"
+            referencedColumns: ["id"]
           },
           {
             foreignKeyName: "installation_tasks_team_fk"
@@ -1706,6 +2038,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "maintenance_history_billboard_id_fkey"
+            columns: ["billboard_id"]
+            isOneToOne: false
+            referencedRelation: "billboard_partnership_status"
+            referencedColumns: ["billboard_id"]
+          },
           {
             foreignKeyName: "maintenance_history_billboard_id_fkey"
             columns: ["billboard_id"]
@@ -2280,12 +2619,22 @@ export type Database = {
           area: number | null
           billboard_id: number | null
           created_at: string
+          customer_cutout_cost: number | null
+          customer_total_cost: number | null
+          customer_total_price: number | null
+          customer_unit_cost: number | null
+          customer_unit_price: number | null
           cutout_image_url: string | null
+          cutout_quantity: number | null
           description: string | null
           design_face_a: string | null
           design_face_b: string | null
+          has_cutout: boolean | null
           height: number | null
           id: string
+          model_link: string | null
+          printer_cutout_cost: number | null
+          printer_unit_cost: number | null
           quantity: number | null
           status: string
           task_id: string
@@ -2297,12 +2646,22 @@ export type Database = {
           area?: number | null
           billboard_id?: number | null
           created_at?: string
+          customer_cutout_cost?: number | null
+          customer_total_cost?: number | null
+          customer_total_price?: number | null
+          customer_unit_cost?: number | null
+          customer_unit_price?: number | null
           cutout_image_url?: string | null
+          cutout_quantity?: number | null
           description?: string | null
           design_face_a?: string | null
           design_face_b?: string | null
+          has_cutout?: boolean | null
           height?: number | null
           id?: string
+          model_link?: string | null
+          printer_cutout_cost?: number | null
+          printer_unit_cost?: number | null
           quantity?: number | null
           status?: string
           task_id: string
@@ -2314,12 +2673,22 @@ export type Database = {
           area?: number | null
           billboard_id?: number | null
           created_at?: string
+          customer_cutout_cost?: number | null
+          customer_total_cost?: number | null
+          customer_total_price?: number | null
+          customer_unit_cost?: number | null
+          customer_unit_price?: number | null
           cutout_image_url?: string | null
+          cutout_quantity?: number | null
           description?: string | null
           design_face_a?: string | null
           design_face_b?: string | null
+          has_cutout?: boolean | null
           height?: number | null
           id?: string
+          model_link?: string | null
+          printer_cutout_cost?: number | null
+          printer_unit_cost?: number | null
           quantity?: number | null
           status?: string
           task_id?: string
@@ -2328,6 +2697,13 @@ export type Database = {
           width?: number | null
         }
         Relationships: [
+          {
+            foreignKeyName: "print_task_items_billboard_id_fkey"
+            columns: ["billboard_id"]
+            isOneToOne: false
+            referencedRelation: "billboard_partnership_status"
+            referencedColumns: ["billboard_id"]
+          },
           {
             foreignKeyName: "print_task_items_billboard_id_fkey"
             columns: ["billboard_id"]
@@ -2349,8 +2725,15 @@ export type Database = {
           completed_at: string | null
           contract_id: number | null
           created_at: string
+          customer_cost_per_meter: number | null
+          customer_cutout_cost: number | null
+          customer_cutout_price: number | null
+          customer_cutout_total: number | null
           customer_id: string | null
           customer_name: string | null
+          customer_price_per_meter: number | null
+          customer_total_amount: number | null
+          customer_total_cost: number | null
           cutout_cost: number | null
           cutout_image_url: string | null
           cutout_printer_id: string | null
@@ -2361,7 +2744,10 @@ export type Database = {
           invoice_id: string | null
           notes: string | null
           price_per_meter: number | null
+          printer_cost_per_meter: number | null
+          printer_cutout_cost: number | null
           printer_id: string | null
+          printer_total_cost: number | null
           priority: string | null
           status: string
           total_area: number | null
@@ -2372,8 +2758,15 @@ export type Database = {
           completed_at?: string | null
           contract_id?: number | null
           created_at?: string
+          customer_cost_per_meter?: number | null
+          customer_cutout_cost?: number | null
+          customer_cutout_price?: number | null
+          customer_cutout_total?: number | null
           customer_id?: string | null
           customer_name?: string | null
+          customer_price_per_meter?: number | null
+          customer_total_amount?: number | null
+          customer_total_cost?: number | null
           cutout_cost?: number | null
           cutout_image_url?: string | null
           cutout_printer_id?: string | null
@@ -2384,7 +2777,10 @@ export type Database = {
           invoice_id?: string | null
           notes?: string | null
           price_per_meter?: number | null
+          printer_cost_per_meter?: number | null
+          printer_cutout_cost?: number | null
           printer_id?: string | null
+          printer_total_cost?: number | null
           priority?: string | null
           status?: string
           total_area?: number | null
@@ -2395,8 +2791,15 @@ export type Database = {
           completed_at?: string | null
           contract_id?: number | null
           created_at?: string
+          customer_cost_per_meter?: number | null
+          customer_cutout_cost?: number | null
+          customer_cutout_price?: number | null
+          customer_cutout_total?: number | null
           customer_id?: string | null
           customer_name?: string | null
+          customer_price_per_meter?: number | null
+          customer_total_amount?: number | null
+          customer_total_cost?: number | null
           cutout_cost?: number | null
           cutout_image_url?: string | null
           cutout_printer_id?: string | null
@@ -2407,7 +2810,10 @@ export type Database = {
           invoice_id?: string | null
           notes?: string | null
           price_per_meter?: number | null
+          printer_cost_per_meter?: number | null
+          printer_cutout_cost?: number | null
           printer_id?: string | null
+          printer_total_cost?: number | null
           priority?: string | null
           status?: string
           total_area?: number | null
@@ -3127,6 +3533,7 @@ export type Database = {
           billboard_id: number
           capital_contribution: number
           capital_remaining: number
+          confirmed_amount: number | null
           created_at: string | null
           end_date: string | null
           id: string
@@ -3138,6 +3545,7 @@ export type Database = {
           post_company_pct: number
           pre_capital_pct: number
           pre_company_pct: number
+          reserved_amount: number | null
           start_date: string | null
           status: string | null
           updated_at: string | null
@@ -3146,6 +3554,7 @@ export type Database = {
           billboard_id: number
           capital_contribution?: number
           capital_remaining?: number
+          confirmed_amount?: number | null
           created_at?: string | null
           end_date?: string | null
           id?: string
@@ -3157,6 +3566,7 @@ export type Database = {
           post_company_pct?: number
           pre_capital_pct?: number
           pre_company_pct?: number
+          reserved_amount?: number | null
           start_date?: string | null
           status?: string | null
           updated_at?: string | null
@@ -3165,6 +3575,7 @@ export type Database = {
           billboard_id?: number
           capital_contribution?: number
           capital_remaining?: number
+          confirmed_amount?: number | null
           created_at?: string | null
           end_date?: string | null
           id?: string
@@ -3176,6 +3587,7 @@ export type Database = {
           post_company_pct?: number
           pre_capital_pct?: number
           pre_company_pct?: number
+          reserved_amount?: number | null
           start_date?: string | null
           status?: string | null
           updated_at?: string | null
@@ -3663,6 +4075,22 @@ export type Database = {
       }
     }
     Views: {
+      billboard_partnership_status: {
+        Row: {
+          billboard_id: number | null
+          billboard_name: string | null
+          capital: number | null
+          capital_remaining: number | null
+          is_partnership: boolean | null
+          partners: Json[] | null
+          partners_count: number | null
+          total_capital_contributions: number | null
+          total_capital_remaining: number | null
+          total_confirmed: number | null
+          total_reserved: number | null
+        }
+        Relationships: []
+      }
       customer_financial_summary: {
         Row: {
           balance: number | null
@@ -3688,6 +4116,20 @@ export type Database = {
           total_paid: number | null
           total_remaining: number | null
           updated_at: string | null
+        }
+        Relationships: []
+      }
+      friend_company_financials: {
+        Row: {
+          company_id: string | null
+          company_name: string | null
+          first_rental_date: string | null
+          last_rental_date: string | null
+          total_billboards: number | null
+          total_contracts: number | null
+          total_paid_to_friend: number | null
+          total_profit: number | null
+          total_revenue_from_customers: number | null
         }
         Relationships: []
       }

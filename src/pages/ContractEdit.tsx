@@ -29,6 +29,7 @@ import { InstallmentsManager } from '@/components/contracts/edit/InstallmentsMan
 import { CostSummaryCard } from '@/components/contracts/edit/CostSummaryCard';
 import { BillboardManagementMap } from '@/components/Map/BillboardManagementMap';
 import { DesignManager } from '@/components/contracts/DesignManager';
+import { PartnershipBillboardsInfo } from '@/components/contracts/PartnershipBillboardsInfo';
 
 // ✅ NEW: Currency options
 const CURRENCIES = [
@@ -99,6 +100,7 @@ export default function ContractEdit() {
   }>>([]);
   const [operatingFee, setOperatingFee] = useState<number>(0);
   const [operatingFeeRate, setOperatingFeeRate] = useState<number>(3);
+  const [partnershipOperatingFeeRate, setPartnershipOperatingFeeRate] = useState<number>(3);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -126,6 +128,35 @@ export default function ContractEdit() {
     description: string; 
     dueDate: string; 
   }>>([]);
+
+  // ✅ NEW: Friend billboard costs
+  const [friendBillboardCosts, setFriendBillboardCosts] = useState<Array<{
+    billboardId: string;
+    friendCompanyId: string;
+    friendCompanyName: string;
+    friendRentalCost: number;
+  }>>([]);
+
+  // Helper functions for friend costs
+  const updateFriendBillboardCost = (billboardId: string, friendCompanyId: string, friendCompanyName: string, cost: number) => {
+    setFriendBillboardCosts(prev => {
+      const existing = prev.find(f => f.billboardId === billboardId);
+      if (existing) {
+        return prev.map(f => 
+          f.billboardId === billboardId 
+            ? { ...f, friendCompanyId, friendCompanyName, friendRentalCost: cost }
+            : f
+        );
+      } else {
+        return [...prev, { billboardId, friendCompanyId, friendCompanyName, friendRentalCost: cost }];
+      }
+    });
+  };
+
+  const totalFriendCosts = React.useMemo(() => 
+    friendBillboardCosts.reduce((sum, f) => sum + f.friendRentalCost, 0),
+    [friendBillboardCosts]
+  );
 
   // ✅ NEW: Get currency symbol
   const getCurrencySymbol = (currencyCode: string): string => {
@@ -395,6 +426,28 @@ export default function ContractEdit() {
           });
           setInstallments(payments);
           console.log('Set installments from old Payment format:', payments);
+        }
+
+        // ✅ Load friend billboard rentals for this contract
+        const { data: friendRentals } = await supabase
+          .from('friend_billboard_rentals')
+          .select(`
+            billboard_id,
+            friend_company_id,
+            friend_rental_cost,
+            friend_companies!inner(name)
+          `)
+          .eq('contract_number', Number(contractNumber));
+
+        if (friendRentals && friendRentals.length > 0) {
+          const friendCosts = friendRentals.map((rental: any) => ({
+            billboardId: String(rental.billboard_id),
+            friendCompanyId: rental.friend_company_id,
+            friendCompanyName: rental.friend_companies?.name || 'غير محدد',
+            friendRentalCost: rental.friend_rental_cost || 0
+          }));
+          setFriendBillboardCosts(friendCosts);
+          console.log('✅ Loaded friend billboard costs:', friendCosts);
         }
         
       } catch (e: any) {
@@ -1466,6 +1519,13 @@ export default function ContractEdit() {
       }
       for (const id of toRemove) {
         await removeBillboardFromContract(contractNumber, id);
+        
+        // ✅ Delete friend rental record if exists
+        await supabase
+          .from('friend_billboard_rentals')
+          .delete()
+          .eq('contract_number', Number(contractNumber))
+          .eq('billboard_id', Number(id));
       }
 
       // ✅ NEW: Generate billboard prices data for historical reference
@@ -1503,15 +1563,43 @@ export default function ContractEdit() {
         billboards_data: JSON.stringify(selectedBillboardsData),
         billboards_count: selectedBillboardsData.length,
         billboard_ids: selected, // Pass as array, updateContract will handle conversion
-        // ✅ NEW: Store billboard prices for historical reference
-        billboard_prices: JSON.stringify(selectedBillboardsData.map(b => ({
+      // ✅ Store billboard prices with discount details for history
+      billboard_prices: JSON.stringify(selectedBillboardsData.map(b => {
+        // ✅ FIX: Get full billboard object for accurate price calculation
+        const fullBillboard = billboards.find(bb => String((bb as any).ID) === b.id);
+        if (!fullBillboard) {
+          console.warn(`Billboard ${b.id} not found for price calculation`);
+          return {
+            billboardId: b.id,
+            priceBeforeDiscount: 0,
+            discountPerBillboard: 0,
+            priceAfterDiscount: 0,
+            contractPrice: 0,
+            printCost: 0,
+            pricingCategory: pricingCategory,
+            pricingMode: pricingMode,
+            duration: pricingMode === 'months' ? durationMonths : durationDays
+          };
+        }
+        
+        const billboardPrice = calculateBillboardPrice(fullBillboard);
+        const printCostForBillboard = calculatePrintCost(fullBillboard);
+        const discountPerBillboard = selected.length > 0 
+          ? discountAmount * (billboardPrice / estimatedTotal) 
+          : 0;
+        
+        return {
           billboardId: b.id,
-          contractPrice: b.contractPrice,
-          printCost: b.printCost,
-          pricingCategory: b.pricingCategory,
-          pricingMode: b.pricingMode,
-          duration: b.duration
-        }))),
+          priceBeforeDiscount: billboardPrice,
+          discountPerBillboard: discountPerBillboard,
+          priceAfterDiscount: billboardPrice - discountPerBillboard,
+          contractPrice: billboardPrice - discountPerBillboard,
+          printCost: printCostForBillboard,
+          pricingCategory: pricingCategory,
+          pricingMode: pricingMode,
+          duration: pricingMode === 'months' ? durationMonths : durationDays
+        };
+      })),
         // ✅ FIXED: Store installation_cost in correct field name
         'installation_cost': installationEnabled ? applyExchangeRate(installationCost) : 0,
         installation_enabled: installationEnabled,
@@ -1525,11 +1613,19 @@ export default function ContractEdit() {
         // ✅ NEW: Store operating fee rate and calculated fee based on Total Rent
         fee: operatingFee, // This is calculated as rentalCostOnly * operatingFeeRate
         operating_fee_rate: operatingFeeRate, // Store the percentage rate
+        partnership_operating_fee_rate: partnershipOperatingFeeRate, // Store partnership rate
         // ✅ NEW: Store design data
         design_data: JSON.stringify(billboardDesigns),
         // ✅ CRITICAL FIX: Use exact same field name as ContractCreate
         installments_data: installments, // Pass as array, updateContract will stringify it
       };
+      
+      // ✅ FIX: Store friend_rental_data in contract
+      if (friendBillboardCosts.length > 0) {
+        updates.friend_rental_data = friendBillboardCosts;
+      } else {
+        updates.friend_rental_data = null;
+      }
       
       // Also save individual payments for backward compatibility
       if (installments.length > 0) updates['Payment 1'] = installments[0]?.amount || 0;
@@ -1551,6 +1647,40 @@ export default function ContractEdit() {
       console.log('- installation_cost (converted):', applyExchangeRate(installationCost));
       
       await updateContract(contractNumber, updates);
+
+      // ✅ Save friend billboard rentals
+      for (const friendCost of friendBillboardCosts) {
+        // Calculate customer price for this billboard
+        const billboard = billboards.find(b => String((b as any).ID) === friendCost.billboardId);
+        if (billboard) {
+          const billboardPrice = calculateBillboardPrice(billboard);
+          const discountPerBillboard = selected.length > 0 
+            ? discountAmount * (billboardPrice / estimatedTotal) 
+            : 0;
+          const customerPrice = billboardPrice - discountPerBillboard;
+
+          // Upsert friend rental record
+          const { error: rentalError } = await supabase
+            .from('friend_billboard_rentals')
+            .upsert({
+              contract_number: Number(contractNumber),
+              billboard_id: Number(friendCost.billboardId),
+              friend_company_id: friendCost.friendCompanyId,
+              start_date: startDate,
+              end_date: endDate,
+              customer_rental_price: customerPrice,
+              friend_rental_cost: friendCost.friendRentalCost,
+              profit: customerPrice - friendCost.friendRentalCost,
+              notes: 'تحديث من تعديل العقد'
+            }, {
+              onConflict: 'contract_number,billboard_id'
+            });
+
+          if (rentalError) {
+            console.error('Failed to save friend rental:', rentalError);
+          }
+        }
+      }
 
       toast.success(`تم حفظ التعديلات مع العملة ${getCurrencySymbol(contractCurrency)} بنجاح`);
       navigate('/admin/contracts');
@@ -1616,6 +1746,9 @@ export default function ContractEdit() {
               durationDays={durationDays}
               currencySymbol={getCurrencySymbol(contractCurrency)}
               sizeNames={sizeNames}
+              totalDiscount={discountAmount}
+              friendBillboardCosts={friendBillboardCosts}
+              onUpdateFriendCost={updateFriendBillboardCost}
             />
 
             {/* الخريطة التفاعلية للوحات المرتبطة */}
@@ -1753,6 +1886,45 @@ export default function ContractEdit() {
               durationDays={durationDays}
               setDurationDays={setDurationDays}
             />
+
+            {/* معلومات لوحات المشاركة */}
+            {selected.length > 0 && startDate && endDate && (
+              <PartnershipBillboardsInfo 
+                billboardIds={selected.map(id => Number(id))}
+                startDate={startDate}
+                endDate={endDate}
+              />
+            )}
+
+            {/* رسوم التشغيل للوحات المشاركة */}
+            {selected.length > 0 && billboards.filter(b => selected.includes(String((b as any).ID)) && (b as any).is_partnership).length > 0 && (
+              <Card className="bg-card border-border shadow-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-card-foreground">
+                    <Settings className="h-5 w-5 text-primary" />
+                    رسوم التشغيل للوحات المشاركة
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div>
+                    <Label htmlFor="partnershipOperatingFee">نسبة رسوم التشغيل (%)</Label>
+                    <input
+                      id="partnershipOperatingFee"
+                      type="number"
+                      value={partnershipOperatingFeeRate}
+                      onChange={(e) => setPartnershipOperatingFeeRate(Number(e.target.value) || 0)}
+                      className="w-full px-3 py-2 rounded bg-input border border-border text-card-foreground mt-2"
+                      placeholder="3"
+                      min="0"
+                      step="0.1"
+                    />
+                    <p className="text-xs text-muted-foreground mt-1">
+                      نسبة خاصة لرسوم التشغيل على لوحات المشاركة
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
 
             {/* ✅ إعدادات العملة */}
             <Card className="bg-card border-border shadow-card">
@@ -1975,6 +2147,7 @@ export default function ContractEdit() {
               onSave={save}
               onCancel={() => navigate('/admin/contracts')}
               saving={saving}
+              totalFriendCosts={totalFriendCosts}
             />
           </div>
         </div>

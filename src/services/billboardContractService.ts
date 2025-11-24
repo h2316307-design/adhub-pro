@@ -13,8 +13,8 @@ export interface BillboardWithContract extends Billboard {
   };
 }
 
-// دالة مساعدة لإضافة timeout للاستعلامات
-const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 5000): Promise<T> => {
+// دالة مساعدة لإضافة timeout للاستعلامات - زيادة الوقت لقاعدة البيانات الكبيرة
+const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 15000): Promise<T> => {
   return Promise.race([
     promise,
     new Promise<T>((_, reject) => 
@@ -23,208 +23,113 @@ const withTimeout = <T>(promise: Promise<T>, timeoutMs: number = 5000): Promise<
   ]);
 };
 
-// جلب اللوحات مع بيانات العقود المرتبطة بها (بدون الاعتماد على علاقات FK في Postgres)
+// جلب اللوحات - نسخة مبسطة بدون JOIN لتجنب البطء
 export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContract[]> => {
+  console.log('🔍 fetchBillboardsWithContracts: Starting...');
   try {
-    // 1) جلب كل اللوحات مع timeout
-    const billboardsQuery = supabase
+    console.log('📡 Executing Supabase query...');
+    // استعلام بسيط جداً - فقط اللوحات بدون أي joins
+    const { data: billboards, error } = await supabase
       .from('billboards')
       .select('*')
       .order('ID', { ascending: true });
-    
-    const { data: billboards, error: billboardsError } = await withTimeout(billboardsQuery);
 
-    if (billboardsError) {
-      console.warn('Error fetching billboards with contracts:', billboardsError?.message || JSON.stringify(billboardsError));
+    console.log('✅ Query executed. Error:', error, 'Data count:', billboards?.length || 0);
+
+    if (error) {
+      console.error('❌ Error fetching billboards:', error);
       return [];
     }
 
-    const rows = billboards || [];
-
-    // 2) جمع أرقام العقود الموجودة
-    const contractIds = Array.from(
-      new Set(
-        rows
-          .map((b: any) => b.contract_id ?? b.Contract_Number ?? b.contractNumber)
-          .filter((v: any) => v !== null && v !== undefined && `${v}`.toString().trim() !== '')
-          .map((v: any) => {
-            const n = Number(v);
-            return Number.isFinite(n) ? n : String(v);
-          })
-      )
-    );
-
-    // 3) جلب العقود ذات الصلة دفعة واحدة (يدعم جدولي contracts و Contract)
-    let contractMap: Record<string, any> = {};
-    if (contractIds.length > 0) {
-      try {
-        const numericIds = contractIds
-          .map((v: any) => Number(v))
-          .filter((n: number) => Number.isFinite(n));
-        const stringIds = contractIds.map((v: any) => String(v));
-
-        // أ) جدول Contract الحديث (حسب id)
-        if (numericIds.length > 0) {
-          const contractQuery = supabase
-            .from('Contract')
-            .select('id, "Customer Name", "Ad Type", "Contract Date", "End Date", "Total Rent"')
-            .in('id', numericIds as any);
-          const { data: v2, error: e2 } = await withTimeout(contractQuery);
-          if (e2) {
-            console.warn('Failed loading contracts (Contract):', e2?.message || JSON.stringify(e2));
-          } else if (v2) {
-            for (const c of v2) {
-              contractMap[String(c.id)] = {
-                id: c.id,
-                customer_name: (c as any)['Customer Name'],
-                ad_type: (c as any)['Ad Type'],
-                start_date: (c as any)['Contract Date'],
-                end_date: (c as any)['End Date'],
-                rent_cost: (c as any)['Total Rent'],
-              };
-            }
-          }
-        }
-
-        // ب) جدول Contract القديم (حسب Contract_Number أو "Contract Number")
-        if (stringIds.length > 0) {
-          let legacyRows: any[] | null = null;
-
-          // محاولة باستخدام Contract_Number
-          try {
-            const contractNumberQuery = supabase
-              .from('Contract')
-              .select('id, Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", "Total Rent"')
-              .in('Contract_Number', stringIds as any);
-            const q1 = await withTimeout(contractNumberQuery);
-            if (!q1.error && q1.data) legacyRows = q1.data as any[];
-          } catch {}
-
-          // إذا لم تنجح، جرب باستخدام "Contract Number"
-          if (!legacyRows) {
-            try {
-              const contractNumQuery = supabase
-                .from('Contract')
-                .select('id, "Contract Number", "Customer Name", "Ad Type", "Contract Date", "End Date", "Total Rent"')
-                .in('Contract Number', stringIds as any);
-              const q2 = await withTimeout(contractNumQuery);
-              if (!q2.error && q2.data) legacyRows = q2.data as any[];
-            } catch {}
-          }
-
-          if (legacyRows && legacyRows.length > 0) {
-            for (const c of legacyRows) {
-              const key = String(c.Contract_Number ?? c['Contract Number'] ?? c.id);
-              contractMap[key] = {
-                id: c.id ?? key,
-                customer_name: c['Customer Name'] ?? '',
-                ad_type: c['Ad Type'] ?? '',
-                start_date: c['Contract Date'] ?? '',
-                end_date: c['End Date'] ?? '',
-                rent_cost: typeof c['Total Rent'] === 'number' ? c['Total Rent'] : Number(c['Total Rent']) || 0,
-              };
-            }
-          }
-        }
-      } catch (e: any) {
-        console.warn('Contracts fetch failed (network):', e?.message || JSON.stringify(e));
-      }
+    if (!billboards || billboards.length === 0) {
+      console.warn('⚠️ No billboards found in database');
+      return [];
     }
 
-    // 4) تحويل البيانات إلى الشكل المطلوب
-    const processedBillboards: BillboardWithContract[] = rows.map((billboard: any) => {
-      const contractKey = billboard.contract_id ?? billboard.Contract_Number ?? billboard.contractNumber;
-      const relatedContract = contractKey ? contractMap[String(contractKey)] : undefined;
-
-      const hasContractNumber = Boolean(contractKey);
-
-      const endDateRaw = relatedContract?.end_date || billboard.end_date || billboard.Rent_End_Date;
-      const startDateRaw = relatedContract?.start_date || billboard.start_date || billboard.Rent_Start_Date;
+    // معالجة بسيطة للبيانات
+    const processedBillboards: BillboardWithContract[] = billboards.map((billboard: any) => {
+      const endDateRaw = billboard.Rent_End_Date;
+      const startDateRaw = billboard.Rent_Start_Date;
+      
       let remainingDays: number | undefined = undefined;
       let nearExpiry = false;
+      
       if (endDateRaw) {
-        const endDate = new Date(endDateRaw);
-        if (!isNaN(endDate.getTime())) {
-          const today = new Date();
-          const diffMs = endDate.getTime() - today.getTime();
-          remainingDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-          if (remainingDays > 0 && remainingDays <= 20) nearExpiry = true;
-        }
+        try {
+          const endDate = new Date(endDateRaw);
+          if (!isNaN(endDate.getTime())) {
+            const today = new Date();
+            const diffMs = endDate.getTime() - today.getTime();
+            remainingDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+            if (remainingDays > 0 && remainingDays <= 20) nearExpiry = true;
+          }
+        } catch {}
       }
 
+      const hasContract = Boolean(billboard.Contract_Number);
       let status: 'available' | 'rented' | 'maintenance';
-      if (hasContractNumber) {
+      
+      if (hasContract) {
         if (typeof remainingDays === 'number' && remainingDays <= 0) {
           status = 'available';
         } else {
           status = 'rented';
         }
       } else {
-        status = (billboard.Status || billboard.status || 'available');
+        status = billboard.Status || 'available';
       }
 
       return {
-        ID: billboard.ID || billboard.id,
-        Billboard_Name: billboard.Billboard_Name || billboard.name || `لوحة رقم ${billboard.ID || billboard.id}`,
-        City: billboard.City || billboard.city || '',
-        District: billboard.District || billboard.district || '',
-        Municipality: billboard.Municipality || billboard.municipality || '',
-        Size: billboard.Size || billboard.size || '',
+        ID: billboard.ID,
+        Billboard_Name: billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`,
+        City: billboard.City || '',
+        District: billboard.District || '',
+        Municipality: billboard.Municipality || '',
+        Size: billboard.Size || '',
         Status: status,
-        Price: billboard.Price || billboard.price || '',
-        Level: billboard.Level || billboard.level || '',
-        Image_URL: billboard.Image_URL || billboard.image_url || '',
-        GPS_Coordinates: billboard.GPS_Coordinates || billboard.coordinates || '',
-        GPS_Link: billboard.GPS_Link || (billboard.coordinates ? `https://www.google.com/maps?q=${billboard.coordinates}` : ''),
-        Nearest_Landmark: billboard.Nearest_Landmark || billboard.location || '',
-        Faces_Count: billboard.Faces_Count || billboard.faces_count || '1',
-
-        Contract_Number: billboard.contract_id || billboard.Contract_Number || '',
-        Customer_Name: relatedContract?.customer_name || billboard.customer_name || billboard['Customer Name'] || '',
+        Price: billboard.Price || '',
+        Level: billboard.Level || '',
+        Image_URL: billboard.Image_URL || '',
+        GPS_Coordinates: billboard.GPS_Coordinates || '',
+        GPS_Link: billboard.GPS_Link || '',
+        Nearest_Landmark: billboard.Nearest_Landmark || '',
+        Faces_Count: billboard.Faces_Count || '1',
+        Contract_Number: billboard.Contract_Number || '',
+        Customer_Name: billboard.Customer_Name || '',
         Rent_Start_Date: startDateRaw || '',
         Rent_End_Date: endDateRaw || '',
         Days_Count: typeof remainingDays === 'number' ? String(remainingDays) : undefined,
-        Ad_Type: relatedContract?.ad_type || billboard.ad_type || billboard['Ad Type'] || '',
-
-        contract: relatedContract
-          ? {
-              id: relatedContract.id,
-              customer_name: relatedContract.customer_name,
-              ad_type: relatedContract.ad_type,
-              start_date: relatedContract.start_date,
-              end_date: relatedContract.end_date,
-              rent_cost: relatedContract.rent_cost,
-            }
-          : undefined,
-
-        id: String(billboard.ID || billboard.id),
-        name: billboard.Billboard_Name || billboard.name,
-        location: billboard.Nearest_Landmark || billboard.location,
-        size: billboard.Size || billboard.size,
-        price: Number(billboard.Price || billboard.price || 0),
+        Ad_Type: billboard.Ad_Type || '',
+        id: String(billboard.ID),
+        name: billboard.Billboard_Name,
+        location: billboard.Nearest_Landmark,
+        size: billboard.Size,
+        price: Number(billboard.Price || 0),
         status: status as 'available' | 'rented' | 'maintenance',
-        city: billboard.City || billboard.city,
-        district: billboard.District || billboard.district,
-        municipality: billboard.Municipality || billboard.municipality,
-        coordinates: billboard.GPS_Coordinates || billboard.coordinates,
-        image: billboard.Image_URL || billboard.image_url,
-        contractNumber: billboard.contract_id || billboard.Contract_Number || '',
-        clientName: relatedContract?.customer_name || billboard.customer_name || billboard['Customer Name'] || '',
+        city: billboard.City,
+        district: billboard.District,
+        municipality: billboard.Municipality,
+        coordinates: billboard.GPS_Coordinates,
+        image: billboard.Image_URL,
+        contractNumber: billboard.Contract_Number || '',
+        clientName: billboard.Customer_Name || '',
         expiryDate: endDateRaw || '',
-        adType: relatedContract?.ad_type || billboard.ad_type || billboard['Ad Type'] || '',
-        level: billboard.Level || billboard.level || '',
+        adType: billboard.Ad_Type || '',
+        level: billboard.Level || '',
         remainingDays,
         nearExpiry,
       };
     });
 
-    console.log('Fetched billboards with contracts:', processedBillboards.length);
+    console.log('Fetched billboards (simplified):', processedBillboards.length);
     return processedBillboards;
   } catch (error) {
-    console.warn('Error in fetchBillboardsWithContracts:', (error as any)?.message || JSON.stringify(error));
+    console.error('Error in fetchBillboardsWithContracts:', error);
     return [];
   }
 };
+
+
 
 // تحديث بيانات اللوحة مع العقد
 export const updateBillboardContract = async (

@@ -25,6 +25,7 @@ interface CostSummaryCardProps {
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
+  totalFriendCosts?: number;
 }
 
 export function CostSummaryCard({
@@ -46,8 +47,12 @@ export function CostSummaryCard({
   originalTotal,
   onSave,
   onCancel,
-  saving
+  saving,
+  totalFriendCosts = 0
 }: CostSummaryCardProps) {
+  
+  // Calculate net rental after friend costs
+  const netRentalAfterFriendCosts = rentalCostOnly - totalFriendCosts;
   return (
     <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/30 shadow-lg">
       <CardHeader className="pb-3">
@@ -130,6 +135,22 @@ export function CostSummaryCard({
               <div className="flex justify-between text-base font-semibold">
                 <span className="text-card-foreground">سعر الإيجار فقط:</span>
                 <span className="text-primary">{(rentalCostOnly || 0).toLocaleString('ar-LY')} د.ل</span>
+              </div>
+            </>
+          )}
+
+          {totalFriendCosts > 0 && (
+            <>
+              <div className="flex justify-between text-sm items-center bg-blue-50 p-2 rounded">
+                <span className="flex items-center gap-1 text-blue-600">
+                  <DollarSign className="h-4 w-4" />
+                  تكلفة اللوحات من الشركات الصديقة:
+                </span>
+                <span className="text-blue-600 font-medium">{(totalFriendCosts || 0).toLocaleString('ar-LY')} د.ل</span>
+              </div>
+              <div className="flex justify-between text-base font-bold bg-green-50 p-2 rounded">
+                <span className="text-green-700">صافي الإيجار (بعد تكلفة الشركات الصديقة):</span>
+                <span className="text-green-700">{(netRentalAfterFriendCosts || 0).toLocaleString('ar-LY')} د.ل</span>
               </div>
             </>
           )}

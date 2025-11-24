@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Chrome as Home, MapPin, Trash2, Wrench, FileText, Users, Merge, TrendingUp, TrendingDown, CreditCard, DollarSign, Calculator, Calendar, ChartBar as BarChart3, Settings, LogOut, Printer, Wallet, Receipt, Database, AlertCircle, MessageSquare, Moon, Sun, Hammer } from 'lucide-react';
+import { Chrome as Home, MapPin, Trash2, Wrench, FileText, Users, Merge, TrendingUp, TrendingDown, CreditCard, DollarSign, Calculator, Calendar, ChartBar as BarChart3, Settings, LogOut, Printer, Wallet, Receipt, Database, AlertCircle, MessageSquare, Moon, Sun, Hammer, Scissors, Building2 } from 'lucide-react';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
@@ -37,6 +37,8 @@ const sidebarSections: SidebarSection[] = [
       { id: 'billboard_maintenance', label: 'صيانة اللوحات', icon: Wrench, path: '/admin/billboard-maintenance' },
       { id: 'shared_billboards', label: 'اللوحات المشتركة', icon: FileText, path: '/admin/shared-billboards' },
       { id: 'shared_companies', label: 'الشركات المشاركة', icon: FileText, path: '/admin/shared-companies' },
+      { id: 'friend_billboards', label: 'لوحات الأصدقاء', icon: Building2, path: '/admin/friend-billboards' },
+      { id: 'friend_accounts', label: 'حسابات لوحات الأصدقاء', icon: DollarSign, path: '/admin/friend-accounts' },
       { id: 'partnership_dashboard', label: 'توزيع حصص الشركاء', icon: BarChart3, path: '/admin/partnership-dashboard' },
     ],
   },
@@ -77,6 +79,7 @@ const sidebarSections: SidebarSection[] = [
       { id: 'installation_tasks', label: 'مهام التركيب', icon: Hammer, path: '/admin/installation-tasks' },
       { id: 'removal_tasks', label: 'مهام إزالة الدعاية', icon: Trash2, path: '/admin/removal-tasks' },
       { id: 'print_tasks', label: 'مهام الطباعة', icon: Printer, path: '/admin/print-tasks' },
+      { id: 'cutout_tasks', label: 'مهام المجسمات', icon: Scissors, path: '/admin/cutout-tasks' },
     ],
   },
   {

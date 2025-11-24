@@ -436,7 +436,7 @@ export function PrintTaskInvoice({
         <h3 className="text-lg font-semibold">معاينة فاتورة الطباعة</h3>
         <Button onClick={handlePrint} className="gap-2">
           <Printer className="h-4 w-4" />
-          طباعة الفاتورة
+          طباعة فاتورة المطبعة
         </Button>
       </div>
       

@@ -39,6 +39,7 @@ export function EditContractSidebar({
 }: EditContractSidebarProps) {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [pricingCategories] = useState<string[]>(['عادي', 'مسوق', 'شركات', 'المدينة']);
+  const [friendRentalCost, setFriendRentalCost] = useState<number>(0);
 
   // Load customers
   useEffect(() => {
@@ -258,6 +259,22 @@ export function EditContractSidebar({
               value={formData.operatingFeeRate}
               onChange={(e) => updateFormData({ operatingFeeRate: parseFloat(e.target.value) || 0 })}
             />
+          </div>
+          
+          <div>
+            <Label htmlFor="friendRentalCost">سعر الإيجار من الصديق (اختياري)</Label>
+            <Input
+              id="friendRentalCost"
+              type="number"
+              min="0"
+              step="0.01"
+              value={friendRentalCost}
+              onChange={(e) => setFriendRentalCost(parseFloat(e.target.value) || 0)}
+              placeholder="0.00"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              للوحات الأصدقاء فقط - سيتم حساب الربح تلقائياً
+            </p>
           </div>
         </CardContent>
       </Card>

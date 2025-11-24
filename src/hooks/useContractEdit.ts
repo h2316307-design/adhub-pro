@@ -25,6 +25,13 @@ interface EditInstallment {
   dueDate: string;
 }
 
+interface FriendBillboardCost {
+  billboardId: string;
+  friendCompanyId: string;
+  friendCompanyName: string;
+  friendRentalCost: number;
+}
+
 export function useContractEdit(contractId: string) {
   const [formData, setFormData] = useState<EditFormData>({
     customerName: '',
@@ -56,6 +63,7 @@ export function useContractEdit(contractId: string) {
   const [pricingData, setPricingData] = useState<any[]>([]);
   const [originalContract, setOriginalContract] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [friendBillboardCosts, setFriendBillboardCosts] = useState<FriendBillboardCost[]>([]);
 
   // Load contract data
   useEffect(() => {
@@ -110,6 +118,27 @@ export function useContractEdit(contractId: string) {
         // Set installments
         if (contract.installments_data && Array.isArray(contract.installments_data)) {
           setInstallments(contract.installments_data);
+        }
+
+        // Load friend billboard rentals for this contract
+        const { data: friendRentals } = await supabase
+          .from('friend_billboard_rentals')
+          .select(`
+            billboard_id,
+            friend_company_id,
+            friend_rental_cost,
+            friend_companies!inner(name)
+          `)
+          .eq('contract_number', Number(contractId));
+
+        if (friendRentals && friendRentals.length > 0) {
+          const friendCosts: FriendBillboardCost[] = friendRentals.map((rental: any) => ({
+            billboardId: String(rental.billboard_id),
+            friendCompanyId: rental.friend_company_id,
+            friendCompanyName: rental.friend_companies?.name || 'غير محدد',
+            friendRentalCost: rental.friend_rental_cost || 0
+          }));
+          setFriendBillboardCosts(friendCosts);
         }
 
       } catch (error) {
@@ -187,6 +216,28 @@ export function useContractEdit(contractId: string) {
     setFormData(prev => ({ ...prev, ...updates }));
   };
 
+  const updateFriendBillboardCost = (billboardId: string, friendCompanyId: string, friendCompanyName: string, cost: number) => {
+    setFriendBillboardCosts(prev => {
+      const existing = prev.find(f => f.billboardId === billboardId);
+      if (existing) {
+        return prev.map(f => 
+          f.billboardId === billboardId 
+            ? { ...f, friendCompanyId, friendCompanyName, friendRentalCost: cost }
+            : f
+        );
+      } else {
+        return [...prev, { billboardId, friendCompanyId, friendCompanyName, friendRentalCost: cost }];
+      }
+    });
+  };
+
+  const removeFriendBillboardCost = (billboardId: string) => {
+    setFriendBillboardCosts(prev => prev.filter(f => f.billboardId !== billboardId));
+  };
+
+  // Calculate total friend costs
+  const totalFriendCosts = friendBillboardCosts.reduce((sum, f) => sum + f.friendRentalCost, 0);
+
   const updateInstallment = (index: number, field: string, value: any) => {
     setInstallments(prev => prev.map((inst, i) => {
       if (i === index) {
@@ -253,6 +304,35 @@ export function useContractEdit(contractId: string) {
     return null;
   };
 
+  // ✅ NEW: Calculate billboard price with discount distribution
+  const calculateBillboardPriceWithDiscount = (
+    billboard: any,
+    months: number,
+    days: number,
+    mode: 'months' | 'days',
+    totalDiscount: number,
+    totalBillboards: number
+  ): { priceBeforeDiscount: number; priceAfterDiscount: number; discountPerBillboard: number } => {
+    const sizeId = billboard.size_id || billboard.Size_ID;
+    const level = billboard.level || billboard.Level;
+    
+    let priceBeforeDiscount = 0;
+    
+    if (mode === 'months' && months > 0) {
+      const price = getPriceFromDatabase(sizeId, level, formData.pricingCategory, months);
+      priceBeforeDiscount = price || 0;
+    } else if (mode === 'days' && days > 0) {
+      const dailyPrice = getDailyPriceFromDatabase(sizeId, level, formData.pricingCategory);
+      priceBeforeDiscount = (dailyPrice || 0) * days;
+    }
+    
+    // Distribute discount equally across all billboards
+    const discountPerBillboard = totalBillboards > 0 ? totalDiscount / totalBillboards : 0;
+    const priceAfterDiscount = Math.max(0, priceBeforeDiscount - discountPerBillboard);
+    
+    return { priceBeforeDiscount, priceAfterDiscount, discountPerBillboard };
+  };
+
   const getDailyPriceFromDatabase = (sizeId: number | null, level: any, customer: string): number | null => {
     if (!sizeId) return null;
     
@@ -284,7 +364,12 @@ export function useContractEdit(contractId: string) {
     getPriceFromDatabase,
     getDailyPriceFromDatabase,
     calculateDueDate,
+    calculateBillboardPriceWithDiscount,
     originalContract,
-    isLoading
+    isLoading,
+    friendBillboardCosts,
+    updateFriendBillboardCost,
+    removeFriendBillboardCost,
+    totalFriendCosts
   };
 }

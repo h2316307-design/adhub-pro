@@ -44,7 +44,10 @@ import Printers from "./pages/Printers";
 import InstallationTasks from "./pages/InstallationTasks";
 import RemovalTasks from "./pages/RemovalTasks";
 import PrintTasks from "./pages/PrintTasks";
+import CutoutTasks from "./pages/CutoutTasks";
 import PDFTemplateSettings from "./pages/PDFTemplateSettings";
+import FriendBillboards from "./pages/FriendBillboards";
+import FriendCompanyAccounts from "./pages/FriendCompanyAccounts";
 import { MainLayout } from "@/components/Layout/MainLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
@@ -137,6 +140,22 @@ const App = () => (
                   <MainLayout>
                     <SharedCompanies />
                   </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/friend-billboards"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FriendBillboards />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/friend-accounts"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <FriendCompanyAccounts />
                 </ProtectedRoute>
               }
             />
@@ -406,6 +425,16 @@ const App = () => (
                 <ProtectedRoute requireAdmin>
                   <MainLayout>
                     <PrintTasks />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/cutout-tasks"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <MainLayout>
+                    <CutoutTasks />
                   </MainLayout>
                 </ProtectedRoute>
               }

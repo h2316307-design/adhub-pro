@@ -1,8 +1,16 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Calendar, X, Wrench } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Calendar, X, Wrench, Building2 } from 'lucide-react';
 import type { Billboard } from '@/types';
+
+interface FriendBillboardCost {
+  billboardId: string;
+  friendCompanyId: string;
+  friendCompanyName: string;
+  friendRentalCost: number;
+}
 
 interface SelectedBillboardsCardProps {
   selected: string[];
@@ -20,10 +28,15 @@ interface SelectedBillboardsCardProps {
   pricingMode: 'months' | 'days';
   durationMonths: number;
   durationDays: number;
-  // ✅ NEW: Add currency symbol prop
   currencySymbol?: string;
-  // ✅ NEW: Size names mapping (size_id -> name)
   sizeNames?: Map<number, string>;
+  // ✅ NEW: Discount info for price breakdown
+  totalDiscount?: number;
+  discountType?: 'percent' | 'amount';
+  discountValue?: number;
+  // ✅ NEW: Friend billboard costs
+  friendBillboardCosts?: FriendBillboardCost[];
+  onUpdateFriendCost?: (billboardId: string, friendCompanyId: string, friendCompanyName: string, cost: number) => void;
 }
 
 export function SelectedBillboardsCard({
@@ -36,7 +49,12 @@ export function SelectedBillboardsCard({
   durationMonths,
   durationDays,
   currencySymbol = 'د.ل',
-  sizeNames = new Map()
+  sizeNames = new Map(),
+  totalDiscount = 0,
+  discountType = 'percent',
+  discountValue = 0,
+  friendBillboardCosts = [],
+  onUpdateFriendCost
 }: SelectedBillboardsCardProps) {
   
   // ✅ NEW: Helper to get display size name
@@ -47,7 +65,23 @@ export function SelectedBillboardsCard({
     }
     return billboard.size || billboard.Size || 'غير محدد';
   };
+  
   const selectedBillboards = billboards.filter((b) => selected.includes(String((b as any).ID)));
+
+  // ✅ DEBUG: Log billboard data to check friend_company_id
+  React.useEffect(() => {
+    console.log('🔍 Selected Billboards Data:', selectedBillboards.map(b => ({
+      id: (b as any).ID,
+      name: (b as any).name || (b as any).Billboard_Name,
+      friend_company_id: (b as any).friend_company_id,
+      friend_companies: (b as any).friend_companies
+    })));
+  }, [selectedBillboards]);
+
+  // ✅ Calculate total price of all billboards before discount
+  const totalPriceBeforeDiscount = React.useMemo(() => {
+    return selectedBillboards.reduce((sum, b) => sum + calculateBillboardPrice(b), 0);
+  }, [selectedBillboards, calculateBillboardPrice]);
 
   // ✅ NEW: Calculate installation cost summary with unique sizes display
   const installationCostSummary = React.useMemo(() => {
@@ -88,11 +122,30 @@ export function SelectedBillboardsCard({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {selectedBillboards.map((b) => {
+                const billboardId = String((b as any).ID);
                 const totalForBoard = calculateBillboardPrice(b);
                 const installDetail = installationDetails.find(
-                  detail => detail.billboardId === String((b as any).ID)
+                  detail => detail.billboardId === billboardId
                 );
                 const installPrice = installDetail?.installationPrice || 0;
+                
+                // ✅ Calculate proportional discount based on billboard's price percentage
+                const billboardPricePercentage = totalPriceBeforeDiscount > 0 
+                  ? totalForBoard / totalPriceBeforeDiscount 
+                  : 0;
+                const discountPerBillboard = totalDiscount * billboardPricePercentage;
+                const priceAfterDiscount = Math.max(0, totalForBoard - discountPerBillboard);
+
+                // ✅ Check if this is a friend company billboard
+                const isFriendBillboard = (b as any).friend_company_id;
+                const friendCost = friendBillboardCosts.find(f => f.billboardId === billboardId);
+                
+                // ✅ DEBUG: Log for each billboard
+                console.log(`🔍 Billboard ${billboardId}:`, {
+                  friend_company_id: (b as any).friend_company_id,
+                  isFriendBillboard,
+                  friend_companies: (b as any).friend_companies
+                });
 
                 return (
                   <Card 
@@ -123,12 +176,66 @@ export function SelectedBillboardsCard({
                             </div>
                           </div>
                           <div className="text-xs font-medium space-y-1">
-                            <div className="text-primary">
-                              الإيجار: {totalForBoard.toLocaleString('ar-LY')} {currencySymbol} {' '}
-                              {pricingMode === 'months' ? `/${durationMonths} شهر` : `/${durationDays} يوم`}
+                            {isFriendBillboard && (
+                              <div className="flex items-center gap-1 text-blue-500 bg-blue-50 p-2 rounded mb-2">
+                                <Building2 className="h-4 w-4" />
+                                <span className="font-bold">
+                                  لوحة من شركة صديقة{(b as any).friend_companies?.name ? ` - ${(b as any).friend_companies.name}` : ''}
+                                </span>
+                              </div>
+                            )}
+                            
+                            <div className="text-muted-foreground">
+                              الإيجار (قبل الخصم): {totalForBoard.toLocaleString('ar-LY')} {currencySymbol}
                             </div>
+                            {discountPerBillboard > 0 && (
+                              <>
+                                <div className="text-orange-600">
+                                  الخصم: - {discountPerBillboard.toLocaleString('ar-LY')} {currencySymbol}
+                                </div>
+                                <div className="text-primary font-bold">
+                                  الإيجار (بعد الخصم): {priceAfterDiscount.toLocaleString('ar-LY')} {currencySymbol} {' '}
+                                  {pricingMode === 'months' ? `/${durationMonths} شهر` : `/${durationDays} يوم`}
+                                </div>
+                              </>
+                            )}
+                            {discountPerBillboard === 0 && (
+                              <div className="text-primary">
+                                {pricingMode === 'months' ? `/${durationMonths} شهر` : `/${durationDays} يوم`}
+                              </div>
+                            )}
+
+                            {/* ✅ Friend company cost input */}
+                            {isFriendBillboard && onUpdateFriendCost && (
+                              <div className="mt-2 p-2 bg-blue-50 rounded">
+                                <label className="text-xs text-blue-700 font-medium block mb-1">
+                                  تكلفة الإيجار من الشركة الصديقة:
+                                </label>
+                                <Input
+                                  type="number"
+                                  value={friendCost?.friendRentalCost || 0}
+                                  onChange={(e) => {
+                                    const cost = Number(e.target.value) || 0;
+                                    onUpdateFriendCost(
+                                      billboardId,
+                                      (b as any).friend_company_id,
+                                      (b as any).friend_companies?.name || 'غير محدد',
+                                      cost
+                                    );
+                                  }}
+                                  placeholder="0"
+                                  className="h-8 text-xs"
+                                />
+                                {friendCost && friendCost.friendRentalCost > 0 && (
+                                  <div className="text-xs text-blue-700 mt-1">
+                                    صافي الإيجار: {(priceAfterDiscount - friendCost.friendRentalCost).toLocaleString('ar-LY')} {currencySymbol}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            
                             {installPrice > 0 && (
-                              <div className="flex items-center gap-1 text-accent">
+                              <div className="flex items-center gap-1 text-accent mt-2">
                                 <Wrench className="h-3 w-3" />
                                 التركيب: {installPrice.toLocaleString('ar-LY')} د.ل
                                 {installDetail?.faces === 1 && (

@@ -347,6 +347,14 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                 </label>
               </div>
             )}
+            {(billboard as any).friend_companies?.name && (
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground">الشركة الصديقة:</span>
+                <Badge variant="outline" className="text-xs">
+                  {(billboard as any).friend_companies.name}
+                </Badge>
+              </div>
+            )}
           </div>
 
           {/* معلومات العقد المحسنة */}

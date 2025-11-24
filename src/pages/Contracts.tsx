@@ -15,6 +15,7 @@ import { SendContractDialog } from '@/components/contracts/SendContractDialog';
 import { AddPaymentDialog } from '@/components/contracts/AddPaymentDialog';
 import { BillboardPrintIndividual } from '@/components/contracts/BillboardPrintIndividual';
 import { SendAlertsDialog } from '@/components/contracts/SendAlertsDialog';
+import { QuickContractDialog } from '@/components/contracts/QuickContractDialog';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   createContract,
@@ -61,6 +62,7 @@ export default function Contracts() {
     customerPhone?: string;
   } | null>(null);
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
+  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
   const [formData, setFormData] = useState<ContractCreate>({
     customer_name: '',
@@ -653,7 +655,7 @@ export default function Contracts() {
           </Button>
           <Button
             className="btn-primary"
-            onClick={() => navigate('/admin/contracts/new')}
+            onClick={() => setQuickCreateOpen(true)}
           >
             <Plus className="h-4 w-4 ml-2" />
             إنشاء عقد جديد
@@ -1278,13 +1280,13 @@ export default function Contracts() {
           <div className="space-y-4">
             <div>
               <Label>اختر فرقة التركيب التي ستقوم بالتركيب لهذه العقدة</Label>
-              <Select value={selectedTeamId || ''} onValueChange={(v) => setSelectedTeamId(v || null)}>
+              <Select value={selectedTeamId || 'none'} onValueChange={(v) => setSelectedTeamId(v === 'none' ? null : v)}>
                 <SelectTrigger>
                   <SelectValue placeholder="اختر فرقة" />
                 </SelectTrigger>
                 <SelectContent>
                   {installationTeams.length === 0 ? (
-                    <SelectItem value="">لا توجد فرق</SelectItem>
+                    <SelectItem value="none">لا توجد فرق</SelectItem>
                   ) : (
                     installationTeams.map(team => (
                       <SelectItem key={team.id} value={String(team.id)}>{team.team_name || team.name || `فرقة ${team.id}`}</SelectItem>
@@ -1317,6 +1319,12 @@ export default function Contracts() {
         open={alertsDialogOpen}
         onOpenChange={setAlertsDialogOpen}
         contracts={contracts}
+      />
+
+      {/* Quick Contract Creation Dialog */}
+      <QuickContractDialog
+        open={quickCreateOpen}
+        onOpenChange={setQuickCreateOpen}
       />
     </div>
   );

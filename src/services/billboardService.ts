@@ -194,6 +194,8 @@ function processBillboardFromSupabase(row: any, index: number): Billboard {
   const expiryDate = row['Rent_End_Date'] ?? '';
   const adType = row['Ad_Type'] ?? '';
   const daysCount = row['Days_Count'];
+  const friendCompanyId = row['friend_company_id'] ?? row['friend_company'] ?? null;
+  const friendCompanies = row['friend_companies'] ?? null;
 
   let nearExpiry = false;
   let remainingDays: number | undefined = undefined;
@@ -254,6 +256,8 @@ function processBillboardFromSupabase(row: any, index: number): Billboard {
     rent_end_date: expiryDate || null,
     Customer_Name: clientName || null,
     Ad_Type: adType || null,
+    friend_company_id: friendCompanyId,
+    friend_companies: friendCompanies,
     
     // App-level normalized fields
     id: String(id),
@@ -277,6 +281,8 @@ function processBillboardFromSupabase(row: any, index: number): Billboard {
     remainingDays,
     adType: adType || undefined,
     level: String(level),
+    friend_company_id: friendCompanyId,
+    friend_companies: friendCompanies,
   };
 }
 
@@ -397,7 +403,7 @@ export async function loadBillboards(): Promise<Billboard[]> {
     console.log('[Service] محاولة تحميل اللوحات من Supabase...');
     const { data: rows, error: dbError } = await supabase
       .from('billboards')
-      .select('*');
+      .select('*, friend_companies(*)');
 
     if (!dbError && Array.isArray(rows) && rows.length > 0) {
       console.log(`[Service] تم استلام ${rows.length} صف من Supabase`);

@@ -350,14 +350,25 @@ export default function ContractCreate() {
         customer_category: formData.pricingCategory,
         billboards_data: JSON.stringify(selectedBillboardsData),
         billboards_count: selectedBillboardsData.length,
-        billboard_prices: JSON.stringify(selectedBillboardsData.map(b => ({
-          billboardId: b.id,
-          contractPrice: b.contractPrice,
-          printCost: b.printCost,
-          pricingCategory: b.pricingCategory,
-          pricingMode: b.pricingMode,
-          duration: b.duration
-        }))),
+        // ✅ Store billboard prices with discount details for history
+        billboard_prices: JSON.stringify(selectedBillboardsData.map(b => {
+          const billboardPrice = b.contractPrice; // السعر قبل الخصم
+          const discountPerBillboard = selected.length > 0 
+            ? calculations.discountAmount * (billboardPrice / estimatedTotalWithPrint) 
+            : 0;
+          
+          return {
+            billboardId: b.id,
+            priceBeforeDiscount: billboardPrice,
+            discountPerBillboard: discountPerBillboard,
+            priceAfterDiscount: billboardPrice - discountPerBillboard,
+            contractPrice: billboardPrice - discountPerBillboard,
+            printCost: b.printCost,
+            pricingCategory: b.pricingCategory,
+            pricingMode: b.pricingMode,
+            duration: b.duration
+          };
+        })),
         installments_data: installments,
         installation_cost: installationEnabled ? convertPrice(installationCost) : 0,
         installation_enabled: installationEnabled,

@@ -25,28 +25,22 @@ const CURRENCIES = [
 
 // ✅ FIXED: Custom number formatting function for Arabic locale with proper thousands separator
 const formatArabicNumber = (num: number): string => {
-  if (isNaN(num) || num === null || num === undefined) return '0';
-  
-  // Convert to string and handle decimal places
-  const numStr = num.toString();
-  const parts = numStr.split('.');
-  const integerPart = parts[0];
-  const decimalPart = parts[1];
-  
-  // Add thousands separator (comma) to integer part
+  if (num === null || num === undefined || isNaN(num)) return '0';
+
+  // ✅ تقريب لرقم واحد بعد الفاصلة العشرية
+  const rounded = Math.round(Number(num) * 10) / 10;
+
+  // استخدم فاصل الآلاف "," والفاصل العشري "." مع رقم واحد بعد الفاصلة
+  const [integerPart, decimalPart = '0'] = rounded.toString().split('.');
   const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  
-  // Return with decimal part if exists
-  if (decimalPart) {
-    return `${formattedInteger}.${decimalPart}`;
-  }
-  
-  return formattedInteger;
+
+  return `${formattedInteger}.${decimalPart}`;
 };
 
 export default function ContractPDFDialog({ open, onOpenChange, contract }: ContractPDFDialogProps) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [printMode, setPrintMode] = useState<'auto' | 'manual'>('auto');
+  const [useInstallationImages, setUseInstallationImages] = useState(false); // ✅ NEW: خيار استخدام صور التركيب
   const [customerData, setCustomerData] = useState<{
     name: string;
     company: string | null;
@@ -200,9 +194,9 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
     const endDate = contract?.end_date || contract?.['End Date'];
     const currencyInfo = getCurrencyInfo();
     
-    // ✅ CORRECTED: Use final total (rental + installation) for display
+    // ✅ FIXED: استخدم Total مباشرة لأنه يحتوي على السعر بالعملة المحولة
     const finalTotal = contract?.Total || contract?.total_cost || 0;
-    const rentalCost = contract?.rent_cost || contract?.['Total Rent'] || 0;
+    const rentalCost = contract?.['Total Rent'] || contract?.rent_cost || 0;
     const installationCost = contract?.installation_cost || 0;
     
     let duration = '';
@@ -334,7 +328,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
     return payments;
   };
 
-  // ✅ REFACTORED: Get billboards data from various sources
+  // ✅ REFACTORED: Get billboards data from various sources with installation images option
   const getBillboardsData = async () => {
     let billboardsToShow = [];
     
@@ -354,6 +348,33 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
 
           if (!error && billboardsData && billboardsData.length > 0) {
             billboardsToShow = billboardsData;
+            
+            // ✅ NEW: إذا كان useInstallationImages مفعل، جلب صور التركيب الفعلية
+            if (useInstallationImages) {
+              for (let billboard of billboardsToShow) {
+                try {
+                  const { data: installationData, error: installError } = await supabase
+                    .from('installation_task_items')
+                    .select('installed_image_face_a_url, installation_date')
+                    .eq('billboard_id', billboard.ID)
+                    .eq('status', 'completed')
+                    .not('installed_image_face_a_url', 'is', null)
+                    .order('installation_date', { ascending: false })
+                    .limit(1)
+                    .single();
+                  
+                  if (!installError && installationData?.installed_image_face_a_url) {
+                    console.log(`✅ استخدام صورة التركيب للوحة ${billboard.ID}:`, installationData.installed_image_face_a_url);
+                    // ✅ FIX: Update both Image_URL and image_name to force the new image to be used
+                    billboard.Image_URL = installationData.installed_image_face_a_url;
+                    billboard.image_name = null; // Clear image_name so Image_URL is used
+                    billboard.image = installationData.installed_image_face_a_url;
+                  }
+                } catch (error) {
+                  console.warn(`فشل جلب صورة التركيب للوحة ${billboard.ID}:`, error);
+                }
+              }
+            }
           }
         }
       } catch (e) {
@@ -380,7 +401,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
     return billboardsToShow;
   };
 
-  // ✅ REFACTORED: Get billboard prices from contract
+  // ✅ REFACTORED: Get billboard prices from contract (FIXED: handle both string and number IDs)
   const getBillboardPrices = () => {
     let billboardPrices = {};
     if (contract?.billboard_prices) {
@@ -390,11 +411,19 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           : contract.billboard_prices;
         
         if (Array.isArray(pricesData)) {
+          // ✅ FIX: Store prices with both string and number keys, support multiple price fields
           billboardPrices = pricesData.reduce((acc, item) => {
-            acc[item.billboardId] = item.contractPrice;
+            const id = String(item.billboardId);
+            // Try multiple price fields in order of preference
+            const price = item.finalPrice || item.calculatedPrice || item.price || item.contractPrice || 0;
+            acc[id] = price;
+            // Also store with number key if the ID is numeric
+            if (!isNaN(Number(id))) {
+              acc[Number(id)] = price;
+            }
             return acc;
           }, {});
-          console.log('✅ Loaded billboard prices from billboard_prices column:', billboardPrices);
+          console.log('✅ Loaded billboard prices (with dual keys):', billboardPrices);
         }
       } catch (e) {
         console.warn('Failed to parse billboard_prices:', e);
@@ -1514,10 +1543,19 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const norm = (b: any) => {
         const id = String(b.ID ?? b.id ?? b.code ?? '');
         
-        // Enhanced image handling - use dual source system
-        const imageName = b.image_name || b.Image_Name;
-        const imageUrl = b.Image_URL || b.image || b.billboard_image || b.imageUrl || b.img;
-        const image = imageName ? `/image/${imageName}` : (imageUrl || '');
+        // ✅ FIX: Enhanced image handling - prioritize updated installation images
+        let image = '';
+        // First check if billboard has an updated image (from installation_task_items)
+        if (b.image) {
+          image = String(b.image);
+        } else if (b.Image_URL) {
+          image = String(b.Image_URL);
+        } else {
+          // Fall back to image_name if no direct URL
+          const imageName = b.image_name || b.Image_Name;
+          const imageUrl = b.billboard_image || b.imageUrl || b.img;
+          image = imageName ? `/image/${imageName}` : (imageUrl || '');
+        }
         
         const municipality = String(b.Municipality ?? b.municipality ?? b.city ?? '');
         const district = String(b.District ?? b.district ?? '');
@@ -1525,17 +1563,46 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         const size = String(b.Size ?? b.size ?? '');
         const faces = String(b.Faces ?? b.faces ?? b.Number_of_Faces ?? b.Faces_Count ?? b.faces_count ?? '1');
         
-        // ✅ ENHANCED: Use historical price from billboard_prices column if available with currency
+        // ✅ FIX: Use historical price from billboard_prices column with proper ID matching
         let price = '';
-        const historicalPrice = billboardPrices[id];
-        if (historicalPrice !== undefined && historicalPrice !== null) {
+
+        // الحصول على السعر قبل الخصم من بيانات العقد إن وجد
+        let originalPriceBeforeDiscount: number | null = null;
+        try {
+          if (contract?.billboard_prices) {
+            const pricesData = typeof contract.billboard_prices === 'string'
+              ? JSON.parse(contract.billboard_prices)
+              : contract.billboard_prices;
+            if (Array.isArray(pricesData)) {
+              const priceItem = pricesData.find((item: any) => String(item.billboardId) === id);
+              if (priceItem && priceItem.priceBeforeDiscount != null) {
+                originalPriceBeforeDiscount = Number(priceItem.priceBeforeDiscount);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to parse billboard_prices for original price:', e);
+        }
+        
+        // Try to get price using different ID formats
+        const historicalPrice = billboardPrices[id] ?? billboardPrices[Number(id)];
+        
+        if (historicalPrice !== undefined && historicalPrice !== null && historicalPrice !== '') {
           const num = Number(historicalPrice);
           if (!isNaN(num) && num > 0) {
-            price = `<span style="direction:ltr;display:inline-block;"><span class=\"num\">${formatArabicNumber(num)}</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>`;
+            // ✅ FIXED: إظهار السعر قبل الخصم فقط إذا كان مختلفاً عن السعر النهائي
+            if (originalPriceBeforeDiscount && originalPriceBeforeDiscount > 0 && originalPriceBeforeDiscount !== num) {
+              // السعر قبل الخصم مختلف عن السعر النهائي - اعرض كلاهما
+              price = `<span style="direction:ltr;display:inline-block;"><span class=\"num\">${formatArabicNumber(num)}</span> <span class=\"currency\">${currencyInfo.symbol}</span><br/><span class=\"original-price\" style=\"font-size:8px;\">(قبل الخصم: <span class=\"num\">${formatArabicNumber(originalPriceBeforeDiscount)}</span> <span class=\"currency\">${currencyInfo.symbol}</span>)</span></span>`;
+            } else {
+              // السعر قبل الخصم مساوي للسعر النهائي أو غير موجود - اعرض السعر فقط
+              price = `<span style="direction:ltr;display:inline-block;"><span class=\"num\">${formatArabicNumber(num)}</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>`;
+            }
+            console.log(`✅ Using historical price for billboard ${id}: ${num} ${currencyInfo.symbol}`);
           } else {
             price = `<span style="direction:ltr;display:inline-block;"><span class=\"num\">0</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>`;
+            console.warn(`⚠️ Invalid historical price for billboard ${id}: ${historicalPrice}`);
           }
-          console.log(`✅ Using historical price for billboard ${id}: ${price}`);
         } else {
           // Fallback to current billboard price
           const priceVal = b.Price ?? b.price ?? b.rent ?? b.Rent_Price ?? b.rent_cost ?? b['Total Rent'] ?? 0;
@@ -1543,13 +1610,14 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
             const num = typeof priceVal === 'number' ? priceVal : Number(priceVal);
             if (!isNaN(num) && num > 0) {
               price = `<span style="direction:ltr;display:inline-block;"><span class=\"num\">${formatArabicNumber(num)}</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>`;
+              console.log(`⚠️ Using fallback price for billboard ${id}: ${num} ${currencyInfo.symbol}`);
             } else {
               price = String(priceVal);
             }
           } else {
             price = `<span style="direction:ltr;display:inline-block;"><span class=\"num\">0</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>`;
+            console.warn(`⚠️ No price found for billboard ${id}`);
           }
-          console.log(`⚠️ Using fallback price for billboard ${id}: ${price}`);
         }
 
         let rent_end_date = '';
@@ -2399,11 +2467,35 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         const faces = String(b.Faces ?? b.faces ?? b.Number_of_Faces ?? b.Faces_Count ?? b.faces_count ?? '1');
         
         let price = '';
+
+        // الحصول على السعر قبل الخصم من بيانات العقد إن وجد
+        let originalPriceBeforeDiscount: number | null = null;
+        try {
+          if (contract?.billboard_prices) {
+            const pricesData = typeof contract.billboard_prices === 'string'
+              ? JSON.parse(contract.billboard_prices)
+              : contract.billboard_prices;
+            if (Array.isArray(pricesData)) {
+              const priceItem = pricesData.find((item: any) => String(item.billboardId) === id);
+              if (priceItem && priceItem.priceBeforeDiscount != null) {
+                originalPriceBeforeDiscount = Number(priceItem.priceBeforeDiscount);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to parse billboard_prices for original price:', e);
+        }
+
         const historicalPrice = billboardPrices[id];
         if (historicalPrice !== undefined && historicalPrice !== null) {
           const num = Number(historicalPrice);
           if (!isNaN(num) && num > 0) {
-            price = `<span style="direction:ltr;display:inline-block;"><span class="num">${formatArabicNumber(num)}</span> <span class="currency">${currencyInfo.symbol}</span></span>`;
+            if (originalPriceBeforeDiscount && originalPriceBeforeDiscount > 0) {
+              // ✅ إظهار السعر بعد الخصم مع السعر قبل الخصم في سطر جديد
+              price = `<span style="direction:ltr;display:inline-block;"><span class="num">${formatArabicNumber(num)}</span> <span class="currency">${currencyInfo.symbol}</span><br/><span class="original-price" style="font-size:11px;">(قبل الخصم: <span class="num">${formatArabicNumber(originalPriceBeforeDiscount)}</span> <span class="currency">${currencyInfo.symbol}</span>)</span></span>`;
+            } else {
+              price = `<span style="direction:ltr;display:inline-block;"><span class="num">${formatArabicNumber(num)}</span> <span class="currency">${currencyInfo.symbol}</span></span>`;
+            }
           } else {
             price = `<span style="direction:ltr;display:inline-block;"><span class="num">0</span> <span class="currency">${currencyInfo.symbol}</span></span>`;
           }
@@ -3171,6 +3263,24 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                     />
                     <span className="text-sm">طباعة يدوية (معاينة أولاً)</span>
                   </label>
+                  
+                  {/* ✅ NEW: خيار استخدام صور التركيب الفعلية */}
+                  <div className="pt-3 border-t border-primary/20">
+                    <label className="flex items-center space-x-3 space-x-reverse cursor-pointer">
+                      <input 
+                        type="checkbox" 
+                        checked={useInstallationImages} 
+                        onChange={(e) => setUseInstallationImages(e.target.checked)}
+                        className="text-primary focus:ring-primary rounded"
+                      />
+                      <div>
+                        <span className="text-sm font-medium">استخدام صور التركيب الفعلية</span>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          عرض صور التركيب المكتملة بدلاً من الصور الافتراضية للوحات
+                        </p>
+                      </div>
+                    </label>
+                  </div>
                 </div>
               </div>
 

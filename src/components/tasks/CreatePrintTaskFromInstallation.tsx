@@ -1,15 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Printer, Image as ImageIcon, Download } from 'lucide-react';
+import { Printer, Scissors, FileText } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { useQueryClient } from '@tanstack/react-query';
+import { DesignDisplayCard } from '@/components/print-tasks/DesignDisplayCard';
 import { PrintTaskInvoice } from './PrintTaskInvoice';
+import { CutoutTaskInvoice } from './CutoutTaskInvoice';
 
 interface DesignGroup {
   design: string;
@@ -23,6 +25,10 @@ interface DesignGroup {
   hasCutout?: boolean;
   cutoutCount?: number;
   cutoutImageUrl?: string;
+  printerCostPerMeter: number;
+  printerCutoutCostPerUnit: number;
+  customerCostPerMeter: number;
+  customerCutoutCostPerUnit: number;
 }
 
 interface BillboardInfo {
@@ -55,8 +61,7 @@ export function CreatePrintTaskFromInstallation({
   taskItems,
   onSuccess
 }: CreatePrintTaskFromInstallationProps) {
-  const [pricePerMeter, setPricePerMeter] = useState<number>(10);
-  const [cutoutPricePerUnit, setCutoutPricePerUnit] = useState<number>(0);
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [designGroups, setDesignGroups] = useState<DesignGroup[]>([]);
   const [billboardsMap, setBillboardsMap] = useState<Record<number, BillboardInfo>>({});
@@ -64,32 +69,37 @@ export function CreatePrintTaskFromInstallation({
   const [printerId, setPrinterId] = useState<string>('');
   const [cutoutPrinterId, setCutoutPrinterId] = useState<string>('');
   const [printers, setPrinters] = useState<Array<{ id: string; name: string }>>([]);
-  const [showPrices, setShowPrices] = useState<boolean>(true);
   const [cutoutImageUrls, setCutoutImageUrls] = useState<Record<string, string>>({});
-  const [pricePerMeterEditable, setPricePerMeterEditable] = useState<boolean>(true);
+  const hasFetchedRef = useRef(false);
+  const [showPrintInvoice, setShowPrintInvoice] = useState(false);
+  const [showCutoutInvoice, setShowCutoutInvoice] = useState(false);
+  
+  // نظام التوزيع الذكي للمجسمات
+  const [totalCutoutPrinterCost, setTotalCutoutPrinterCost] = useState<number>(0);
+  const [totalCutoutCustomerCost, setTotalCutoutCustomerCost] = useState<number>(0);
+  const [useDistribution, setUseDistribution] = useState(false);
 
-  // إعادة تعيين البيانات عند التبديل بين المهام أو الإغلاق
   useEffect(() => {
     if (!open) {
       setDesignGroups([]);
       setBillboardsMap({});
       setEnrichedTaskItems([]);
-      setPricePerMeter(10);
-      setCutoutPricePerUnit(0);
       setPrinterId('');
       setCutoutPrinterId('');
-      setShowPrices(true);
       setCutoutImageUrls({});
+      setShowPrintInvoice(false);
+      setShowCutoutInvoice(false);
+      setTotalCutoutPrinterCost(0);
+      setTotalCutoutCustomerCost(0);
+      setUseDistribution(false);
+      hasFetchedRef.current = false;
     }
   }, [open, installationTaskId]);
 
-  // جلب سعر المتر وبيانات اللوحات والتصاميم والمطابع من قاعدة البيانات
   useEffect(() => {
     const fetchData = async () => {
-      console.log('🔍 Fetching data for print task...');
-      console.log('📦 Task items received:', taskItems);
+      console.log('Fetching data for print task...');
       
-      // جلب جميع البيانات بشكل متوازي
       const billboardIds = taskItems.map(item => item.billboard_id);
       const designIds = taskItems
         .map(item => item.selected_design_id)
@@ -101,21 +111,8 @@ export function CreatePrintTaskFromInstallation({
         designIds.length > 0 ? supabase.from('task_designs').select('id, design_face_a_url, design_face_b_url, cutout_image_url').in('id', designIds) : null,
         supabase.from('printers').select('id, name').eq('is_active', true)
       ]);
-      
-      // معالجة سعر المتر
-      if (pricingResult.data?.print_price) {
-        console.log('💰 Print price per meter:', pricingResult.data.print_price);
-        setPricePerMeter(pricingResult.data.print_price);
-        setPricePerMeterEditable(false);
-      } else {
-        console.log('💰 No default price found, using 10');
-        setPricePerMeter(10);
-        setPricePerMeterEditable(true);
-      }
 
-      // معالجة بيانات اللوحات
       if (billboardsResult && !billboardsResult.error) {
-        console.log('✅ Billboards fetched:', billboardsResult.data);
         const map: Record<number, BillboardInfo> = {};
         billboardsResult.data?.forEach((b: any) => {
           map[b.ID] = {
@@ -127,14 +124,11 @@ export function CreatePrintTaskFromInstallation({
         setBillboardsMap(map);
       }
 
-      // معالجة التصاميم
       if (designsResult && !designsResult.error && designsResult.data) {
-        console.log('✅ Designs fetched:', designsResult.data);
         const updatedItems = taskItems.map(item => {
           if (item.selected_design_id) {
             const design = designsResult.data?.find(d => d.id === item.selected_design_id);
             if (design) {
-              // تحديث حالة روابط صور المجسمات
               if (design.cutout_image_url && item.has_cutout) {
                 const key = `${design.design_face_a_url || design.design_face_b_url}-${item.billboard_id}`;
                 setCutoutImageUrls(prev => ({...prev, [key]: design.cutout_image_url || ''}));
@@ -148,41 +142,27 @@ export function CreatePrintTaskFromInstallation({
           }
           return item;
         });
-        console.log('✅ Updated task items with designs:', updatedItems);
         setEnrichedTaskItems(updatedItems);
       } else {
         setEnrichedTaskItems(taskItems);
       }
 
-      // معالجة المطابع
       if (printersResult.data && printersResult.data.length > 0) {
-        console.log('✅ Printers fetched:', printersResult.data);
         setPrinters(printersResult.data.map(p => ({ id: p.id, name: p.name })));
       } else {
-        console.log('⚠️ No printers found');
         setPrinters([]);
       }
     };
     
-    if (open && taskItems.length > 0) {
+    if (open && taskItems.length > 0 && !hasFetchedRef.current) {
+      hasFetchedRef.current = true;
       fetchData();
     }
   }, [open, taskItems, installationTaskId]);
 
-  // تجميع التصاميم حسب المقاس والتصميم مع المجسمات
   useEffect(() => {
-    console.log('🔄 Grouping designs...');
-    console.log('📊 Billboards map:', billboardsMap);
-    console.log('📦 Enriched task items:', enrichedTaskItems);
-    console.log('📦 Enriched task items length:', enrichedTaskItems.length);
-    
-    if (Object.keys(billboardsMap).length === 0) {
-      console.log('⏳ Waiting for billboards data...');
-      return;
-    }
-
+    if (Object.keys(billboardsMap).length === 0) return;
     if (!enrichedTaskItems || enrichedTaskItems.length === 0) {
-      console.log('⚠️ No enriched task items provided');
       setDesignGroups([]);
       return;
     }
@@ -192,24 +172,11 @@ export function CreatePrintTaskFromInstallation({
 
     enrichedTaskItems.forEach(item => {
       const billboard = billboardsMap[item.billboard_id];
-      
-      if (!billboard) {
-        console.warn(`⚠️ Billboard ${item.billboard_id} not found in map`);
-        return;
-      }
+      if (!billboard) return;
       
       const size = billboard.Size || '3x4';
       const hasCutout = item.has_cutout || billboard.has_cutout || false;
       
-      console.log(`📋 Processing item:`, {
-        billboard_id: item.billboard_id,
-        size,
-        design_face_a: item.design_face_a,
-        design_face_b: item.design_face_b,
-        hasCutout
-      });
-      
-      // معالجة الوجه الأمامي
       if (item.design_face_a) {
         hasDesigns = true;
         const key = `${size}_${item.design_face_a}_a`;
@@ -224,20 +191,25 @@ export function CreatePrintTaskFromInstallation({
             billboards: [],
             width,
             height,
-            hasCutout: false,
-            cutoutCount: 0
+            hasCutout,
+            cutoutCount: 0,
+            printerCostPerMeter: 10,
+            printerCutoutCostPerUnit: 0,
+            customerCostPerMeter: 15,
+            customerCutoutCostPerUnit: 0
           };
         }
         groups[key].quantity++;
         groups[key].billboards.push(item.billboard_id);
+        
         if (hasCutout) {
           groups[key].hasCutout = true;
           groups[key].cutoutCount = (groups[key].cutoutCount || 0) + 1;
-          groups[key].cutoutImageUrl = cutoutImageUrls[key] || '';
+          const cutoutKey = `${item.design_face_a}-${item.billboard_id}`;
+          groups[key].cutoutImageUrl = cutoutImageUrls[cutoutKey] || '';
         }
       }
 
-      // معالجة الوجه الخلفي
       if (item.design_face_b) {
         hasDesigns = true;
         const key = `${size}_${item.design_face_b}_b`;
@@ -252,30 +224,32 @@ export function CreatePrintTaskFromInstallation({
             billboards: [],
             width,
             height,
-            hasCutout: false,
-            cutoutCount: 0
+            hasCutout,
+            cutoutCount: 0,
+            printerCostPerMeter: 10,
+            printerCutoutCostPerUnit: 0,
+            customerCostPerMeter: 15,
+            customerCutoutCostPerUnit: 0
           };
         }
         groups[key].quantity++;
         groups[key].billboards.push(item.billboard_id);
+        
         if (hasCutout) {
           groups[key].hasCutout = true;
           groups[key].cutoutCount = (groups[key].cutoutCount || 0) + 1;
-          groups[key].cutoutImageUrl = cutoutImageUrls[key] || '';
+          const cutoutKey = `${item.design_face_b}-${item.billboard_id}`;
+          groups[key].cutoutImageUrl = cutoutImageUrls[cutoutKey] || '';
         }
       }
     });
 
     if (!hasDesigns) {
-      console.warn('⚠️ No designs found in task items. Please assign designs to billboards first.');
-      toast.error('لم يتم العثور على تصاميم! يرجى تعيين التصاميم للوحات أولاً في مهمة التركيب.');
+      toast.error('لم يتم العثور على تصاميم! يرجى تعيين التصاميم للوحات أولاً.');
     }
 
-    const groupsArray = Object.values(groups);
-    console.log('✅ Design groups created:', groupsArray);
-    console.log('📊 Has designs:', hasDesigns);
-    setDesignGroups(groupsArray);
-  }, [enrichedTaskItems, billboardsMap]);
+    setDesignGroups(Object.values(groups));
+  }, [enrichedTaskItems, billboardsMap, cutoutImageUrls]);
 
   const parseSizeDimensions = (size: string): { width: number; height: number } => {
     const parts = size.split(/[x×*]/);
@@ -285,14 +259,114 @@ export function CreatePrintTaskFromInstallation({
         height: parseFloat(parts[1])
       };
     }
-    return { width: 3, height: 4 }; // القيمة الافتراضية
+    return { width: 3, height: 4 };
+  };
+
+  const { printGroups, cutoutGroups } = useMemo(() => {
+    const print: DesignGroup[] = [];
+    const cutout: DesignGroup[] = [];
+    
+    designGroups.forEach(group => {
+      print.push({
+        ...group,
+        printerCutoutCostPerUnit: 0,
+        customerCutoutCostPerUnit: 0
+      });
+      
+      if (group.hasCutout && group.cutoutCount && group.cutoutCount > 0) {
+        cutout.push(group);
+      }
+    });
+    
+    return { printGroups: print, cutoutGroups: cutout };
+  }, [designGroups]);
+
+  const updateGroupPrice = (index: number, field: keyof DesignGroup, value: number) => {
+    setDesignGroups(prev => {
+      const updated = [...prev];
+      updated[index] = { ...updated[index], [field]: value };
+      return updated;
+    });
+  };
+
+  // دالة التوزيع الذكي للتكاليف
+  const distributeCutoutCosts = () => {
+    if (cutoutGroups.length === 0) return;
+    
+    const totalQuantity = cutoutGroups.reduce((sum, g) => sum + (g.cutoutCount || 0), 0);
+    
+    if (totalQuantity === 0) {
+      toast.error('لا توجد مجسمات للتوزيع');
+      return;
+    }
+    
+    const printerCostPerUnit = totalCutoutPrinterCost / totalQuantity;
+    const customerCostPerUnit = totalCutoutCustomerCost / totalQuantity;
+    
+    setDesignGroups(prev => {
+      const updated = [...prev];
+      cutoutGroups.forEach((group, idx) => {
+        const originalIndex = prev.findIndex(g => 
+          g.design === group.design && 
+          g.face === group.face && 
+          g.size === group.size
+        );
+        
+        if (originalIndex !== -1) {
+          updated[originalIndex] = {
+            ...updated[originalIndex],
+            printerCutoutCostPerUnit: printerCostPerUnit,
+            customerCutoutCostPerUnit: customerCostPerUnit
+          };
+        }
+      });
+      return updated;
+    });
+    
+    toast.success(`تم توزيع التكاليف بنجاح - ${totalQuantity} مجسم`);
+  };
+
+  const calculateTotals = () => {
+    let printerPrintCost = 0;
+    let printerCutoutCost = 0;
+    let customerPrintCost = 0;
+    let customerCutoutCost = 0;
+
+    printGroups.forEach(group => {
+      const printArea = group.area * group.quantity;
+      printerPrintCost += printArea * group.printerCostPerMeter;
+      customerPrintCost += printArea * group.customerCostPerMeter;
+    });
+    
+    cutoutGroups.forEach(group => {
+      if (group.cutoutCount) {
+        printerCutoutCost += group.cutoutCount * group.printerCutoutCostPerUnit;
+        customerCutoutCost += group.cutoutCount * group.customerCutoutCostPerUnit;
+      }
+    });
+
+    return {
+      printerPrintTotal: printerPrintCost,
+      printerCutoutTotal: printerCutoutCost,
+      printerTotal: printerPrintCost + printerCutoutCost,
+      customerPrintTotal: customerPrintCost,
+      customerCutoutTotal: customerCutoutCost,
+      customerTotal: customerPrintCost + customerCutoutCost,
+      printProfit: customerPrintCost - printerPrintCost,
+      cutoutProfit: customerCutoutCost - printerCutoutCost,
+      totalProfit: (customerPrintCost + customerCutoutCost) - (printerPrintCost + printerCutoutCost)
+    };
   };
 
   const handleCreatePrintTask = async () => {
     try {
       setLoading(true);
 
-      // جلب بيانات مهمة التركيب
+      if (!printerId) {
+        toast.error('يرجى اختيار المطبعة');
+        return;
+      }
+
       const { data: installationTask, error: taskError } = await supabase
         .from('installation_tasks')
         .select('contract_id, contract_ids')
@@ -301,416 +375,605 @@ export function CreatePrintTaskFromInstallation({
 
       if (taskError) throw taskError;
 
-      // جلب بيانات العقد
-      const contractIds = installationTask.contract_ids || [installationTask.contract_id];
+      let contractIds = installationTask.contract_ids && installationTask.contract_ids.length > 0 
+        ? installationTask.contract_ids 
+        : [installationTask.contract_id];
+
+      if (!contractIds || contractIds.length === 0 || !contractIds[0]) {
+        throw new Error('لا يوجد رقم عقد مرتبط بمهمة التركيب');
+      }
+
       const { data: contracts, error: contractError } = await supabase
         .from('Contract')
         .select('Contract_Number, customer_id, "Customer Name"')
         .in('Contract_Number', contractIds);
 
-      if (contractError) throw contractError;
+      if (contractError || !contracts || contracts.length === 0) {
+        throw new Error('لم يتم العثور على بيانات العقد');
+      }
 
-      const totalArea = designGroups.reduce((sum, group) => sum + (group.area * group.quantity), 0);
-      const totalCutouts = designGroups.reduce((sum, group) => sum + (group.cutoutCount || 0), 0);
-      const totalCost = (totalArea * pricePerMeter) + (totalCutouts * cutoutPricePerUnit);
+      const customerData = {
+        customer_id: contracts[0].customer_id,
+        customer_name: contracts[0]['Customer Name']
+      };
+
+      if (!customerData.customer_id || !customerData.customer_name) {
+        throw new Error('بيانات العميل غير مكتملة');
+      }
+
+      const totals = calculateTotals();
+      const totalArea = printGroups.reduce((sum, g) => sum + (g.area * g.quantity), 0);
+
+      // إنشاء فاتورة الطباعة
+      const printInvoiceNumber = `PT-${Date.now()}`;
+      const { data: printInvoice, error: printInvoiceError } = await supabase
+        .from('printed_invoices')
+        .insert({
+          contract_number: installationTask.contract_id,
+          invoice_number: printInvoiceNumber,
+          customer_id: customerData.customer_id,
+          customer_name: customerData.customer_name,
+          printer_id: printerId,
+          printer_name: printers.find(p => p.id === printerId)?.name || 'غير محدد',
+          invoice_date: new Date().toISOString().split('T')[0],
+          total_amount: totals.customerPrintTotal,
+          printer_cost: totals.printerPrintTotal,
+          invoice_type: 'print',
+          notes: `مهمة طباعة من التركيب ${installationTaskId}`
+        })
+        .select()
+        .single();
+
+      if (printInvoiceError) throw printInvoiceError;
 
       // إنشاء مهمة الطباعة
       const { data: printTask, error: printTaskError } = await supabase
         .from('print_tasks')
         .insert({
+          invoice_id: printInvoice.id,
           contract_id: installationTask.contract_id,
-          customer_id: contracts?.[0]?.customer_id,
-          customer_name: contracts?.[0]?.['Customer Name'],
-        printer_id: printerId || null,
-        cutout_printer_id: cutoutPrinterId || null,
-        status: 'pending',
+          customer_id: customerData.customer_id,
+          customer_name: customerData.customer_name,
+          customer_total_amount: totals.customerPrintTotal,
+          printer_id: printerId,
+          status: 'pending',
           total_area: totalArea,
-          total_cost: totalCost,
-          price_per_meter: pricePerMeter,
-          has_cutouts: totalCutouts > 0,
-          cutout_quantity: totalCutouts,
-          cutout_cost: totalCutouts * cutoutPricePerUnit,
+          total_cost: totals.printerPrintTotal,
+          printer_total_cost: totals.printerPrintTotal,
           priority: 'normal',
-          notes: `تم إنشاؤها تلقائياً من مهمة التركيب ${installationTaskId}${cutoutPrinterId ? `\nمطبعة المجسمات: ${selectedCutoutPrinterName}` : ''}`
+          notes: `مهمة طباعة من التركيب - الربح: ${totals.printProfit.toFixed(2)} د.ل`
         })
         .select()
         .single();
 
       if (printTaskError) throw printTaskError;
 
-      // إنشاء عناصر مهمة الطباعة
-      const printTaskItems = designGroups.map(group => {
-        const cutoutKey = `${group.design}-${group.face}`;
-        return {
-          task_id: printTask.id,
-          description: `${group.size} - الوجه ${group.face === 'a' ? 'الأمامي' : 'الخلفي'}${group.hasCutout ? ' (مجسم)' : ''}`,
-          width: group.width,
-          height: group.height,
-          area: group.area,
-          quantity: group.quantity,
-          unit_cost: pricePerMeter,
-          total_cost: group.area * group.quantity * pricePerMeter,
-          design_face_a: group.face === 'a' ? group.design : null,
-          design_face_b: group.face === 'b' ? group.design : null,
-          cutout_image_url: group.hasCutout ? (cutoutImageUrls[cutoutKey] || null) : null,
-          status: 'pending'
-        };
-      });
+      // إنشاء بنود مهمة الطباعة
+      const printTaskItems = printGroups.map(group => ({
+        task_id: printTask.id,
+        description: `${group.size} - ${group.face === 'a' ? 'وجه أمامي' : 'وجه خلفي'}`,
+        width: group.width,
+        height: group.height,
+        area: group.area,
+        quantity: group.quantity,
+        unit_cost: group.printerCostPerMeter * group.area,
+        printer_unit_cost: group.printerCostPerMeter * group.area,
+        customer_unit_cost: group.customerCostPerMeter * group.area,
+        total_cost: group.printerCostPerMeter * group.area * group.quantity,
+        design_face_a: group.face === 'a' ? group.design : null,
+        design_face_b: group.face === 'b' ? group.design : null,
+        status: 'pending'
+      }));
 
-      const { error: itemsError } = await supabase
+      const { error: printItemsError } = await supabase
         .from('print_task_items')
         .insert(printTaskItems);
 
-      if (itemsError) throw itemsError;
+      if (printItemsError) throw printItemsError;
 
-      toast.success('تم إنشاء مهمة الطباعة بنجاح');
+      // تسجيل في حساب الزبون للطباعة
+      await supabase.from('customer_payments').insert({
+        customer_id: customerData.customer_id,
+        customer_name: customerData.customer_name,
+        printed_invoice_id: printInvoice.id,
+        amount: -totals.customerPrintTotal,
+        entry_type: 'invoice',
+        paid_at: new Date().toISOString().split('T')[0],
+        method: 'حساب',
+        notes: `فاتورة طباعة ${printInvoiceNumber} - الربح: ${totals.printProfit.toFixed(2)} د.ل`
+      });
+
+      // إنشاء مهمة القص إذا كانت هناك مجسمات
+      if (cutoutGroups.length > 0 && totals.printerCutoutTotal > 0) {
+        const cutoutInvoiceNumber = `CT-${Date.now()}`;
+        const { data: cutoutInvoice, error: cutoutInvoiceError } = await supabase
+          .from('printed_invoices')
+          .insert({
+            contract_number: installationTask.contract_id,
+            invoice_number: cutoutInvoiceNumber,
+            customer_id: customerData.customer_id,
+            customer_name: customerData.customer_name,
+            printer_id: printerId,
+            printer_name: printers.find(p => p.id === printerId)?.name || 'غير محدد',
+            invoice_date: new Date().toISOString().split('T')[0],
+            total_amount: totals.customerCutoutTotal,
+            printer_cost: totals.printerCutoutTotal,
+            invoice_type: 'cutout',
+            notes: `مهمة قص من التركيب ${installationTaskId}`
+          })
+          .select()
+          .single();
+
+        if (cutoutInvoiceError) throw cutoutInvoiceError;
+
+        const totalCutoutQuantity = cutoutGroups.reduce((sum, g) => sum + (g.cutoutCount || 0), 0);
+
+        const { data: cutoutTask, error: cutoutTaskError } = await supabase
+          .from('cutout_tasks')
+          .insert({
+            invoice_id: cutoutInvoice.id,
+            contract_id: installationTask.contract_id,
+            customer_id: customerData.customer_id,
+            customer_name: customerData.customer_name,
+            customer_total_amount: totals.customerCutoutTotal,
+            printer_id: cutoutPrinterId || printerId,
+            status: 'pending',
+            total_cost: totals.printerCutoutTotal,
+            total_quantity: totalCutoutQuantity,
+            unit_cost: totalCutoutQuantity > 0 ? totals.printerCutoutTotal / totalCutoutQuantity : 0,
+            priority: 'normal',
+            installation_task_id: installationTaskId,
+            notes: `مهمة قص من التركيب - الربح: ${totals.cutoutProfit.toFixed(2)} د.ل`
+          })
+          .select()
+          .single();
+
+        if (cutoutTaskError) throw cutoutTaskError;
+
+        // إنشاء بنود مهمة القص
+        const cutoutTaskItems = cutoutGroups.map(group => ({
+          task_id: cutoutTask.id,
+          description: `مجسم ${group.size} - ${group.face === 'a' ? 'وجه أمامي' : 'وجه خلفي'}`,
+          quantity: group.cutoutCount || 0,
+          unit_cost: group.printerCutoutCostPerUnit,
+          total_cost: (group.cutoutCount || 0) * group.printerCutoutCostPerUnit,
+          cutout_image_url: group.cutoutImageUrl || null,
+          status: 'pending'
+        }));
+
+        const { error: cutoutItemsError } = await supabase
+          .from('cutout_task_items')
+          .insert(cutoutTaskItems);
+
+        if (cutoutItemsError) throw cutoutItemsError;
+
+        // تسجيل في حساب الزبون للقص
+        await supabase.from('customer_payments').insert({
+          customer_id: customerData.customer_id,
+          customer_name: customerData.customer_name,
+          printed_invoice_id: cutoutInvoice.id,
+          amount: -totals.customerCutoutTotal,
+          entry_type: 'invoice',
+          paid_at: new Date().toISOString().split('T')[0],
+          method: 'حساب',
+          notes: `فاتورة قص ${cutoutInvoiceNumber} - الربح: ${totals.cutoutProfit.toFixed(2)} د.ل`
+        });
+      }
+
+      const successMessage = cutoutGroups.length > 0 
+        ? `تم إنشاء مهمة الطباعة والقص بنجاح - الربح الإجمالي: ${totals.totalProfit.toFixed(2)} د.ل`
+        : `تم إنشاء مهمة الطباعة بنجاح - الربح: ${totals.printProfit.toFixed(2)} د.ل`;
+
+      toast.success(successMessage);
+      queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['cutout-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
       onOpenChange(false);
       onSuccess?.();
-    } catch (error) {
-      console.error('Error creating print task:', error);
-      toast.error('فشل في إنشاء مهمة الطباعة');
+    } catch (error: any) {
+      console.error('Error:', error);
+      toast.error(error.message || 'فشل في إنشاء المهام');
     } finally {
       setLoading(false);
     }
   };
 
-  const totalArea = designGroups.reduce((sum, group) => sum + (group.area * group.quantity), 0);
-  const totalCutouts = designGroups.reduce((sum, group) => sum + (group.cutoutCount || 0), 0);
-  const printCost = totalArea * pricePerMeter;
-  const cutoutsCost = totalCutouts * cutoutPricePerUnit;
-  const estimatedCost = printCost + cutoutsCost;
-
-  const selectedPrinterName = printers.find(p => p.id === printerId)?.name;
-  const selectedCutoutPrinterName = cutoutPrinterId 
-    ? printers.find(p => p.id === cutoutPrinterId)?.name 
-    : selectedPrinterName;
+  const totals = calculateTotals();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Printer className="h-5 w-5" />
-            إنشاء مهمة طباعة من مهمة التركيب
-          </DialogTitle>
+          <DialogTitle className="text-2xl">إنشاء مهمة طباعة وقص</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-6">
-          {/* ملخص التصاميم مع الصور */}
-          <div className="space-y-3">
-            <h3 className="font-semibold text-lg">ملخص التصاميم المطلوبة:</h3>
-            
-            {designGroups.length === 0 && (
-              <Card className="bg-destructive/10 border-destructive/20">
-                <CardContent className="p-6 text-center">
-                  <p className="text-destructive font-semibold text-lg mb-2">⚠️ لا توجد تصاميم محددة</p>
-                  <p className="text-muted-foreground">يرجى تعيين التصاميم للوحات في مهمة التركيب أولاً قبل إنشاء مهمة الطباعة</p>
-                </CardContent>
-              </Card>
-            )}
-            
-            {designGroups.map((group, index) => (
-              <Card key={index} className="overflow-hidden">
-                <CardContent className="p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    {/* صورة التصميم */}
-                    <div className="flex items-center justify-center bg-muted rounded-lg p-2">
-                      {group.design ? (
-                        <img 
-                          src={group.design} 
-                          alt={`تصميم ${group.size}`}
-                          className="max-h-32 w-auto object-contain"
-                          onError={(e) => {
-                            e.currentTarget.style.display = 'none';
-                            e.currentTarget.nextElementSibling?.classList.remove('hidden');
-                          }}
-                        />
-                      ) : null}
-                      <div className={group.design ? 'hidden' : 'flex items-center justify-center text-muted-foreground'}>
-                        <ImageIcon className="h-16 w-16" />
-                      </div>
-                    </div>
-
-                    {/* التفاصيل */}
-                    <div className="md:col-span-3 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-bold text-lg">
-                          {group.size} - {group.face === 'a' ? 'الوجه الأمامي' : 'الوجه الخلفي'}
-                          {group.hasCutout && <span className="text-destructive mr-2">(مجسم)</span>}
-                        </h4>
-                        <span className="font-bold text-primary text-xl">×{group.quantity}</span>
-                      </div>
-
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-                        <div className="bg-muted p-2 rounded">
-                          <div className="text-muted-foreground text-xs">العرض</div>
-                          <div className="font-semibold">{group.width}م</div>
-                        </div>
-                        <div className="bg-muted p-2 rounded">
-                          <div className="text-muted-foreground text-xs">الارتفاع</div>
-                          <div className="font-semibold">{group.height}م</div>
-                        </div>
-                        <div className="bg-muted p-2 rounded">
-                          <div className="text-muted-foreground text-xs">مساحة الوحدة</div>
-                          <div className="font-semibold">{group.area.toFixed(2)}م²</div>
-                        </div>
-                        <div className="bg-primary/10 p-2 rounded">
-                          <div className="text-muted-foreground text-xs">إجمالي المساحة</div>
-                          <div className="font-bold text-primary">{(group.area * group.quantity).toFixed(2)}م²</div>
-                        </div>
-                      </div>
-
-                      {group.hasCutout && (
-                          <div className="space-y-2">
-                            <div className="bg-destructive/10 p-2 rounded border border-destructive/20">
-                              <div className="flex items-center gap-2 text-destructive font-semibold">
-                                <Printer className="h-4 w-4" />
-                                عدد المجسمات المطلوبة: {group.cutoutCount}
-                              </div>
-                            </div>
-                            <div className="space-y-1">
-                              <Label htmlFor={`cutout-url-${group.design}-${group.face}`}>
-                                رابط صورة المجسم (اختياري)
-                              </Label>
-                              <Input
-                                id={`cutout-url-${group.design}-${group.face}`}
-                                type="url"
-                                value={cutoutImageUrls[`${group.design}-${group.face}`] || ''}
-                                onChange={(e) => {
-                                  const key = `${group.design}-${group.face}`;
-                                  setCutoutImageUrls(prev => ({
-                                    ...prev,
-                                    [key]: e.target.value
-                                  }));
-                                }}
-                                placeholder="https://example.com/cutout-image.jpg"
-                                className="text-sm"
-                              />
-                              {cutoutImageUrls[`${group.design}-${group.face}`] && (
-                                <div className="mt-2 p-2 bg-muted rounded border">
-                                  <img 
-                                    src={cutoutImageUrls[`${group.design}-${group.face}`]}
-                                    alt="معاينة صورة المجسم"
-                                    className="max-h-24 w-auto object-contain mx-auto"
-                                    onError={(e) => {
-                                      e.currentTarget.style.display = 'none';
-                                      const parent = e.currentTarget.parentElement;
-                                      if (parent) {
-                                        parent.innerHTML = '<p class="text-destructive text-xs text-center">فشل تحميل الصورة</p>';
-                                      }
-                                    }}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-            ))}
-
-            {/* الملخص الإجمالي */}
-            <Card className="bg-primary/5 border-primary/20">
-              <CardContent className="p-4">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <div className="text-sm text-muted-foreground">عدد التصاميم</div>
-                    <div className="text-2xl font-bold">{designGroups.length}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">إجمالي الكمية</div>
-                    <div className="text-2xl font-bold">{designGroups.reduce((sum, g) => sum + g.quantity, 0)}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">إجمالي المساحة</div>
-                    <div className="text-2xl font-bold text-primary">{totalArea.toFixed(2)} م²</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground">عدد المجسمات</div>
-                    <div className="text-2xl font-bold text-destructive">{totalCutouts}</div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* فاتورة الطباعة */}
-          {designGroups.length > 0 && (
-            <>
-              <div className="flex items-center gap-2 mb-4">
-                <Checkbox
-                  id="showPrices"
-                  checked={showPrices}
-                  onCheckedChange={(checked) => setShowPrices(checked === true)}
-                />
-                <Label htmlFor="showPrices" className="cursor-pointer">
-                  عرض الأسعار في الفاتورة
-                </Label>
-              </div>
-              <PrintTaskInvoice
-                designGroups={designGroups}
-                pricePerMeter={pricePerMeter}
-                cutoutPricePerUnit={cutoutPricePerUnit}
-                printerName={selectedPrinterName}
-                cutoutPrinterName={selectedCutoutPrinterName}
-                totalArea={totalArea}
-                totalCutouts={totalCutouts}
-                showPrices={showPrices}
-              />
-            </>
-          )}
-
-          {/* إعدادات التكلفة */}
-          <Card>
-            <CardContent className="p-4 space-y-4">
-              <h3 className="font-semibold text-lg">حساب التكاليف والتكليف:</h3>
-              
+          {/* اختيار المطابع */}
+          <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/30">
+            <CardContent className="pt-6 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="printer">تكليف المطبعة</Label>
+                  <Label className="flex items-center gap-2">
+                    <Printer className="h-4 w-4" />
+                    <span>مطبعة الطباعة *</span>
+                  </Label>
                   <Select value={printerId} onValueChange={setPrinterId}>
-                    <SelectTrigger>
-                      <SelectValue placeholder={printers.length > 0 ? "اختر المطبعة" : "لا توجد مطابع متاحة"} />
+                    <SelectTrigger className="bg-background">
+                      <SelectValue placeholder="اختر مطبعة الطباعة" />
                     </SelectTrigger>
                     <SelectContent>
-                      {printers.length === 0 ? (
-                        <div className="p-2 text-center text-muted-foreground">
-                          لا توجد مطابع مضافة في النظام
-                        </div>
-                      ) : (
-                        printers.map(printer => (
-                          <SelectItem key={printer.id} value={printer.id}>
-                            {printer.name}
-                          </SelectItem>
-                        ))
-                      )}
+                      {printers.map(p => (
+                        <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  {printers.length === 0 && (
-                    <p className="text-xs text-destructive">
-                      يرجى إضافة مطابع من صفحة إدارة المطابع أولاً
-                    </p>
-                  )}
                 </div>
 
-                {totalCutouts > 0 && (
+                {cutoutGroups.length > 0 && (
                   <div className="space-y-2">
-                    <Label htmlFor="cutoutPrinter">مطبعة المجسمات</Label>
-                    <Select value={cutoutPrinterId || 'same'} onValueChange={(val) => setCutoutPrinterId(val === 'same' ? '' : val)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="نفس المطبعة أو اختر أخرى" />
+                    <Label className="flex items-center gap-2">
+                      <Scissors className="h-4 w-4 text-destructive" />
+                      <span>مصنع قص المجسمات *</span>
+                    </Label>
+                    <Select value={cutoutPrinterId} onValueChange={setCutoutPrinterId}>
+                      <SelectTrigger className="bg-background border-destructive/30">
+                        <SelectValue placeholder="اختر مصنع القص" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="same">نفس المطبعة الرئيسية</SelectItem>
-                        {printers.map(printer => (
-                          <SelectItem key={printer.id} value={printer.id}>
-                            {printer.name}
-                          </SelectItem>
+                        {printers.map(p => (
+                          <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="pricePerMeter">سعر متر الطباعة (د.ل)</Label>
-                  <Input
-                    id="pricePerMeter"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={pricePerMeter}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      if (val === '') {
-                        setPricePerMeter(0);
-                      } else {
-                        const newValue = parseFloat(val);
-                        if (!isNaN(newValue) && newValue >= 0) {
-                          setPricePerMeter(newValue);
-                        }
-                      }
-                    }}
-                    placeholder="10.00"
-                  />
-                  <div className="text-xs text-muted-foreground">
-                    {designGroups.length > 0 ? (
-                      <>التكلفة: {totalArea.toFixed(2)} م² × {pricePerMeter} = {printCost.toFixed(2)} د.ل</>
-                    ) : (
-                      <>القيمة الافتراضية: {pricePerMeter} د.ل (قابل للتعديل)</>
-                    )}
+          {/* مجموعات الطباعة والمجسمات */}
+          {printGroups.length > 0 && (
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Printer className="h-5 w-5" />
+                <h3 className="font-bold text-lg">تصاميم الطباعة ({printGroups.length})</h3>
+              </div>
+              
+              {printGroups.map((group, idx) => (
+                <div key={idx} className="space-y-4">
+                  <DesignDisplayCard group={group} index={idx} />
+                  
+                  {/* حقول الطباعة */}
+                  <Card className="border-2">
+                    <CardContent className="pt-6 space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-3">
+                          <h5 className="font-semibold text-orange-600">تكاليف المطبعة</h5>
+                          <div>
+                            <Label>سعر المتر للمطبعة (د.ل)</Label>
+                            <Input
+                              type="number"
+                              value={designGroups[idx]?.printerCostPerMeter || 0}
+                              onChange={(e) => updateGroupPrice(idx, 'printerCostPerMeter', parseFloat(e.target.value) || 0)}
+                              step="0.1"
+                              min="0"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          <h5 className="font-semibold text-green-600">أسعار الزبون</h5>
+                          <div>
+                            <Label>سعر المتر للزبون (د.ل)</Label>
+                            <Input
+                              type="number"
+                              value={designGroups[idx]?.customerCostPerMeter || 0}
+                              onChange={(e) => updateGroupPrice(idx, 'customerCostPerMeter', parseFloat(e.target.value) || 0)}
+                              step="0.1"
+                              min="0"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                   {/* حقول المجسمات - تظهر مباشرة إذا كان التصميم يحتوي على مجسم */}
+                  {group.hasCutout && group.cutoutCount && group.cutoutCount > 0 && (
+                    <Card className="border-2 border-destructive/30 bg-destructive/5">
+                      <CardContent className="pt-6 space-y-4">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Scissors className="h-5 w-5 text-destructive" />
+                          <h5 className="font-semibold text-destructive">مجسمات القص (عدد: {group.cutoutCount})</h5>
+                        </div>
+                        
+                        {!useDistribution ? (
+                          <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-3">
+                              <h5 className="font-semibold text-orange-600">تكاليف شركة القص</h5>
+                              <div>
+                                <Label>سعر الوحدة لشركة القص (د.ل)</Label>
+                                <Input
+                                  type="number"
+                                  value={designGroups[idx]?.printerCutoutCostPerUnit || 0}
+                                  onChange={(e) => updateGroupPrice(idx, 'printerCutoutCostPerUnit', parseFloat(e.target.value) || 0)}
+                                  step="0.1"
+                                  min="0"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  التكلفة الإجمالية: {((designGroups[idx]?.printerCutoutCostPerUnit || 0) * (group.cutoutCount || 0)).toFixed(2)} د.ل
+                                </p>
+                              </div>
+                            </div>
+
+                            <div className="space-y-3">
+                              <h5 className="font-semibold text-green-600">أسعار الزبون</h5>
+                              <div>
+                                <Label>سعر الوحدة للزبون (د.ل)</Label>
+                                <Input
+                                  type="number"
+                                  value={designGroups[idx]?.customerCutoutCostPerUnit || 0}
+                                  onChange={(e) => updateGroupPrice(idx, 'customerCutoutCostPerUnit', parseFloat(e.target.value) || 0)}
+                                  step="0.1"
+                                  min="0"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  السعر الإجمالي: {((designGroups[idx]?.customerCutoutCostPerUnit || 0) * (group.cutoutCount || 0)).toFixed(2)} د.ل
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-accent/50 p-4 rounded-lg space-y-2">
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">الكمية:</span>
+                              <span className="font-semibold">{group.cutoutCount}</span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">تكلفة الوحدة (شركة القص):</span>
+                              <span className="font-semibold text-orange-600">
+                                {(designGroups[idx]?.printerCutoutCostPerUnit || 0).toFixed(2)} د.ل
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-sm">
+                              <span className="text-muted-foreground">سعر الوحدة (للزبون):</span>
+                              <span className="font-semibold text-green-600">
+                                {(designGroups[idx]?.customerCutoutCostPerUnit || 0).toFixed(2)} د.ل
+                              </span>
+                            </div>
+                            <div className="pt-2 border-t border-border">
+                              <div className="flex justify-between text-sm font-bold">
+                                <span>الإجمالي:</span>
+                                <span className="text-primary">
+                                  {((designGroups[idx]?.customerCutoutCostPerUnit || 0) * (group.cutoutCount || 0)).toFixed(2)} د.ل
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* نظام التوزيع الذكي للمجسمات */}
+          {cutoutGroups.length > 0 && (
+            <Card className="border-2 border-amber-500 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/20 dark:to-orange-950/20">
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-2">
+                    <Scissors className="h-5 w-5 text-amber-600" />
+                    <h3 className="font-bold text-lg text-amber-700 dark:text-amber-500">نظام التوزيع الذكي للمجسمات</h3>
+                  </div>
+                  <Button
+                    variant={useDistribution ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setUseDistribution(!useDistribution)}
+                    className="gap-2"
+                  >
+                    {useDistribution ? '✓ مُفعّل' : 'تفعيل التوزيع'}
+                  </Button>
+                </div>
+
+                {useDistribution && (
+                  <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-orange-600 font-semibold">
+                          إجمالي تكلفة القص من الشركة (د.ل)
+                        </Label>
+                        <Input
+                          type="number"
+                          value={totalCutoutPrinterCost}
+                          onChange={(e) => setTotalCutoutPrinterCost(parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                          className="text-lg font-semibold border-orange-300"
+                        />
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label className="text-green-600 font-semibold">
+                          إجمالي السعر للزبون (د.ل)
+                        </Label>
+                        <Input
+                          type="number"
+                          value={totalCutoutCustomerCost}
+                          onChange={(e) => setTotalCutoutCustomerCost(parseFloat(e.target.value) || 0)}
+                          placeholder="0.00"
+                          step="0.01"
+                          min="0"
+                          className="text-lg font-semibold border-green-300"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-white/50 dark:bg-black/20 p-4 rounded-lg">
+                      <div className="grid grid-cols-3 gap-4 text-sm mb-3">
+                        <div>
+                          <span className="text-muted-foreground">إجمالي الكميات:</span>
+                          <p className="font-bold text-lg">{cutoutGroups.reduce((sum, g) => sum + (g.cutoutCount || 0), 0)}</p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">تكلفة الوحدة (شركة):</span>
+                          <p className="font-bold text-lg text-orange-600">
+                            {(totalCutoutPrinterCost / cutoutGroups.reduce((sum, g) => sum + (g.cutoutCount || 0), 0) || 0).toFixed(2)} د.ل
+                          </p>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">سعر الوحدة (زبون):</span>
+                          <p className="font-bold text-lg text-green-600">
+                            {(totalCutoutCustomerCost / cutoutGroups.reduce((sum, g) => sum + (g.cutoutCount || 0), 0) || 0).toFixed(2)} د.ل
+                          </p>
+                        </div>
+                      </div>
+
+                      <Button
+                        onClick={distributeCutoutCosts}
+                        disabled={totalCutoutPrinterCost === 0 || totalCutoutCustomerCost === 0}
+                        className="w-full gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700"
+                        size="lg"
+                      >
+                        <Scissors className="h-4 w-4" />
+                        توزيع التكاليف على المجسمات
+                      </Button>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* ملخص التكاليف */}
+          <Card className="border-2 border-primary">
+            <CardContent className="pt-6">
+              <h3 className="font-bold text-lg mb-4">ملخص التكاليف والأرباح</h3>
+              
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <h4 className="font-semibold">الطباعة</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span>تكلفة المطبعة:</span>
+                      <span className="font-bold">{totals.printerPrintTotal.toFixed(2)} د.ل</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span>سعر الزبون:</span>
+                      <span className="font-bold">{totals.customerPrintTotal.toFixed(2)} د.ل</span>
+                    </div>
+                    <div className="flex justify-between text-green-600">
+                      <span>الربح:</span>
+                      <span className="font-bold">{totals.printProfit.toFixed(2)} د.ل</span>
+                    </div>
                   </div>
                 </div>
 
-              {totalCutouts > 0 && (
-                  <div className="space-y-2">
-                    <Label htmlFor="cutoutPrice">سعر قص المجسم الواحد (د.ل)</Label>
-                    <Input
-                      id="cutoutPrice"
-                      type="number"
-                      step="0.01"
-                      value={cutoutPricePerUnit}
-                      onChange={(e) => setCutoutPricePerUnit(parseFloat(e.target.value) || 0)}
-                      placeholder="0.00"
-                    />
-                    <div className="text-xs text-muted-foreground">
-                      التكلفة: {totalCutouts} مجسم × {cutoutPricePerUnit} = {cutoutsCost.toFixed(2)} د.ل
+                {cutoutGroups.length > 0 && (
+                  <div className="space-y-3">
+                    <h4 className="font-semibold">القص</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span>تكلفة شركة القص:</span>
+                        <span className="font-bold">{totals.printerCutoutTotal.toFixed(2)} د.ل</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>سعر الزبون:</span>
+                        <span className="font-bold">{totals.customerCutoutTotal.toFixed(2)} د.ل</span>
+                      </div>
+                      <div className="flex justify-between text-green-600">
+                        <span>الربح:</span>
+                        <span className="font-bold">{totals.cutoutProfit.toFixed(2)} د.ل</span>
+                      </div>
                     </div>
                   </div>
                 )}
               </div>
 
-              {/* ملخص التكلفة */}
-              <div className="border-t pt-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>تكلفة الطباعة:</span>
-                  <span className="font-semibold">{printCost.toFixed(2)} د.ل</span>
-                </div>
-                {totalCutouts > 0 && (
-                  <div className="flex justify-between text-sm">
-                    <span>تكلفة القص ({totalCutouts} مجسم):</span>
-                    <span className="font-semibold">{cutoutsCost.toFixed(2)} د.ل</span>
-                  </div>
-                )}
-                <div className="flex justify-between text-lg font-bold border-t pt-2">
-                  <span>الإجمالي:</span>
-                  <span className="text-primary">{estimatedCost.toFixed(2)} د.ل</span>
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex justify-between text-lg font-bold">
+                  <span>الربح الإجمالي:</span>
+                  <span className="text-green-600">{totals.totalProfit.toFixed(2)} د.ل</span>
                 </div>
               </div>
             </CardContent>
           </Card>
 
+          {/* أزرار معاينة الفواتير */}
+          {printGroups.length > 0 && (
+            <Card className="bg-accent/30">
+              <CardContent className="pt-6">
+                <div className="flex items-center justify-between gap-4">
+                  <h4 className="font-semibold flex items-center gap-2">
+                    <FileText className="h-5 w-5" />
+                    معاينة الفواتير
+                  </h4>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowPrintInvoice(!showPrintInvoice)}
+                      className="gap-2"
+                      disabled={!printerId}
+                    >
+                      <Printer className="h-4 w-4" />
+                      {showPrintInvoice ? 'إخفاء' : 'عرض'} فاتورة الطباعة
+                    </Button>
+                    {cutoutGroups.length > 0 && (
+                      <Button
+                        variant="outline"
+                        onClick={() => setShowCutoutInvoice(!showCutoutInvoice)}
+                        className="gap-2 border-destructive/30 text-destructive hover:bg-destructive/10"
+                        disabled={!cutoutPrinterId && !printerId}
+                      >
+                        <Scissors className="h-4 w-4" />
+                        {showCutoutInvoice ? 'إخفاء' : 'عرض'} فاتورة القص
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
-          {/* الأزرار */}
-          <div className="flex justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-              disabled={loading}
-            >
+          {/* معاينة فاتورة الطباعة */}
+          {showPrintInvoice && printGroups.length > 0 && (
+            <PrintTaskInvoice
+              designGroups={printGroups}
+              pricePerMeter={printGroups[0]?.printerCostPerMeter || 0}
+              cutoutPricePerUnit={0}
+              printerName={printers.find(p => p.id === printerId)?.name}
+              totalArea={totals.printerPrintTotal / (printGroups[0]?.printerCostPerMeter || 1)}
+              totalCutouts={0}
+              showPrices={true}
+            />
+          )}
+
+          {/* معاينة فاتورة القص */}
+          {showCutoutInvoice && cutoutGroups.length > 0 && (
+            <CutoutTaskInvoice
+              designGroups={cutoutGroups}
+              cutoutPricePerUnit={cutoutGroups[0]?.printerCutoutCostPerUnit || 0}
+              cutoutPrinterName={printers.find(p => p.id === (cutoutPrinterId || printerId))?.name}
+              totalCutouts={cutoutGroups.reduce((sum, g) => sum + (g.cutoutCount || 0), 0)}
+              showPrices={true}
+            />
+          )}
+
+          {/* أزرار الحفظ */}
+          <div className="flex gap-2 justify-end">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
               إلغاء
             </Button>
-            <Button
-              onClick={handleCreatePrintTask}
-              disabled={loading || pricePerMeter === 0 || designGroups.length === 0 || !printerId}
-              className="print:hidden"
+            <Button 
+              onClick={handleCreatePrintTask} 
+              disabled={loading || !printerId || (cutoutGroups.length > 0 && !cutoutPrinterId && !printerId)}
+              className="gap-2"
             >
-              {loading ? 'جاري الإنشاء...' : !printerId ? 'اختر المطبعة أولاً' : 'حفظ مهمة الطباعة'}
+              {loading ? 'جاري الإنشاء...' : 'إنشاء المهام'}
             </Button>
-          </div>
-
-          {/* ملاحظات للطباعة */}
-          <div className="hidden print:block text-sm text-muted-foreground mt-4 border-t pt-4">
-            <p>ملاحظات مهمة:</p>
-            <ul className="list-disc list-inside space-y-1 mt-2">
-              <li>يرجى التحقق من جودة التصاميم قبل البدء بالطباعة</li>
-              <li>العناصر المجسمة تحتاج إلى قص دقيق حسب المواصفات</li>
-              <li>التأكد من المقاسات النهائية قبل التسليم</li>
-            </ul>
           </div>
         </div>
       </DialogContent>

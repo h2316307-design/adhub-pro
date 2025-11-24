@@ -106,33 +106,104 @@ export const BillboardHistoryDialog: React.FC<BillboardHistoryDialogProps> = ({
           const startDate = new Date(billboard.Rent_Start_Date);
           const durationDays = endDate ? Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) : 0;
 
-          // ✅ جلب التكلفة الكاملة والتصاميم
+          // ✅ جلب بيانات العقد الكاملة
           const { data: contractData } = await supabase
             .from('Contract')
-            .select('Total, Discount, installation_cost, installation_enabled, design_data')
+            .select('Total, "Total Rent", Discount, installation_cost, installation_enabled, design_data, billboard_ids, billboard_prices')
             .eq('Contract_Number', billboard.Contract_Number)
             .single();
 
-          const totalAmount = contractData?.Total || billboard.Price || 0;
-          const discountAmount = contractData?.Discount || 0;
-          const installCost = (contractData?.installation_enabled && contractData?.installation_cost) || 0;
-          const finalAmount = totalAmount + installCost - discountAmount;
-          const discountPct = totalAmount > 0 ? (discountAmount / totalAmount) * 100 : 0;
+          // ✅ حساب السعر الفردي للوحة
+          const billboardIds = contractData?.billboard_ids ? contractData.billboard_ids.split(',').map((id: string) => id.trim()) : [];
+          const billboardCount = billboardIds.length || 1;
+          
+          // محاولة الحصول على السعر الفردي من billboard_prices
+          let individualPrice = 0;
+          let individualDiscount = 0;
+          
+          if (contractData?.billboard_prices) {
+            try {
+              const prices = typeof contractData.billboard_prices === 'string' 
+                ? JSON.parse(contractData.billboard_prices) 
+                : contractData.billboard_prices;
+              
+              const billboardPrice = Array.isArray(prices) 
+                ? prices.find((p: any) => p.billboardId?.toString() === billboardId.toString())
+                : null;
+              
+              if (billboardPrice) {
+                individualPrice = billboardPrice.priceBeforeDiscount || billboardPrice.contractPrice || 0;
+                individualDiscount = billboardPrice.discountPerBillboard || 0;
+              }
+            } catch (e) {
+              console.error('Error parsing billboard_prices:', e);
+            }
+          }
+          
+          // إذا لم نجد السعر في billboard_prices، نحسبه نسبياً
+          if (individualPrice === 0) {
+            const rentOnly = Math.max((contractData?.Total || 0) - (contractData?.installation_cost || 0), 0);
+            individualPrice = rentOnly / billboardCount;
+            individualDiscount = (contractData?.Discount || 0) / billboardCount;
+          }
 
-          // ✅ استخراج التصاميم
-          let designA = billboard.design_face_a || '';
-          let designB = billboard.design_face_b || '';
-          if (contractData?.design_data) {
-            const designs = Array.isArray(contractData.design_data) ? contractData.design_data : [contractData.design_data];
-            if (designs[0] && typeof designs[0] === 'object') {
-              const design = designs[0] as any;
-              designA = design.face_a_url || design.faceAUrl || designA;
-              designB = design.face_b_url || design.faceBUrl || designB;
+          const installCost = ((contractData?.installation_enabled && contractData?.installation_cost) || 0) / billboardCount;
+          const finalAmount = individualPrice - individualDiscount + installCost;
+          const discountPct = individualPrice > 0 ? (individualDiscount / individualPrice) * 100 : 0;
+
+          // ✅ جلب التصاميم من installation_task_items → task_designs → billboards
+          let designA = '';
+          let designB = '';
+          
+          const { data: tasks } = await supabase
+            .from('installation_tasks')
+            .select('id')
+            .eq('contract_id', billboard.Contract_Number);
+          
+          if (tasks?.length) {
+            const { data: items } = await supabase
+              .from('installation_task_items')
+              .select('design_face_a, design_face_b, selected_design_id, installed_image_face_a_url, installed_image_face_b_url')
+              .eq('billboard_id', billboardId)
+              .in('task_id', tasks.map(t => t.id))
+              .limit(1);
+            
+            if (items?.[0]) {
+              designA = items[0].design_face_a || '';
+              designB = items[0].design_face_b || '';
+              
+              // إذا لم توجد، جرب من task_designs
+              if ((!designA || !designB) && items[0].selected_design_id) {
+                const { data: designData } = await supabase
+                  .from('task_designs')
+                  .select('design_face_a_url, design_face_b_url')
+                  .eq('id', items[0].selected_design_id)
+                  .single();
+                
+                if (designData) {
+                  designA = designData.design_face_a_url || designA;
+                  designB = designData.design_face_b_url || designB;
+                }
+              }
+            }
+          }
+          
+          // Fallback: من billboards أو contract design_data
+          if (!designA && !designB) {
+            designA = billboard.design_face_a || '';
+            designB = billboard.design_face_b || '';
+            
+            if ((!designA || !designB) && contractData?.design_data) {
+              const designs = Array.isArray(contractData.design_data) ? contractData.design_data : [contractData.design_data];
+              if (designs[0] && typeof designs[0] === 'object') {
+                const design = designs[0] as any;
+                designA = design.face_a_url || design.faceAUrl || designA;
+                designB = design.face_b_url || design.faceBUrl || designB;
+              }
             }
           }
 
           // ✅ جلب صور التركيب
-          const { data: tasks } = await supabase.from('installation_tasks').select('id').eq('contract_id', billboard.Contract_Number);
           let imgA = '', imgB = '';
           if (tasks?.length) {
             const { data: items } = await supabase.from('installation_task_items')
@@ -152,13 +223,13 @@ export const BillboardHistoryDialog: React.FC<BillboardHistoryDialogProps> = ({
             start_date: billboard.Rent_Start_Date,
             end_date: billboard.Rent_End_Date || '',
             duration_days: durationDays,
-            rent_amount: finalAmount,
-            discount_amount: discountAmount,
+            rent_amount: individualPrice - individualDiscount,
+            discount_amount: individualDiscount,
             discount_percentage: discountPct,
             installation_date: billboard.Rent_Start_Date,
             installation_cost: installCost,
             billboard_rent_price: billboard.Price || 0,
-            total_before_discount: totalAmount,
+            total_before_discount: individualPrice,
             design_face_a_url: designA,
             design_face_b_url: designB,
             design_name: '',
@@ -175,9 +246,11 @@ export const BillboardHistoryDialog: React.FC<BillboardHistoryDialogProps> = ({
 
       setHistory(allRecords);
       
-      // حساب الإحصائيات
+      // حساب الإحصائيات (✅ تضمين تكلفة التركيب في الإيرادات)
       const rentalsCount = allRecords.length;
-      const revenue = allRecords.reduce((sum, record) => sum + (Number(record.rent_amount) || 0), 0);
+      const revenue = allRecords.reduce((sum, record) => 
+        sum + (Number(record.rent_amount) || 0) + (Number(record.installation_cost) || 0), 0
+      );
       const days = allRecords.reduce((sum, record) => sum + (record.duration_days || 0), 0);
 
       setTotalRentals(rentalsCount);
@@ -528,10 +601,10 @@ export const BillboardHistoryDialog: React.FC<BillboardHistoryDialogProps> = ({
                   <div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">
                       <DollarSign className="h-3 w-3" />
-                      المبلغ النهائي
+                      المبلغ النهائي (مع التركيب)
                     </div>
                     <div className="font-semibold text-green-600">
-                      {Number(record.rent_amount || 0).toLocaleString()} دينار
+                      {(Number(record.rent_amount || 0) + Number(record.installation_cost || 0)).toLocaleString()} دينار
                     </div>
                   </div>
                   <div>

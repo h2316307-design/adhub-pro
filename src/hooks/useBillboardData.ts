@@ -172,7 +172,10 @@ export const useBillboardData = () => {
       // Load billboards data
       const { data: billboardsData, error: billboardsError } = await supabase
         .from('billboards')
-        .select('*')
+        .select(`
+          *,
+          friend_companies:friend_company_id(*)
+        `)
         .order('ID', { ascending: true });
       
       if (billboardsError) {

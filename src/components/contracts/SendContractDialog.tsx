@@ -35,6 +35,7 @@ export function SendContractDialog({
   const [platform, setPlatform] = useState<'whatsapp' | 'whatsapp-web' | 'telegram'>('whatsapp');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [sendPDF, setSendPDF] = useState(true);
+  const [useInstallationImage, setUseInstallationImage] = useState(false);
   const [message, setMessage] = useState(
     `مرحباً ${customerName},\n\nنود إرسال تفاصيل العقد رقم ${contractNumber} إليك.\n\nشكراً لك.`
   );
@@ -125,11 +126,12 @@ export function SendContractDialog({
             duration: duration,
             year: startDate ? new Date(startDate).getFullYear().toString() : new Date().getFullYear().toString(),
             phoneNumber: phoneNumber || customerPhone || '',
-            billboards: (contractData as any)?.billboards || []
+            billboards: (contractData as any)?.billboards || [],
+            useInstallationImage: useInstallationImage // استخدام صور التركيب الفعلية
           };
 
           // فتح PDF في نافذة جديدة
-          const pdfWindow = openContractPDF(pdfData);
+          const pdfWindow = await openContractPDF(pdfData);
           
           if (!pdfWindow) {
             throw new Error('فشل فتح نافذة PDF. يرجى السماح بالنوافذ المنبثقة.');
@@ -265,14 +267,32 @@ export function SendContractDialog({
           </div>
 
           {sendPDF && (
-            <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
-              <p>سيتم إنشاء وإرفاق ملف PDF يحتوي على:</p>
-              <ul className="list-disc list-inside mt-2 space-y-1">
-                <li>تفاصيل العقد الكاملة</li>
-                <li>معلومات اللوحات الإعلانية</li>
-                <li>جدول الأقساط والدفعات</li>
-              </ul>
-            </div>
+            <>
+              <div className="flex items-center justify-between p-3 border rounded-lg bg-muted/50">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="use-installation-image" className="cursor-pointer text-sm">
+                    استخدام صور التركيب الفعلية بدلاً من الصور الافتراضية
+                  </Label>
+                </div>
+                <Switch
+                  id="use-installation-image"
+                  checked={useInstallationImage}
+                  onCheckedChange={setUseInstallationImage}
+                />
+              </div>
+              
+              <div className="text-sm text-muted-foreground bg-muted p-3 rounded-lg">
+                <p>سيتم إنشاء وإرفاق ملف PDF يحتوي على:</p>
+                <ul className="list-disc list-inside mt-2 space-y-1">
+                  <li>تفاصيل العقد الكاملة</li>
+                  <li>معلومات اللوحات الإعلانية</li>
+                  <li>جدول الأقساط والدفعات</li>
+                  {useInstallationImage && (
+                    <li className="text-primary font-medium">صور التركيب الفعلية للوحات</li>
+                  )}
+                </ul>
+              </div>
+            </>
           )}
 
           <div className="flex gap-2">

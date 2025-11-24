@@ -6,15 +6,20 @@ import { fetchBillboardsWithContracts } from '@/services/billboardContractServic
 
 // جلب جميع اللوحات مع بيانات العقود
 export const fetchAllBillboards = async (): Promise<Billboard[]> => {
+  console.log('🚀 supabaseService: fetchAllBillboards started');
   try {
+    console.log('📞 Calling fetchBillboardsWithContracts...');
     // محاولة جلب اللوحات مع العقود من Supabase أولاً
     const billboardsWithContracts = await fetchBillboardsWithContracts();
+    console.log('📦 fetchBillboardsWithContracts returned:', billboardsWithContracts?.length);
+    
     if (billboardsWithContracts && billboardsWithContracts.length > 0) {
-      console.log('Fetched billboards with contracts from Supabase:', billboardsWithContracts.length);
+      console.log('✅ Returning billboards with contracts:', billboardsWithContracts.length);
       return billboardsWithContracts as any;
     }
+    console.warn('⚠️ No billboards returned from fetchBillboardsWithContracts');
   } catch (error) {
-    console.warn('Failed to fetch billboards with contracts, trying legacy method:', error);
+    console.error('❌ Failed to fetch billboards with contracts:', error);
   }
 
   // الطريقة القديمة كـ fallback

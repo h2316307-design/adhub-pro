@@ -110,6 +110,14 @@ export function BulkDesignAssigner({
         return;
       }
 
+      // ✅ جلب تفاصيل التصاميم للحفظ
+      const { data: designsData, error: designsError } = await supabase
+        .from('task_designs')
+        .select('id, design_face_a_url, design_face_b_url')
+        .in('id', selectedDesignIds);
+
+      if (designsError) throw designsError;
+
       // تطبيق التصاميم
       if (assignMode === 'distribute' && selectedDesignIds.length > 1) {
         // توزيع متساوي لعدة تصاميم
@@ -118,10 +126,17 @@ export function BulkDesignAssigner({
         for (let i = 0; i < itemsToUpdate.length; i++) {
           const designIndex = Math.floor(i / itemsPerDesign);
           const designId = selectedDesignIds[Math.min(designIndex, selectedDesignIds.length - 1)];
+          const design = designsData?.find(d => d.id === designId);
+          
+          const updateData: any = { selected_design_id: designId };
+          if (design) {
+            updateData.design_face_a = design.design_face_a_url;
+            updateData.design_face_b = design.design_face_b_url || null;
+          }
           
           const { error } = await supabase
             .from('installation_task_items')
-            .update({ selected_design_id: designId })
+            .update(updateData)
             .eq('id', itemsToUpdate[i].id);
 
           if (error) throw error;
@@ -129,11 +144,18 @@ export function BulkDesignAssigner({
       } else {
         // تعيين نفس التصميم لكل اللوحات المختارة
         const designId = selectedDesignIds[0];
+        const design = designsData?.find(d => d.id === designId);
+        
+        const updateData: any = { selected_design_id: designId };
+        if (design) {
+          updateData.design_face_a = design.design_face_a_url;
+          updateData.design_face_b = design.design_face_b_url || null;
+        }
         
         for (const item of itemsToUpdate) {
           const { error } = await supabase
             .from('installation_task_items')
-            .update({ selected_design_id: designId })
+            .update(updateData)
             .eq('id', item.id);
 
           if (error) throw error;
