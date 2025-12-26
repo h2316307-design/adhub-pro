@@ -1,0 +1,1484 @@
+import { useEffect, useState } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Textarea } from '@/components/ui/textarea';
+import * as UIDialog from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { Loader2, Wallet, Plus, DollarSign, FileText, TrendingDown, TrendingUp, Printer, Receipt, CheckCircle, Undo2, Trash2, CreditCard, Users, Pencil } from 'lucide-react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CustodyReceiptPrint } from '@/components/custody/CustodyReceiptPrint';
+import { CustodyStatementPrint } from '@/components/custody/CustodyStatementPrint';
+import { CustodySettlementDialog } from '@/components/custody/CustodySettlementDialog';
+import { EmployeeCustodyStatementPrint } from '@/components/custody/EmployeeCustodyStatementPrint';
+
+interface Employee {
+  id: string;
+  name: string;
+  position: string;
+}
+
+interface CustodyAccount {
+  id: string;
+  employee_id: string;
+  account_number: string;
+  custody_name: string | null;
+  initial_amount: number;
+  current_balance: number;
+  status: string;
+  assigned_date: string;
+  closed_date: string | null;
+  notes: string | null;
+  source_type: string | null;
+  source_payment_id: string | null;
+  employee?: Employee;
+}
+
+interface CustodyTransaction {
+  id: string;
+  custody_account_id: string;
+  transaction_type: string;
+  amount: number;
+  transaction_date: string;
+  description: string | null;
+  receipt_number: string | null;
+  notes: string | null;
+  receiver_name?: string | null;
+}
+
+interface CustodyExpense {
+  id: string;
+  custody_account_id: string;
+  expense_category: string;
+  amount: number;
+  expense_date: string;
+  description: string;
+  receipt_number: string | null;
+  vendor_name: string | null;
+  notes: string | null;
+}
+
+export default function CustodyManagement() {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [accounts, setAccounts] = useState<CustodyAccount[]>([]);
+  const [transactions, setTransactions] = useState<CustodyTransaction[]>([]);
+  const [expenses, setExpenses] = useState<CustodyExpense[]>([]);
+  const [loading, setLoading] = useState(true);
+  
+  // Dialogs
+  const [accountDialogOpen, setAccountDialogOpen] = useState(false);
+  const [transactionDialogOpen, setTransactionDialogOpen] = useState(false);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [settlementDialogOpen, setSettlementDialogOpen] = useState(false);
+  const [selectedAccountForSettlement, setSelectedAccountForSettlement] = useState<CustodyAccount | null>(null);
+  const [editingTransaction, setEditingTransaction] = useState<CustodyTransaction | null>(null);
+  const [depositDialogOpen, setDepositDialogOpen] = useState(false);
+  const [selectedAccountForDeposit, setSelectedAccountForDeposit] = useState<CustodyAccount | null>(null);
+  
+  // Deposit form
+  const [depositAmount, setDepositAmount] = useState('');
+  const [depositDate, setDepositDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [depositDescription, setDepositDescription] = useState('');
+  const [depositReceiptNumber, setDepositReceiptNumber] = useState('');
+  
+  // Account form
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [custodyName, setCustodyName] = useState('');
+  const [initialAmount, setInitialAmount] = useState('');
+  const [accountNotes, setAccountNotes] = useState('');
+  
+  // Edit account state
+  const [editingAccount, setEditingAccount] = useState<CustodyAccount | null>(null);
+  const [editAccountDialogOpen, setEditAccountDialogOpen] = useState(false);
+  const [editCustodyName, setEditCustodyName] = useState('');
+  const [editCurrentBalance, setEditCurrentBalance] = useState('');
+  
+  // Add expense directly to account
+  const [selectedAccountForExpense, setSelectedAccountForExpense] = useState<CustodyAccount | null>(null);
+  
+  // Transaction form
+  const [selectedAccountId, setSelectedAccountId] = useState('');
+  const [transactionType, setTransactionType] = useState('deposit');
+  const [transactionAmount, setTransactionAmount] = useState('');
+  const [transactionDate, setTransactionDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [transactionDescription, setTransactionDescription] = useState('');
+  const [receiptNumber, setReceiptNumber] = useState('');
+  const [receiverName, setReceiverName] = useState('');
+  
+  // Expense form
+  const [expenseAccountId, setExpenseAccountId] = useState('');
+  const [expenseCategory, setExpenseCategory] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [expenseDate, setExpenseDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [expenseDescription, setExpenseDescription] = useState('');
+  const [expenseReceiptNumber, setExpenseReceiptNumber] = useState('');
+  const [vendorName, setVendorName] = useState('');
+  const [expenseNotes, setExpenseNotes] = useState('');
+
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Load employees
+      const { data: employeesData } = await supabase
+        .from('employees')
+        .select('id, name, position')
+        .eq('status', 'active')
+        .order('name');
+      
+      if (employeesData) setEmployees(employeesData);
+      
+      // Load custody accounts with employee info
+      const { data: accountsData } = await supabase
+        .from('custody_accounts')
+        .select(`
+          *,
+          employee:employees(id, name, position)
+        `)
+        .order('created_at', { ascending: false });
+      
+      if (accountsData) setAccounts(accountsData as any);
+      
+      // Load recent transactions
+      const { data: transactionsData } = await supabase
+        .from('custody_transactions')
+        .select('*')
+        .order('transaction_date', { ascending: false })
+        .limit(50);
+      
+      if (transactionsData) setTransactions(transactionsData as CustodyTransaction[]);
+      
+      // Load recent expenses
+      const { data: expensesData } = await supabase
+        .from('custody_expenses')
+        .select('*')
+        .order('expense_date', { ascending: false })
+        .limit(50);
+      
+      if (expensesData) setExpenses(expensesData);
+      
+    } catch (error) {
+      console.error('Error loading data:', error);
+      toast.error('فشل في تحميل البيانات');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateAccountNumber = () => {
+    const timestamp = Date.now().toString().slice(-6);
+    return `CUS-${timestamp}`;
+  };
+
+  const handleCreateAccount = async () => {
+    if (!selectedEmployeeId || !initialAmount || parseFloat(initialAmount) <= 0) {
+      toast.error('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    try {
+      const accNumber = accountNumber || generateAccountNumber();
+      
+      const { error } = await supabase
+        .from('custody_accounts')
+        .insert({
+          employee_id: selectedEmployeeId,
+          account_number: accNumber,
+          custody_name: custodyName || null,
+          initial_amount: parseFloat(initialAmount),
+          current_balance: parseFloat(initialAmount),
+          status: 'active',
+          notes: accountNotes || null
+        });
+
+      if (error) throw error;
+
+      toast.success('تم إنشاء العهدة بنجاح');
+      setAccountDialogOpen(false);
+      resetAccountForm();
+      loadData();
+    } catch (error) {
+      console.error('Error creating custody account:', error);
+      toast.error('فشل في إنشاء العهدة');
+    }
+  };
+
+  const handleAddTransaction = async () => {
+    if (!selectedAccountId || !transactionAmount || parseFloat(transactionAmount) <= 0) {
+      toast.error('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    try {
+      if (editingTransaction) {
+        // Update existing transaction
+        const { error } = await supabase
+          .from('custody_transactions')
+          .update({
+            transaction_type: transactionType,
+            amount: parseFloat(transactionAmount),
+            transaction_date: transactionDate,
+            description: transactionDescription || null,
+            receipt_number: receiptNumber || null,
+            receiver_name: receiverName || null
+          })
+          .eq('id', editingTransaction.id);
+
+        if (error) throw error;
+        toast.success('تم تعديل الحركة بنجاح');
+      } else {
+        // Insert new transaction
+        const { error } = await supabase
+          .from('custody_transactions')
+          .insert({
+            custody_account_id: selectedAccountId,
+            transaction_type: transactionType,
+            amount: parseFloat(transactionAmount),
+            transaction_date: transactionDate,
+            description: transactionDescription || null,
+            receipt_number: receiptNumber || null,
+            receiver_name: receiverName || null
+          });
+
+        if (error) throw error;
+        toast.success('تم إضافة الحركة بنجاح');
+      }
+
+      setTransactionDialogOpen(false);
+      resetTransactionForm();
+      loadData();
+    } catch (error) {
+      console.error('Error adding/updating transaction:', error);
+      toast.error(editingTransaction ? 'فشل في تعديل الحركة' : 'فشل في إضافة الحركة');
+    }
+  };
+
+  const handleAddExpense = async () => {
+    if (!expenseAccountId || !expenseAmount || parseFloat(expenseAmount) <= 0 || !expenseDescription) {
+      toast.error('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('custody_expenses')
+        .insert({
+          custody_account_id: expenseAccountId,
+          expense_category: expenseCategory,
+          amount: parseFloat(expenseAmount),
+          expense_date: expenseDate,
+          description: expenseDescription,
+          receipt_number: expenseReceiptNumber || null,
+          vendor_name: vendorName || null,
+          notes: expenseNotes || null
+        });
+
+      if (error) throw error;
+
+      toast.success('تم إضافة المصروف بنجاح');
+      setExpenseDialogOpen(false);
+      resetExpenseForm();
+      loadData();
+    } catch (error) {
+      console.error('Error adding expense:', error);
+      toast.error('فشل في إضافة المصروف');
+    }
+  };
+
+  const resetAccountForm = () => {
+    setSelectedEmployeeId('');
+    setAccountNumber('');
+    setCustodyName('');
+    setInitialAmount('');
+    setAccountNotes('');
+  };
+  
+  // Handle edit account
+  const handleOpenEditAccount = (account: CustodyAccount) => {
+    setEditingAccount(account);
+    setEditCustodyName(account.custody_name || '');
+    setEditCurrentBalance(account.current_balance.toString());
+    setEditAccountDialogOpen(true);
+  };
+
+  const handleSaveAccountEdit = async () => {
+    if (!editingAccount) return;
+    
+    try {
+      const newBalance = parseFloat(editCurrentBalance);
+      if (isNaN(newBalance) || newBalance < 0) {
+        toast.error('يرجى إدخال رصيد صحيح');
+        return;
+      }
+      
+      const { error } = await supabase
+        .from('custody_accounts')
+        .update({
+          custody_name: editCustodyName || null,
+          current_balance: newBalance
+        })
+        .eq('id', editingAccount.id);
+      
+      if (error) throw error;
+      
+      toast.success('تم تحديث العهدة بنجاح');
+      setEditAccountDialogOpen(false);
+      setEditingAccount(null);
+      loadData();
+    } catch (error) {
+      console.error('Error updating custody:', error);
+      toast.error('فشل في تحديث العهدة');
+    }
+  };
+  
+  // Open expense dialog for specific account
+  const handleOpenExpenseForAccount = (account: CustodyAccount) => {
+    setSelectedAccountForExpense(account);
+    setExpenseAccountId(account.id);
+    setExpenseDialogOpen(true);
+  };
+
+  const resetTransactionForm = () => {
+    setSelectedAccountId('');
+    setTransactionType('deposit');
+    setTransactionAmount('');
+    setTransactionDate(new Date().toISOString().slice(0, 10));
+    setTransactionDescription('');
+    setReceiptNumber('');
+    setReceiverName('');
+    setEditingTransaction(null);
+  };
+
+  const resetExpenseForm = () => {
+    setExpenseAccountId('');
+    setExpenseCategory('');
+    setExpenseAmount('');
+    setExpenseDate(new Date().toISOString().slice(0, 10));
+    setExpenseDescription('');
+    setExpenseReceiptNumber('');
+    setVendorName('');
+    setExpenseNotes('');
+  };
+
+  const resetDepositForm = () => {
+    setDepositAmount('');
+    setDepositDate(new Date().toISOString().slice(0, 10));
+    setDepositDescription('');
+    setDepositReceiptNumber('');
+    setSelectedAccountForDeposit(null);
+  };
+
+  // إضافة رصيد للعهدة
+  const handleAddDeposit = async () => {
+    if (!selectedAccountForDeposit || !depositAmount || parseFloat(depositAmount) <= 0) {
+      toast.error('يرجى إدخال مبلغ صحيح');
+      return;
+    }
+
+    try {
+      const amount = parseFloat(depositAmount);
+      
+      // Insert deposit transaction - الـ trigger سيقوم بتحديث الرصيد تلقائياً
+      const { error: txError } = await supabase
+        .from('custody_transactions')
+        .insert({
+          custody_account_id: selectedAccountForDeposit.id,
+          transaction_type: 'deposit',
+          amount: amount,
+          transaction_date: depositDate,
+          description: depositDescription || 'إضافة رصيد',
+          receipt_number: depositReceiptNumber || null
+        });
+
+      if (txError) throw txError;
+
+      toast.success('تم إضافة الرصيد بنجاح');
+      setDepositDialogOpen(false);
+      resetDepositForm();
+      loadData();
+    } catch (error) {
+      console.error('Error adding deposit:', error);
+      toast.error('فشل في إضافة الرصيد');
+    }
+  };
+
+  // ترجيع العهدة من الدفعة الموزعة
+  const handleReturnCustody = async (account: CustodyAccount) => {
+    if (!confirm(`هل تريد ترجيع العهدة "${account.account_number}" للموظف "${(account.employee as any)?.name}"؟\n\nسيتم حذف العهدة وإرجاع المبلغ إلى الدفعة الموزعة.`)) {
+      return;
+    }
+
+    try {
+      // حذف العهدة
+      const { error } = await supabase
+        .from('custody_accounts')
+        .delete()
+        .eq('id', account.id);
+
+      if (error) throw error;
+
+      toast.success('تم ترجيع العهدة بنجاح');
+      loadData();
+    } catch (error: any) {
+      console.error('Error returning custody:', error);
+      toast.error('فشل في ترجيع العهدة: ' + (error.message || ''));
+    }
+  };
+
+  // حذف العهدة اليدوية
+  const handleDeleteCustody = async (account: CustodyAccount) => {
+    if (!confirm(`هل تريد حذف العهدة "${account.account_number}" للموظف "${(account.employee as any)?.name}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) {
+      return;
+    }
+
+    try {
+      // حذف المعاملات والمصروفات المرتبطة أولاً
+      await supabase.from('custody_transactions').delete().eq('custody_account_id', account.id);
+      await supabase.from('custody_expenses').delete().eq('custody_account_id', account.id);
+
+      // حذف العهدة
+      const { error } = await supabase
+        .from('custody_accounts')
+        .delete()
+        .eq('id', account.id);
+
+      if (error) throw error;
+
+      toast.success('تم حذف العهدة بنجاح');
+      loadData();
+    } catch (error: any) {
+      console.error('Error deleting custody:', error);
+      toast.error('فشل في حذف العهدة: ' + (error.message || ''));
+    }
+  };
+
+  const totalCustodyBalance = accounts
+    .filter(acc => acc.status === 'active')
+    .reduce((sum, acc) => sum + acc.current_balance, 0);
+
+  const totalExpenses = expenses.reduce((sum, exp) => sum + exp.amount, 0);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto p-6 space-y-6" dir="rtl">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold">إدارة العهد المالية</h1>
+          <p className="text-muted-foreground mt-1">متابعة وإدارة العهد المالية للموظفين</p>
+        </div>
+        <Button onClick={() => setAccountDialogOpen(true)} className="gap-2">
+          <Plus className="h-4 w-4" />
+          إنشاء عهدة جديدة
+        </Button>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">إجمالي العهد النشطة</CardTitle>
+            <Wallet className="h-4 w-4 text-primary" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-primary">
+              {totalCustodyBalance.toLocaleString('ar-LY')} د.ل
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">عدد العهد النشطة</CardTitle>
+            <FileText className="h-4 w-4 text-green-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {accounts.filter(acc => acc.status === 'active').length}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">إجمالي المصروفات</CardTitle>
+            <TrendingDown className="h-4 w-4 text-red-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">
+              {totalExpenses.toLocaleString('ar-LY')} د.ل
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs */}
+      <Tabs defaultValue="by-employee" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="by-employee">حسب الموظف</TabsTrigger>
+          <TabsTrigger value="accounts">العهد المالية</TabsTrigger>
+          <TabsTrigger value="transactions">الحركات</TabsTrigger>
+          <TabsTrigger value="expenses">المصروفات</TabsTrigger>
+        </TabsList>
+
+        {/* By Employee Tab */}
+        <TabsContent value="by-employee">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                العهد المالية حسب الموظف
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {(() => {
+                // Group accounts by employee
+                const employeeGroups = accounts.reduce((groups, account) => {
+                  const empId = account.employee_id;
+                  if (!groups[empId]) {
+                    groups[empId] = {
+                      employee: account.employee,
+                      accounts: []
+                    };
+                  }
+                  groups[empId].accounts.push(account);
+                  return groups;
+                }, {} as Record<string, { employee: Employee | undefined; accounts: CustodyAccount[] }>);
+
+                const groupedEmployees = Object.entries(employeeGroups);
+
+                if (groupedEmployees.length === 0) {
+                  return (
+                    <div className="text-center text-muted-foreground py-8">
+                      لا توجد عهد مالية
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-4">
+                    {groupedEmployees.map(([empId, group]) => {
+                      const totalInitial = group.accounts.reduce((sum, acc) => sum + acc.initial_amount, 0);
+                      const totalBalance = group.accounts.reduce((sum, acc) => sum + acc.current_balance, 0);
+                      const activeCount = group.accounts.filter(acc => acc.status === 'active').length;
+                      
+                      return (
+                        <Card key={empId} className="border-2">
+                          <CardHeader className="pb-2">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <Users className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <CardTitle className="text-lg">{group.employee?.name || 'غير محدد'}</CardTitle>
+                                  <p className="text-sm text-muted-foreground">{group.employee?.position || '-'}</p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-sm">
+                                  {group.accounts.length} عهدة
+                                </Badge>
+                                {group.accounts.length > 0 && (
+                                  <EmployeeCustodyStatementPrint
+                                    employeeId={empId}
+                                    employeeName={group.employee?.name || 'غير محدد'}
+                                    employeePosition={group.employee?.position}
+                                  />
+                                )}
+                              </div>
+                            </div>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="grid grid-cols-4 gap-4 mb-4">
+                              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                                <p className="text-xs text-muted-foreground">عدد العهد</p>
+                                <p className="text-lg font-bold">{group.accounts.length}</p>
+                              </div>
+                              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                                <p className="text-xs text-muted-foreground">النشطة</p>
+                                <p className="text-lg font-bold text-green-600">{activeCount}</p>
+                              </div>
+                              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                                <p className="text-xs text-muted-foreground">إجمالي المستلم</p>
+                                <p className="text-lg font-bold">{totalInitial.toLocaleString('ar-LY')} د.ل</p>
+                              </div>
+                              <div className="text-center p-3 bg-muted/50 rounded-lg">
+                                <p className="text-xs text-muted-foreground">الرصيد الحالي</p>
+                                <p className={`text-lg font-bold ${totalBalance >= 0 ? 'text-primary' : 'text-red-600'}`}>
+                                  {totalBalance.toLocaleString('ar-LY')} د.ل
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead className="text-right">رقم العهدة</TableHead>
+                                  <TableHead className="text-right">مسمى العهدة</TableHead>
+                                  <TableHead className="text-right">المصدر</TableHead>
+                                  <TableHead className="text-right">المبلغ الأولي</TableHead>
+                                  <TableHead className="text-right">الإيداعات المضافة</TableHead>
+                                  <TableHead className="text-right">الرصيد الحالي</TableHead>
+                                  <TableHead className="text-right">تاريخ الاستلام</TableHead>
+                                  <TableHead className="text-right">الحالة</TableHead>
+                                  <TableHead className="text-right">الإجراءات</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {group.accounts.map(account => {
+                                  // حساب إجمالي الإيداعات المضافة لهذه العهدة
+                                  const accountDeposits = transactions
+                                    .filter(t => t.custody_account_id === account.id && t.transaction_type === 'deposit')
+                                    .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+                                  
+                                  return (
+                                    <TableRow 
+                                      key={account.id}
+                                      className={account.source_type === 'distributed_payment' ? 'bg-amber-50 dark:bg-amber-950/20' : ''}
+                                    >
+                                      <TableCell className="font-medium">{account.account_number}</TableCell>
+                                      <TableCell>
+                                        {account.custody_name ? (
+                                          <Badge variant="outline" className="bg-purple-100 text-purple-700 border-purple-300">
+                                            {account.custody_name}
+                                          </Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        {account.source_type === 'distributed_payment' ? (
+                                          <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
+                                            <CreditCard className="h-3 w-3 ml-1" />
+                                            دفعة موزعة
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                                            يدوي
+                                          </Badge>
+                                        )}
+                                      </TableCell>
+                                      <TableCell>{account.initial_amount.toLocaleString('ar-LY')} د.ل</TableCell>
+                                      <TableCell>
+                                        {accountDeposits > 0 ? (
+                                          <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300">
+                                            <TrendingUp className="h-3 w-3 ml-1" />
+                                            +{accountDeposits.toLocaleString('ar-LY')} د.ل
+                                          </Badge>
+                                        ) : (
+                                          <span className="text-muted-foreground">—</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="font-bold">
+                                        {account.current_balance.toLocaleString('ar-LY')} د.ل
+                                      </TableCell>
+                                    <TableCell>
+                                      {new Date(account.assigned_date).toLocaleDateString('ar-LY', {
+                                        year: 'numeric',
+                                        month: '2-digit',
+                                        day: '2-digit'
+                                      })}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant={account.status === 'active' ? 'default' : 'secondary'}>
+                                        {account.status === 'active' ? 'نشط' : 'مغلق'}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <div className="flex gap-1 flex-wrap">
+                                        {account.status === 'active' && (
+                                          <>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="gap-1 text-purple-600 border-purple-600 hover:bg-purple-50"
+                                              onClick={() => handleOpenEditAccount(account)}
+                                            >
+                                              <Pencil className="h-3 w-3" />
+                                              تعديل
+                                            </Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="gap-1 text-red-600 border-red-600 hover:bg-red-50"
+                                              onClick={() => handleOpenExpenseForAccount(account)}
+                                            >
+                                              <TrendingDown className="h-3 w-3" />
+                                              مصروف
+                                            </Button>
+                                            <Button
+                                              variant="outline"
+                                              size="sm"
+                                              className="gap-1 text-green-600 border-green-600 hover:bg-green-50"
+                                              onClick={() => {
+                                                setSelectedAccountForDeposit(account);
+                                                setDepositDialogOpen(true);
+                                              }}
+                                            >
+                                              <Plus className="h-3 w-3" />
+                                              رصيد
+                                            </Button>
+                                          </>
+                                        )}
+                                        <CustodyReceiptPrint account={account} />
+                                        <CustodyStatementPrint accountId={account.id} />
+                                        {account.status === 'active' && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1 text-blue-600 border-blue-600 hover:bg-blue-50"
+                                            onClick={() => {
+                                              setSelectedAccountForSettlement(account);
+                                              setSettlementDialogOpen(true);
+                                            }}
+                                          >
+                                            <CheckCircle className="h-3 w-3" />
+                                            تسليم
+                                          </Button>
+                                        )}
+                                        {account.source_type === 'distributed_payment' && account.status === 'active' && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1 text-amber-600 border-amber-600 hover:bg-amber-50"
+                                            onClick={() => handleReturnCustody(account)}
+                                          >
+                                            <Undo2 className="h-3 w-3" />
+                                            ترجيع
+                                          </Button>
+                                        )}
+                                        {account.source_type !== 'distributed_payment' && account.status === 'active' && (
+                                          <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="gap-1 text-red-600 border-red-600 hover:bg-red-50"
+                                            onClick={() => handleDeleteCustody(account)}
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                            حذف
+                                          </Button>
+                                        )}
+                                      </div>
+                                    </TableCell>
+                                  </TableRow>
+                                  );
+                                })}
+                              </TableBody>
+                            </Table>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Accounts Tab */}
+        <TabsContent value="accounts">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Wallet className="h-5 w-5" />
+                قائمة العهد المالية
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">رقم العهدة</TableHead>
+                    <TableHead className="text-right">الموظف</TableHead>
+                    <TableHead className="text-right">المصدر</TableHead>
+                    <TableHead className="text-right">المبلغ الأولي</TableHead>
+                    <TableHead className="text-right">الرصيد الحالي</TableHead>
+                    <TableHead className="text-right">تاريخ الاستلام</TableHead>
+                    <TableHead className="text-right">الحالة</TableHead>
+                    <TableHead className="text-right">الإجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accounts.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                        لا توجد عهد مالية
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    accounts.map((account) => (
+                      <TableRow 
+                        key={account.id}
+                        className={account.source_type === 'distributed_payment' ? 'bg-amber-50 dark:bg-amber-950/20' : ''}
+                      >
+                        <TableCell className="font-medium">{account.account_number}</TableCell>
+                        <TableCell>{(account.employee as any)?.name || '-'}</TableCell>
+                        <TableCell>
+                          {account.source_type === 'distributed_payment' ? (
+                            <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
+                              <CreditCard className="h-3 w-3 ml-1" />
+                              دفعة موزعة
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
+                              يدوي
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>{account.initial_amount.toLocaleString('ar-LY')} د.ل</TableCell>
+                        <TableCell className="font-bold">
+                          {account.current_balance.toLocaleString('ar-LY')} د.ل
+                        </TableCell>
+                        <TableCell>
+                          {new Date(account.assigned_date).toLocaleDateString('ar-LY')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={account.status === 'active' ? 'default' : 'secondary'}>
+                            {account.status === 'active' ? 'نشط' : 'مغلق'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex gap-2 flex-wrap">
+                            <CustodyReceiptPrint account={account} />
+                            <CustodyStatementPrint accountId={account.id} />
+                            {account.status === 'active' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-green-600 border-green-600 hover:bg-green-50"
+                                onClick={() => {
+                                  setSelectedAccountForSettlement(account);
+                                  setSettlementDialogOpen(true);
+                                }}
+                              >
+                                <CheckCircle className="h-4 w-4" />
+                                تسليم العهدة
+                              </Button>
+                            )}
+                            {/* زر ترجيع العهدة للدفعات الموزعة */}
+                            {account.source_type === 'distributed_payment' && account.status === 'active' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-amber-600 border-amber-600 hover:bg-amber-50"
+                                onClick={() => handleReturnCustody(account)}
+                              >
+                                <Undo2 className="h-4 w-4" />
+                                ترجيع العهدة
+                              </Button>
+                            )}
+                            {/* زر حذف العهدة اليدوية */}
+                            {account.source_type !== 'distributed_payment' && account.status === 'active' && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="gap-1 text-red-600 border-red-600 hover:bg-red-50"
+                                onClick={() => handleDeleteCustody(account)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                                حذف
+                              </Button>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Transactions Tab */}
+        <TabsContent value="transactions">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <TrendingUp className="h-5 w-5" />
+                حركات العهدة
+              </CardTitle>
+              <Button onClick={() => setTransactionDialogOpen(true)} size="sm" className="gap-2">
+                <Plus className="h-4 w-4" />
+                إضافة حركة
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">نوع الحركة</TableHead>
+                    <TableHead className="text-right">المبلغ</TableHead>
+                    <TableHead className="text-right">المستلم</TableHead>
+                    <TableHead className="text-right">الوصف</TableHead>
+                    <TableHead className="text-right">رقم الإيصال</TableHead>
+                    <TableHead className="text-right">الإجراءات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {transactions.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
+                        لا توجد حركات مسجلة
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    transactions.map((transaction) => (
+                      <TableRow key={transaction.id}>
+                        <TableCell>
+                          {new Date(transaction.transaction_date).toLocaleDateString('ar-LY')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={transaction.transaction_type === 'deposit' ? 'default' : 'destructive'}>
+                            {transaction.transaction_type === 'deposit' ? 'إيداع' : 
+                             transaction.transaction_type === 'withdrawal' ? 'سحب' : 'مصروف'}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="font-bold">
+                          {transaction.amount.toLocaleString('ar-LY')} د.ل
+                        </TableCell>
+                        <TableCell>{transaction.receiver_name || '-'}</TableCell>
+                        <TableCell>{transaction.description || '-'}</TableCell>
+                        <TableCell>{transaction.receipt_number || '-'}</TableCell>
+                        <TableCell>
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => {
+                              setEditingTransaction(transaction);
+                              const account = accounts.find(a => a.id === transaction.custody_account_id);
+                              setSelectedAccountId(transaction.custody_account_id);
+                              setTransactionType(transaction.transaction_type);
+                              setTransactionAmount(transaction.amount.toString());
+                              setTransactionDate(transaction.transaction_date);
+                              setTransactionDescription(transaction.description || '');
+                              setReceiptNumber(transaction.receipt_number || '');
+                              setReceiverName(transaction.receiver_name || '');
+                              setTransactionDialogOpen(true);
+                            }}
+                          >
+                            تعديل
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Expenses Tab */}
+        <TabsContent value="expenses">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <TrendingDown className="h-5 w-5 text-red-600" />
+                مصروفات العهدة
+              </CardTitle>
+              <Button onClick={() => setExpenseDialogOpen(true)} size="sm" className="gap-2" variant="destructive">
+                <Plus className="h-4 w-4" />
+                إضافة مصروف
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">التاريخ</TableHead>
+                    <TableHead className="text-right">الفئة</TableHead>
+                    <TableHead className="text-right">المبلغ</TableHead>
+                    <TableHead className="text-right">الوصف</TableHead>
+                    <TableHead className="text-right">المورد</TableHead>
+                    <TableHead className="text-right">رقم الإيصال</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {expenses.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                        لا توجد مصروفات مسجلة
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    expenses.map((expense) => (
+                      <TableRow key={expense.id}>
+                        <TableCell>
+                          {new Date(expense.expense_date).toLocaleDateString('ar-LY')}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{expense.expense_category}</Badge>
+                        </TableCell>
+                        <TableCell className="font-bold text-red-600">
+                          {expense.amount.toLocaleString('ar-LY')} د.ل
+                        </TableCell>
+                        <TableCell>{expense.description}</TableCell>
+                        <TableCell>{expense.vendor_name || '-'}</TableCell>
+                        <TableCell>{expense.receipt_number || '-'}</TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Create Account Dialog */}
+      <UIDialog.Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
+        <UIDialog.DialogContent>
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>إنشاء عهدة مالية جديدة</UIDialog.DialogTitle>
+          </UIDialog.DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">الموظف *</label>
+              <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر الموظف" />
+                </SelectTrigger>
+                <SelectContent>
+                  {employees.map((emp) => (
+                    <SelectItem key={emp.id} value={emp.id}>
+                      {emp.name} - {emp.position}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">مسمى العهدة (اختياري)</label>
+              <Input
+                value={custodyName}
+                onChange={(e) => setCustodyName(e.target.value)}
+                placeholder="مثال: عهدة المشتريات، عهدة الصيانة"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">رقم العهدة (اختياري)</label>
+              <Input
+                value={accountNumber}
+                onChange={(e) => setAccountNumber(e.target.value)}
+                placeholder="سيتم التوليد تلقائياً"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">المبلغ الأولي *</label>
+              <Input
+                type="number"
+                value={initialAmount}
+                onChange={(e) => setInitialAmount(e.target.value)}
+                placeholder="0"
+                min="0"
+                step="0.01"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">ملاحظات</label>
+              <Textarea
+                value={accountNotes}
+                onChange={(e) => setAccountNotes(e.target.value)}
+                placeholder="ملاحظات إضافية"
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => setAccountDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleCreateAccount}>إنشاء العهدة</Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* Add Transaction Dialog */}
+      <UIDialog.Dialog open={transactionDialogOpen} onOpenChange={(open) => {
+        setTransactionDialogOpen(open);
+        if (!open) resetTransactionForm();
+      }}>
+        <UIDialog.DialogContent>
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>{editingTransaction ? 'تعديل الحركة' : 'إضافة حركة جديدة'}</UIDialog.DialogTitle>
+          </UIDialog.DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">العهدة *</label>
+              <Select 
+                value={selectedAccountId} 
+                onValueChange={setSelectedAccountId}
+                disabled={!!editingTransaction}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر العهدة" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.filter(acc => acc.status === 'active').map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.account_number} - {(acc.employee as any)?.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">نوع الحركة *</label>
+              <Select value={transactionType} onValueChange={setTransactionType}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="deposit">إيداع</SelectItem>
+                  <SelectItem value="withdrawal">سحب</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">المبلغ *</label>
+              <Input
+                type="number"
+                value={transactionAmount}
+                onChange={(e) => setTransactionAmount(e.target.value)}
+                placeholder="0"
+                min="0"
+                step="0.01"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">التاريخ *</label>
+              <Input
+                type="date"
+                value={transactionDate}
+                onChange={(e) => setTransactionDate(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">الوصف</label>
+              <Input
+                value={transactionDescription}
+                onChange={(e) => setTransactionDescription(e.target.value)}
+                placeholder="وصف الحركة"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">رقم الإيصال</label>
+              <Input
+                value={receiptNumber}
+                onChange={(e) => setReceiptNumber(e.target.value)}
+                placeholder="رقم الإيصال"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">اسم المستلم</label>
+              <Input
+                value={receiverName}
+                onChange={(e) => setReceiverName(e.target.value)}
+                placeholder="اسم المستلم"
+              />
+            </div>
+          </div>
+
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setTransactionDialogOpen(false);
+              resetTransactionForm();
+            }}>
+              إلغاء
+            </Button>
+            <Button onClick={handleAddTransaction}>
+              {editingTransaction ? 'حفظ التعديلات' : 'إضافة الحركة'}
+            </Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* Add Expense Dialog */}
+      <UIDialog.Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
+        <UIDialog.DialogContent className="max-w-2xl">
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>إضافة مصروف جديد</UIDialog.DialogTitle>
+          </UIDialog.DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">العهدة *</label>
+              <Select value={expenseAccountId} onValueChange={setExpenseAccountId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر العهدة" />
+                </SelectTrigger>
+                <SelectContent>
+                  {accounts.filter(acc => acc.status === 'active').map((acc) => (
+                    <SelectItem key={acc.id} value={acc.id}>
+                      {acc.account_number} - {(acc.employee as any)?.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">الفئة *</label>
+                <Input
+                  value={expenseCategory}
+                  onChange={(e) => setExpenseCategory(e.target.value)}
+                  placeholder="مثال: مصاريف تشغيل"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">المبلغ *</label>
+                <Input
+                  type="number"
+                  value={expenseAmount}
+                  onChange={(e) => setExpenseAmount(e.target.value)}
+                  placeholder="0"
+                  min="0"
+                  step="0.01"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">التاريخ *</label>
+              <Input
+                type="date"
+                value={expenseDate}
+                onChange={(e) => setExpenseDate(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">الوصف *</label>
+              <Textarea
+                value={expenseDescription}
+                onChange={(e) => setExpenseDescription(e.target.value)}
+                placeholder="وصف تفصيلي للمصروف"
+                rows={3}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">المورد</label>
+                <Input
+                  value={vendorName}
+                  onChange={(e) => setVendorName(e.target.value)}
+                  placeholder="اسم المورد"
+                />
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium">رقم الإيصال</label>
+                <Input
+                  value={expenseReceiptNumber}
+                  onChange={(e) => setExpenseReceiptNumber(e.target.value)}
+                  placeholder="رقم الإيصال"
+                />
+              </div>
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">ملاحظات</label>
+              <Textarea
+                value={expenseNotes}
+                onChange={(e) => setExpenseNotes(e.target.value)}
+                placeholder="ملاحظات إضافية"
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => setExpenseDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleAddExpense} variant="destructive">إضافة المصروف</Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* Settlement Dialog */}
+      {selectedAccountForSettlement && (
+        <CustodySettlementDialog
+          open={settlementDialogOpen}
+          onOpenChange={(open) => {
+            setSettlementDialogOpen(open);
+            if (!open) setSelectedAccountForSettlement(null);
+          }}
+          account={selectedAccountForSettlement}
+          onSuccess={loadData}
+        />
+      )}
+
+      {/* Add Deposit Dialog */}
+      <UIDialog.Dialog open={depositDialogOpen} onOpenChange={(open) => {
+        setDepositDialogOpen(open);
+        if (!open) resetDepositForm();
+      }}>
+        <UIDialog.DialogContent>
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>إضافة رصيد للعهدة</UIDialog.DialogTitle>
+            {selectedAccountForDeposit && (
+              <p className="text-sm text-muted-foreground">
+                العهدة: {selectedAccountForDeposit.account_number} - 
+                الموظف: {(selectedAccountForDeposit.employee as any)?.name || '-'}
+              </p>
+            )}
+          </UIDialog.DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            {selectedAccountForDeposit && (
+              <div className="bg-muted/50 p-3 rounded-lg">
+                <p className="text-sm text-muted-foreground">الرصيد الحالي</p>
+                <p className="text-lg font-bold text-primary">
+                  {selectedAccountForDeposit.current_balance.toLocaleString('ar-LY')} د.ل
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">المبلغ *</label>
+              <Input
+                type="number"
+                value={depositAmount}
+                onChange={(e) => setDepositAmount(e.target.value)}
+                placeholder="0"
+                min="0"
+                step="0.01"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">التاريخ *</label>
+              <Input
+                type="date"
+                value={depositDate}
+                onChange={(e) => setDepositDate(e.target.value)}
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">الوصف</label>
+              <Input
+                value={depositDescription}
+                onChange={(e) => setDepositDescription(e.target.value)}
+                placeholder="وصف الإضافة"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">رقم الإيصال</label>
+              <Input
+                value={depositReceiptNumber}
+                onChange={(e) => setDepositReceiptNumber(e.target.value)}
+                placeholder="رقم الإيصال"
+              />
+            </div>
+          </div>
+
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => setDepositDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleAddDeposit} className="bg-green-600 hover:bg-green-700">
+              إضافة الرصيد
+            </Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* Edit Account Dialog */}
+      <UIDialog.Dialog open={editAccountDialogOpen} onOpenChange={(open) => {
+        setEditAccountDialogOpen(open);
+        if (!open) setEditingAccount(null);
+      }}>
+        <UIDialog.DialogContent>
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>تعديل العهدة</UIDialog.DialogTitle>
+            {editingAccount && (
+              <p className="text-sm text-muted-foreground">
+                العهدة: {editingAccount.account_number} - 
+                الموظف: {(editingAccount.employee as any)?.name || '-'}
+              </p>
+            )}
+          </UIDialog.DialogHeader>
+          
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">مسمى العهدة</label>
+              <Input
+                value={editCustodyName}
+                onChange={(e) => setEditCustodyName(e.target.value)}
+                placeholder="مثال: عهدة المشتريات، عهدة الصيانة"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <label className="text-sm font-medium">الرصيد الحالي</label>
+              <Input
+                type="number"
+                value={editCurrentBalance}
+                onChange={(e) => setEditCurrentBalance(e.target.value)}
+                placeholder="0"
+                min="0"
+                step="0.01"
+              />
+            </div>
+
+            {editingAccount && (
+              <div className="bg-muted/50 p-3 rounded-lg text-sm">
+                <div className="flex justify-between">
+                  <span>المبلغ الأولي:</span>
+                  <span className="font-bold">{editingAccount.initial_amount.toLocaleString('ar-LY')} د.ل</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => setEditAccountDialogOpen(false)}>
+              إلغاء
+            </Button>
+            <Button onClick={handleSaveAccountEdit} className="bg-purple-600 hover:bg-purple-700">
+              حفظ التعديلات
+            </Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+    </div>
+  );
+}

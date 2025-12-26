@@ -1,0 +1,566 @@
+import React from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Badge } from '@/components/ui/badge';
+import { DollarSign, Wrench, Save, X, Calculator, Percent, Minus, TrendingDown, TrendingUp, Printer, Gift, Settings, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+
+interface CostSummaryCardProps {
+  estimatedTotal: number;
+  rentCost: number;
+  setRentCost: (cost: number) => void;
+  setUserEditedRentCost: (edited: boolean) => void;
+  discountType: 'percent' | 'amount';
+  setDiscountType: (type: 'percent' | 'amount') => void;
+  discountValue: number;
+  setDiscountValue: (value: number) => void;
+  baseTotal: number;
+  discountAmount: number;
+  finalTotal: number;
+  installationCost: number;
+  rentalCostOnly: number;
+  operatingFee: number;
+  operatingFeeRate?: number;
+  currentContract: any;
+  originalTotal: number;
+  onSave: () => void;
+  onCancel: () => void;
+  saving: boolean;
+  totalFriendCosts?: number;
+  // Print cost props
+  printCost?: number;
+  printCostEnabled?: boolean;
+  // Installation enabled prop
+  installationEnabled?: boolean;
+  // Include in price toggles
+  includeInstallationInPrice?: boolean;
+  setIncludeInstallationInPrice?: (include: boolean) => void;
+  includePrintInPrice?: boolean;
+  setIncludePrintInPrice?: (include: boolean) => void;
+  // Currency
+  currencySymbol?: string;
+}
+
+export function CostSummaryCard({
+  estimatedTotal,
+  rentCost,
+  setRentCost,
+  setUserEditedRentCost,
+  discountType,
+  setDiscountType,
+  discountValue,
+  setDiscountValue,
+  baseTotal,
+  discountAmount,
+  finalTotal,
+  installationCost,
+  rentalCostOnly,
+  operatingFee,
+  operatingFeeRate = 3,
+  currentContract,
+  originalTotal,
+  onSave,
+  onCancel,
+  saving,
+  totalFriendCosts = 0,
+  printCost = 0,
+  printCostEnabled = false,
+  installationEnabled = true,
+  includeInstallationInPrice = false,
+  setIncludeInstallationInPrice,
+  includePrintInPrice = false,
+  setIncludePrintInPrice,
+  currencySymbol = 'د.ل'
+}: CostSummaryCardProps) {
+  const [showDetails, setShowDetails] = React.useState(true);
+  
+  // الإيجار الصافي بعد الخصم (قبل أي إضافات أو خصومات تكاليف)
+  const rentalAfterDiscount = React.useMemo(() => {
+    return baseTotal - discountAmount;
+  }, [baseTotal, discountAmount]);
+
+  // حساب صافي الإيجار الفعلي
+  // إذا كانت التكلفة مضمنة = مخصومة من صافي الإيجار (مجانية للعميل)
+  // إذا كانت التكلفة غير مضمنة = تضاف للإجمالي (يدفعها العميل)
+  const netRental = React.useMemo(() => {
+    let net = rentalAfterDiscount;
+    
+    // خصم التركيب إذا كان مضمناً (مجاني للعميل)
+    if (installationEnabled && includeInstallationInPrice && installationCost > 0) {
+      net -= installationCost;
+    }
+    
+    // خصم الطباعة إذا كانت مضمنة (مجانية للعميل)
+    if (printCostEnabled && includePrintInPrice && printCost > 0) {
+      net -= printCost;
+    }
+    
+    // خصم تكاليف الشركات الصديقة
+    net -= totalFriendCosts;
+    
+    return Math.max(0, net);
+  }, [rentalAfterDiscount, installationCost, printCost, installationEnabled, printCostEnabled, includeInstallationInPrice, includePrintInPrice, totalFriendCosts]);
+
+  // حساب رسوم التشغيل على صافي الإيجار الفعلي
+  const calculatedOperatingFee = React.useMemo(() => {
+    return Math.round(netRental * (operatingFeeRate / 100) * 100) / 100;
+  }, [netRental, operatingFeeRate]);
+
+  // حساب الإجمالي النهائي للعميل
+  const adjustedFinalTotal = React.useMemo(() => {
+    let total = rentalAfterDiscount;
+    
+    // إضافة التركيب إذا لم يكن مضمناً
+    if (installationEnabled && !includeInstallationInPrice && installationCost > 0) {
+      total += installationCost;
+    }
+    
+    // إضافة الطباعة إذا لم تكن مضمنة
+    if (printCostEnabled && !includePrintInPrice && printCost > 0) {
+      total += printCost;
+    }
+    
+    return Math.max(0, total);
+  }, [rentalAfterDiscount, installationCost, printCost, installationEnabled, printCostEnabled, includeInstallationInPrice, includePrintInPrice]);
+  
+  const totalPaid = Number(currentContract?.['Total Paid'] || 0);
+  const remaining = adjustedFinalTotal - totalPaid;
+  const priceDifference = adjustedFinalTotal - originalTotal;
+  
+  return (
+    <Card className="border-border shadow-xl overflow-hidden">
+      {/* Header with gradient */}
+      <div className="h-1.5 bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500" />
+      <CardHeader className="py-4 px-5 bg-gradient-to-br from-green-500/10 via-emerald-500/5 to-transparent border-b border-border">
+        <CardTitle className="flex items-center justify-between">
+          <div className="flex items-center gap-3 text-lg">
+            <div className="p-2 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 shadow-lg shadow-green-500/25">
+              <Calculator className="h-5 w-5 text-white" />
+            </div>
+            ملخص التكاليف
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowDetails(!showDetails)}
+            className="text-muted-foreground"
+          >
+            {showDetails ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="p-5 space-y-5">
+        {/* Estimated Total Badge */}
+        <div className="p-4 rounded-xl bg-gradient-to-r from-muted/80 to-muted/50 border border-border">
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground font-medium">التقدير التلقائي للإيجار</span>
+            <span className="font-bold text-lg text-primary">{(estimatedTotal || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
+          </div>
+        </div>
+
+        {/* Manual Cost Override */}
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+            <DollarSign className="h-4 w-4 text-primary" />
+            تعديل يدوي للتكلفة
+          </label>
+          <Input
+            type="number"
+            value={rentCost}
+            onChange={(e) => {
+              setRentCost(Number(e.target.value));
+              setUserEditedRentCost(true);
+            }}
+            placeholder="التكلفة قبل الخصم"
+            className="h-12 font-bold text-xl bg-background border-2 border-border focus:border-primary rounded-xl"
+          />
+        </div>
+
+        {/* Discount Section */}
+        <div className="p-4 rounded-xl bg-red-500/5 border-2 border-red-500/20 space-y-3">
+          <label className="text-sm font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
+            <Percent className="h-4 w-4" />
+            الخصم
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Select value={discountType} onValueChange={(v) => setDiscountType(v as any)}>
+              <SelectTrigger className="h-11 bg-background border-border">
+                <SelectValue placeholder="النوع" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border z-[10000]">
+                <SelectItem value="percent">نسبة %</SelectItem>
+                <SelectItem value="amount">مبلغ ثابت</SelectItem>
+              </SelectContent>
+            </Select>
+            <Input
+              type="number"
+              value={discountValue}
+              onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
+              placeholder="0"
+              className="h-11 bg-background"
+            />
+          </div>
+        </div>
+
+        <Collapsible open={showDetails} onOpenChange={setShowDetails}>
+          <CollapsibleContent className="space-y-4">
+            {/* Installation Inclusion Toggle */}
+            {installationEnabled && installationCost > 0 && setIncludeInstallationInPrice && (
+              <div className="p-4 rounded-xl bg-orange-500/5 border-2 border-orange-500/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="include-install" className="text-sm font-semibold text-orange-600 dark:text-orange-400 flex items-center gap-2 cursor-pointer">
+                    <Wrench className="h-4 w-4" />
+                    تضمين التركيب في السعر
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p>عند التفعيل: التركيب مجاني للعميل ويخصم من صافي الإيجار</p>
+                          <p>عند الإلغاء: التركيب يضاف للإجمالي ويدفعه العميل</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <Switch
+                    id="include-install"
+                    checked={includeInstallationInPrice}
+                    onCheckedChange={setIncludeInstallationInPrice}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">تكلفة التركيب:</span>
+                  <span className="font-bold text-orange-600">{installationCost.toLocaleString('ar-LY')} {currencySymbol}</span>
+                </div>
+                {includeInstallationInPrice ? (
+                  <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <Gift className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-medium text-green-600">مجانية للعميل (مخصومة من صافي الإيجار)</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 bg-orange-500/10 rounded-lg border border-orange-500/20">
+                    <DollarSign className="h-4 w-4 text-orange-600" />
+                    <span className="text-xs font-medium text-orange-600">تضاف للإجمالي (يدفعها العميل)</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Print Cost Inclusion Toggle */}
+            {printCostEnabled && printCost > 0 && setIncludePrintInPrice && (
+              <div className="p-4 rounded-xl bg-blue-500/5 border-2 border-blue-500/20 space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="include-print" className="text-sm font-semibold text-blue-600 dark:text-blue-400 flex items-center gap-2 cursor-pointer">
+                    <Printer className="h-4 w-4" />
+                    تضمين الطباعة في السعر
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs">
+                          <p>عند التفعيل: الطباعة مجانية للعميل وتخصم من صافي الإيجار</p>
+                          <p>عند الإلغاء: الطباعة تضاف للإجمالي ويدفعها العميل</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </Label>
+                  <Switch
+                    id="include-print"
+                    checked={includePrintInPrice}
+                    onCheckedChange={setIncludePrintInPrice}
+                  />
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">تكلفة الطباعة:</span>
+                  <span className="font-bold text-blue-600">{printCost.toLocaleString('ar-LY')} {currencySymbol}</span>
+                </div>
+                {includePrintInPrice ? (
+                  <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
+                    <Gift className="h-4 w-4 text-green-600" />
+                    <span className="text-xs font-medium text-green-600">مجانية للعميل (مخصومة من صافي الإيجار)</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
+                    <DollarSign className="h-4 w-4 text-blue-600" />
+                    <span className="text-xs font-medium text-blue-600">تضاف للإجمالي (يدفعها العميل)</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Cost Breakdown - Enhanced */}
+            <div className="space-y-0 rounded-xl border-2 border-border overflow-hidden">
+              <div className="p-3 bg-gradient-to-r from-slate-500/10 to-slate-500/5 border-b border-border">
+                <h4 className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  تفاصيل الحساب الكاملة
+                </h4>
+              </div>
+              
+              {/* Step 1: Base Rental */}
+              <div className="p-3 border-b border-border bg-background">
+                <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                  <Badge variant="outline" className="text-[10px] px-1.5 py-0">1</Badge>
+                  إيجار اللوحات الأساسي
+                </div>
+                <div className="flex justify-between items-center">
+                  <span className="text-sm text-foreground">إجمالي الإيجار</span>
+                  <span className="font-bold text-lg">{(baseTotal || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
+                </div>
+              </div>
+              
+              {/* Step 2: Discount */}
+              {discountAmount > 0 && (
+                <div className="p-3 border-b border-border bg-red-500/5">
+                  <div className="flex items-center gap-2 text-xs text-red-500 mb-2">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-red-500/50 text-red-500">2</Badge>
+                    الخصم المطبق
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-red-600 flex items-center gap-1">
+                      <Minus className="h-3 w-3" />
+                      خصم {discountType === 'percent' ? `${discountValue}%` : 'ثابت'}
+                    </span>
+                    <span className="font-bold text-lg text-red-600">-{(discountAmount || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
+                  </div>
+                  <div className="flex justify-between items-center mt-2 pt-2 border-t border-red-500/20">
+                    <span className="text-xs text-muted-foreground">= بعد الخصم</span>
+                    <span className="font-semibold text-sm">{rentalAfterDiscount.toLocaleString('ar-LY')} {currencySymbol}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Installation */}
+              {installationEnabled && installationCost > 0 && (
+                <div className={cn(
+                  "p-3 border-b border-border",
+                  includeInstallationInPrice ? "bg-green-500/5" : "bg-orange-500/5"
+                )}>
+                  <div className="flex items-center gap-2 text-xs mb-2">
+                    <Badge variant="outline" className={cn(
+                      "text-[10px] px-1.5 py-0",
+                      includeInstallationInPrice ? "border-green-500/50 text-green-600" : "border-orange-500/50 text-orange-600"
+                    )}>
+                      {discountAmount > 0 ? '3' : '2'}
+                    </Badge>
+                    <span className={includeInstallationInPrice ? "text-green-600" : "text-orange-600"}>
+                      تكلفة التركيب
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className={cn(
+                      "text-sm flex items-center gap-1",
+                      includeInstallationInPrice ? "text-green-600" : "text-orange-600"
+                    )}>
+                      <Wrench className="h-3 w-3" />
+                      {includeInstallationInPrice ? 'مخصوم (مجاني للعميل)' : 'يضاف للعميل'}
+                    </span>
+                    <span className={cn(
+                      "font-bold text-lg",
+                      includeInstallationInPrice ? "text-green-600" : "text-orange-600"
+                    )}>
+                      {includeInstallationInPrice ? '-' : '+'}{(installationCost || 0).toLocaleString('ar-LY')} {currencySymbol}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 4: Print */}
+              {printCostEnabled && printCost > 0 && (
+                <div className={cn(
+                  "p-3 border-b border-border",
+                  includePrintInPrice ? "bg-green-500/5" : "bg-blue-500/5"
+                )}>
+                  <div className="flex items-center gap-2 text-xs mb-2">
+                    <Badge variant="outline" className={cn(
+                      "text-[10px] px-1.5 py-0",
+                      includePrintInPrice ? "border-green-500/50 text-green-600" : "border-blue-500/50 text-blue-600"
+                    )}>
+                      {(discountAmount > 0 ? 1 : 0) + (installationEnabled && installationCost > 0 ? 1 : 0) + 2}
+                    </Badge>
+                    <span className={includePrintInPrice ? "text-green-600" : "text-blue-600"}>
+                      تكلفة الطباعة
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className={cn(
+                      "text-sm flex items-center gap-1",
+                      includePrintInPrice ? "text-green-600" : "text-blue-600"
+                    )}>
+                      <Printer className="h-3 w-3" />
+                      {includePrintInPrice ? 'مخصومة (مجانية للعميل)' : 'تضاف للعميل'}
+                    </span>
+                    <span className={cn(
+                      "font-bold text-lg",
+                      includePrintInPrice ? "text-green-600" : "text-blue-600"
+                    )}>
+                      {includePrintInPrice ? '-' : '+'}{(printCost || 0).toLocaleString('ar-LY')} {currencySymbol}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 5: Friend Costs */}
+              {totalFriendCosts > 0 && (
+                <div className="p-3 border-b border-border bg-amber-500/5">
+                  <div className="flex items-center gap-2 text-xs text-amber-600 mb-2">
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/50 text-amber-600">خصم</Badge>
+                    تكاليف الشركات الصديقة
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-amber-600 flex items-center gap-1">
+                      <Minus className="h-3 w-3" />
+                      مخصوم من صافي الإيجار
+                    </span>
+                    <span className="font-bold text-lg text-amber-600">-{totalFriendCosts.toLocaleString('ar-LY')} {currencySymbol}</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Summary Row */}
+              <div className="p-3 bg-gradient-to-r from-primary/10 to-primary/5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <span className="text-xs text-muted-foreground block mb-1">صافي الإيجار (للشركة)</span>
+                    <span className="font-bold text-primary">{netRental.toLocaleString('ar-LY')} {currencySymbol}</span>
+                  </div>
+                  <div className="text-left">
+                    <span className="text-xs text-muted-foreground block mb-1">رسوم التشغيل ({operatingFeeRate}%)</span>
+                    <span className="font-bold text-purple-600">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+
+        <Separator />
+
+        {/* Net Rental - الأهم */}
+        <div className="p-4 rounded-xl bg-gradient-to-r from-primary/15 to-primary/5 border-2 border-primary/30">
+          <div className="flex justify-between items-center mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-primary">صافي الإيجار</span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-4 w-4 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs text-right">
+                    <p className="font-semibold mb-1">صافي الإيجار =</p>
+                    <p>الإيجار بعد الخصم</p>
+                    {includeInstallationInPrice && installationCost > 0 && <p>- التركيب (مضمن)</p>}
+                    {includePrintInPrice && printCost > 0 && <p>- الطباعة (مضمنة)</p>}
+                    {totalFriendCosts > 0 && <p>- تكاليف الشركات الصديقة</p>}
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <span className="text-2xl font-bold text-primary">{netRental.toLocaleString('ar-LY')} {currencySymbol}</span>
+          </div>
+          
+          {/* Operating Fee from Net Rental */}
+          <div className="flex justify-between items-center text-sm pt-2 border-t border-primary/20 mt-2">
+            <span className="text-muted-foreground flex items-center gap-1">
+              <DollarSign className="h-3 w-3" />
+              رسوم التشغيل ({operatingFeeRate}% من الصافي)
+            </span>
+            <span className="font-semibold text-purple-600">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
+          </div>
+        </div>
+
+        {/* Final Total */}
+        <div className="p-5 rounded-2xl bg-gradient-to-br from-green-500/15 via-emerald-500/10 to-teal-500/5 border-2 border-green-500/40 shadow-lg">
+          <div className="flex justify-between items-center mb-1">
+            <span className="font-bold text-lg text-foreground">الإجمالي للعميل</span>
+            <span className="text-3xl font-bold text-green-600">{adjustedFinalTotal.toLocaleString('ar-LY')} {currencySymbol}</span>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {includeInstallationInPrice && installationCost > 0 && '(التركيب مجاني) '}
+            {includePrintInPrice && printCost > 0 && '(الطباعة مجانية)'}
+            {!includeInstallationInPrice && installationCost > 0 && `(شامل التركيب ${installationCost.toLocaleString('ar-LY')}) `}
+            {!includePrintInPrice && printCost > 0 && `(شامل الطباعة ${printCost.toLocaleString('ar-LY')})`}
+          </p>
+        </div>
+
+        {/* Payment Status */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-4 rounded-xl bg-green-500/10 border-2 border-green-500/30 text-center">
+            <p className="text-xs text-muted-foreground mb-1">المدفوع</p>
+            <p className="font-bold text-lg text-green-600 dark:text-green-400">{totalPaid.toLocaleString('ar-LY')}</p>
+          </div>
+          <div className="p-4 rounded-xl bg-red-500/10 border-2 border-red-500/30 text-center">
+            <p className="text-xs text-muted-foreground mb-1">المتبقي</p>
+            <p className="font-bold text-lg text-red-600 dark:text-red-400">{remaining.toLocaleString('ar-LY')}</p>
+          </div>
+        </div>
+
+        {/* Price Difference */}
+        {originalTotal > 0 && (
+          <div className={cn(
+            "p-3 rounded-xl text-center text-sm font-medium",
+            priceDifference > 0 
+              ? "bg-green-500/10 text-green-600 dark:text-green-400 border border-green-500/20" 
+              : priceDifference < 0 
+                ? "bg-red-500/10 text-red-600 dark:text-red-400 border border-red-500/20"
+                : "bg-muted/50 text-muted-foreground border border-border"
+          )}>
+            {priceDifference > 0 ? (
+              <span className="flex items-center justify-center gap-2">
+                <TrendingUp className="h-4 w-4" />
+                زيادة {priceDifference.toLocaleString('ar-LY')} {currencySymbol} عن السابق
+              </span>
+            ) : priceDifference < 0 ? (
+              <span className="flex items-center justify-center gap-2">
+                <TrendingDown className="h-4 w-4" />
+                نقصان {Math.abs(priceDifference).toLocaleString('ar-LY')} {currencySymbol} عن السابق
+              </span>
+            ) : (
+              <span>لا يوجد تغيير عن السابق</span>
+            )}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        <div className="grid grid-cols-2 gap-3 pt-2">
+          <Button 
+            variant="outline"
+            onClick={onCancel}
+            className="h-12 text-base"
+          >
+            <X className="h-4 w-4 mr-2" />
+            إلغاء
+          </Button>
+          <Button 
+            onClick={onSave} 
+            disabled={saving}
+            className="h-12 text-base bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
+          >
+            {saving ? (
+              <div className="flex items-center gap-2">
+                <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent"></div>
+                جاري الحفظ...
+              </div>
+            ) : (
+              <>
+                <Save className="h-4 w-4 mr-2" />
+                حفظ التعديلات
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

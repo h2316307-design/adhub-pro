@@ -1,0 +1,943 @@
+/**
+ * Unified Contract Print - يستخدم نفس بنية المعاينة من ContractTermsSettings
+ * الأبعاد: 2480x3508 (نفس viewBox) ثم يتم تصغيرها لـ A4
+ * 
+ * مهم: جميع الوحدات والحسابات يجب أن تتطابق مع المعاينة في ContractTermsSettings.tsx
+ */
+
+import { PageSectionSettings, DiscountDisplaySettings, FallbackSettings, DEFAULT_DISCOUNT_DISPLAY, DEFAULT_FALLBACK_SETTINGS } from '@/hooks/useContractTemplateSettings';
+import QRCode from 'qrcode';
+
+// ===== DESIGN DIMENSIONS (same as preview) =====
+const DESIGN_W = 2480;
+const DESIGN_H = 3508;
+
+// A4 في 96 DPI = 793.7px width
+// لتحويل 2480px إلى عرض A4 الكامل (210mm)
+// نستخدم scale أعلى لملء الصفحة بشكل صحيح عند الطباعة
+const A4_WIDTH_MM = 210;
+const A4_HEIGHT_MM = 297;
+// Scale لتحويل التصميم ليملأ A4 بالكامل
+const PRINT_SCALE = 1; // سنستخدم transform مختلف للطباعة
+
+// معامل تحويل mm إلى design px (نفس المعاينة: 1mm ≈ 3.779 design px)
+// في تصميم 2480px عرض يساوي 210mm، إذاً: 2480 / 210 ≈ 11.81 ولكن المعاينة تستخدم 3.779
+// لأن topPosition في الإعدادات هو بالـ mm ويتم ضربه في 3.779
+const MM_TO_DESIGN_PX = 3.779;
+
+// SVG data URI for solid color backgrounds - ensures colors print correctly
+function solidFillDataUri(fill: string): string {
+  const safeFill = (fill ?? "").toString().trim() || "#000000";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="100%" height="100%" fill="${safeFill}"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+// Format Arabic number
+const formatArabicNumber = (num: number): string => {
+  if (num === null || num === undefined || isNaN(num)) return '0';
+  const rounded = Math.round(Number(num) * 10) / 10;
+  const [integerPart, decimalPart = '0'] = rounded.toString().split('.');
+  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return `${formattedInteger}.${decimalPart}`;
+};
+
+// Text measurement cache
+const __textMeasureCache = new Map<string, number>();
+let __textMeasureCtx: CanvasRenderingContext2D | null = null;
+
+function measureTextWidthPx(
+  text: string,
+  fontSize: number,
+  fontFamily: string,
+  fontWeight: string | number = 400
+): number {
+  if (typeof document === 'undefined') return text.length * fontSize * 0.5;
+
+  const key = `${fontFamily}|${fontWeight}|${fontSize}|${text}`;
+  const cached = __textMeasureCache.get(key);
+  if (cached != null) return cached;
+
+  if (!__textMeasureCtx) {
+    const canvas = document.createElement('canvas');
+    __textMeasureCtx = canvas.getContext('2d');
+  }
+
+  if (!__textMeasureCtx) return text.length * fontSize * 0.5;
+
+  __textMeasureCtx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+  const width = __textMeasureCtx.measureText(text).width;
+  __textMeasureCache.set(key, width);
+  return width;
+}
+
+export interface ContractData {
+  contractNumber: string;
+  yearlyCode?: string;
+  year: string;
+  startDate: string;
+  endDate: string;
+  duration: string;
+  customerName: string;
+  customerCompany?: string;
+  customerPhone?: string;
+  isOffer?: boolean;
+  adType?: string;
+  billboardsCount?: number;
+  currencyName?: string;
+}
+
+export interface ContractTerm {
+  id: string;
+  term_title: string;
+  term_content: string;
+  term_order: number;
+  is_active: boolean;
+  font_size: number;
+}
+
+export interface BillboardPrintData {
+  id: string;
+  code?: string;
+  billboardName?: string;
+  image?: string;
+  municipality?: string;
+  district?: string;
+  landmark?: string;
+  size?: string;
+  faces?: string | number;
+  price?: string;
+  originalPrice?: string; // السعر الأصلي قبل التخفيض
+  hasDiscount?: boolean; // هل هناك تخفيض
+  gpsLink?: string;
+}
+
+export interface UnifiedPrintOptions {
+  settings: PageSectionSettings;
+  contractData: ContractData;
+  terms: ContractTerm[];
+  billboards: BillboardPrintData[];
+  templateBgUrl: string;
+  tableBgUrl: string;
+  currencyInfo: {
+    symbol: string;
+    writtenName: string;
+  };
+  contractDetails: {
+    finalTotal: string;
+    rentalCost: string;
+    installationCost: string;
+    duration: string;
+  };
+  paymentsHtml: string;
+}
+
+// Generate QR code data URL
+async function generateQRDataUrl(url: string, fgColor: string, bgColor: string, size: number): Promise<string> {
+  try {
+    return await QRCode.toDataURL(url, {
+      width: Math.max(50, Math.round(size)),
+      margin: 0,
+      color: { dark: fgColor, light: bgColor },
+      errorCorrectionLevel: 'M',
+    });
+  } catch (e) {
+    console.error('QR generation error:', e);
+    return '';
+  }
+}
+
+// Wrap text into lines
+function wrapText(text: string, maxCharsPerLine: number): string[] {
+  const words = text.split(' ');
+  const lines: string[] = [];
+  let currentLine = '';
+  
+  words.forEach(word => {
+    if ((currentLine + ' ' + word).length > maxCharsPerLine) {
+      if (currentLine) lines.push(currentLine.trim());
+      currentLine = word;
+    } else {
+      currentLine += ' ' + word;
+    }
+  });
+  if (currentLine) lines.push(currentLine.trim());
+  
+  return lines;
+}
+
+// Replace variables in term content
+function replaceVariables(
+  text: string, 
+  contractData: ContractData,
+  contractDetails: any,
+  currencyInfo: any,
+  billboardsCount: number,
+  paymentsHtml: string
+): string {
+  return text
+    .replace(/{duration}/g, contractData.duration)
+    .replace(/{startDate}/g, contractData.startDate)
+    .replace(/{endDate}/g, contractData.endDate)
+    .replace(/{customerName}/g, contractData.customerName)
+    .replace(/{contractNumber}/g, contractData.contractNumber)
+    .replace(/{totalAmount}/g, contractDetails.finalTotal)
+    .replace(/{currency}/g, currencyInfo.writtenName)
+    .replace(/{billboardsCount}/g, String(billboardsCount))
+    .replace(/{payments}/g, paymentsHtml);
+}
+
+// ===== BUILD FIRST PAGE SVG (Contract Terms) - متطابق تماماً مع المعاينة في ContractTermsSettings =====
+function buildFirstPageSVG(options: UnifiedPrintOptions): string {
+  const { settings, contractData, terms, contractDetails, currencyInfo, billboards, paymentsHtml } = options;
+  
+  // نفس المعاينة بالضبط - المعاينة تستخدم textAnchor="end" دائماً للبنود
+  const termsX = settings.termsStartX;
+  const termsWidth = settings.termsWidth || 2000;
+  const charsPerLine = Math.floor(termsWidth / 28);
+  const lineHeight = 55; // نفس المعاينة
+  const goldLineSettings = settings.termsGoldLine || { visible: true, heightPercent: 30, color: '#D4AF37' };
+  
+  // المعاينة تستخدم textAnchor="end" للبنود بشكل ثابت - يجب التطابق معها
+  const termsTextAnchor = 'end';
+
+  let termsSvg = '';
+  let currentY = settings.termsStartY;
+  const activeTerms = terms.filter(t => t.is_active);
+  
+  activeTerms.forEach((term) => {
+    const termY = currentY;
+    const fontSize = term.font_size || 42;
+    const titleText = `${term.term_title}:`;
+    const contentText = replaceVariables(term.term_content, contractData, contractDetails, currencyInfo, billboards.length, paymentsHtml);
+    const fullText = `${titleText} ${contentText}`;
+    const contentLines = wrapText(fullText, charsPerLine);
+    const termHeight = contentLines.length * lineHeight;
+    
+    // حساب موقع Y التالي بعد هذا البند مع التباعد - نفس المعاينة
+    currentY = termY + termHeight + (settings.termsSpacing || 40);
+    
+    contentLines.forEach((line, lineIndex) => {
+      const y = termY + (lineIndex * lineHeight);
+      
+      // السطر الأول يحتوي على العنوان
+      if (lineIndex === 0) {
+        const colonIndex = line.indexOf(':');
+        if (colonIndex !== -1) {
+          const titlePart = line.substring(0, colonIndex + 1);
+          const contentPart = line.substring(colonIndex + 1);
+          const titleWeight = settings.termsTitleWeight || 'bold';
+          const titleWidth = Math.round(measureTextWidthPx(titlePart, fontSize, 'Doran, sans-serif', titleWeight));
+          
+          // الخط الذهبي خلف العنوان فقط - نفس المعاينة بالضبط (rectX = termsX - titleWidth)
+          if (goldLineSettings.visible !== false) {
+            const goldLineHeight = lineHeight * (goldLineSettings.heightPercent / 100);
+            // المعاينة تستخدم: x={termsX - titleWidth}
+            const rectX = termsX - titleWidth;
+            const rectY = y - (goldLineHeight / 2);
+            termsSvg += `<rect x="${rectX}" y="${rectY}" width="${titleWidth}" height="${goldLineHeight}" fill="${goldLineSettings.color}" rx="2" />`;
+          }
+          
+          termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">`;
+          termsSvg += `<tspan font-weight="${settings.termsTitleWeight || 'bold'}">${titlePart}</tspan>`;
+          termsSvg += `<tspan font-weight="${settings.termsContentWeight || 'normal'}">${contentPart}</tspan>`;
+          termsSvg += `</text>`;
+          return;
+        }
+      }
+      
+      termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-weight="${settings.termsContentWeight || 'normal'}" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">${line}</text>`;
+    });
+  });
+  
+  // SVG overlay - نفس بنية المعاينة تماماً
+  return `
+    <svg 
+      class="overlay-svg" 
+      viewBox="0 0 ${DESIGN_W} ${DESIGN_H}" 
+      preserveAspectRatio="xMidYMid slice" 
+      xmlns="http://www.w3.org/2000/svg" 
+      style="position: absolute; inset: 0; width: 100%; height: 100%; z-index: 10;"
+    >
+      <!-- العنوان الرئيسي - نفس المعاينة -->
+      ${settings.header.visible ? `
+        <text 
+          x="${settings.header.x}" 
+          y="${settings.header.y}" 
+          font-family="Doran, sans-serif" 
+          font-weight="bold" 
+          font-size="${settings.header.fontSize}" 
+          fill="#000" 
+          text-anchor="${settings.header.textAlign || 'middle'}"
+          dominant-baseline="middle"
+        >${contractData.isOffer ? `عرض سعر رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} - صالح لمدة 24 ساعة` : `عقد إيجار مواقع إعلانية رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} سنة ${contractData.year}`}</text>
+      ` : ''}
+      
+      <!-- التاريخ - نفس المعاينة -->
+      ${settings.date.visible ? `
+        <text 
+          x="${settings.date.x}" 
+          y="${settings.date.y}" 
+          font-family="Doran, sans-serif" 
+          font-weight="bold" 
+          font-size="${settings.date.fontSize}" 
+          fill="#000" 
+          text-anchor="${settings.date.textAlign || 'middle'}"
+          dominant-baseline="middle"
+        >التاريخ: ${contractData.startDate}</text>
+      ` : ''}
+      
+      <!-- نوع الإعلان - جديد -->
+      ${settings.adType?.visible ? `
+        <text 
+          x="${settings.adType.x}" 
+          y="${settings.adType.y}" 
+          font-family="Doran, sans-serif" 
+          font-weight="bold" 
+          font-size="${settings.adType.fontSize}" 
+          fill="#1a1a2e" 
+          text-anchor="${settings.adType.textAlign || 'end'}"
+          dominant-baseline="middle"
+        >نوع الإعلان: ${contractData.adType || 'غير محدد'}</text>
+      ` : ''}
+      
+      <!-- الطرف الأول - نفس المعاينة (fontSize + 4 للعنوان) -->
+      ${settings.firstParty.visible ? `
+        <g>
+          <text 
+            x="${settings.firstParty.x}" 
+            y="${settings.firstParty.y}" 
+            font-family="Doran, sans-serif" 
+            font-weight="bold" 
+            font-size="${settings.firstParty.fontSize + 4}" 
+            fill="#000" 
+            text-anchor="${settings.firstParty.textAlign || 'end'}"
+            dominant-baseline="middle"
+          >الطرف الأول: ${settings.firstPartyData.companyName}، ${settings.firstPartyData.address}</text>
+          <text 
+            x="${settings.firstParty.x}" 
+            y="${settings.firstParty.y + (settings.firstParty.lineSpacing || 50)}" 
+            font-family="Doran, sans-serif" 
+            font-size="${settings.firstParty.fontSize}" 
+            fill="#000" 
+            text-anchor="${settings.firstParty.textAlign || 'end'}"
+            dominant-baseline="middle"
+          >${settings.firstPartyData.representative}</text>
+        </g>
+      ` : ''}
+      
+      <!-- الطرف الثاني - اسم الشركة -->
+      ${settings.secondParty.visible ? `
+        <g>
+          <text 
+            x="${settings.secondParty.x}" 
+            y="${settings.secondParty.y}" 
+            font-family="Doran, sans-serif" 
+            font-weight="bold" 
+            font-size="${settings.secondParty.fontSize}" 
+            fill="#000" 
+            text-anchor="${settings.secondParty.textAlign || 'end'}"
+            dominant-baseline="middle"
+          >الطرف الثاني: ${contractData.customerCompany || contractData.customerName}</text>
+        </g>
+      ` : ''}
+      
+      <!-- الطرف الثاني - اسم الزبون والهاتف -->
+      ${settings.secondPartyCustomer?.visible ? `
+        <g>
+          <text 
+            x="${settings.secondPartyCustomer.x}" 
+            y="${settings.secondPartyCustomer.y}" 
+            font-family="Doran, sans-serif" 
+            font-size="${settings.secondPartyCustomer.fontSize}" 
+            fill="#000" 
+            text-anchor="${settings.secondPartyCustomer.textAlign || 'end'}"
+            dominant-baseline="middle"
+            direction="rtl"
+          >يمثلها السيد ${contractData.customerName} - هاتف: <tspan direction="ltr" unicode-bidi="embed">${contractData.customerPhone || 'غير محدد'}</tspan></text>
+        </g>
+      ` : ''}
+      
+      <!-- البنود الديناميكية -->
+      ${termsSvg}
+    </svg>
+  `;
+}
+
+// ===== BUILD TABLE PAGE HTML (متطابق مع المعاينة في ContractTermsSettings) =====
+function buildTablePageHTML(
+  billboards: BillboardPrintData[],
+  settings: PageSectionSettings,
+  tableBgUrl: string,
+  pageIndex: number,
+  qrDataUrls: Map<string, string>
+): string {
+  const tblSettings = settings.tableSettings;
+  const tableTerm = settings.tableTerm;
+  const visibleColumns = tblSettings.columns.filter(col => col.visible);
+  const borderWidthPx = (tblSettings.borderWidth ?? 1);
+  
+  // تحويل mm إلى design px - نفس المعاينة بالضبط (rowHeight * 3.779)
+  const topPositionPx = tblSettings.topPosition * MM_TO_DESIGN_PX;
+  const rowHeightPx = (tblSettings.rowHeight || 12) * MM_TO_DESIGN_PX;
+  const headerRowHeightPx = (tblSettings.headerRowHeight || 14) * MM_TO_DESIGN_PX;
+  const cellPaddingPx = tblSettings.cellPadding || 2;
+  
+  // Table term header (first page only)
+  let tableTermHtml = '';
+  if (pageIndex === 0 && tableTerm?.visible !== false) {
+    const goldLineHtml = tableTerm?.goldLine?.visible !== false ? `
+      <span style="
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        height: ${tableTerm?.goldLine?.heightPercent || 30}%;
+        background: ${tableTerm?.goldLine?.color || '#D4AF37'};
+        border-radius: 2px;
+        z-index: 0;
+      "></span>
+    ` : '';
+    
+    // نفس المعاينة: fontSize بدون ضرب
+    tableTermHtml = `
+      <div style="
+        text-align: center;
+        margin-bottom: ${tableTerm?.marginBottom || 8}px;
+        font-family: 'Doran', sans-serif;
+        direction: rtl;
+        position: relative;
+        left: ${tableTerm?.positionX || 0}px;
+        top: ${tableTerm?.positionY || 0}px;
+      ">
+        <h2 style="
+          font-size: ${tableTerm?.fontSize || 14}px;
+          color: ${tableTerm?.color || '#1a1a2e'};
+          margin: 0;
+          display: inline-block;
+        ">
+          <span style="
+            font-weight: ${tableTerm?.titleFontWeight || 'bold'};
+            position: relative;
+            display: inline-block;
+          ">
+            ${goldLineHtml}
+            <span style="position: relative; z-index: 1;">${tableTerm?.termTitle || 'البند الثامن:'}</span>
+          </span>
+          <span style="font-weight: ${tableTerm?.contentFontWeight || 'normal'}; margin-right: 8px;">
+            ${tableTerm?.termContent || 'المواقع المتفق عليها بين الطرفين'}
+          </span>
+        </h2>
+      </div>
+    `;
+  }
+  
+  // Header row - نفس المعاينة بالضبط
+  const headerCells = visibleColumns.map(col => {
+    const isHighlighted = (tblSettings.highlightedColumns || ['index']).includes(col.key);
+    const headerBg = isHighlighted ? (tblSettings.highlightedColumnBgColor || '#1a1a2e') : tblSettings.headerBgColor;
+    const headerFg = isHighlighted ? (tblSettings.highlightedColumnTextColor || '#ffffff') : tblSettings.headerTextColor;
+    
+    // نفس المعاينة: fontSize بدون ضرب، استخدام solidFillDataUri لضمان طباعة الألوان
+    return `
+      <th style="
+        width: ${col.width}%;
+        padding: ${(col.padding ?? (cellPaddingPx || 2))}px;
+        border: ${borderWidthPx}px solid ${tblSettings.borderColor};
+        font-size: ${(col.headerFontSize || tblSettings.headerFontSize || 11)}px;
+        font-weight: ${tblSettings.headerFontWeight || 'bold'};
+        text-align: ${tblSettings.headerTextAlign || 'center'};
+        vertical-align: middle;
+        line-height: ${(col.lineHeight ?? 1.3)};
+        overflow: hidden;
+        position: relative;
+        background-color: ${headerBg};
+        color: ${headerFg};
+      ">
+        <img src="${solidFillDataUri(headerBg)}" alt="" aria-hidden="true" style="
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          z-index: 0;
+          pointer-events: none;
+        " />
+        <span style="position: relative; z-index: 1;">${col.label}</span>
+      </th>
+    `;
+  }).join('');
+  
+  // Data rows - نفس المعاينة بالضبط
+  // المعاينة تستخدم: idx % 2 === 1 ? alternateRowColor : white
+  // أي الصف الأول (idx=0) أبيض، الصف الثاني (idx=1) متناوب...
+  const dataRows = billboards.map((row, rowIndex) => {
+    const globalIndex = pageIndex * (tblSettings.maxRows || 12) + rowIndex;
+    const rowBgColor = rowIndex % 2 === 1 ? tblSettings.alternateRowColor : 'white';
+    
+    const cells = visibleColumns.map(col => {
+      const isHighlighted = (tblSettings.highlightedColumns || ['index']).includes(col.key);
+      // المعاينة: cellBg = isHighlighted ? highlightedColor : undefined (لا تضع backgroundColor للخلايا العادية)
+      const cellBg = isHighlighted ? (tblSettings.highlightedColumnBgColor || '#1a1a2e') : undefined;
+      const cellTextColor = isHighlighted ? (tblSettings.highlightedColumnTextColor || '#ffffff') : (tblSettings.cellTextColor || '#000000');
+      
+      // نفس المعاينة: rowHeightPx - 6 للصور
+      const imgHeightPx = rowHeightPx - 6;
+      const qrSizePx = rowHeightPx - 8;
+      
+      let cellContent = '';
+      const noPadding = col.key === 'image' || col.key === 'location';
+      
+      switch (col.key) {
+        case 'index':
+          cellContent = String(globalIndex + 1);
+          break;
+        case 'code':
+          cellContent = row.code || row.id || '';
+          break;
+        case 'image':
+          // استخدام الصورة الافتراضية إذا لم تكن هناك صورة
+          const fallbackSettings: FallbackSettings = settings.fallbackSettings || DEFAULT_FALLBACK_SETTINGS;
+          const imageToUse = row.image || (fallbackSettings.useDefaultImage ? fallbackSettings.defaultImageUrl : null);
+          
+          if (imageToUse) {
+            cellContent = `<img src="${imageToUse}" alt="" onerror="this.style.display='none'" style="
+              height: ${imgHeightPx}px;
+              max-height: ${imgHeightPx}px;
+              width: auto;
+              object-fit: contain;
+              display: block;
+              margin: 0 auto;
+            " />`;
+          }
+          break;
+        case 'billboardName':
+          cellContent = row.billboardName || '';
+          break;
+        case 'municipality':
+          cellContent = row.municipality || '';
+          break;
+        case 'district':
+          cellContent = row.district || '';
+          break;
+        case 'name':
+          cellContent = row.landmark || '';
+          break;
+        case 'size':
+          cellContent = row.size || '';
+          break;
+        case 'faces':
+          // Convert face count to Arabic text
+          const getFaceCountText = (facesCount: any): string => {
+            switch (String(facesCount)) {
+              case '1': return 'وجه واحد';
+              case '2': return 'وجهين';
+              case '3': return 'ثلاثة أوجه';
+              case '4': return 'أربعة أوجه';
+              default: return facesCount || '';
+            }
+          };
+          cellContent = getFaceCountText(row.faces);
+          break;
+        case 'price':
+          // إعدادات عرض التخفيض
+          const discountSettings: DiscountDisplaySettings = settings.discountDisplay || DEFAULT_DISCOUNT_DISPLAY;
+          
+          if (row.hasDiscount && row.originalPrice && discountSettings.enabled && discountSettings.showOriginalPrice) {
+            // عرض السعر الأصلي مشطوب فوق السعر الجديد
+            cellContent = `
+              <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2;">
+                <span style="
+                  font-size: ${discountSettings.originalPriceFontSize}px;
+                  color: ${discountSettings.originalPriceColor};
+                  text-decoration: line-through;
+                  text-decoration-color: ${discountSettings.strikethroughColor};
+                  text-decoration-thickness: ${discountSettings.strikethroughWidth}px;
+                ">${row.originalPrice}</span>
+                <span style="
+                  font-size: ${discountSettings.discountedPriceFontSize}px;
+                  color: ${discountSettings.discountedPriceColor};
+                  font-weight: bold;
+                ">${row.price || ''}</span>
+              </div>
+            `;
+          } else {
+            cellContent = row.price || '';
+          }
+          break;
+        case 'location':
+          // استخدام رابط قوقل ماب الافتراضي إذا لم يكن هناك رابط
+          const fallbackSettingsQR: FallbackSettings = settings.fallbackSettings || DEFAULT_FALLBACK_SETTINGS;
+          const gpsLinkToUse = row.gpsLink || (fallbackSettingsQR.useDefaultQR ? fallbackSettingsQR.defaultGoogleMapsUrl : null);
+          
+          if (gpsLinkToUse) {
+            const qrUrl = qrDataUrls.get(gpsLinkToUse);
+            if (qrUrl) {
+              cellContent = `<a href="${gpsLinkToUse}" target="_blank" rel="noopener" style="display:block;">
+                <img src="${qrUrl}" alt="QR" style="width:${qrSizePx}px; height:${qrSizePx}px; object-fit:contain; display:block; margin:0 auto;" />
+              </a>`;
+            }
+          }
+          break;
+        default:
+          cellContent = '';
+      }
+      
+      // نفس المعاينة: استخدام solidFillDataUri للأعمدة المميزة فقط
+      const bgImageHtml = isHighlighted && cellBg ? `
+        <img src="${solidFillDataUri(cellBg)}" alt="" aria-hidden="true" style="
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          z-index: 0;
+          pointer-events: none;
+        " />
+      ` : '';
+      
+      const colPadding = col.padding ?? cellPaddingPx;
+      const lineHeight = col.lineHeight ?? 1.3;
+
+      return `
+        <td style="
+          border: ${borderWidthPx}px solid ${tblSettings.borderColor};
+          padding: ${noPadding ? 0 : colPadding}px;
+          text-align: ${col.textAlign || tblSettings.cellTextAlign || 'center'};
+          font-size: ${(col.fontSize || tblSettings.fontSize || 10)}px;
+          font-weight: ${tblSettings.fontWeight || 'normal'};
+          ${cellBg ? `background-color: ${cellBg};` : ''}
+          color: ${cellTextColor};
+          vertical-align: middle;
+          line-height: ${lineHeight};
+          white-space: normal;
+          word-break: break-word;
+          overflow: hidden;
+          ${cellBg ? 'position: relative;' : ''}
+        ">
+          ${bgImageHtml}
+          <div style="position: relative; z-index: 1; line-height: ${lineHeight}; white-space: normal; word-break: break-word;">${cellContent}</div>
+        </td>
+      `;
+    }).join('');
+    
+    return `<tr style="min-height: ${rowHeightPx}px; height: auto; background-color: ${rowBgColor};">${cells}</tr>`;
+  }).join('');
+  
+  const tableLeftMargin = (100 - (tblSettings.tableWidth || 90)) / 2;
+  
+  return `
+    <div class="contract-preview-container" style="
+      position: relative;
+      width: ${DESIGN_W}px;
+      height: ${DESIGN_H}px;
+      overflow: hidden;
+      background: white;
+    ">
+      <img src="${tableBgUrl}" alt="خلفية جدول اللوحات" style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: ${DESIGN_W}px;
+        height: ${DESIGN_H}px;
+        object-fit: cover;
+        z-index: 1;
+      " onerror="console.warn('Failed to load table background')" />
+      
+      <div style="
+        position: absolute;
+        top: ${topPositionPx}px;
+        left: ${tableLeftMargin}%;
+        width: ${tblSettings.tableWidth || 90}%;
+        z-index: 20;
+      ">
+        ${tableTermHtml}
+        
+        <table dir="rtl" style="
+          width: 100%;
+          border-collapse: collapse;
+          border-spacing: 0;
+          font-size: ${tblSettings.fontSize}px;
+          font-family: 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
+          table-layout: fixed;
+          border: ${borderWidthPx}px solid ${tblSettings.borderColor};
+        ">
+          <colgroup>
+            ${visibleColumns.map(col => `<col style="width: ${col.width}%;" />`).join('')}
+          </colgroup>
+          <thead>
+            <tr style="height: ${headerRowHeightPx}px;">
+              ${headerCells}
+            </tr>
+          </thead>
+          <tbody>
+            ${dataRows}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+// ===== MAIN PRINT FUNCTION =====
+export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Promise<string> {
+  const { settings, contractData, billboards, templateBgUrl, tableBgUrl } = options;
+  const rowsPerPage = settings.tableSettings.maxRows || 12;
+  
+  // Generate QR codes for all billboards
+  const qrDataUrls = new Map<string, string>();
+  const qrFg = settings.tableSettings.qrForegroundColor || '#000000';
+  const qrBg = settings.tableSettings.qrBackgroundColor || '#ffffff';
+  const fallbackSettings: FallbackSettings = settings.fallbackSettings || DEFAULT_FALLBACK_SETTINGS;
+  
+  for (const billboard of billboards) {
+    // استخدام رابط GPS الموجود أو الرابط الافتراضي
+    const gpsLink = billboard.gpsLink || (fallbackSettings.useDefaultQR ? fallbackSettings.defaultGoogleMapsUrl : null);
+    if (gpsLink && !qrDataUrls.has(gpsLink)) {
+      const qrUrl = await generateQRDataUrl(gpsLink, qrFg, qrBg, 150);
+      qrDataUrls.set(gpsLink, qrUrl);
+    }
+  }
+  
+  // Build first page
+  const firstPageSVG = buildFirstPageSVG(options);
+  const firstPageHTML = `
+    <div class="contract-preview-container" style="
+      position: relative;
+      width: ${DESIGN_W}px;
+      height: ${DESIGN_H}px;
+      overflow: hidden;
+      background: white;
+    ">
+      <img src="${templateBgUrl}" alt="قالب العقد" style="
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        z-index: 0;
+      " />
+      ${firstPageSVG}
+    </div>
+  `;
+  
+  // Split billboards into pages
+  const billboardPages: BillboardPrintData[][] = [];
+  for (let i = 0; i < billboards.length; i += rowsPerPage) {
+    billboardPages.push(billboards.slice(i, i + rowsPerPage));
+  }
+  
+  // Build table pages
+  const tablePages = billboardPages.map((pageBillboards, pageIndex) => 
+    buildTablePageHTML(pageBillboards, settings, tableBgUrl, pageIndex, qrDataUrls)
+  );
+  
+  // Collect styles from page
+  const stylesHtml = typeof document !== 'undefined' 
+    ? Array.from(document.querySelectorAll('style, link[rel="stylesheet"]'))
+        .map((n) => (n as HTMLElement).outerHTML)
+        .join('\n')
+    : '';
+  
+  const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  
+  // Scale لتحويل التصميم (2480x3508) إلى A4 (210x297mm)
+  // 210mm = 793.7px at 96 DPI, لكن نستخدم mm مباشرة في CSS
+  // scale = 210mm / 2480px = 0.0847mm/px
+  // أو بالـ px: 793.7 / 2480 = 0.32
+  // لكن للطباعة نستخدم mm مباشرة ونترك المتصفح يتعامل معها
+  const scaleToA4 = (210 / DESIGN_W); // ~0.0847 (من px إلى mm)
+  
+  return `
+    <!DOCTYPE html>
+    <html dir="ltr">
+    <head>
+      <meta charset="utf-8" />
+      <meta name="viewport" content="width=device-width, initial-scale=1" />
+      <base href="${origin}/" />
+      <title>${contractData.isOffer ? 'عرض سعر' : 'عقد'} #${contractData.contractNumber} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${contractData.billboardsCount || 1} لوحة • ${contractData.currencyName || ''}</title>
+      ${stylesHtml}
+      <style>
+        @page { size: A4; margin: 0; }
+        html, body { 
+          width: 210mm; 
+          height: auto; 
+          margin: 0; 
+          padding: 0; 
+          background: white; 
+        }
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+
+        @font-face {
+          font-family: 'Doran';
+          src: url('/Doran-Regular.otf') format('opentype');
+          font-weight: 400;
+          font-style: normal;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Doran';
+          src: url('/Doran-Bold.otf') format('opentype');
+          font-weight: 700;
+          font-style: normal;
+          font-display: swap;
+        }
+
+        body { font-family: 'Doran', 'Tajawal', sans-serif; direction: ltr; }
+
+        /* صفحة طباعة A4 فعلية */
+        .print-page {
+          width: 210mm;
+          height: 297mm;
+          position: relative;
+          overflow: visible;
+          direction: ltr;
+          page-break-after: always;
+          page-break-inside: avoid;
+          box-sizing: border-box;
+          background: white;
+        }
+
+        .print-page:last-child {
+          page-break-after: auto;
+        }
+
+        /* التصميم الأصلي 2480x3508px يتم تصغيره ليلائم A4 باستخدام zoom */
+        .print-page .contract-preview-container {
+          position: absolute !important;
+          left: 0 !important;
+          top: 0 !important;
+          width: 2480px !important;
+          height: 3508px !important;
+          zoom: 0.32 !important;
+          -moz-transform: scale(0.32);
+          -moz-transform-origin: top left;
+          margin: 0 !important;
+          border-radius: 0 !important;
+          box-shadow: none !important;
+          direction: ltr;
+        }
+        
+        /* للشاشة فقط - نعرض بحجم أصغر للمعاينة */
+        @media screen {
+          .print-page {
+            transform-origin: top left;
+            margin: 20px auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+          }
+        }
+
+        /* ضمان ظهور الألوان والخلفيات في الطباعة */
+        .contract-preview-container,
+        .contract-preview-container * {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+
+        /* ضمان ظهور خلفيات الجدول */
+        table, thead, tbody, tr, th, td {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
+          color-adjust: exact !important;
+        }
+
+        th, td {
+          background-color: inherit !important;
+        }
+
+        @media screen {
+          body {
+            background: #f0f0f0;
+            padding: 20px;
+          }
+          .print-page {
+            background: white;
+            margin: 20px auto;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+          }
+        }
+
+        @media print {
+          html, body { 
+            width: 210mm !important; 
+            min-height: 297mm !important; 
+            margin: 0 !important; 
+            padding: 0 !important;
+            background: white !important;
+          }
+          
+          .print-page {
+            width: 210mm !important;
+            height: 297mm !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            box-shadow: none !important;
+            overflow: visible !important;
+          }
+          
+          .print-page .contract-preview-container {
+            width: 2480px !important;
+            height: 3508px !important;
+            zoom: 0.32 !important;
+            -moz-transform: scale(0.32) !important;
+            -moz-transform-origin: top left !important;
+          }
+        }
+      </style>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+    </head>
+    <body>
+      <div class="print-page">
+        ${firstPageHTML}
+      </div>
+      ${tablePages.map(page => `<div class="print-page">${page}</div>`).join('')}
+      <script>
+        window.addEventListener('load', function () {
+          function waitForCss() {
+            const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
+            return Promise.all(links.map((l) => new Promise((res) => {
+              try {
+                if (l.sheet) return res();
+                l.addEventListener('load', () => res(), { once: true });
+                l.addEventListener('error', () => res(), { once: true });
+                setTimeout(() => res(), 1200);
+              } catch (e) {
+                res();
+              }
+            })));
+          }
+
+          const imgs = Array.from(document.images || []);
+          const waitImgs = Promise.all(imgs.map((img) => img.complete ? Promise.resolve() : new Promise((res) => {
+            img.onload = () => res();
+            img.onerror = () => res();
+          })));
+
+          const waitFonts = (document.fonts && document.fonts.ready)
+            ? document.fonts.ready.catch(function () { return; })
+            : Promise.resolve();
+
+          Promise.all([waitForCss(), waitImgs, waitFonts]).then(function () {
+            setTimeout(function () { window.print(); }, 200);
+          });
+        });
+      </script>
+    </body>
+    </html>
+  `;
+}
+
+// ===== OPEN PRINT WINDOW =====
+export function openUnifiedPrintWindow(htmlContent: string): void {
+  const printWindow = window.open('', '_blank');
+  if (!printWindow) {
+    console.error('Could not open print window');
+    return;
+  }
+
+  printWindow.document.open();
+  printWindow.document.write(htmlContent);
+  printWindow.document.close();
+  printWindow.focus();
+}
