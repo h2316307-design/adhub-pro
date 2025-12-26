@@ -3625,6 +3625,45 @@ export type Database = {
         }
         Relationships: []
       }
+      pricing_durations: {
+        Row: {
+          created_at: string
+          days: number
+          db_column: string
+          id: string
+          is_active: boolean
+          label: string
+          months: number
+          name: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          days: number
+          db_column: string
+          id?: string
+          is_active?: boolean
+          label: string
+          months?: number
+          name: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          days?: number
+          db_column?: string
+          id?: string
+          is_active?: boolean
+          label?: string
+          months?: number
+          name?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       print_installation_pricing: {
         Row: {
           billboard_level: string

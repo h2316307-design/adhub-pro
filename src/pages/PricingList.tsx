@@ -27,18 +27,30 @@ function normalize(val: any): number | null {
   return isNaN(num) ? null : num;
 }
 
-type MonthKeyAll = 'شهر واحد' | '2 أشهر' | '3 أشهر' | '6 أشهر' | 'سنة كاملة' | 'يوم واحد';
+type MonthKeyAll = string;
 
-const MONTH_OPTIONS = [
-  { key: 'شهر واحد', label: 'شهرياً', months: 1, dbColumn: 'one_month' },
-  { key: '2 أشهر', label: 'كل شهرين', months: 2, dbColumn: '2_months' },
-  { key: '3 أشهر', label: 'كل 3 أشهر', months: 3, dbColumn: '3_months' },
-  { key: '6 أشهر', label: 'كل 6 أشهر', months: 6, dbColumn: '6_months' },
-  { key: 'سنة كاملة', label: 'سنوي', months: 12, dbColumn: 'full_year' },
-  { key: 'يوم واحد', label: 'يومي', months: 0, dbColumn: 'one_day' },
-] as const;
+// المدد الافتراضية (احتياطي)
+const DEFAULT_MONTH_OPTIONS = [
+  { key: 'شهر واحد', label: 'شهرياً', months: 1, days: 30, dbColumn: 'one_month', sort_order: 1 },
+  { key: '2 أشهر', label: 'كل شهرين', months: 2, days: 60, dbColumn: '2_months', sort_order: 2 },
+  { key: '3 أشهر', label: 'كل 3 أشهر', months: 3, days: 90, dbColumn: '3_months', sort_order: 3 },
+  { key: '6 أشهر', label: 'كل 6 أشهر', months: 6, days: 180, dbColumn: '6_months', sort_order: 4 },
+  { key: 'سنة كاملة', label: 'سنوي', months: 12, days: 365, dbColumn: 'full_year', sort_order: 5 },
+  { key: 'يوم واحد', label: 'يومي', months: 0, days: 1, dbColumn: 'one_day', sort_order: 6 },
+];
 
-type MonthKey = typeof MONTH_OPTIONS[number]['key'];
+interface PricingDuration {
+  id: string;
+  name: string;
+  label: string;
+  days: number;
+  months: number;
+  db_column: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+type MonthKey = string;
 
 const PRIMARY_CUSTOMERS: string[] = ['عادي', 'مسوق', 'شركات'];
 const PRIMARY_SENTINEL = '__primary__';
@@ -84,8 +96,34 @@ export default function PricingList() {
   const [categories, setCategories] = useState<PricingCategory[]>([]);
   const [pricingData, setPricingData] = useState<PricingData[]>([]);
   const [sizesData, setSizesData] = useState<SizeData[]>([]);
+  const [durations, setDurations] = useState<PricingDuration[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
+
+  // إنشاء MONTH_OPTIONS من المدد المحملة
+  const MONTH_OPTIONS = useMemo(() => {
+    if (durations.length === 0) {
+      return DEFAULT_MONTH_OPTIONS.map(d => ({
+        key: d.key,
+        label: d.label,
+        months: d.months,
+        days: d.days,
+        dbColumn: d.dbColumn,
+        sort_order: d.sort_order
+      }));
+    }
+    return durations
+      .filter(d => d.is_active)
+      .sort((a, b) => a.sort_order - b.sort_order)
+      .map(d => ({
+        key: d.name,
+        label: d.label,
+        months: d.months,
+        days: d.days,
+        dbColumn: d.db_column,
+        sort_order: d.sort_order
+      }));
+  }, [durations]);
 
   // استخراج المستويات المتاحة - مرتبة حسب sort_order
   const allLevels = useMemo(() => {
@@ -155,6 +193,19 @@ export default function PricingList() {
   const [editCatName, setEditCatName] = useState('');
   const [deleteCatOpen, setDeleteCatOpen] = useState(false);
   const [deletingCategory, setDeletingCategory] = useState<PricingCategory | null>(null);
+
+  // حالات إدارة المدد
+  const [addDurationOpen, setAddDurationOpen] = useState(false);
+  const [editDurationOpen, setEditDurationOpen] = useState(false);
+  const [deleteDurationOpen, setDeleteDurationOpen] = useState(false);
+  const [editingDuration, setEditingDuration] = useState<PricingDuration | null>(null);
+  const [deletingDuration, setDeletingDuration] = useState<PricingDuration | null>(null);
+  const [newDurationName, setNewDurationName] = useState('');
+  const [newDurationLabel, setNewDurationLabel] = useState('');
+  const [newDurationDays, setNewDurationDays] = useState<number>(30);
+  const [newDurationMonths, setNewDurationMonths] = useState<number>(1);
+  const [newDurationOrder, setNewDurationOrder] = useState<number>(1);
+  const [newDurationDbColumn, setNewDurationDbColumn] = useState('');
 
   // تحميل البيانات من قاعدة البيانات
   const loadData = async () => {
@@ -242,6 +293,22 @@ export default function PricingList() {
       } else {
         console.log('✅ تم تحميل الأسعار:', pricingData?.length || 0, 'سعر');
         setPricingData(pricingData || []);
+      }
+
+      // تحميل المدد الزمنية
+      console.log('⏱️ تحميل المدد...');
+      const { data: durationsData, error: durationsError } = await supabase
+        .from('pricing_durations')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order', { ascending: true });
+
+      if (durationsError) {
+        console.error('❌ خطأ في تحميل المدد:', durationsError);
+        console.log('⚠️ سيتم استخدام المدد الافتراضية');
+      } else {
+        console.log('✅ تم تحميل المدد:', durationsData?.length || 0, 'مدة');
+        setDurations(durationsData || []);
       }
 
       console.log('🎉 تم الانتهاء من تحميل جميع البيانات');
@@ -745,6 +812,157 @@ export default function PricingList() {
       setDeletingCategory(category);
       setDeleteCatOpen(true);
     }
+  };
+
+  // ========== إدارة المدد ==========
+  
+  // إضافة مدة جديدة
+  const addNewDuration = async () => {
+    const name = newDurationName.trim();
+    const label = newDurationLabel.trim();
+    const dbColumn = newDurationDbColumn.trim().toLowerCase().replace(/\s+/g, '_');
+    
+    if (!name || !label || !dbColumn) {
+      toast.error('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    // التحقق من عدم تكرار الاسم أو العمود
+    const existingName = durations.find(d => d.name === name);
+    const existingColumn = durations.find(d => d.db_column === dbColumn);
+    
+    if (existingName) {
+      toast.error('هذا الاسم مستخدم بالفعل');
+      return;
+    }
+    
+    if (existingColumn) {
+      toast.error('هذا العمود مستخدم بالفعل');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pricing_durations')
+        .insert([{
+          name,
+          label,
+          days: newDurationDays,
+          months: newDurationMonths,
+          db_column: dbColumn,
+          sort_order: newDurationOrder,
+          is_active: true
+        }]);
+
+      if (error) {
+        console.error('خطأ في إضافة المدة:', error);
+        toast.error('حدث خطأ في إضافة المدة');
+        return;
+      }
+
+      await loadData();
+      setAddDurationOpen(false);
+      resetDurationForm();
+      toast.success('تم إضافة المدة بنجاح');
+    } catch (error) {
+      console.error('خطأ في الاتصال بقاعدة البيانات:', error);
+      toast.error('حدث خطأ في الاتصال بقاعدة البيانات');
+    }
+  };
+
+  // تعديل مدة
+  const updateDuration = async () => {
+    if (!editingDuration) return;
+    
+    const name = newDurationName.trim();
+    const label = newDurationLabel.trim();
+    
+    if (!name || !label) {
+      toast.error('يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('pricing_durations')
+        .update({
+          name,
+          label,
+          days: newDurationDays,
+          months: newDurationMonths,
+          sort_order: newDurationOrder
+        })
+        .eq('id', editingDuration.id);
+
+      if (error) {
+        console.error('خطأ في تعديل المدة:', error);
+        toast.error('حدث خطأ في تعديل المدة');
+        return;
+      }
+
+      await loadData();
+      setEditDurationOpen(false);
+      setEditingDuration(null);
+      resetDurationForm();
+      toast.success('تم تعديل المدة بنجاح');
+    } catch (error) {
+      console.error('خطأ في الاتصال بقاعدة البيانات:', error);
+      toast.error('حدث خطأ في الاتصال بقاعدة البيانات');
+    }
+  };
+
+  // حذف مدة
+  const deleteDuration = async () => {
+    if (!deletingDuration) return;
+
+    try {
+      const { error } = await supabase
+        .from('pricing_durations')
+        .delete()
+        .eq('id', deletingDuration.id);
+
+      if (error) {
+        console.error('خطأ في حذف المدة:', error);
+        toast.error('حدث خطأ في حذف المدة');
+        return;
+      }
+
+      await loadData();
+      setDeleteDurationOpen(false);
+      setDeletingDuration(null);
+      toast.success('تم حذف المدة بنجاح');
+    } catch (error) {
+      console.error('خطأ في الاتصال بقاعدة البيانات:', error);
+      toast.error('حدث خطأ في الاتصال بقاعدة البيانات');
+    }
+  };
+
+  // فتح نافذة تعديل المدة
+  const openEditDuration = (duration: PricingDuration) => {
+    setEditingDuration(duration);
+    setNewDurationName(duration.name);
+    setNewDurationLabel(duration.label);
+    setNewDurationDays(duration.days);
+    setNewDurationMonths(duration.months);
+    setNewDurationOrder(duration.sort_order);
+    setNewDurationDbColumn(duration.db_column);
+    setEditDurationOpen(true);
+  };
+
+  // فتح نافذة حذف المدة
+  const openDeleteDuration = (duration: PricingDuration) => {
+    setDeletingDuration(duration);
+    setDeleteDurationOpen(true);
+  };
+
+  // إعادة تعيين نموذج المدة
+  const resetDurationForm = () => {
+    setNewDurationName('');
+    setNewDurationLabel('');
+    setNewDurationDays(30);
+    setNewDurationMonths(1);
+    setNewDurationOrder(durations.length + 1);
+    setNewDurationDbColumn('');
   };
 
   // الحصول على المقاسات للمستوى المحدد مع الترتيب حسب sort_order
@@ -1421,7 +1639,7 @@ export default function PricingList() {
                 </span>
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {MONTH_OPTIONS.map(opt => (
                 <button
                   key={`m-${opt.key}`}
@@ -1431,6 +1649,38 @@ export default function PricingList() {
                   {opt.months === 1 ? 'شهرياً' : opt.months === 0 ? 'يومي' : opt.label}
                 </button>
               ))}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  resetDurationForm();
+                  setNewDurationOrder(durations.length + 1);
+                  setAddDurationOpen(true);
+                }}
+                title="إضافة مدة جديدة"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+              {durations.length > 0 && (
+                <Select 
+                  value="" 
+                  onValueChange={(val) => {
+                    const duration = durations.find(d => d.id === val);
+                    if (duration) openEditDuration(duration);
+                  }}
+                >
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder="تعديل المدد" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {durations.sort((a, b) => a.sort_order - b.sort_order).map(d => (
+                      <SelectItem key={d.id} value={d.id}>
+                        {d.name} ({d.days} يوم)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
               <div className="mx-3 h-6 w-px bg-border" />
               <div className="flex items-center gap-2">
                 <Select value={otherCustomer} onValueChange={setOtherCustomer}>
@@ -2009,6 +2259,187 @@ export default function PricingList() {
             >
               حفظ
             </Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* نافذة إضافة مدة جديدة */}
+      <UIDialog.Dialog open={addDurationOpen} onOpenChange={setAddDurationOpen}>
+        <UIDialog.DialogContent className="max-w-md">
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>إضافة مدة جديدة</UIDialog.DialogTitle>
+            <UIDialog.DialogDescription>
+              أضف مدة زمنية جديدة لقائمة الأسعار
+            </UIDialog.DialogDescription>
+          </UIDialog.DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">الاسم</label>
+                <Input 
+                  placeholder="مثال: 4 أشهر" 
+                  value={newDurationName} 
+                  onChange={e => setNewDurationName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">التسمية المختصرة</label>
+                <Input 
+                  placeholder="مثال: كل 4 أشهر" 
+                  value={newDurationLabel} 
+                  onChange={e => setNewDurationLabel(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">عدد الأيام</label>
+                <Input 
+                  type="number" 
+                  min={1}
+                  value={newDurationDays} 
+                  onChange={e => setNewDurationDays(Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">عدد الأشهر (للحساب)</label>
+                <Input 
+                  type="number" 
+                  min={0}
+                  step={0.5}
+                  value={newDurationMonths} 
+                  onChange={e => setNewDurationMonths(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">اسم العمود (بالإنجليزية)</label>
+                <Input 
+                  placeholder="مثال: 4_months" 
+                  value={newDurationDbColumn} 
+                  onChange={e => setNewDurationDbColumn(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground mt-1">يجب أن يكون فريداً</p>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">الترتيب</label>
+                <Input 
+                  type="number" 
+                  min={1}
+                  value={newDurationOrder} 
+                  onChange={e => setNewDurationOrder(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          </div>
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => { setAddDurationOpen(false); resetDurationForm(); }}>إلغاء</Button>
+            <Button onClick={addNewDuration} disabled={!newDurationName.trim() || !newDurationLabel.trim() || !newDurationDbColumn.trim()}>
+              إضافة
+            </Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* نافذة تعديل المدة */}
+      <UIDialog.Dialog open={editDurationOpen} onOpenChange={setEditDurationOpen}>
+        <UIDialog.DialogContent className="max-w-md">
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>تعديل المدة</UIDialog.DialogTitle>
+            <UIDialog.DialogDescription>
+              تعديل بيانات المدة الزمنية
+            </UIDialog.DialogDescription>
+          </UIDialog.DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">الاسم</label>
+                <Input 
+                  placeholder="مثال: 4 أشهر" 
+                  value={newDurationName} 
+                  onChange={e => setNewDurationName(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">التسمية المختصرة</label>
+                <Input 
+                  placeholder="مثال: كل 4 أشهر" 
+                  value={newDurationLabel} 
+                  onChange={e => setNewDurationLabel(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-sm font-medium mb-1 block">عدد الأيام</label>
+                <Input 
+                  type="number" 
+                  min={1}
+                  value={newDurationDays} 
+                  onChange={e => setNewDurationDays(Number(e.target.value))}
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-1 block">عدد الأشهر (للحساب)</label>
+                <Input 
+                  type="number" 
+                  min={0}
+                  step={0.5}
+                  value={newDurationMonths} 
+                  onChange={e => setNewDurationMonths(Number(e.target.value))}
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-sm font-medium mb-1 block">الترتيب</label>
+              <Input 
+                type="number" 
+                min={1}
+                value={newDurationOrder} 
+                onChange={e => setNewDurationOrder(Number(e.target.value))}
+              />
+            </div>
+            <div className="bg-muted/50 rounded-lg p-3">
+              <p className="text-sm text-muted-foreground">
+                <strong>اسم العمود:</strong> {editingDuration?.db_column}
+              </p>
+              <p className="text-xs text-muted-foreground mt-1">
+                لا يمكن تغيير اسم العمود بعد الإنشاء
+              </p>
+            </div>
+          </div>
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => { setEditDurationOpen(false); setEditingDuration(null); resetDurationForm(); }}>إلغاء</Button>
+            <Button onClick={updateDuration} disabled={!newDurationName.trim() || !newDurationLabel.trim()}>
+              تحديث
+            </Button>
+          </UIDialog.DialogFooter>
+        </UIDialog.DialogContent>
+      </UIDialog.Dialog>
+
+      {/* نافذة تأكيد حذف المدة */}
+      <UIDialog.Dialog open={deleteDurationOpen} onOpenChange={setDeleteDurationOpen}>
+        <UIDialog.DialogContent>
+          <UIDialog.DialogHeader>
+            <UIDialog.DialogTitle>تأكيد الحذف</UIDialog.DialogTitle>
+            <UIDialog.DialogDescription>
+              هذا الإجراء لا يمكن التراجع عنه
+            </UIDialog.DialogDescription>
+          </UIDialog.DialogHeader>
+          <div className="py-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              هل أنت متأكد من حذف المدة <strong>"{deletingDuration?.name}"</strong>؟
+            </p>
+            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
+              <p className="text-sm text-amber-600 dark:text-amber-400">
+                ⚠️ ملاحظة: حذف المدة لن يؤثر على البيانات المحفوظة في قاعدة البيانات، لكنها لن تظهر في واجهة الأسعار.
+              </p>
+            </div>
+          </div>
+          <UIDialog.DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDurationOpen(false)}>إلغاء</Button>
+            <Button variant="destructive" onClick={deleteDuration}>حذف</Button>
           </UIDialog.DialogFooter>
         </UIDialog.DialogContent>
       </UIDialog.Dialog>

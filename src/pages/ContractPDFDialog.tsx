@@ -675,24 +675,18 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const billboardPrices = getBillboardPrices();
       const { groupedBillboards, subtotal: billboardSubtotal } = calculateBillboardPricing(billboardsToShow, billboardPrices);
 
-      // ✅ FIX: استخدام نفس الإجمالي المخزن في العقد
+      // ✅ FIX: استخدام الإجمالي المخزن + رسوم التشغيل
       const contractTotal = Number(contract?.Total ?? contract?.total_cost ?? 0);
+      const operatingFee = Number(contract?.fee ?? 0);
       const rentCost = Number(contract?.['Total Rent'] ?? contract?.rent_cost ?? billboardSubtotal);
       const installationCost = Number(contract?.installation_cost ?? 0);
       const printCost = Number(contract?.print_cost ?? 0);
 
+      // ✅ المجموع الفرعي = Total (الإيجار + التركيب + الطباعة بعد الخصم)
       const subtotal = contractTotal > 0 ? contractTotal : rentCost + installationCost + printCost;
-      let discountAmount = 0;
-      let grandTotal = subtotal;
 
-      if (discountInfo) {
-        if (discountInfo.type === 'percentage') {
-          discountAmount = (subtotal * discountInfo.value) / 100;
-        } else {
-          discountAmount = discountInfo.value;
-        }
-        grandTotal = subtotal - discountAmount;
-      }
+      // ✅ الإجمالي للعميل = المجموع الفرعي + رسوم التشغيل
+      const grandTotal = subtotal + operatingFee;
 
       const FIXED_ROWS = 10;
       const displayItems = [...groupedBillboards];
@@ -784,12 +778,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       </tbody>
     </table>
     <div class="total-section">
-      ${discountInfo ? `
-        <div class="total-row"><span>المجموع الفرعي:</span><span><span class="num">${formatArabicNumber(subtotal)}</span> ${currencyInfo.symbol}</span></div>
-        <div class="total-row"><span>خصم (${discountInfo.display}):</span><span>- <span class="num">${formatArabicNumber(discountAmount)}</span> ${currencyInfo.symbol}</span></div>
-      ` : ''}
-      <div class="total-row grand-total"><span>المجموع الإجمالي:</span><span><span class="num">${formatArabicNumber(grandTotal)}</span> ${currencyInfo.symbol}</span></div>
-      <div style="margin-top: 15px; text-align: center;">المبلغ بالكلمات: ${formatArabicNumber(grandTotal)} ${currencyInfo.writtenName}${discountInfo ? `<br><small style="color: #28a745;">* تم تطبيق خصم ${discountInfo.text}</small>` : ''}${printCostEnabled ? '<br><small style="color: #28a745;">* الأسعار شاملة تكلفة الطباعة</small>' : '<br><small>* الأسعار غير شاملة تكلفة الطباعة</small>'}</div>
+      <div class="total-row"><span>المجموع الفرعي:</span><span><span class="num">${formatArabicNumber(subtotal)}</span> ${currencyInfo.symbol}</span></div>
+      ${operatingFee > 0 ? `<div class="total-row" style="color: #2563eb;"><span>رسوم التشغيل:</span><span><span class="num">${formatArabicNumber(operatingFee)}</span> ${currencyInfo.symbol}</span></div>` : ''}
+      <div class="total-row grand-total"><span>الإجمالي للعميل:</span><span><span class="num">${formatArabicNumber(grandTotal)}</span> ${currencyInfo.symbol}</span></div>
+      <div style="margin-top: 15px; text-align: center;">المبلغ بالكلمات: ${formatArabicNumber(grandTotal)} ${currencyInfo.writtenName}${printCostEnabled ? '<br><small style="color: #28a745;">* الأسعار شاملة تكلفة الطباعة</small>' : '<br><small>* الأسعار غير شاملة تكلفة الطباعة</small>'}</div>
     </div>
     <div class="footer">شكراً لتعاملكم معنا | Thank you for your business<br>هذه فاتورة إلكترونية ولا تحتاج إلى ختم أو توقيع</div>
   </div>
@@ -1199,27 +1191,18 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const billboardPrices = getBillboardPrices();
       const { groupedBillboards, subtotal: billboardSubtotal } = calculateBillboardPricing(billboardsToShow, billboardPrices);
 
-      // ✅ FIX: استخدام نفس الإجمالي المخزن في العقد بدلاً من إعادة الحساب
+      // ✅ FIX: استخدام الإجمالي المخزن + رسوم التشغيل
       const contractTotal = Number(contract?.Total ?? contract?.total_cost ?? 0);
+      const operatingFee = Number(contract?.fee ?? 0);
       const rentCost = Number(contract?.['Total Rent'] ?? contract?.rent_cost ?? billboardSubtotal);
       const installationCost = Number(contract?.installation_cost ?? 0);
       const printCost = Number(contract?.print_cost ?? 0);
 
-      // ✅ في هذا النظام: Total = الإيجار + التركيب + الطباعة (ولا يشمل fee)
+      // ✅ المجموع الفرعي = Total (الإيجار + التركيب + الطباعة بعد الخصم)
       const subtotal = contractTotal > 0 ? contractTotal : rentCost + installationCost + printCost;
 
-      // ✅ الخصم (إذا كان فعلاً خصم) والإجمالي النهائي
-      let discountAmount = 0;
-      let grandTotal = subtotal;
-
-      if (discountInfo) {
-        if (discountInfo.type === 'percentage') {
-          discountAmount = (subtotal * discountInfo.value) / 100;
-        } else {
-          discountAmount = discountInfo.value;
-        }
-        grandTotal = subtotal - discountAmount;
-      }
+      // ✅ الإجمالي للعميل = المجموع الفرعي + رسوم التشغيل
+      const grandTotal = subtotal + operatingFee;
 
       // ✅ FIXED: Prepare display items for table (NO discount in table, NO installation cost)
       const FIXED_ROWS = 10;
@@ -1575,23 +1558,22 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
             </table>
             
             <div class="total-section">
-              ${discountInfo ? `
-                <div class="total-row subtotal">
-                  <span>المجموع الفرعي:</span>
-                  <span style="direction:ltr;display:inline-block;"> <span class="num">${formatArabicNumber(subtotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
-                </div>
-                <div class="total-row discount">
-                  <span>خصم (${discountInfo.display}):</span>
-                  <span style="direction:ltr;display:inline-block;">- <span class="num">${formatArabicNumber(discountAmount)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
+              <div class="total-row subtotal">
+                <span>المجموع الفرعي:</span>
+                <span style="direction:ltr;display:inline-block;"> <span class="num">${formatArabicNumber(subtotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
+              </div>
+              ${operatingFee > 0 ? `
+                <div class="total-row" style="color: #2563eb;">
+                  <span>رسوم التشغيل:</span>
+                  <span style="direction:ltr;display:inline-block;"> <span class="num">${formatArabicNumber(operatingFee)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
                 </div>
               ` : ''}
               <div class="total-row grand-total">
-                <span>المجموع الإجمالي:</span>
+                <span>الإجمالي للعميل:</span>
                 <span style="direction:ltr;display:inline-block;"> <span class="grand-num">${formatArabicNumber(grandTotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
               </div>
               <div style="margin-top: 15px; font-size: 13px; color: #666; text-align: center;">
                 المبلغ بالكلمات: ${formatArabicNumber(grandTotal)} ${currencyInfo.writtenName}
-                ${discountInfo ? `<br><small style="color: #28a745;">* تم تطبيق خصم ${discountInfo.text}</small>` : ''}
                 ${printCostEnabled ? '<br><small style="color: #28a745;">* الأسعار شاملة تكلفة الطباعة حسب عدد الأوجه</small>' : '<br><small style="color: #6c757d;">* الأسعار غير شاملة تكلفة الطباعة</small>'}
               </div>
             </div>
