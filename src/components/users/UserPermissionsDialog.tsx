@@ -24,6 +24,7 @@ interface PermissionGroup {
     value: string;
     label: string;
     description?: string;
+    hasEdit?: boolean; // إذا كان يدعم صلاحية التعديل
   }[];
 }
 
@@ -32,50 +33,50 @@ const permissionGroups: PermissionGroup[] = [
     name: 'الصفحات الأساسية',
     icon: <LayoutDashboard className="h-4 w-4" />,
     permissions: [
-      { value: 'dashboard', label: 'لوحة التحكم', description: 'عرض الإحصائيات والملخصات' },
-      { value: 'billboards', label: 'اللوحات الإعلانية', description: 'عرض وإدارة اللوحات' },
-      { value: 'contracts', label: 'العقود', description: 'عرض وإدارة العقود' },
-      { value: 'customers', label: 'العملاء', description: 'عرض وإدارة العملاء' },
+      { value: 'dashboard', label: 'لوحة التحكم', description: 'عرض الإحصائيات والملخصات', hasEdit: false },
+      { value: 'billboards', label: 'اللوحات الإعلانية', description: 'عرض وإدارة اللوحات', hasEdit: true },
+      { value: 'contracts', label: 'العقود', description: 'عرض وإدارة العقود', hasEdit: true },
+      { value: 'customers', label: 'العملاء', description: 'عرض وإدارة العملاء', hasEdit: true },
     ]
   },
   {
     name: 'المهام والتقارير',
     icon: <ListTodo className="h-4 w-4" />,
     permissions: [
-      { value: 'tasks', label: 'مهام التركيب', description: 'عرض وإدارة مهام التركيب' },
-      { value: 'print-tasks', label: 'مهام الطباعة', description: 'عرض وإدارة مهام الطباعة' },
-      { value: 'removal-tasks', label: 'مهام الإزالة', description: 'عرض وإدارة مهام الإزالة' },
-      { value: 'reports', label: 'التقارير', description: 'عرض التقارير والإحصائيات' },
+      { value: 'tasks', label: 'مهام التركيب', description: 'عرض وإدارة مهام التركيب', hasEdit: true },
+      { value: 'print-tasks', label: 'مهام الطباعة', description: 'عرض وإدارة مهام الطباعة', hasEdit: true },
+      { value: 'removal-tasks', label: 'مهام الإزالة', description: 'عرض وإدارة مهام الإزالة', hasEdit: true },
+      { value: 'reports', label: 'التقارير', description: 'عرض التقارير والإحصائيات', hasEdit: false },
     ]
   },
   {
     name: 'المالية والمصروفات',
     icon: <Wallet className="h-4 w-4" />,
     permissions: [
-      { value: 'payments', label: 'المدفوعات', description: 'عرض وإدارة المدفوعات' },
-      { value: 'expenses', label: 'المصروفات', description: 'عرض وإدارة المصروفات' },
-      { value: 'salaries', label: 'الرواتب', description: 'عرض وإدارة الرواتب' },
-      { value: 'revenue', label: 'الإيرادات', description: 'عرض تقارير الإيرادات' },
+      { value: 'payments', label: 'المدفوعات', description: 'عرض وإدارة المدفوعات', hasEdit: true },
+      { value: 'expenses', label: 'المصروفات', description: 'عرض وإدارة المصروفات', hasEdit: true },
+      { value: 'salaries', label: 'الرواتب', description: 'عرض وإدارة الرواتب', hasEdit: true },
+      { value: 'revenue', label: 'الإيرادات', description: 'عرض تقارير الإيرادات', hasEdit: false },
     ]
   },
   {
     name: 'الإعدادات والإدارة',
     icon: <Settings className="h-4 w-4" />,
     permissions: [
-      { value: 'settings', label: 'الإعدادات', description: 'الوصول لإعدادات النظام' },
-      { value: 'users', label: 'إدارة المستخدمين', description: 'إضافة وتعديل المستخدمين' },
-      { value: 'pricing', label: 'إدارة الأسعار', description: 'تعديل جداول الأسعار' },
-      { value: 'teams', label: 'فرق التركيب', description: 'إدارة فرق التركيب' },
+      { value: 'settings', label: 'الإعدادات', description: 'الوصول لإعدادات النظام', hasEdit: true },
+      { value: 'users', label: 'إدارة المستخدمين', description: 'إضافة وتعديل المستخدمين', hasEdit: true },
+      { value: 'pricing', label: 'إدارة الأسعار', description: 'تعديل جداول الأسعار', hasEdit: true },
+      { value: 'teams', label: 'فرق التركيب', description: 'إدارة فرق التركيب', hasEdit: true },
     ]
   },
   {
     name: 'الشركاء والطباعة',
     icon: <Building className="h-4 w-4" />,
     permissions: [
-      { value: 'printers', label: 'المطابع', description: 'إدارة المطابع' },
-      { value: 'friend-companies', label: 'الشركات الصديقة', description: 'إدارة الشركات الصديقة' },
-      { value: 'partners', label: 'الشراكات', description: 'إدارة الشراكات' },
-      { value: 'offers', label: 'العروض', description: 'إنشاء وإدارة العروض' },
+      { value: 'printers', label: 'المطابع', description: 'إدارة المطابع', hasEdit: true },
+      { value: 'friend-companies', label: 'الشركات الصديقة', description: 'إدارة الشركات الصديقة', hasEdit: true },
+      { value: 'partners', label: 'الشراكات', description: 'إدارة الشراكات', hasEdit: true },
+      { value: 'offers', label: 'العروض', description: 'إنشاء وإدارة العروض', hasEdit: true },
     ]
   },
 ];
@@ -200,30 +201,49 @@ export function UserPermissionsDialog({ open, onOpenChange, userId, userName, on
                     {group.icon}
                     {group.name}
                   </div>
-                  <div className="grid grid-cols-2 gap-3 pr-6">
+                  <div className="grid grid-cols-1 gap-3 pr-6">
                     {group.permissions.map((permission) => (
                       <div
                         key={permission.value}
-                        className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                        className={`p-3 rounded-lg border transition-colors ${
                           selectedPermissions.includes(permission.value)
                             ? 'border-primary bg-primary/5'
                             : 'border-border hover:border-primary/50'
                         }`}
                       >
-                        <div className="flex-1">
-                          <Label className="font-medium cursor-pointer">
-                            {permission.label}
-                          </Label>
-                          {permission.description && (
-                            <p className="text-xs text-muted-foreground mt-1">
-                              {permission.description}
-                            </p>
-                          )}
+                        <div className="flex items-center justify-between">
+                          <div className="flex-1">
+                            <Label className="font-medium cursor-pointer">
+                              {permission.label}
+                            </Label>
+                            {permission.description && (
+                              <p className="text-xs text-muted-foreground mt-1">
+                                {permission.description}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-4">
+                            {/* صلاحية العرض */}
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-muted-foreground">عرض</Label>
+                              <Switch
+                                checked={selectedPermissions.includes(permission.value)}
+                                onCheckedChange={() => togglePermission(permission.value)}
+                              />
+                            </div>
+                            {/* صلاحية التعديل (إذا كانت متاحة) */}
+                            {permission.hasEdit && (
+                              <div className="flex items-center gap-2">
+                                <Label className="text-xs text-muted-foreground">تعديل</Label>
+                                <Switch
+                                  checked={selectedPermissions.includes(`${permission.value}_edit`)}
+                                  onCheckedChange={() => togglePermission(`${permission.value}_edit`)}
+                                  disabled={!selectedPermissions.includes(permission.value)}
+                                />
+                              </div>
+                            )}
+                          </div>
                         </div>
-                        <Switch
-                          checked={selectedPermissions.includes(permission.value)}
-                          onCheckedChange={() => togglePermission(permission.value)}
-                        />
                       </div>
                     ))}
                   </div>

@@ -12,6 +12,32 @@ import { useQuery } from '@tanstack/react-query';
 import type { Billboard } from '@/types';
 import { BillboardImage } from '@/components/BillboardImage';
 
+// Component to show friend company name
+function FriendCompanyBadge({ billboardId, billboard }: { billboardId: string; billboard: any }) {
+  const friendCompanyId = billboard.friend_company_id;
+  
+  const { data: friendCompany } = useQuery({
+    queryKey: ['friend-company', friendCompanyId],
+    queryFn: async () => {
+      if (!friendCompanyId) return null;
+      const { data } = await supabase
+        .from('friend_companies')
+        .select('name')
+        .eq('id', friendCompanyId)
+        .single();
+      return data;
+    },
+    enabled: !!friendCompanyId
+  });
+
+  return (
+    <Badge className="bg-amber-500/90 text-white text-[10px] px-2 py-0.5 shadow-sm max-w-[150px] truncate">
+      <Building2 className="h-2.5 w-2.5 ml-1" />
+      {friendCompany?.name || 'شركة صديقة'}
+    </Badge>
+  );
+}
+
 interface FriendBillboardCost {
   billboardId: string;
   friendCompanyId: string;
@@ -810,11 +836,13 @@ export function SelectedBillboardsCard({
                           مشتركة
                         </Badge>
                       )}
-                      {isFriendBillboard && (
-                        <Badge className="bg-secondary text-secondary-foreground text-[10px] px-2 py-0.5 shadow-sm">
-                          <Building2 className="h-2.5 w-2.5 ml-1" />
-                          صديقة
+                      {isPartnership && partnershipInfo && partnershipInfo.partnerShares.length > 0 && (
+                        <Badge className="bg-purple-500/90 text-white text-[10px] px-2 py-0.5 shadow-sm max-w-[150px] truncate">
+                          {partnershipInfo.partnerShares.map(ps => ps.partnerName).join(' • ')}
                         </Badge>
+                      )}
+                      {isFriendBillboard && (
+                        <FriendCompanyBadge billboardId={billboardId} billboard={b} />
                       )}
                     </div>
 

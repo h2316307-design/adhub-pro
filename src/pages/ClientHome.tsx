@@ -212,12 +212,12 @@ export default function ClientHome() {
                   <span className="text-sm">info@billboards.ly</span>
                 </div>
               </div>
-              {!isAdmin && (
+              {!user && (
                 <Button asChild variant="secondary" className="ml-2">
-                  <Link to="/auth">تسجي�� دخول الأدمن</Link>
+                  <Link to="/auth">تسجيل الدخول</Link>
                 </Button>
               )}
-              {isAdmin && (
+              {user && (isAdmin || (user?.permissions && user.permissions.length > 0)) && (
                 <Button asChild className="ml-2">
                   <Link to="/admin">لوحة التحكم</Link>
                 </Button>

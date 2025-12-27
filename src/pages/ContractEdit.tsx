@@ -32,6 +32,8 @@ import { InstallmentsManager } from '@/components/contracts/edit/InstallmentsMan
 import { CostSummaryCard } from '@/components/contracts/edit/CostSummaryCard';
 import { DesignManager } from '@/components/contracts/DesignManager';
 import { PartnershipBillboardsInfo } from '@/components/contracts/PartnershipBillboardsInfo';
+import { FriendBillboardsBulkRental } from '@/components/contracts/edit/FriendBillboardsBulkRental';
+import { LevelDiscountsCard } from '@/components/contracts/edit/LevelDiscountsCard';
 
 // ✅ NEW: Currency options
 const CURRENCIES = [
@@ -59,6 +61,9 @@ export default function ContractEdit() {
   // ✅ NEW: Price update state - DEFAULT to recalculating prices
   const [useStoredPrices, setUseStoredPrices] = useState<boolean>(false); // ✅ CHANGED: Default to false
   const [refreshingPrices, setRefreshingPrices] = useState(false);
+  
+  // ✅ NEW: Proportional distribution overrides
+  const [billboardPriceOverrides, setBillboardPriceOverrides] = useState<Record<string, number>>({});
   
   // ✅ NEW: Factors pricing system state
   const [useFactorsPricing, setUseFactorsPricing] = useState<boolean>(false);
@@ -93,6 +98,13 @@ export default function ContractEdit() {
   // ✅ NEW: Include costs in price toggles
   const [includeInstallationInPrice, setIncludeInstallationInPrice] = useState<boolean>(false);
   const [includePrintInPrice, setIncludePrintInPrice] = useState<boolean>(false);
+
+  // ✅ NEW: Include operating fee in costs toggles
+  const [includeOperatingInPrint, setIncludeOperatingInPrint] = useState<boolean>(false);
+  const [includeOperatingInInstallation, setIncludeOperatingInInstallation] = useState<boolean>(false);
+
+  // ✅ NEW: Level-based discounts
+  const [levelDiscounts, setLevelDiscounts] = useState<Record<string, number>>({});
 
   // ✅ NEW: Design management state
   const [billboardDesigns, setBillboardDesigns] = useState<any[]>([]);
@@ -159,6 +171,13 @@ export default function ContractEdit() {
     friendRentalCost: number;
   }>>([]);
 
+  // ✅ NEW: Friend rental includes installation toggle
+  const [friendRentalIncludesInstallation, setFriendRentalIncludesInstallation] = useState<boolean>(false);
+
+  // ✅ NEW: Friend rental operating fee settings
+  const [friendRentalOperatingFeeEnabled, setFriendRentalOperatingFeeEnabled] = useState<boolean>(false);
+  const [friendRentalOperatingFeeRate, setFriendRentalOperatingFeeRate] = useState<number>(3); // افتراضي 3%
+
   // Helper functions for friend costs
   const updateFriendBillboardCost = (billboardId: string, friendCompanyId: string, friendCompanyName: string, cost: number) => {
     setFriendBillboardCosts(prev => {
@@ -179,6 +198,12 @@ export default function ContractEdit() {
     friendBillboardCosts.reduce((sum, f) => sum + f.friendRentalCost, 0),
     [friendBillboardCosts]
   );
+
+  // ✅ NEW: Calculate friend rental operating fee (percentage of friend costs)
+  const friendOperatingFeeAmount = React.useMemo(() => {
+    if (!friendRentalOperatingFeeEnabled || friendBillboardCosts.length === 0) return 0;
+    return Math.round(totalFriendCosts * (friendRentalOperatingFeeRate / 100));
+  }, [friendRentalOperatingFeeEnabled, totalFriendCosts, friendRentalOperatingFeeRate]);
 
   // ✅ NEW: Get currency symbol
   const getCurrencySymbol = (currencyCode: string): string => {
@@ -337,6 +362,22 @@ export default function ContractEdit() {
         const savedIncludePrint = c.include_print_in_billboard_price === true || c.include_print_in_billboard_price === 1 || c.include_print_in_billboard_price === 'true' || c.include_print_in_billboard_price === '1';
         setIncludeInstallationInPrice(savedIncludeInstallation);
         setIncludePrintInPrice(savedIncludePrint);
+
+        // ✅ NEW: Load operating fee inclusion in costs
+        const savedIncludeOperatingInPrint = c.include_operating_in_print === true;
+        const savedIncludeOperatingInInstallation = c.include_operating_in_installation === true;
+        setIncludeOperatingInPrint(savedIncludeOperatingInPrint);
+        setIncludeOperatingInInstallation(savedIncludeOperatingInInstallation);
+
+        // ✅ NEW: Load level discounts
+        const savedLevelDiscounts = c.level_discounts;
+        if (savedLevelDiscounts && typeof savedLevelDiscounts === 'object') {
+          setLevelDiscounts(savedLevelDiscounts as Record<string, number>);
+        }
+
+        // ✅ NEW: Load friend rental includes installation
+        const savedFriendRentalIncludesInstallation = c.friend_rental_includes_installation === true;
+        setFriendRentalIncludesInstallation(savedFriendRentalIncludesInstallation);
         
         console.log('✅ Loading cost inclusion settings:');
         console.log('- Print cost enabled:', savedPrintEnabled);
@@ -344,6 +385,8 @@ export default function ContractEdit() {
         console.log('- Installation enabled:', savedInstallationEnabled);
         console.log('- Include installation in price:', savedIncludeInstallation);
         console.log('- Include print in price:', savedIncludePrint);
+        console.log('- Include operating in print:', savedIncludeOperatingInPrint);
+        console.log('- Include operating in installation:', savedIncludeOperatingInInstallation);
 
         // ✅ NEW: Load operating fee rate from contract
         const savedOperatingFeeRate = Number(c.operating_fee_rate || 3);
@@ -525,6 +568,13 @@ export default function ContractEdit() {
           setFriendBillboardCosts(friendCosts);
           console.log('✅ Loaded friend billboard costs:', friendCosts);
         }
+
+        // ✅ NEW: Load friend rental operating fee settings
+        const friendFeeEnabled = c.friend_rental_operating_fee_enabled === true;
+        const friendFeeRate = Number(c.friend_rental_operating_fee_rate || 3);
+        setFriendRentalOperatingFeeEnabled(friendFeeEnabled);
+        setFriendRentalOperatingFeeRate(friendFeeRate);
+        console.log('✅ Loaded friend rental operating fee settings:', { enabled: friendFeeEnabled, rate: friendFeeRate });
         
       } catch (e: any) {
         console.error(e);
@@ -858,6 +908,12 @@ export default function ContractEdit() {
   const calculateBillboardPrice = React.useCallback((billboard: Billboard): number => {
     const billboardId = String((billboard as any).ID);
     
+    // ✅ NEW: Check for proportional distribution overrides first
+    if (billboardPriceOverrides[billboardId] !== undefined) {
+      console.log(`📊 Using proportional override for billboard ${billboardId}:`, billboardPriceOverrides[billboardId]);
+      return billboardPriceOverrides[billboardId];
+    }
+    
     let basePrice = 0;
     
     // ✅ ONLY use stored prices if user explicitly chose to
@@ -934,7 +990,7 @@ export default function ContractEdit() {
     
     console.log(`✅ Base rental price for billboard ${billboardId}: ${basePrice} LYD -> ${convertedPrice} ${contractCurrency}`);
     return convertedPrice;
-  }, [useStoredPrices, useFactorsPricing, pricingMode, durationMonths, durationDays, pricingCategory, pricingData, contractCurrency, exchangeRate, basePrices, municipalityFactors, categoryFactors, currentContract]);
+  }, [useStoredPrices, useFactorsPricing, pricingMode, durationMonths, durationDays, pricingCategory, pricingData, contractCurrency, exchangeRate, basePrices, municipalityFactors, categoryFactors, currentContract, billboardPriceOverrides]);
 
   // ✅ NEW: Refresh prices from current pricing system
   const refreshPricesFromSystem = async () => {
@@ -957,6 +1013,7 @@ export default function ContractEdit() {
       setRefreshingPrices(false);
     }
   };
+
 
   const calculateDueDate = (paymentType: string, index: number, startDateOverride?: string): string => {
     const baseDate = startDateOverride || startDate;
@@ -1139,6 +1196,43 @@ export default function ContractEdit() {
 
   const rentalCostOnly = useMemo(() => netRentalForCompany, [netRentalForCompany]);
 
+  // ✅ NEW: Handle proportional distribution of new total across billboards
+  const handleProportionalDistribution = React.useCallback((newTotal: number) => {
+    if (estimatedTotal <= 0 || newTotal <= 0) {
+      toast.error('لا يمكن التوزيع - الإجمالي الحالي أو الجديد غير صالح');
+      return;
+    }
+    
+    const ratio = newTotal / estimatedTotal;
+    const selectedBillboardsData = billboards.filter(b => selected.includes(String((b as any).ID)));
+    
+    const newOverrides: Record<string, number> = {};
+    
+    selectedBillboardsData.forEach(billboard => {
+      const billboardId = String((billboard as any).ID);
+      const currentPrice = calculateBillboardPrice(billboard);
+      const newPrice = Math.round(currentPrice * ratio);
+      newOverrides[billboardId] = newPrice;
+    });
+    
+    setBillboardPriceOverrides(newOverrides);
+    
+    // Update the rent cost to reflect the new total
+    setRentCost(newTotal);
+    setUserEditedRentCost(true);
+    
+    const changePercent = ((ratio - 1) * 100).toFixed(1);
+    toast.success(`تم توزيع ${newTotal.toLocaleString('ar-LY')} بنسبة ${changePercent}% على ${selectedBillboardsData.length} لوحة`);
+    
+    console.log('✅ Proportional distribution applied:', {
+      oldTotal: estimatedTotal,
+      newTotal,
+      ratio,
+      billboardCount: selectedBillboardsData.length,
+      overrides: newOverrides
+    });
+  }, [estimatedTotal, billboards, selected, calculateBillboardPrice]);
+
   // ✅ NEW: Calculate rental cost for regular (non-partnership) billboards only
   const regularBillboardsRentalCost = useMemo(() => {
     const regularBillboards = billboards.filter(b => 
@@ -1169,12 +1263,12 @@ export default function ContractEdit() {
     return Math.max(0, partnershipTotal - partnershipDiscount);
   }, [billboards, selected, estimatedTotal, discountAmount]);
 
-  // ✅ CORRECTED: Calculate operating fee ONLY for regular (non-partnership) billboards
+  // ✅ CORRECTED: Calculate operating fee from NET RENTAL (صافي الإيجار للشركة)
   useEffect(() => {
-    const fee = Math.round(regularBillboardsRentalCost * (operatingFeeRate / 100) * 100) / 100;
+    const fee = Math.round(netRentalForCompany * (operatingFeeRate / 100) * 100) / 100;
     setOperatingFee(fee);
-    console.log(`✅ Operating fee calculated (regular billboards only): ${regularBillboardsRentalCost} × ${operatingFeeRate}% = ${fee}`);
-  }, [regularBillboardsRentalCost, operatingFeeRate]);
+    console.log(`✅ Operating fee calculated (from net rental): ${netRentalForCompany} × ${operatingFeeRate}% = ${fee}`);
+  }, [netRentalForCompany, operatingFeeRate]);
   
   // ✅ NEW: Calculate partnership operating fee
   const partnershipOperatingFee = useMemo(() => {
@@ -1838,14 +1932,26 @@ export default function ContractEdit() {
         include_installation_in_price: includeInstallationInPrice,
         include_print_in_billboard_price: includePrintInPrice,
 
+        // ✅ NEW: Persist operating fee inclusion flags
+        include_operating_in_print: includeOperatingInPrint,
+        include_operating_in_installation: includeOperatingInInstallation,
+
+        // ✅ NEW: Persist level discounts
+        level_discounts: Object.keys(levelDiscounts).length > 0 ? levelDiscounts : null,
+
+        // ✅ NEW: Persist friend rental includes installation
+        friend_rental_includes_installation: friendRentalIncludesInstallation,
+
         // ✅ Currency
         contract_currency: contractCurrency,
         exchange_rate: String(exchangeRate),
 
-        // ✅ Operating fee
-        fee: String(operatingFee + partnershipOperatingFee),
+        // ✅ Operating fee - إجمالي جميع رسوم التشغيل (عادية + مشاركة + صديقة)
+        fee: String(operatingFee + partnershipOperatingFee + friendOperatingFeeAmount),
         operating_fee_rate: operatingFeeRate,
         partnership_operating_fee_rate: partnershipOperatingFeeRate,
+        friend_rental_operating_fee_rate: friendRentalOperatingFeeRate,
+        friend_rental_operating_fee_enabled: friendRentalOperatingFeeEnabled,
 
         // ✅ Partnership operating details
         partnership_operating_data: billboards
@@ -1882,6 +1988,10 @@ export default function ContractEdit() {
 
       // ✅ Save friend rentals
       updates.friend_rental_data = friendBillboardCosts.length > 0 ? friendBillboardCosts : null;
+
+      // ✅ Save friend rental operating fee settings
+      (updates as any).friend_rental_operating_fee_enabled = friendRentalOperatingFeeEnabled;
+      (updates as any).friend_rental_operating_fee_rate = friendRentalOperatingFeeRate;
 
       // Also save individual payments for backward compatibility
       if (installments.length > 0) updates['Payment 1'] = { amount: installments[0]?.amount || 0, type: installments[0]?.paymentType || 'عند التوقيع' };
@@ -2073,6 +2183,32 @@ export default function ContractEdit() {
               installationEnabled={installationEnabled}
             />
 
+            {/* ✅ NEW: إيجارات اللوحات الصديقة بالجملة */}
+            {selected.length > 0 && billboards.filter(b => 
+              selected.includes(String((b as any).ID)) && (b as any).friend_company_id
+            ).length > 0 && (
+              <FriendBillboardsBulkRental
+                friendBillboards={billboards
+                  .filter(b => selected.includes(String((b as any).ID)) && (b as any).friend_company_id)
+                  .map(b => ({
+                    id: String((b as any).ID),
+                    size: (b as any).Size || (b as any).size || 'غير محدد',
+                    friendCompanyId: (b as any).friend_company_id,
+                    friendCompanyName: (b as any).friend_companies?.name || 'شركة صديقة'
+                  }))
+                }
+                friendBillboardCosts={friendBillboardCosts}
+                onUpdateFriendCost={updateFriendBillboardCost}
+                includesInstallation={friendRentalIncludesInstallation}
+                onIncludesInstallationChange={setFriendRentalIncludesInstallation}
+                currencySymbol={getCurrencySymbol(contractCurrency)}
+                operatingFeeEnabled={friendRentalOperatingFeeEnabled}
+                operatingFeeRate={friendRentalOperatingFeeRate}
+                onOperatingFeeEnabledChange={setFriendRentalOperatingFeeEnabled}
+                onOperatingFeeRateChange={setFriendRentalOperatingFeeRate}
+                operatingFeeAmount={friendOperatingFeeAmount}
+              />
+            )}
 
             {/* خريطة اللوحات المرتبطة - مطوية افتراضياً */}
             {selected.length > 0 && (
@@ -2406,8 +2542,8 @@ export default function ContractEdit() {
                   
                   <div className="p-3 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-500/5 border border-blue-500/20 space-y-2">
                     <div className="flex justify-between text-sm">
-                      <span className="text-muted-foreground">إيجار اللوحات العادية:</span>
-                      <span className="font-semibold">{regularBillboardsRentalCost.toLocaleString('ar-LY')} د.ل</span>
+                      <span className="text-muted-foreground">صافي الإيجار (للشركة):</span>
+                      <span className="font-semibold">{netRentalForCompany.toLocaleString('ar-LY')} د.ل</span>
                     </div>
                     <div className="flex justify-between items-center pt-2 border-t border-blue-500/20">
                       <span className="font-semibold text-blue-700 dark:text-blue-300">رسوم التشغيل:</span>
@@ -2418,7 +2554,56 @@ export default function ContractEdit() {
               </Card>
             )}
 
-            {/* إعدادات العملة */}
+            {/* ✅ إجمالي رسوم التشغيل */}
+            {(operatingFee > 0 || partnershipOperatingFee > 0 || friendOperatingFeeAmount > 0) && (
+              <Card className="bg-card border-border shadow-lg overflow-hidden">
+                <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />
+                <CardHeader className="py-3 px-4 bg-gradient-to-br from-emerald-500/5 to-transparent">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                      <DollarSign className="h-4 w-4 text-emerald-600" />
+                    </div>
+                    إجمالي رسوم التشغيل
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-4 space-y-3">
+                  {operatingFee > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">رسوم اللوحات العادية ({operatingFeeRate}%):</span>
+                      <span className="font-semibold text-blue-600">{operatingFee.toLocaleString('ar-LY')} {getCurrencySymbol(contractCurrency)}</span>
+                    </div>
+                  )}
+                  {partnershipOperatingFee > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">رسوم لوحات المشاركة ({partnershipOperatingFeeRate}%):</span>
+                      <span className="font-semibold text-purple-600">{partnershipOperatingFee.toLocaleString('ar-LY')} {getCurrencySymbol(contractCurrency)}</span>
+                    </div>
+                  )}
+                  {friendOperatingFeeAmount > 0 && (
+                    <div className="flex flex-col gap-1">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">تكلفة اللوحات الصديقة:</span>
+                        <span className="font-semibold text-amber-500">{totalFriendCosts.toLocaleString('ar-LY')} {getCurrencySymbol(contractCurrency)}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">رسوم التشغيل ({friendRentalOperatingFeeRate}%):</span>
+                        <span className="font-semibold text-amber-600">{friendOperatingFeeAmount.toLocaleString('ar-LY')} {getCurrencySymbol(contractCurrency)}</span>
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex justify-between items-center pt-3 border-t border-emerald-500/20">
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300">الإجمالي:</span>
+                    <span className="text-xl font-bold text-emerald-600">
+                      {(operatingFee + partnershipOperatingFee + friendOperatingFeeAmount).toLocaleString('ar-LY')} {getCurrencySymbol(contractCurrency)}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground text-center bg-muted/30 p-2 rounded-lg">
+                    يتم حفظ هذا المبلغ في حقل "رسوم التشغيل" بالعقد
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
             <Card className="bg-card border-border shadow-lg overflow-hidden">
               <div className="h-1 bg-gradient-to-r from-amber-500 to-orange-500" />
               <CardHeader className="py-3 px-4 bg-gradient-to-br from-amber-500/5 to-transparent">
@@ -2706,6 +2891,18 @@ export default function ContractEdit() {
               onHasDifferentFirstPaymentChange={setHasDifferentFirstPayment}
             />
 
+            {/* مكون تخفيض حسب المستوى */}
+            {selected.length > 0 && (
+              <LevelDiscountsCard
+                selectedBillboards={billboards.filter(b => selected.includes(String((b as any).ID)))}
+                levelDiscounts={levelDiscounts}
+                setLevelDiscounts={setLevelDiscounts}
+                currencySymbol={getCurrencySymbol(contractCurrency)}
+                calculateBillboardPrice={calculateBillboardPrice}
+                sizeNames={sizeNames}
+              />
+            )}
+
             {/* ملخص التكاليف */}
             <CostSummaryCard
               estimatedTotal={estimatedTotal}
@@ -2739,8 +2936,15 @@ export default function ContractEdit() {
               setIncludeInstallationInPrice={setIncludeInstallationInPrice}
               includePrintInPrice={includePrintInPrice}
               setIncludePrintInPrice={setIncludePrintInPrice}
+              // Operating fee inclusion toggles
+              includeOperatingInPrint={includeOperatingInPrint}
+              setIncludeOperatingInPrint={setIncludeOperatingInPrint}
+              includeOperatingInInstallation={includeOperatingInInstallation}
+              setIncludeOperatingInInstallation={setIncludeOperatingInInstallation}
               // Currency
               currencySymbol={getCurrencySymbol(contractCurrency)}
+              // Proportional distribution
+              onProportionalDistribution={handleProportionalDistribution}
             />
           </div>
         </div>

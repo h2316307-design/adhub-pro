@@ -61,33 +61,42 @@ export const loginUser = async (credentials: LoginCredentials): Promise<{ user: 
     }
 
     const { emailOrUsername, password } = validation.data;
-    let email = emailOrUsername;
 
-    // التحقق إذا كان المدخل اسم مستخدم وليس بريد إلكتروني
-    if (!emailOrUsername.includes('@')) {
-      // البحث عن البريد الإلكتروني باستخدام اسم المستخدم
-      const { data: profileData, error: profileError } = await supabase
-        .from('profiles')
-        .select('email')
-        .eq('username', emailOrUsername)
-        .maybeSingle();
+    // دعم تسجيل الدخول باسم المستخدم بدون فتح RLS للـ profiles على anon
+    let authUserId: string | null = null;
+    let authEmail: string | null = null;
 
-      if (profileError || !profileData?.email) {
-        return { user: null, error: 'اسم المستخدم غير موجود' };
+    if (emailOrUsername.includes('@')) {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: emailOrUsername,
+        password,
+      });
+
+      if (error) {
+        return { user: null, error: 'البريد الإلكتروني/اسم المستخدم أو كلمة المرور غير صحيحة' };
       }
-      email = profileData.email;
+
+      authUserId = data.user?.id ?? null;
+      authEmail = data.user?.email ?? null;
+    } else {
+      const { data: tokenData, error: invokeError } = await supabase.functions.invoke('auth-username-login', {
+        body: { emailOrUsername, password },
+      });
+
+      if (invokeError || !tokenData?.access_token || !tokenData?.refresh_token) {
+        return { user: null, error: 'البريد الإلكتروني/اسم المستخدم أو كلمة المرور غير صحيحة' };
+      }
+
+      await supabase.auth.setSession({
+        access_token: tokenData.access_token,
+        refresh_token: tokenData.refresh_token,
+      });
+
+      authUserId = tokenData.user?.id ?? null;
+      authEmail = tokenData.user?.email ?? null;
     }
 
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email: email,
-      password: password,
-    });
-
-    if (error) {
-      return { user: null, error: 'البريد الإلكتروني/اسم المستخدم أو كلمة المرور غير صحيحة' };
-    }
-
-    if (!data.user) {
+    if (!authUserId) {
       return { user: null, error: 'حدث خطأ أثناء تسجيل الدخول' };
     }
 
@@ -95,13 +104,13 @@ export const loginUser = async (credentials: LoginCredentials): Promise<{ user: 
     const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', data.user.id)
+      .eq('id', authUserId)
       .maybeSingle();
 
     const { data: roleData } = await supabase
       .from('user_roles')
       .select('role')
-      .eq('user_id', data.user.id)
+      .eq('user_id', authUserId)
       .maybeSingle();
 
     // التحقق من موافقة الأدمن - تجاهل إذا لم يكن هناك profile بعد
@@ -127,11 +136,11 @@ export const loginUser = async (credentials: LoginCredentials): Promise<{ user: 
     const { data: permissionsData } = await supabase
       .from('user_permissions')
       .select('permission')
-      .eq('user_id', data.user.id);
+      .eq('user_id', authUserId);
 
     const user: User = {
-      id: data.user.id,
-      email: data.user.email || '',
+      id: authUserId,
+      email: authEmail || '',
       name: profileData?.name || '',
       username: profileData?.username || undefined,
       role: roleData?.role === 'admin' ? 'admin' : 'user',

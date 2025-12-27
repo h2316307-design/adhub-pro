@@ -12,6 +12,8 @@ interface AuthContextType {
   logout: () => void;
   signOut: () => void;
   isAdmin: boolean;
+  hasPermission: (permission: string) => boolean;
+  canEdit: (section: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -75,6 +77,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAdmin = user?.role === 'admin';
 
+  // التحقق من وجود صلاحية معينة
+  const hasPermission = (permission: string): boolean => {
+    if (isAdmin) return true;
+    return user?.permissions?.includes(permission) || false;
+  };
+
+  // التحقق من صلاحية التعديل لقسم معين
+  const canEdit = (section: string): boolean => {
+    if (isAdmin) return true;
+    // يجب أن يكون لديه صلاحية العرض + صلاحية التعديل
+    const hasViewPermission = user?.permissions?.includes(section) || false;
+    const hasEditPermission = user?.permissions?.includes(`${section}_edit`) || false;
+    return hasViewPermission && hasEditPermission;
+  };
+
   const value: AuthContextType = {
     user,
     profile: user,
@@ -83,7 +100,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     login,
     logout,
     signOut: logout,
-    isAdmin
+    isAdmin,
+    hasPermission,
+    canEdit
   };
 
   return (

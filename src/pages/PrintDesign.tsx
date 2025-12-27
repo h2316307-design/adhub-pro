@@ -32,7 +32,8 @@ import {
   Trash2,
   FolderOpen,
   Phone,
-  MapPin
+  MapPin,
+  Ruler
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
@@ -132,8 +133,19 @@ interface DesignProfile {
 }
 
 const PROFILES_KEY = 'print_design_profiles';
-
 const SETTINGS_KEY = 'print_design_settings';
+const SIZES_INVOICE_KEY = 'sizes_invoice_settings';
+
+const DEFAULT_SIZES_INVOICE_SETTINGS = {
+  title: 'كشف المقاسات',
+  subtitle: 'SIZES STATEMENT',
+  showSingleFaceSeparately: true,
+  showAreaPerFace: true,
+  showTotalArea: true,
+  showFacesCount: true,
+  showDimensions: true,
+  groupByFaces: true,
+};
 
 const PrintDesign = () => {
   const queryClient = useQueryClient();
@@ -215,6 +227,15 @@ const PrintDesign = () => {
   const [borderRadius, setBorderRadius] = useState<number>(DEFAULT_PRINT_TEMPLATE.borderRadius);
   const [cellPadding, setCellPadding] = useState<number>(DEFAULT_PRINT_TEMPLATE.cellPadding);
 
+  // Sizes Invoice Settings
+  const [sizesInvoiceTitle, setSizesInvoiceTitle] = useState<string>(DEFAULT_SIZES_INVOICE_SETTINGS.title);
+  const [sizesInvoiceSubtitle, setSizesInvoiceSubtitle] = useState<string>(DEFAULT_SIZES_INVOICE_SETTINGS.subtitle);
+  const [sizesShowSingleFaceSeparately, setSizesShowSingleFaceSeparately] = useState<boolean>(DEFAULT_SIZES_INVOICE_SETTINGS.showSingleFaceSeparately);
+  const [sizesShowAreaPerFace, setSizesShowAreaPerFace] = useState<boolean>(DEFAULT_SIZES_INVOICE_SETTINGS.showAreaPerFace);
+  const [sizesShowTotalArea, setSizesShowTotalArea] = useState<boolean>(DEFAULT_SIZES_INVOICE_SETTINGS.showTotalArea);
+  const [sizesShowFacesCount, setSizesShowFacesCount] = useState<boolean>(DEFAULT_SIZES_INVOICE_SETTINGS.showFacesCount);
+  const [sizesShowDimensions, setSizesShowDimensions] = useState<boolean>(DEFAULT_SIZES_INVOICE_SETTINGS.showDimensions);
+
   useEffect(() => {
     const loadSettings = async () => {
       try {
@@ -240,6 +261,24 @@ const PrintDesign = () => {
         if (profilesData?.setting_value) {
           const loadedProfiles = JSON.parse(profilesData.setting_value);
           setProfiles(loadedProfiles);
+        }
+
+        // Load sizes invoice settings
+        const { data: sizesData } = await supabase
+          .from("system_settings")
+          .select("setting_value")
+          .eq("setting_key", SIZES_INVOICE_KEY)
+          .single();
+
+        if (sizesData?.setting_value) {
+          const sizesSettings = JSON.parse(sizesData.setting_value);
+          setSizesInvoiceTitle(sizesSettings.title ?? DEFAULT_SIZES_INVOICE_SETTINGS.title);
+          setSizesInvoiceSubtitle(sizesSettings.subtitle ?? DEFAULT_SIZES_INVOICE_SETTINGS.subtitle);
+          setSizesShowSingleFaceSeparately(sizesSettings.showSingleFaceSeparately ?? DEFAULT_SIZES_INVOICE_SETTINGS.showSingleFaceSeparately);
+          setSizesShowAreaPerFace(sizesSettings.showAreaPerFace ?? DEFAULT_SIZES_INVOICE_SETTINGS.showAreaPerFace);
+          setSizesShowTotalArea(sizesSettings.showTotalArea ?? DEFAULT_SIZES_INVOICE_SETTINGS.showTotalArea);
+          setSizesShowFacesCount(sizesSettings.showFacesCount ?? DEFAULT_SIZES_INVOICE_SETTINGS.showFacesCount);
+          setSizesShowDimensions(sizesSettings.showDimensions ?? DEFAULT_SIZES_INVOICE_SETTINGS.showDimensions);
         }
       } catch (e) {
         console.log("No existing settings found, using defaults");
@@ -358,6 +397,43 @@ const PrintDesign = () => {
             setting_value: JSON.stringify(settings),
             setting_type: "json",
             description: "إعدادات تصميم الطباعة",
+            category: "print",
+          });
+      }
+
+      // Save sizes invoice settings
+      const sizesInvoiceSettings = {
+        title: sizesInvoiceTitle,
+        subtitle: sizesInvoiceSubtitle,
+        showSingleFaceSeparately: sizesShowSingleFaceSeparately,
+        showAreaPerFace: sizesShowAreaPerFace,
+        showTotalArea: sizesShowTotalArea,
+        showFacesCount: sizesShowFacesCount,
+        showDimensions: sizesShowDimensions,
+      };
+
+      const { data: existingSizes } = await supabase
+        .from("system_settings")
+        .select("id")
+        .eq("setting_key", SIZES_INVOICE_KEY)
+        .single();
+
+      if (existingSizes) {
+        await supabase
+          .from("system_settings")
+          .update({
+            setting_value: JSON.stringify(sizesInvoiceSettings),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("setting_key", SIZES_INVOICE_KEY);
+      } else {
+        await supabase
+          .from("system_settings")
+          .insert({
+            setting_key: SIZES_INVOICE_KEY,
+            setting_value: JSON.stringify(sizesInvoiceSettings),
+            setting_type: "json",
+            description: "إعدادات فاتورة المقاسات",
             category: "print",
           });
       }
@@ -661,24 +737,27 @@ const PrintDesign = () => {
           <ScrollArea className="flex-1 h-[calc(100%-60px)]">
             <div className="p-4 pb-20">
               <Tabs defaultValue="profiles" className="w-full">
-                <TabsList className="w-full grid grid-cols-6 mb-4">
-                  <TabsTrigger value="profiles" className="text-xs px-2">
+                <TabsList className="w-full grid grid-cols-7 mb-4">
+                  <TabsTrigger value="profiles" className="text-xs px-1" title="البروفايلات">
                     <FolderOpen className="h-4 w-4" />
                   </TabsTrigger>
-                  <TabsTrigger value="company" className="text-xs px-2">
+                  <TabsTrigger value="company" className="text-xs px-1" title="الشركة">
                     <Building2 className="h-4 w-4" />
                   </TabsTrigger>
-                  <TabsTrigger value="colors" className="text-xs px-2">
+                  <TabsTrigger value="colors" className="text-xs px-1" title="الألوان">
                     <Palette className="h-4 w-4" />
                   </TabsTrigger>
-                  <TabsTrigger value="table" className="text-xs px-2">
+                  <TabsTrigger value="table" className="text-xs px-1" title="الجدول">
                     <Table className="h-4 w-4" />
                   </TabsTrigger>
-                  <TabsTrigger value="layout" className="text-xs px-2">
+                  <TabsTrigger value="layout" className="text-xs px-1" title="التخطيط">
                     <Layout className="h-4 w-4" />
                   </TabsTrigger>
-                  <TabsTrigger value="footer" className="text-xs px-2">
+                  <TabsTrigger value="footer" className="text-xs px-1" title="الفوتر">
                     <AlignVerticalJustifyStart className="h-4 w-4" />
+                  </TabsTrigger>
+                  <TabsTrigger value="sizes" className="text-xs px-1" title="فاتورة المقاسات">
+                    <Ruler className="h-4 w-4" />
                   </TabsTrigger>
                 </TabsList>
 
@@ -1419,6 +1498,104 @@ const PrintDesign = () => {
                       </p>
                     </CardContent>
                   </Card>
+                </TabsContent>
+
+                {/* Sizes Invoice Tab */}
+                <TabsContent value="sizes" className="space-y-6 mt-0">
+                  <Card className="border-primary/20">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Ruler className="h-4 w-4" />
+                        إعدادات فاتورة المقاسات
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="space-y-2">
+                        <Label className="text-sm">عنوان الفاتورة</Label>
+                        <Input
+                          value={sizesInvoiceTitle}
+                          onChange={(e) => setSizesInvoiceTitle(e.target.value)}
+                          placeholder="كشف المقاسات"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-sm">العنوان الفرعي (إنجليزي)</Label>
+                        <Input
+                          value={sizesInvoiceSubtitle}
+                          onChange={(e) => setSizesInvoiceSubtitle(e.target.value)}
+                          placeholder="SIZES STATEMENT"
+                          dir="ltr"
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-primary/20">
+                    <CardHeader className="pb-3">
+                      <CardTitle className="text-sm flex items-center gap-2">
+                        <Table className="h-4 w-4" />
+                        عناصر العرض
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      <div className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div>
+                          <Label className="text-sm">فصل لوحات الوجه الواحد</Label>
+                          <p className="text-xs text-muted-foreground">عرض لوحات الوجه الواحد في جدول منفصل</p>
+                        </div>
+                        <Switch
+                          checked={sizesShowSingleFaceSeparately}
+                          onCheckedChange={setSizesShowSingleFaceSeparately}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div>
+                          <Label className="text-sm">إظهار الأبعاد</Label>
+                          <p className="text-xs text-muted-foreground">عرض العرض والارتفاع بالمتر</p>
+                        </div>
+                        <Switch
+                          checked={sizesShowDimensions}
+                          onCheckedChange={setSizesShowDimensions}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div>
+                          <Label className="text-sm">إظهار عدد الأوجه</Label>
+                          <p className="text-xs text-muted-foreground">عرض عمود عدد الأوجه</p>
+                        </div>
+                        <Switch
+                          checked={sizesShowFacesCount}
+                          onCheckedChange={setSizesShowFacesCount}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div>
+                          <Label className="text-sm">إظهار مساحة الوجه</Label>
+                          <p className="text-xs text-muted-foreground">عرض المساحة لكل وجه</p>
+                        </div>
+                        <Switch
+                          checked={sizesShowAreaPerFace}
+                          onCheckedChange={setSizesShowAreaPerFace}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between p-2 bg-muted/30 rounded-lg">
+                        <div>
+                          <Label className="text-sm">إظهار المساحة الكلية</Label>
+                          <p className="text-xs text-muted-foreground">عرض إجمالي المساحة</p>
+                        </div>
+                        <Switch
+                          checked={sizesShowTotalArea}
+                          onCheckedChange={setSizesShowTotalArea}
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-sm text-amber-700">
+                      <strong>ملاحظة:</strong> فاتورة المقاسات تستخدم إعدادات الألوان والخطوط من التابات الأخرى (الألوان، الشركة، الجدول).
+                    </p>
+                  </div>
                 </TabsContent>
               </Tabs>
             </div>

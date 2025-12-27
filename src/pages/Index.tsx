@@ -319,8 +319,8 @@ const Index = () => {
                       <Badge className="text-xs bg-gradient-to-r from-primary to-accent text-white border-0">مدير</Badge>
                     )}
                   </div>
-                  {isAdmin && (
-                    <Link to="/dashboard">
+                  {user && (isAdmin || (user?.permissions && user.permissions.length > 0)) && (
+                    <Link to="/admin">
                       <Button 
                         variant="outline" 
                         size="sm"

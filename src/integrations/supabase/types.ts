@@ -294,6 +294,48 @@ export type Database = {
         }
         Relationships: []
       }
+      billboard_print_settings: {
+        Row: {
+          background_height: string | null
+          background_url: string | null
+          background_width: string | null
+          created_at: string | null
+          custom_css: string | null
+          elements: Json | null
+          id: string
+          primary_font: string | null
+          secondary_font: string | null
+          setting_key: string
+          updated_at: string | null
+        }
+        Insert: {
+          background_height?: string | null
+          background_url?: string | null
+          background_width?: string | null
+          created_at?: string | null
+          custom_css?: string | null
+          elements?: Json | null
+          id?: string
+          primary_font?: string | null
+          secondary_font?: string | null
+          setting_key?: string
+          updated_at?: string | null
+        }
+        Update: {
+          background_height?: string | null
+          background_url?: string | null
+          background_width?: string | null
+          created_at?: string | null
+          custom_css?: string | null
+          elements?: Json | null
+          id?: string
+          primary_font?: string | null
+          secondary_font?: string | null
+          setting_key?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       billboard_types: {
         Row: {
           color: string | null
@@ -847,8 +889,13 @@ export type Database = {
           exchange_rate: string | null
           fee: string | null
           friend_rental_data: Json | null
+          friend_rental_includes_installation: boolean | null
+          friend_rental_operating_fee_enabled: boolean | null
+          friend_rental_operating_fee_rate: number | null
           id: number
           include_installation_in_price: boolean
+          include_operating_in_installation: boolean | null
+          include_operating_in_print: boolean | null
           include_print_in_billboard_price: boolean
           installation_cost: number | null
           installation_enabled: boolean | null
@@ -859,6 +906,7 @@ export type Database = {
           installment_first_payment_type: string | null
           installment_interval: string | null
           installments_data: string | null
+          level_discounts: Json | null
           operating_fee_rate: number | null
           partnership_data: Json | null
           partnership_operating_data: Json | null
@@ -900,8 +948,13 @@ export type Database = {
           exchange_rate?: string | null
           fee?: string | null
           friend_rental_data?: Json | null
+          friend_rental_includes_installation?: boolean | null
+          friend_rental_operating_fee_enabled?: boolean | null
+          friend_rental_operating_fee_rate?: number | null
           id?: number
           include_installation_in_price?: boolean
+          include_operating_in_installation?: boolean | null
+          include_operating_in_print?: boolean | null
           include_print_in_billboard_price?: boolean
           installation_cost?: number | null
           installation_enabled?: boolean | null
@@ -912,6 +965,7 @@ export type Database = {
           installment_first_payment_type?: string | null
           installment_interval?: string | null
           installments_data?: string | null
+          level_discounts?: Json | null
           operating_fee_rate?: number | null
           partnership_data?: Json | null
           partnership_operating_data?: Json | null
@@ -953,8 +1007,13 @@ export type Database = {
           exchange_rate?: string | null
           fee?: string | null
           friend_rental_data?: Json | null
+          friend_rental_includes_installation?: boolean | null
+          friend_rental_operating_fee_enabled?: boolean | null
+          friend_rental_operating_fee_rate?: number | null
           id?: number
           include_installation_in_price?: boolean
+          include_operating_in_installation?: boolean | null
+          include_operating_in_print?: boolean | null
           include_print_in_billboard_price?: boolean
           installation_cost?: number | null
           installation_enabled?: boolean | null
@@ -965,6 +1024,7 @@ export type Database = {
           installment_first_payment_type?: string | null
           installment_interval?: string | null
           installments_data?: string | null
+          level_discounts?: Json | null
           operating_fee_rate?: number | null
           partnership_data?: Json | null
           partnership_operating_data?: Json | null
@@ -4660,6 +4720,36 @@ export type Database = {
           start_date?: string | null
           summary?: string | null
           title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      roles: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          display_name: string
+          id: string
+          name: string
+          permissions: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          display_name: string
+          id?: string
+          name: string
+          permissions?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          display_name?: string
+          id?: string
+          name?: string
+          permissions?: string[] | null
           updated_at?: string | null
         }
         Relationships: []

@@ -59,6 +59,8 @@ import ExtendedBillboards from "./pages/ExtendedBillboards";
 import PricingFactors from "./pages/PricingFactors";
 import PrintDesign from "./pages/PrintDesignNew";
 import ContractTermsSettings from "./pages/ContractTermsSettings";
+import RolesManagement from "./pages/RolesManagement";
+import BillboardPrintSettings from "./pages/BillboardPrintSettings";
 import { MainLayout } from "@/components/Layout/MainLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
@@ -578,6 +580,26 @@ const App = () => (
                 <ProtectedRoute requireAdmin>
                   <MainLayout>
                     <ContractTermsSettings />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/roles"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <MainLayout>
+                    <RolesManagement />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/billboard-print-settings"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <MainLayout>
+                    <BillboardPrintSettings />
                   </MainLayout>
                 </ProtectedRoute>
               }

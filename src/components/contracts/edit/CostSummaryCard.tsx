@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,7 +7,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
-import { DollarSign, Wrench, Save, X, Calculator, Percent, Minus, TrendingDown, TrendingUp, Printer, Gift, Settings, Info, ChevronDown, ChevronUp } from 'lucide-react';
+import { DollarSign, Wrench, Save, X, Calculator, Percent, Minus, TrendingDown, TrendingUp, Printer, Gift, Settings, Info, ChevronDown, ChevronUp, RefreshCw } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -44,8 +44,15 @@ interface CostSummaryCardProps {
   setIncludeInstallationInPrice?: (include: boolean) => void;
   includePrintInPrice?: boolean;
   setIncludePrintInPrice?: (include: boolean) => void;
+  // NEW: Include operating fee in costs toggles
+  includeOperatingInPrint?: boolean;
+  setIncludeOperatingInPrint?: (include: boolean) => void;
+  includeOperatingInInstallation?: boolean;
+  setIncludeOperatingInInstallation?: (include: boolean) => void;
   // Currency
   currencySymbol?: string;
+  // NEW: Proportional distribution callback
+  onProportionalDistribution?: (newTotal: number) => void;
 }
 
 export function CostSummaryCard({
@@ -77,9 +84,15 @@ export function CostSummaryCard({
   setIncludeInstallationInPrice,
   includePrintInPrice = false,
   setIncludePrintInPrice,
-  currencySymbol = 'د.ل'
+  includeOperatingInPrint = false,
+  setIncludeOperatingInPrint,
+  includeOperatingInInstallation = false,
+  setIncludeOperatingInInstallation,
+  currencySymbol = 'د.ل',
+  onProportionalDistribution
 }: CostSummaryCardProps) {
   const [showDetails, setShowDetails] = React.useState(true);
+  const [proportionalValue, setProportionalValue] = useState<number>(0);
   
   // الإيجار الصافي بعد الخصم (قبل أي إضافات أو خصومات تكاليف)
   const rentalAfterDiscount = React.useMemo(() => {
@@ -182,6 +195,76 @@ export function CostSummaryCard({
             className="h-12 font-bold text-xl bg-background border-2 border-border focus:border-primary rounded-xl"
           />
         </div>
+
+        {/* Proportional Distribution Section */}
+        {onProportionalDistribution && estimatedTotal > 0 && (
+          <div className="p-4 rounded-xl bg-violet-500/5 border-2 border-violet-500/20 space-y-3">
+            <label className="text-sm font-semibold text-violet-600 dark:text-violet-400 flex items-center gap-2">
+              <RefreshCw className="h-4 w-4" />
+              توزيع نسبي على اللوحات
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger>
+                    <Info className="h-3.5 w-3.5 text-muted-foreground" />
+                  </TooltipTrigger>
+                  <TooltipContent side="top" className="max-w-xs">
+                    <p>عند إدخال إجمالي جديد، يتم توزيعه على اللوحات بنفس نسبة أسعارها الحالية</p>
+                    <p className="mt-1 text-xs text-muted-foreground">مثال: إذا زاد الإجمالي 20%، تزيد أسعار جميع اللوحات 20%</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <DollarSign className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="number"
+                  value={proportionalValue || ''}
+                  onChange={(e) => setProportionalValue(Number(e.target.value) || 0)}
+                  placeholder={`الإجمالي الحالي: ${estimatedTotal.toLocaleString('ar-LY')}`}
+                  className="pr-9 h-11 bg-background"
+                />
+              </div>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => {
+                  if (proportionalValue > 0) {
+                    onProportionalDistribution(proportionalValue);
+                    setProportionalValue(0);
+                  }
+                }}
+                disabled={!proportionalValue || proportionalValue <= 0}
+                className="h-11 px-4 bg-violet-600 hover:bg-violet-700"
+              >
+                <Calculator className="h-4 w-4 ml-2" />
+                توزيع
+              </Button>
+            </div>
+            {proportionalValue > 0 && estimatedTotal > 0 && (
+              <div className="flex items-center justify-between text-xs bg-violet-500/10 rounded-lg px-3 py-2">
+                <span className="text-violet-700 dark:text-violet-300">
+                  نسبة التغيير: {((proportionalValue / estimatedTotal - 1) * 100).toFixed(1)}%
+                </span>
+                <span className="font-medium text-violet-700 dark:text-violet-300">
+                  {proportionalValue > estimatedTotal ? (
+                    <span className="flex items-center gap-1">
+                      <TrendingUp className="h-3 w-3" />
+                      زيادة {(proportionalValue - estimatedTotal).toLocaleString('ar-LY')} {currencySymbol}
+                    </span>
+                  ) : proportionalValue < estimatedTotal ? (
+                    <span className="flex items-center gap-1">
+                      <TrendingDown className="h-3 w-3" />
+                      نقص {(estimatedTotal - proportionalValue).toLocaleString('ar-LY')} {currencySymbol}
+                    </span>
+                  ) : (
+                    'بدون تغيير'
+                  )}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Discount Section */}
         <div className="p-4 rounded-xl bg-red-500/5 border-2 border-red-500/20 space-y-3">
@@ -292,6 +375,68 @@ export function CostSummaryCard({
                   <div className="flex items-center gap-2 p-2 bg-blue-500/10 rounded-lg border border-blue-500/20">
                     <DollarSign className="h-4 w-4 text-blue-600" />
                     <span className="text-xs font-medium text-blue-600">تضاف للإجمالي (يدفعها العميل)</span>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* NEW: Operating Fee Inclusion Toggles */}
+            {operatingFeeRate > 0 && (
+              <div className="p-4 rounded-xl bg-violet-500/5 border-2 border-violet-500/20 space-y-3">
+                <div className="flex items-center gap-2 mb-3">
+                  <Percent className="h-4 w-4 text-violet-600" />
+                  <span className="text-sm font-semibold text-violet-600 dark:text-violet-400">
+                    تضمين نسبة التشغيل ({operatingFeeRate}%)
+                  </span>
+                </div>
+
+                {/* Include in Print */}
+                {printCostEnabled && printCost > 0 && setIncludeOperatingInPrint && (
+                  <div className="flex items-center justify-between bg-background/50 rounded-lg p-3">
+                    <Label htmlFor="include-operating-print" className="text-sm text-foreground flex items-center gap-2 cursor-pointer">
+                      <Printer className="h-4 w-4 text-blue-500" />
+                      تضمين في الطباعة
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="h-3 w-3 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p>عند التفعيل: تضاف نسبة التشغيل على تكلفة الطباعة</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <Switch
+                      id="include-operating-print"
+                      checked={includeOperatingInPrint}
+                      onCheckedChange={setIncludeOperatingInPrint}
+                    />
+                  </div>
+                )}
+
+                {/* Include in Installation */}
+                {installationEnabled && installationCost > 0 && setIncludeOperatingInInstallation && (
+                  <div className="flex items-center justify-between bg-background/50 rounded-lg p-3">
+                    <Label htmlFor="include-operating-install" className="text-sm text-foreground flex items-center gap-2 cursor-pointer">
+                      <Wrench className="h-4 w-4 text-orange-500" />
+                      تضمين في التركيب
+                      <TooltipProvider>
+                        <Tooltip>
+                          <TooltipTrigger>
+                            <Info className="h-3 w-3 text-muted-foreground" />
+                          </TooltipTrigger>
+                          <TooltipContent side="top" className="max-w-xs">
+                            <p>عند التفعيل: تضاف نسبة التشغيل على تكلفة التركيب</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    </Label>
+                    <Switch
+                      id="include-operating-install"
+                      checked={includeOperatingInInstallation}
+                      onCheckedChange={setIncludeOperatingInInstallation}
+                    />
                   </div>
                 )}
               </div>

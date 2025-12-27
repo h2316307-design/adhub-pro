@@ -146,6 +146,21 @@ const getSampleData = (templateType: InvoiceTemplateType) => {
         ],
         balance: { totalDebit: 24000, totalCredit: 10000, remaining: 14000 },
       };
+
+    case 'sizes_invoice':
+      return {
+        ...baseData,
+        customer: { name: 'علي عمار', company: 'شركة المتحدة', phone: '218101-2012255' },
+        sizesData: [
+          { sizeName: '14x5', widthMeters: 14, heightMeters: 5, facesCount: 2, quantity: 3, areaPerFace: 70, totalArea: 420 },
+          { sizeName: '10x4', widthMeters: 10, heightMeters: 4, facesCount: 2, quantity: 2, areaPerFace: 40, totalArea: 160 },
+          { sizeName: '8x3', widthMeters: 8, heightMeters: 3, facesCount: 1, quantity: 4, areaPerFace: 24, totalArea: 96 },
+          { sizeName: '6x3', widthMeters: 6, heightMeters: 3, facesCount: 1, quantity: 2, areaPerFace: 18, totalArea: 36 },
+        ],
+        totalBillboards: 11,
+        totalArea: 712,
+        contractNumbers: ['1170', '1171', '1172'],
+      };
     
     default:
       return {
@@ -563,8 +578,114 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
     );
   };
 
+  const renderSizesSection = () => {
+    if (templateType !== 'sizes_invoice') return null;
+    const data = sampleData as any;
+    if (!data.sizesData) return null;
+
+    const multiFaceItems = data.sizesData.filter((s: any) => s.facesCount > 1);
+    const singleFaceItems = data.sizesData.filter((s: any) => s.facesCount === 1);
+
+    const renderSizesTable = (items: any[], title: string) => {
+      if (items.length === 0) return null;
+      const tableTotal = items.reduce((sum: number, item: any) => sum + item.totalArea, 0);
+      const tableQuantity = items.reduce((sum: number, item: any) => sum + item.quantity, 0);
+
+      return (
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            marginBottom: '10px',
+            paddingBottom: '8px',
+            borderBottom: `2px solid ${individualSettings.primaryColor}`,
+          }}>
+            <span style={{ fontSize: `${individualSettings.headerFontSize}px`, fontWeight: 'bold', color: individualSettings.primaryColor }}>{title}</span>
+            <span style={{ fontSize: `${individualSettings.bodyFontSize}px`, color: individualSettings.tableTextColor, opacity: 0.7, marginRight: 'auto' }}>({tableQuantity} لوحة)</span>
+          </div>
+
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: `${individualSettings.bodyFontSize}px` }}>
+            <thead>
+              <tr style={{ backgroundColor: individualSettings.tableHeaderBgColor }}>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '6%' }}>#</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '18%' }}>المقاس</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '12%' }}>العرض (م)</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '12%' }}>الارتفاع (م)</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '10%' }}>الأوجه</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '10%' }}>الكمية</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '14%' }}>م² / وجه</th>
+                <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '18%' }}>الإجمالي م²</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item: any, idx: number) => (
+                <tr key={idx} style={{ backgroundColor: hexToRgba(idx % 2 === 0 ? individualSettings.tableRowEvenColor : individualSettings.tableRowOddColor, individualSettings.tableRowOpacity) }}>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{idx + 1}</td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontWeight: '600' }}>{item.sizeName}</td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontFamily: 'Manrope, sans-serif' }}>{item.widthMeters.toFixed(2)}</td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontFamily: 'Manrope, sans-serif' }}>{item.heightMeters.toFixed(2)}</td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>
+                    <span style={{
+                      display: 'inline-block',
+                      padding: '3px 10px',
+                      borderRadius: '20px',
+                      backgroundColor: item.facesCount === 1 ? '#e0f2fe' : `${individualSettings.primaryColor}20`,
+                      color: item.facesCount === 1 ? '#0369a1' : individualSettings.primaryColor,
+                      fontFamily: 'Manrope, sans-serif',
+                      fontWeight: 'bold',
+                      fontSize: `${individualSettings.bodyFontSize - 1}px`,
+                    }}>{item.facesCount}</span>
+                  </td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontFamily: 'Manrope, sans-serif', fontWeight: 'bold' }}>{item.quantity}</td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontFamily: 'Manrope, sans-serif' }}>{item.areaPerFace.toFixed(2)}</td>
+                  <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.primaryColor, fontWeight: 'bold', fontFamily: 'Manrope, sans-serif' }}>{item.totalArea.toFixed(2)}</td>
+                </tr>
+              ))}
+              {/* Subtotal Row */}
+              <tr style={{ backgroundColor: individualSettings.subtotalBgColor }}>
+                <td colSpan={5} style={{ padding: '10px 8px', textAlign: 'left', fontWeight: 'bold', color: individualSettings.subtotalTextColor, border: `1px solid ${individualSettings.tableBorderColor}` }}>
+                  إجمالي القسم
+                </td>
+                <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: individualSettings.subtotalTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, fontFamily: 'Manrope, sans-serif' }}>{tableQuantity}</td>
+                <td style={{ padding: '10px 8px', border: `1px solid ${individualSettings.tableBorderColor}` }}></td>
+                <td style={{ padding: '10px 8px', textAlign: 'center', fontWeight: 'bold', color: individualSettings.subtotalTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, fontFamily: 'Manrope, sans-serif' }}>{tableTotal.toFixed(2)} م²</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      );
+    };
+
+    return (
+      <div style={{ marginBottom: '20px' }}>
+        {renderSizesTable(multiFaceItems, 'لوحات متعددة الأوجه')}
+        {renderSizesTable(singleFaceItems, 'لوحات وجه واحد')}
+        
+        {/* Grand Total */}
+        <div style={{
+          background: `linear-gradient(135deg, ${individualSettings.totalBgColor}, ${individualSettings.totalBgColor}dd)`,
+          padding: '20px',
+          textAlign: 'center',
+          marginTop: '20px',
+          borderRadius: '8px',
+        }}>
+          <div style={{ fontSize: `${individualSettings.bodyFontSize}px`, color: individualSettings.totalTextColor, opacity: 0.9, marginBottom: '6px' }}>
+            إجمالي المساحة الكلية
+          </div>
+          <div style={{ fontSize: `${individualSettings.titleFontSize + 8}px`, fontWeight: 'bold', color: individualSettings.totalTextColor, fontFamily: 'Manrope, sans-serif' }}>
+            {data.totalArea.toFixed(2)}
+            <span style={{ fontSize: `${individualSettings.headerFontSize}px`, marginRight: '8px' }}>متر مربع</span>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   const renderTotalsSection = () => {
     if (!individualSettings.showTotalsSection || !hasSection(templateType, 'totals')) return null;
+    // Skip for sizes_invoice as it has its own totals display
+    if (templateType === 'sizes_invoice') return null;
     const data = sampleData as any;
     if (data.subtotal === undefined) return null;
 
@@ -660,6 +781,7 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
           {renderCustomerSection()}
           {renderCustodyInfoSection()}
           {renderBillboardsSection()}
+          {renderSizesSection()}
           {renderItemsSection()}
           {renderServicesSection()}
           {renderTransactionsSection()}

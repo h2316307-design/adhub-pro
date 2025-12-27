@@ -17,7 +17,8 @@ export type InvoiceTemplateType =
   | 'print_task' // فاتورة مهمة الطباعة
   | 'cutout_task' // فاتورة مهمة القص
   | 'composite_task' // المهام المجمعة (طباعة + تركيب + قص)
-  | 'customer_invoice'; // فاتورة الزبون
+  | 'customer_invoice' // فاتورة الزبون
+  | 'sizes_invoice'; // فاتورة المقاسات
 
 // تعريف الأقسام المختلفة لكل نوع فاتورة
 export type InvoiceSectionType = 
@@ -63,6 +64,7 @@ export const TEMPLATE_SECTIONS: Record<InvoiceTemplateType, InvoiceSectionType[]
   cutout_task: ['header', 'customer', 'items', 'totals', 'notes'],
   composite_task: ['header', 'customer', 'items', 'services', 'totals', 'notes'],
   customer_invoice: ['header', 'customer', 'items', 'totals', 'notes'],
+  sizes_invoice: ['header', 'customer', 'items', 'totals', 'notes'],
 };
 export const SECTION_INFO: Record<InvoiceSectionType, { name: string; nameEn: string; icon: string }> = {
   header: { name: 'الهيدر', nameEn: 'Header', icon: 'Layout' },
@@ -243,6 +245,15 @@ export const INVOICE_TEMPLATES: InvoiceTemplateInfo[] = [
     icon: 'UserCheck',
     category: 'invoices',
     sections: TEMPLATE_SECTIONS.customer_invoice
+  },
+  {
+    id: 'sizes_invoice',
+    name: 'فاتورة المقاسات',
+    nameEn: 'Sizes Invoice',
+    description: 'فاتورة مقاسات اللوحات من العقود',
+    icon: 'Ruler',
+    category: 'invoices',
+    sections: TEMPLATE_SECTIONS.sizes_invoice
   }
 ];
 
@@ -640,4 +651,5 @@ export const INVOICE_TITLES: Record<InvoiceTemplateType, { ar: string; en: strin
   cutout_task: { ar: 'فاتورة مهمة قص', en: 'CUTOUT TASK' },
   composite_task: { ar: 'المهام المجمعة', en: 'COMPOSITE TASK' },
   customer_invoice: { ar: 'فاتورة الزبون', en: 'CUSTOMER INVOICE' },
+  sizes_invoice: { ar: 'فاتورة المقاسات', en: 'SIZES INVOICE' },
 };

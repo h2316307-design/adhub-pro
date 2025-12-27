@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
-import { Chrome as Home, MapPin, Trash2, Wrench, FileText, Users, Merge, TrendingUp, TrendingDown, CreditCard, DollarSign, Calculator, Calendar, ChartBar as BarChart3, Settings, LogOut, Printer, Wallet, Receipt, Database, AlertCircle, MessageSquare, Moon, Sun, Hammer, Scissors, Building2, Link, Briefcase, FileSpreadsheet, AlertTriangle, CalendarPlus, Percent, Palette } from 'lucide-react';
+import { Chrome as Home, MapPin, Trash2, Wrench, FileText, Users, Merge, TrendingUp, TrendingDown, CreditCard, DollarSign, Calculator, Calendar, ChartBar as BarChart3, Settings, LogOut, Printer, Wallet, Receipt, Database, AlertCircle, MessageSquare, Moon, Sun, Hammer, Scissors, Building2, Link, Briefcase, FileSpreadsheet, AlertTriangle, CalendarPlus, Percent, Palette, Shield } from 'lucide-react';
 
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { Button } from '@/components/ui/button';
@@ -94,6 +94,7 @@ const sidebarSections: SidebarSection[] = [
     items: [
       { id: 'booking_requests', label: 'طلبات الحجز', icon: Calendar, path: '/admin/booking-requests' },
       { id: 'users', label: 'المستخدمين', icon: Users, path: '/admin/users' },
+      { id: 'roles', label: 'إدارة الأدوار', icon: Shield, path: '/admin/roles' },
       { id: 'installation_teams', label: 'فرقة التركيبات', icon: Users, path: '/admin/installation-teams' },
       { id: 'printers', label: 'إدارة المطابع', icon: Printer, path: '/admin/printers' },
       { id: 'reports', label: 'التقارير والإحصائيات', icon: BarChart3, path: '/admin/reports' },
@@ -102,6 +103,7 @@ const sidebarSections: SidebarSection[] = [
       { id: 'currency_settings', label: 'إعدادات العملة', icon: DollarSign, path: '/admin/currency-settings' },
       { id: 'pdf_templates', label: 'إعدادات قوالب PDF', icon: FileText, path: '/admin/pdf-templates' },
       { id: 'print_design', label: 'تصميم الطباعة', icon: Palette, path: '/admin/print-design' },
+      { id: 'billboard_print_settings', label: 'إعدادات طباعة اللوحات', icon: Printer, path: '/admin/billboard-print-settings' },
       { id: 'contract_terms', label: 'بنود العقد', icon: FileText, path: '/admin/contract-terms' },
       { id: 'system_settings', label: 'إعدادات النظام', icon: Link, path: '/admin/system-settings' },
       { id: 'settings', label: 'الإعدادات', icon: Settings, path: '/admin/settings' },
@@ -116,8 +118,36 @@ interface SidebarProps {
 export function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, user, signOut } = useAuth();
+  const { profile, user, signOut, isAdmin } = useAuth();
   const { theme, toggleTheme } = useTheme();
+
+  // جلب صلاحيات المستخدم
+  const userPermissions = user?.permissions || [];
+
+  // التحقق من إمكانية الوصول للعنصر
+  const canAccessItem = (itemId: string) => {
+    // المدير يرى كل شيء
+    if (isAdmin) return true;
+    // المستخدم العادي يرى فقط ما لديه صلاحية له
+    return userPermissions.includes(itemId);
+  };
+
+  // تصفية العناصر الأساسية حسب الصلاحيات
+  const filteredCoreItems = useMemo(
+    () => coreItems.filter(item => canAccessItem(item.id)),
+    [isAdmin, userPermissions]
+  );
+
+  // تصفية الأقسام والعناصر حسب الصلاحيات
+  const filteredSections = useMemo(
+    () => sidebarSections
+      .map(section => ({
+        ...section,
+        items: section.items.filter(item => canAccessItem(item.id))
+      }))
+      .filter(section => section.items.length > 0),
+    [isAdmin, userPermissions]
+  );
 
   const isActive = (path: string) => {
     if (path === '/admin') return location.pathname === '/admin';
@@ -126,21 +156,29 @@ export function Sidebar({ className }: SidebarProps) {
 
   const activeSectionIds = useMemo(
     () =>
-      sidebarSections
+      filteredSections
         .filter((section) => section.items.some((item) => location.pathname.startsWith(item.path)))
         .map((section) => section.id),
-    [location.pathname],
+    [location.pathname, filteredSections],
   );
 
-  const [openSections, setOpenSections] = useState<string[]>(() => {
-    if (activeSectionIds.length > 0) return activeSectionIds;
-    return sidebarSections.length > 0 ? [sidebarSections[0].id] : [];
-  });
+  const [openSections, setOpenSections] = useState<string[]>([]);
 
   useEffect(() => {
-    if (activeSectionIds.length === 0) return;
-    setOpenSections((prev) => Array.from(new Set([...prev, ...activeSectionIds])));
-  }, [activeSectionIds]);
+    if (activeSectionIds.length === 0) {
+      if (filteredSections.length > 0 && openSections.length === 0) {
+        setOpenSections([filteredSections[0].id]);
+      }
+      return;
+    }
+    setOpenSections((prev) => {
+      const newSections = Array.from(new Set([...prev, ...activeSectionIds]));
+      if (newSections.length === prev.length && newSections.every(s => prev.includes(s))) {
+        return prev;
+      }
+      return newSections;
+    });
+  }, [activeSectionIds, filteredSections]);
 
   const handleNavigate = (path: string) => {
     if (location.pathname !== path) {
@@ -164,7 +202,7 @@ export function Sidebar({ className }: SidebarProps) {
 
       <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
         <div className="space-y-2">
-          {coreItems.map((item) => {
+          {filteredCoreItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
             return (
@@ -193,7 +231,7 @@ export function Sidebar({ className }: SidebarProps) {
           onValueChange={(value) => setOpenSections(value)}
           className="space-y-3"
         >
-          {sidebarSections.map((section) => (
+          {filteredSections.map((section) => (
             <AccordionItem
               key={section.id}
               value={section.id}

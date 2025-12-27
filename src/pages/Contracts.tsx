@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/sonner';
-import { Plus, Eye, Edit, Trash2, Calendar, User, DollarSign, Search, Filter, Building, AlertCircle, Clock, CheckCircle, Printer, RefreshCcw, Hammer, Wrench, Percent, PaintBucket, FileText, Send, FileSpreadsheet, LayoutGrid, List, SlidersHorizontal, Hash, SplitSquareVertical, Download, X, Loader2, CheckSquare, Square } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, Calendar, User, DollarSign, Search, Filter, Building, AlertCircle, Clock, CheckCircle, Printer, RefreshCcw, Hammer, Wrench, Percent, PaintBucket, FileText, Send, FileSpreadsheet, LayoutGrid, List, SlidersHorizontal, Hash, SplitSquareVertical, Download, X, Loader2, CheckSquare, Square, Ruler } from 'lucide-react';
 import { SendContractDialog } from '@/components/contracts/SendContractDialog';
 import { AddPaymentDialog } from '@/components/contracts/AddPaymentDialog';
 import { BillboardPrintIndividual } from '@/components/contracts/BillboardPrintIndividual';
@@ -18,6 +18,7 @@ import { SendAlertsDialog } from '@/components/contracts/SendAlertsDialog';
 import { QuickContractDialog } from '@/components/contracts/QuickContractDialog';
 import { ContractCard } from '@/components/contracts/ContractCard';
 import { ContractStats } from '@/components/contracts/ContractStats';
+import { SizesInvoicePrintDialog } from '@/components/contracts/SizesInvoicePrintDialog';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   createContract,
@@ -69,6 +70,9 @@ export default function Contracts() {
   // Multi-select state
   const [selectedContractIds, setSelectedContractIds] = useState<Set<string | number>>(new Set());
   const [isExportingMultiple, setIsExportingMultiple] = useState(false);
+  const [sizesInvoiceOpen, setSizesInvoiceOpen] = useState(false);
+  const [sizesInvoiceData, setSizesInvoiceData] = useState<{ billboards: any[]; customerName: string; contractNumbers: string[] }>({ billboards: [], customerName: '', contractNumbers: [] });
+  const [lockedCustomerName, setLockedCustomerName] = useState<string | null>(null);
 
   const [billboardPrintData, setBillboardPrintData] = useState<{
     contractNumber: string | number;
@@ -742,24 +746,53 @@ export default function Contracts() {
 
   // Multi-select handlers
   const toggleContractSelection = (contractId: string | number) => {
+    const contract = contracts.find(c => c.id === contractId);
+    if (!contract) return;
+    
+    const contractCustomerName = contract.customer_name || '';
+    
     setSelectedContractIds(prev => {
       const newSet = new Set(prev);
       if (newSet.has(contractId)) {
         newSet.delete(contractId);
+        // If no more contracts selected, unlock customer filter
+        if (newSet.size === 0) {
+          setLockedCustomerName(null);
+        }
       } else {
-        newSet.add(contractId);
+        // If this is the first selection, lock to this customer
+        if (newSet.size === 0) {
+          setLockedCustomerName(contractCustomerName);
+        }
+        // Only add if same customer
+        if (lockedCustomerName === null || lockedCustomerName === contractCustomerName) {
+          newSet.add(contractId);
+        } else {
+          toast.info('يمكنك فقط اختيار عقود لنفس العميل');
+          return prev;
+        }
       }
       return newSet;
     });
   };
 
   const selectAllFiltered = () => {
-    const ids = filteredContracts.map(c => c.id);
+    // Only select contracts for the locked customer (or all if none locked)
+    const customerToFilter = lockedCustomerName || (filteredContracts[0]?.customer_name || null);
+    const ids = filteredContracts
+      .filter(c => !customerToFilter || c.customer_name === customerToFilter)
+      .map(c => c.id);
+    
+    if (ids.length > 0 && !lockedCustomerName) {
+      const firstContract = filteredContracts.find(c => ids.includes(c.id));
+      setLockedCustomerName(firstContract?.customer_name || null);
+    }
     setSelectedContractIds(new Set(ids));
   };
 
   const clearSelection = () => {
     setSelectedContractIds(new Set());
+    setLockedCustomerName(null);
   };
 
   const handleExportMultipleContracts = async () => {
@@ -875,6 +908,53 @@ export default function Contracts() {
       toast.error('فشل في تصدير اللوحات');
     } finally {
       setIsExportingMultiple(false);
+    }
+  };
+
+  const handlePrintSizesInvoice = async () => {
+    if (selectedContractIds.size === 0) {
+      toast.error('يرجى اختيار عقد واحد على الأقل');
+      return;
+    }
+
+    try {
+      const allBillboards: any[] = [];
+      const contractNumbers: string[] = [];
+      let customerName = '';
+
+      for (const contractId of selectedContractIds) {
+        try {
+          const contractWithBillboards = await getContractWithBillboards(String(contractId));
+          const billboardsData = (contractWithBillboards as any).billboards || [];
+          const contractNumber = (contractWithBillboards as any).Contract_Number || contractId;
+          contractNumbers.push(String(contractNumber));
+          
+          if (!customerName) {
+            customerName = (contractWithBillboards as any).customer_name || '';
+          }
+          
+          billboardsData.forEach((b: any) => {
+            allBillboards.push(b);
+          });
+        } catch (e) {
+          console.error(`Failed to load contract ${contractId}:`, e);
+        }
+      }
+
+      if (allBillboards.length === 0) {
+        toast.error('لا توجد لوحات في العقود المختارة');
+        return;
+      }
+
+      setSizesInvoiceData({
+        billboards: allBillboards,
+        customerName,
+        contractNumbers,
+      });
+      setSizesInvoiceOpen(true);
+    } catch (error) {
+      console.error('Error preparing sizes invoice:', error);
+      toast.error('فشل في تجهيز فاتورة المقاسات');
     }
   };
 
@@ -1122,6 +1202,12 @@ export default function Contracts() {
                 <Badge variant="default" className="text-base px-3 py-1">
                   {selectedContractIds.size} عقد مختار
                 </Badge>
+                {lockedCustomerName && (
+                  <Badge variant="secondary" className="text-sm px-2 py-1">
+                    <User className="h-3 w-3 ml-1" />
+                    {lockedCustomerName}
+                  </Badge>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1140,7 +1226,15 @@ export default function Contracts() {
                   className="gap-2"
                 >
                   <CheckSquare className="h-4 w-4" />
-                  اختيار الكل ({filteredContracts.length})
+                  اختيار الكل {lockedCustomerName ? `(${filteredContracts.filter(c => c.customer_name === lockedCustomerName).length})` : `(${filteredContracts.length})`}
+                </Button>
+                <Button
+                  onClick={handlePrintSizesInvoice}
+                  variant="outline"
+                  className="gap-2 border-amber-500 text-amber-600 hover:bg-amber-50"
+                >
+                  <Ruler className="h-4 w-4" />
+                  طباعة فاتورة المقاسات
                 </Button>
                 <Button
                   onClick={handleExportMultipleContracts}
@@ -1159,6 +1253,15 @@ export default function Contracts() {
           </CardContent>
         </Card>
       )}
+
+      {/* Sizes Invoice Dialog */}
+      <SizesInvoicePrintDialog
+        open={sizesInvoiceOpen}
+        onOpenChange={setSizesInvoiceOpen}
+        billboards={sizesInvoiceData.billboards}
+        customerName={sizesInvoiceData.customerName}
+        contractNumbers={sizesInvoiceData.contractNumbers}
+      />
 
       {/* عرض الكروت */}
       {viewMode === 'cards' && (
