@@ -61,6 +61,8 @@ import PrintDesign from "./pages/PrintDesignNew";
 import ContractTermsSettings from "./pages/ContractTermsSettings";
 import RolesManagement from "./pages/RolesManagement";
 import BillboardPrintSettings from "./pages/BillboardPrintSettings";
+import BillboardPrintSettingsNew from "./pages/BillboardPrintSettingsNew";
+import QuickPrintSettings from "./pages/QuickPrintSettings";
 import { MainLayout } from "@/components/Layout/MainLayout";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 
@@ -599,7 +601,27 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <MainLayout>
+                    <BillboardPrintSettingsNew />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/billboard-print-settings-old"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <MainLayout>
                     <BillboardPrintSettings />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/admin/quick-print-settings"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <MainLayout>
+                    <QuickPrintSettings />
                   </MainLayout>
                 </ProtectedRoute>
               }

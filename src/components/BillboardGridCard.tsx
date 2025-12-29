@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History, EyeOff, Wrench, Plus, CalendarPlus, Pencil, ImageIcon, Check } from 'lucide-react';
+import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History, EyeOff, Wrench, Plus, CalendarPlus, Pencil, ImageIcon, Check, ZoomIn, X } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -510,17 +510,29 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
         
         <div className="relative">
           {/* صورة اللوحة مع تأثيرات متقدمة */}
-          <div className="aspect-[4/3] bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 relative overflow-hidden">
+          <div 
+            className="aspect-[4/3] bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 relative overflow-hidden cursor-pointer"
+            onClick={(e) => {
+              e.stopPropagation();
+              setPreviewOpen(true);
+            }}
+          >
             <BillboardImage
               billboard={billboard}
               alt={billboard.Billboard_Name}
               className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
-              onClick={() => setPreviewOpen(true)}
             />
             
             {/* Multi-layer gradient overlay */}
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
             <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            
+            {/* أيقونة التكبير */}
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
+              <div className="bg-black/50 rounded-full p-3 backdrop-blur-sm">
+                <ZoomIn className="h-8 w-8 text-white" />
+              </div>
+            </div>
 
             {/* Top badges row */}
             <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
@@ -1116,14 +1128,35 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
       </div>
     </Card>
 
-    {/* Image Preview Dialog */}
+    {/* Image Preview Dialog - نافذة تكبير الصورة */}
     <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-      <DialogContent className="max-w-4xl p-0">
-        <BillboardImage 
-          billboard={billboard} 
-          alt={billboard.Billboard_Name} 
-          className="w-full h-auto object-contain" 
-        />
+      <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0">
+        <div className="relative w-full h-full flex items-center justify-center min-h-[60vh]">
+          {/* زر الإغلاق */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setPreviewOpen(false)}
+            className="absolute top-4 right-4 z-50 bg-black/50 hover:bg-black/70 text-white rounded-full"
+          >
+            <X className="h-6 w-6" />
+          </Button>
+          
+          {/* معلومات اللوحة */}
+          <div className="absolute top-4 left-4 z-50 bg-black/50 rounded-lg px-4 py-2 backdrop-blur-sm">
+            <h3 className="text-white font-bold text-lg">
+              {billboard.Billboard_Name || `لوحة ${billboard.ID}`}
+            </h3>
+            <p className="text-white/70 text-sm">{billboard.Size} • {billboard.Municipality}</p>
+          </div>
+          
+          {/* الصورة المكبرة */}
+          <BillboardImage 
+            billboard={billboard} 
+            alt={billboard.Billboard_Name} 
+            className="max-w-full max-h-[85vh] object-contain" 
+          />
+        </div>
       </DialogContent>
     </Dialog>
 

@@ -17,12 +17,73 @@ import {
   BillboardPrintData as UnifiedBillboardData,
   ContractTerm as UnifiedContractTerm
 } from '@/lib/unifiedContractPrint';
+import { groupRepeatingPayments, Installment } from '@/utils/paymentGrouping';
 
 interface ContractPDFDialogProps {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   contract: any;
 }
+
+// دالة تنسيق التاريخ للعرض
+const formatDateForDisplay = (dateStr: string): string => {
+  if (!dateStr) return 'غير محدد';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateStr || 'غير محدد';
+  }
+};
+
+// ✅ دالة تنسيق ملخص الدفعات - نفس المنطق المستخدم في المعاينة
+const formatPaymentsSummary = (installmentsData: string | null): string => {
+  if (!installmentsData) return 'دفعة واحدة عند التوقيع';
+  
+  try {
+    const installments: Installment[] = typeof installmentsData === 'string' 
+      ? JSON.parse(installmentsData) 
+      : installmentsData;
+    if (!installments || installments.length === 0) return 'دفعة واحدة عند التوقيع';
+    
+    const groups = groupRepeatingPayments(installments);
+    const currencySymbol = 'د.ل';
+    
+    const parts: string[] = [];
+    
+    groups.forEach((group, index) => {
+      const startDateFormatted = formatDateForDisplay(group.startDate);
+      const endDateFormatted = formatDateForDisplay(group.endDate);
+      
+      if (group.isGrouped) {
+        // دفعات متكررة - عرض التواريخ من/إلى
+        if (index === 0) {
+          parts.push(`${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
+        } else {
+          parts.push(`ثم ${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
+        }
+      } else {
+        // دفعة منفردة - عرض التاريخ
+        const inst = group.originalInstallments[0];
+        if (index === 0) {
+          parts.push(`دفعة أولى ${group.amount} ${currencySymbol} ${inst.paymentType} بتاريخ ${startDateFormatted}`);
+        } else {
+          parts.push(`ودفعة ${group.amount} ${currencySymbol} بتاريخ ${startDateFormatted}`);
+        }
+      }
+    });
+    
+    // ✅ FIX: فصل الدفعات بفاصل سطر لتجنب تداخل النص
+    return parts.join('<br>- ');
+  } catch (e) {
+    console.error('Error parsing installments:', e);
+    return 'دفعة واحدة عند التوقيع';
+  }
+};
 
 // ✅ NEW: Currency options with written names in Arabic
 const CURRENCIES = [
@@ -1562,12 +1623,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                 <span>المجموع الفرعي:</span>
                 <span style="direction:ltr;display:inline-block;"> <span class="num">${formatArabicNumber(subtotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
               </div>
-              ${operatingFee > 0 ? `
-                <div class="total-row" style="color: #2563eb;">
-                  <span>رسوم التشغيل:</span>
-                  <span style="direction:ltr;display:inline-block;"> <span class="num">${formatArabicNumber(operatingFee)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
-                </div>
-              ` : ''}
               <div class="total-row grand-total">
                 <span>الإجمالي للعميل:</span>
                 <span style="direction:ltr;display:inline-block;"> <span class="grand-num">${formatArabicNumber(grandTotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
@@ -1760,16 +1815,11 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           }
         }
 
-        let rent_end_date = '';
-        if (b.end_date || b['End Date']) {
-          try {
-            rent_end_date = new Date(b.end_date || b['End Date']).toLocaleDateString('ar-LY');
-          } catch (e) {
-            rent_end_date = contractDetails.endDate;
-          }
-        } else {
-          rent_end_date = contractDetails.endDate;
-        }
+        // ✅ FIX: Use same logic as ContractTermsSettings preview
+        // Check for valid values (not empty, not 0, not "0")
+        const getValidValue = (val: any) => val && val !== '0' && val !== 0 ? String(val) : '';
+        const rent_end_date = getValidValue(b.Rent_End_Date) || getValidValue(b.rent_end_date) || getValidValue(b.end_date) || contractDetails.endDate || '';
+        const duration_days = getValidValue(b.Days_Count) || getValidValue(b.days_count) || getValidValue(b.duration_days) || contractDetails.duration || '';
 
         // باقي الحقول
         let coords: string = String(b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? '');
@@ -1781,7 +1831,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         const mapLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : (b.GPS_Link || '');
         const billboardName = String(b.Billboard_Name || '');
 
-        return { id, billboardName, image, municipality, district, landmark, size, level, faces, price, rent_end_date, mapLink };
+        return { id, billboardName, image, municipality, district, landmark, size, level, faces, price, rent_end_date, duration_days, mapLink };
       };
 
       // ربط كل لوحة ببيانات الترتيب (المقاس ثم البلدية ثم المستوى)
@@ -1818,6 +1868,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         faces: b.faces,
         price: b.price,
         rent_end_date: b.rent_end_date,
+        duration_days: b.duration_days,
         mapLink: b.mapLink,
       }));
       
@@ -1845,72 +1896,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         enabled: printCostEnabled
       });
 
-      // ✅ NEW: Generate concise payment summary for البند الخامس with written currency name
-      let paymentsHtml = '';
-      if (contractData.payments.length > 0) {
-        const finalTotalAmount = contract?.Total || contract?.total_cost || 0;
-        const installationEnabled = contract?.installation_enabled !== false && contract?.installation_enabled !== 0 && contract?.installation_enabled !== 'false';
-        const installationText = installationEnabled ? 'مع التركيب' : 'غير شامل التركيب';
-        const printCostText = printCostEnabled ? 'شاملة تكاليف الطباعة' : 'غير شاملة تكاليف الطباعة';
-        const discountText = discountInfo ? ` بعد خصم ${discountInfo.text}` : '';
-        
-        // ✅ Build concise payment summary
-        let paymentSummary = '';
-        
-        if (contractData.payments.length === 1) {
-          // Single payment
-          const payment = contractData.payments[0];
-          const dueDateText = payment.dueDate ? ` بتاريخ ${payment.dueDate}` : '';
-          paymentSummary = `دفعة واحدة: ${payment.amount} ${payment.currencyWrittenName}${dueDateText}`;
-        } else {
-          // Multiple payments - check if recurring pattern exists
-          const firstPayment = contractData.payments[0];
-          const recurringPayments = contractData.payments.slice(1);
-          
-          // Check if all recurring payments have same amount
-          const recurringAmount = recurringPayments[0]?.amount || '';
-          const allSameAmount = recurringPayments.every(p => p.amount === recurringAmount);
-          
-          // Check if all recurring payments have same type
-          const recurringType = recurringPayments[0]?.paymentType || '';
-          const allSameType = recurringPayments.every(p => p.paymentType === recurringType);
-          
-          if (allSameAmount && allSameType && recurringPayments.length > 0) {
-            // Concise format for recurring payments
-            const firstDueDateText = firstPayment.dueDate ? ` بتاريخ ${firstPayment.dueDate}` : '';
-            const firstRecurringDate = recurringPayments[0]?.dueDate || '';
-            const lastRecurringDate = recurringPayments[recurringPayments.length - 1]?.dueDate || '';
-            
-            paymentSummary = `الدفعة الأولى: ${firstPayment.amount} ${firstPayment.currencyWrittenName}${firstDueDateText}`;
-            
-            if (recurringPayments.length === 1) {
-              const secondDueDateText = firstRecurringDate ? ` بتاريخ ${firstRecurringDate}` : '';
-              paymentSummary += `، ودفعة ثانية: ${recurringAmount} ${firstPayment.currencyWrittenName}${secondDueDateText}`;
-            } else {
-              const startDateText = firstRecurringDate ? ` تبدأ من ${firstRecurringDate}` : '';
-              const endDateText = lastRecurringDate ? ` حتى ${lastRecurringDate}` : '';
-              paymentSummary += `، بعدها يتم السداد ${recurringType} بمقدار ${recurringAmount} ${firstPayment.currencyWrittenName}${startDateText}${endDateText} (${recurringPayments.length} دفعات)`;
-            }
-          } else {
-            // Non-uniform payments - show first and last only
-            const firstDueDateText = firstPayment.dueDate ? ` بتاريخ ${firstPayment.dueDate}` : '';
-            const lastPayment = contractData.payments[contractData.payments.length - 1];
-            const lastDueDateText = lastPayment.dueDate ? ` بتاريخ ${lastPayment.dueDate}` : '';
-            
-            paymentSummary = `${contractData.payments.length} دفعات: الأولى ${firstPayment.amount} ${firstPayment.currencyWrittenName}${firstDueDateText}، والأخيرة${lastDueDateText}`;
-          }
-        }
-        
-        paymentsHtml = `إجمالي قيمة العقد ${formatArabicNumber(finalTotalAmount)} ${currencyInfo.writtenName} (${installationText}، ${printCostText})${discountText} مقسمة كالتالي: ${paymentSummary}`;
-      } else {
-        // Fallback for contracts without installments
-        const finalTotalAmount = contract?.Total || contract?.total_cost || 0;
-        const installationEnabled = contract?.installation_enabled !== false && contract?.installation_enabled !== 0 && contract?.installation_enabled !== 'false';
-        const installationText = installationEnabled ? 'مع التركيب' : 'غير شامل التركيب';
-        const printCostText = printCostEnabled ? 'شاملة تكاليف الطباعة' : 'غير شاملة تكاليف الطباعة';
-        const discountText = discountInfo ? ` بعد خصم ${discountInfo.text}` : '';
-        paymentsHtml = `قيمة العقد ${formatArabicNumber(finalTotalAmount)} ${currencyInfo.writtenName} (${installationText}، ${printCostText})${discountText}`;
-      }
+      // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات
+      const paymentsHtml = formatPaymentsSummary(contract?.installments_data);
 
       // ✅ UPDATED: Generate enhanced PDF title with contract number, ad type, customer, billboards count and currency
       const billboardsCount = contract?.billboards_count || (contract?.billboard_ids ? contract.billboard_ids.split(',').length : 1);
@@ -2540,9 +2527,11 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
 
     <div class="contract-clause">
       <span class="clause-header">البند الخامس:</span> 
-      ${paymentsHtml}، وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
-      ${printCostText ? `<br><small>(الأسعار ${printCostText})</small>` : ''}
-      ${discountText ? `<br><small>${discountText}</small>` : ''}
+      <div style="margin-top: 5px;">
+        ${paymentsHtml}
+        ${discountText ? `<br><small>${discountText}</small>` : ''}
+        <br><br>وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
+      </div>
     </div>
 
     <div class="contract-clause">
@@ -2676,16 +2665,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           }
         }
 
-        let rent_end_date = '';
-        if (b.end_date || b['End Date']) {
-          try {
-            rent_end_date = new Date(b.end_date || b['End Date']).toLocaleDateString('ar-LY');
-          } catch (e) {
-            rent_end_date = contractDetails.endDate;
-          }
-        } else {
-          rent_end_date = contractDetails.endDate;
-        }
+        // ✅ FIX: Use same logic - check for valid values (not empty, not 0)
+        const getValidValue = (val: any) => val && val !== '0' && val !== 0 ? String(val) : '';
+        const rent_end_date = getValidValue(b.Rent_End_Date) || getValidValue(b.rent_end_date) || getValidValue(b.end_date) || contractDetails.endDate || '';
+        const duration_days = getValidValue(b.Days_Count) || getValidValue(b.days_count) || getValidValue(b.duration_days) || contractDetails.duration || '';
 
         let coords: string = String(b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? '');
         if (!coords || coords === 'undefined' || coords === 'null') {
@@ -2696,7 +2679,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         const mapLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : (b.GPS_Link || '');
         const billboardName = String(b.Billboard_Name || '');
 
-        return { id, billboardName, image, municipality, district, landmark, size, level, faces, price, rent_end_date, mapLink };
+        return { id, billboardName, image, municipality, district, landmark, size, level, faces, price, rent_end_date, duration_days, mapLink };
       };
 
       const normalized = billboardsToShow.map(norm);
@@ -2805,6 +2788,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                               case 'size': content = r.size; break;
                               case 'faces': content = `<span class="num">${r.faces}</span>`; break;
                               case 'price': content = r.price; break;
+                              case 'endDate': content = r.rent_end_date || ''; break;
+                              case 'durationDays': content = r.duration_days || ''; break;
                               case 'location': content = r.mapLink ? `<a href="${r.mapLink}" target="_blank" rel="noopener" style="display:block;"><img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(r.mapLink)}&color=${(tblSettings.qrForegroundColor || '#000000').replace('#', '')}&bgcolor=${(tblSettings.qrBackgroundColor || '#ffffff').replace('#', '')}" alt="QR" style="width:14mm;height:12mm;object-fit:contain;" /></a>` : ''; break;
                               default: content = '';
                             }
@@ -2835,19 +2820,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         contract?.print_cost_enabled === "1"
       );
 
-      let paymentsHtml = '';
-      if (contractData.payments.length > 0) {
-        const finalTotalAmount = contract?.Total || contract?.total_cost || 0;
-        const installationEnabled = contract?.installation_enabled !== false && contract?.installation_enabled !== 0 && contract?.installation_enabled !== 'false';
-        const installationText = installationEnabled ? 'مع التركيب' : 'غير شامل التركيب';
-        const printCostText = printCostEnabled ? 'شاملة تكاليف الطباعة' : 'غير شاملة تكاليف الطباعة';
-        const discountText = discountInfo ? ` بعد خصم ${discountInfo.text}` : '';
-        
-        paymentsHtml = `إجمالي قيمة العقد ${formatArabicNumber(finalTotalAmount)} ${currencyInfo.writtenName} (${installationText}، ${printCostText})${discountText}`;
-      } else {
-        const finalTotalAmount = contract?.Total || contract?.total_cost || 0;
-        paymentsHtml = `قيمة العقد ${formatArabicNumber(finalTotalAmount)} ${currencyInfo.writtenName}`;
-      }
+      // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات
+      const paymentsHtml = formatPaymentsSummary(contract?.installments_data);
 
       // ✅ نفس HTML الذي يستخدمه handlePrintContract (كامل مع كل البنود والخلفية الصحيحة)
       const billboardsCount = contract?.billboards_count || (contract?.billboard_ids ? contract.billboard_ids.split(',').length : 1);
@@ -3360,6 +3334,11 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         let coords = String(b.GPS_Coordinates ?? b.coords ?? '');
         const gpsLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : (b.GPS_Link || '');
 
+        // ✅ FIX: Add endDate and durationDays with fallback - check for valid values
+        const getValidValue = (val: any) => val && val !== '0' && val !== 0 ? String(val) : '';
+        const rent_end_date = getValidValue(b.Rent_End_Date) || getValidValue(b.rent_end_date) || getValidValue(b.end_date) || contractDetails.endDate || '';
+        const duration_days = getValidValue(b.Days_Count) || getValidValue(b.days_count) || getValidValue(b.duration_days) || contractDetails.duration || '';
+
         return {
           id,
           code: b.code || `TR-${String(b.ID || b.id || '').padStart(4, '0')}`,
@@ -3374,6 +3353,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           originalPrice,
           hasDiscount,
           gpsLink,
+          rent_end_date,
+          duration_days,
         };
       });
 
@@ -3401,17 +3382,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const printCostText = printCostEnabled ? 'شاملة تكاليف الطباعة' : 'غير شاملة تكاليف الطباعة';
       const discountText = discountInfo ? ` بعد خصم ${discountInfo.text}` : '';
       
-      let paymentsHtml = `إجمالي قيمة العقد ${formatArabicNumber(finalTotalAmount)} ${currencyInfo.writtenName} (${installationText}، ${printCostText})${discountText}`;
-      
-      if (paymentInstallments.length > 0) {
-        if (paymentInstallments.length === 1) {
-          const p = paymentInstallments[0];
-          paymentsHtml += ` - دفعة واحدة: ${p.amount} ${p.currencyWrittenName}`;
-        } else {
-          const first = paymentInstallments[0];
-          paymentsHtml += ` مقسمة على ${paymentInstallments.length} دفعات: الأولى ${first.amount} ${first.currencyWrittenName}`;
-        }
-      }
+      // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات مع التفاصيل الكاملة
+      const paymentsSummary = formatPaymentsSummary(contract?.installments_data);
+      // ✅ FIX: تنسيق أفضل للبند الخامس - فصل الإجمالي عن الدفعات
+      const paymentsHtml = `إجمالي تكلفة الإيجار لعدد (<strong>${sortedBillboards.length}</strong>) لوحة إعلانية هو (<strong>${formatArabicNumber(finalTotalAmount)}</strong>) ${currencyInfo.writtenName} (${installationText}، ${printCostText}).<br><br><strong>يتم السداد وفقاً للدفعات المتفق عليها:</strong><br>- ${paymentsSummary}`;
 
       // Convert contract terms
       const unifiedTerms: UnifiedContractTerm[] = contractTerms.map(t => ({
@@ -3591,20 +3565,22 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                   </div>
                 </div>
 
-                {/* Payments - Compact */}
+                {/* Payments - With Dates */}
                 {paymentInstallments.length > 0 && (
                   <div className="rounded-lg bg-card border p-2.5">
                     <p className="text-xs text-muted-foreground mb-2">الدفعات ({paymentInstallments.length})</p>
-                    <div className="flex flex-wrap gap-2">
-                      {paymentInstallments.slice(0, 4).map((p, i) => (
-                        <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-muted/50 text-xs">
-                          <span className="w-4 h-4 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{p.number}</span>
-                          <span className="font-medium">{p.amount} {p.currencySymbol}</span>
+                    <div className="space-y-1.5">
+                      {paymentInstallments.map((p, i) => (
+                        <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-muted/50 text-xs">
+                          <div className="flex items-center gap-1.5">
+                            <span className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center text-[10px] font-bold text-primary">{p.number}</span>
+                            <span className="font-medium">{p.amount} {p.currencySymbol}</span>
+                          </div>
+                          {p.dueDate && (
+                            <span className="text-muted-foreground text-[10px]">{p.dueDate}</span>
+                          )}
                         </div>
                       ))}
-                      {paymentInstallments.length > 4 && (
-                        <span className="text-xs text-muted-foreground">+{paymentInstallments.length - 4} أخرى</span>
-                      )}
                     </div>
                   </div>
                 )}

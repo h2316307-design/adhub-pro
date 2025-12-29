@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import QRCode from 'qrcode';
+import { groupRepeatingPayments, Installment } from "@/utils/paymentGrouping";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -114,10 +115,80 @@ const AVAILABLE_VARIABLES = [
   { key: '{totalAmount}', label: 'إجمالي المبلغ', example: '50,000', description: 'إجمالي قيمة العقد' },
   { key: '{currency}', label: 'العملة', example: 'دينار ليبي', description: 'عملة العقد' },
   { key: '{billboardsCount}', label: 'عدد اللوحات', example: '5', description: 'عدد اللوحات في العقد' },
-  { key: '{payments}', label: 'الدفعات', example: 'الدفعة الأولى: 25,000 - الدفعة الثانية: 25,000', description: 'تفاصيل الدفعات' },
+  { key: '{payments}', label: 'الدفعات', example: 'دفعة أولى 52,000 د.ل بتاريخ 20/07/2025 ثم 7 دفعات × 50,000 د.ل', description: 'ملخص الدفعات مع التواريخ ودمج المتكررة' },
 ];
 
-// بيانات تجريبية للمعاينة من العقد 1114
+// دالة تنسيق التاريخ للعرض
+const formatDateForDisplay = (dateStr: string): string => {
+  if (!dateStr) return 'غير محدد';
+  try {
+    const date = new Date(dateStr);
+    // التحقق من صحة التاريخ
+    if (isNaN(date.getTime())) return dateStr;
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateStr || 'غير محدد';
+  }
+};
+
+// دالة تنسيق ملخص الدفعات مع دمج المتكررة وإظهار التواريخ
+const formatPaymentsSummary = (installmentsData: string | null): string => {
+  if (!installmentsData) return '';
+  
+  try {
+    const installments: Installment[] = JSON.parse(installmentsData);
+    if (!installments || installments.length === 0) return '';
+    
+    const groups = groupRepeatingPayments(installments);
+    const currencySymbol = 'د.ل';
+    
+    const parts: string[] = [];
+    
+    groups.forEach((group, index) => {
+      const startDateFormatted = formatDateForDisplay(group.startDate);
+      const endDateFormatted = formatDateForDisplay(group.endDate);
+      
+      if (group.isGrouped) {
+        // دفعات متكررة - عرض التواريخ من/إلى
+        const total = (Number(group.amount.replace(/,/g, '')) * group.count).toLocaleString('ar-LY');
+        if (index === 0) {
+          parts.push(`${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
+        } else {
+          parts.push(`ثم ${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
+        }
+      } else {
+        // دفعة منفردة - عرض التاريخ
+        const inst = group.originalInstallments[0];
+        if (index === 0) {
+          parts.push(`دفعة أولى ${group.amount} ${currencySymbol} ${inst.paymentType} بتاريخ ${startDateFormatted}`);
+        } else {
+          parts.push(`ودفعة ${group.amount} ${currencySymbol} بتاريخ ${startDateFormatted}`);
+        }
+      }
+    });
+    
+    return parts.join(' ');
+  } catch (e) {
+    console.error('Error parsing installments:', e);
+    return '';
+  }
+};
+
+// بيانات تجريبية للمعاينة من العقد 1114 - مع دفعات مدمجة
+const SAMPLE_INSTALLMENTS = JSON.stringify([
+  {"amount":52000,"paymentType":"عند التوقيع","description":"الدفعة الأولى","dueDate":"2025-07-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 2","dueDate":"2025-08-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 3","dueDate":"2025-09-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 4","dueDate":"2025-10-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 5","dueDate":"2025-11-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 6","dueDate":"2025-12-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 7","dueDate":"2026-01-20"},
+  {"amount":50000,"paymentType":"شهري","description":"الدفعة 8","dueDate":"2026-02-20"}
+]);
+
 const SAMPLE_CONTRACT_DATA = {
   contractNumber: '1114',
   customerName: 'محمد عبدالله بن نصر ( المدير العام)',
@@ -132,13 +203,7 @@ const SAMPLE_CONTRACT_DATA = {
   billboardsCount: '21',
   adType: 'طلاء المدينة مصراتة',
   year: '2025',
-  payments: `إجمالي قيمة العقد: 402,000 دينار ليبي
-تكلفة الإيجار: 393,700 دينار ليبي
-الدفعة الأولى: 52,000 د.ل
-الدفعة الثانية: 50,000 د.ل
-الدفعة الثالثة: 50,000 د.ل
-إجمالي المدفوع: 290,728 د.ل
-المتبقي: 402,000 د.ل`,
+  payments: formatPaymentsSummary(SAMPLE_INSTALLMENTS),
 };
 
 // إعدادات موقع كل جزء من الصفحة
@@ -326,6 +391,8 @@ const DEFAULT_TABLE_COLUMNS: TableColumnSettings[] = [
   { key: 'size', label: 'المقاس', visible: true, width: 7, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'faces', label: 'الأوجه', visible: true, width: 7, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'price', label: 'السعر', visible: true, width: 9, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'endDate', label: 'تاريخ الانتهاء', visible: false, width: 10, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'durationDays', label: 'المدة (أيام)', visible: false, width: 8, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'location', label: 'GPS', visible: true, width: 9, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
 ];
 
@@ -566,6 +633,9 @@ export default function ContractTermsSettings() {
       const discount = c.Discount || 0;
       const totalRent = c['Total Rent'] || 0;
       
+      // استخدام دالة تنسيق الدفعات مع دمج المتكررة
+      const paymentsText = formatPaymentsSummary(c.installments_data);
+      
       setPreviewContractData({
         contractNumber: String(c.Contract_Number),
         customerName: c['Customer Name'] || '',
@@ -580,7 +650,7 @@ export default function ContractTermsSettings() {
         billboardsCount: String(c.billboards_count || selectedContract.billboards?.length || 0),
         adType: c['Ad Type'] || '',
         year: c['Contract Date'] ? new Date(c['Contract Date']).getFullYear().toString() : '',
-        payments: '',
+        payments: paymentsText,
       });
 
       // Transform billboards for preview
@@ -1788,6 +1858,8 @@ export default function ContractTermsSettings() {
                                               billboard.price ? `${billboard.price.toLocaleString()} د.ل` : '-'
                                             )
                                           )}
+                                          {col.key === 'endDate' && (billboard.endDate || previewContractData.endDate || '-')}
+                                          {col.key === 'durationDays' && (billboard.durationDays || previewContractData.duration || '-')}
                                           {col.key === 'location' && (() => {
                                             const gpsUrl = billboard.gps || (sectionSettings.fallbackSettings?.useDefaultQR ? sectionSettings.fallbackSettings?.defaultGoogleMapsUrl || 'https://www.google.com/maps?q=32.8872,13.1913' : null);
                                             return gpsUrl ? (

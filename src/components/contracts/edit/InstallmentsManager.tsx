@@ -182,6 +182,38 @@ export function InstallmentsManager({
     onCountChange?.(value);
   };
 
+  // إعادة توزيع الدفعات المتبقية بعد حذف دفعة
+  const handleRemoveAndRedistribute = (index: number) => {
+    const remainingInstallments = installments.filter((_, i) => i !== index);
+    
+    // إذا تبقت دفعات، أعد توزيع المبلغ عليها
+    if (remainingInstallments.length > 0) {
+      const totalRemaining = remainingInstallments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
+      const diff = finalTotal - totalRemaining;
+      
+      // إذا كان هناك فرق كبير، وزع الفرق على الدفعات المتبقية
+      if (Math.abs(diff) > 1 && remainingInstallments.length > 0) {
+        const addPerInstallment = Math.round(diff / remainingInstallments.length);
+        remainingInstallments.forEach((inst, i) => {
+          if (i === remainingInstallments.length - 1) {
+            // آخر دفعة تأخذ الباقي لتجنب أخطاء التقريب
+            const currentTotal = remainingInstallments.slice(0, -1).reduce((sum, x) => sum + (x.amount || 0), 0);
+            inst.amount = finalTotal - currentTotal;
+          } else {
+            inst.amount = (inst.amount || 0) + addPerInstallment;
+          }
+        });
+        
+        // تحديث الدفعات من خلال onUpdateInstallment
+        remainingInstallments.forEach((inst, i) => {
+          onUpdateInstallment(i > index ? i - 1 : i, 'amount', inst.amount);
+        });
+      }
+    }
+    
+    onRemoveInstallment(index);
+  };
+
   const totalInstallments = installments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
   const difference = finalTotal - totalInstallments;
   const isBalanced = Math.abs(difference) < 1;
@@ -498,7 +530,7 @@ export function InstallmentsManager({
               📋 الدفعات ({installments.length})
             </Label>
             
-            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+            <div className="space-y-2 max-h-80 overflow-y-auto pr-1">
               {installments.map((installment, index) => (
                 <div
                   key={index}
@@ -509,38 +541,71 @@ export function InstallmentsManager({
                       : "bg-card border-border hover:border-primary/20"
                   )}
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className={cn(
-                        "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
-                        index === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                      )}>
-                        {index + 1}
+                  <div className="flex flex-col gap-2">
+                    {/* الصف الأول: الرقم والوصف والمبلغ */}
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className={cn(
+                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                          index === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                        )}>
+                          {index + 1}
+                        </div>
+                        <div className="min-w-0">
+                          <Input
+                            type="text"
+                            value={installment.description}
+                            onChange={(e) => onUpdateInstallment(index, 'description', e.target.value)}
+                            placeholder={index === 0 ? 'الدفعة الأولى' : `الدفعة ${index + 1}`}
+                            className="h-7 text-xs w-32"
+                          />
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-xs text-muted-foreground truncate">
-                          {installment.description || (index === 0 ? 'الدفعة الأولى' : `الدفعة ${index + 1}`)}
-                        </p>
-                        <p className="text-xs text-muted-foreground">{installment.dueDate}</p>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min={0}
+                          value={installment.amount}
+                          onChange={(e) => onUpdateInstallment(index, 'amount', parseFloat(e.target.value) || 0)}
+                          className="w-28 h-8 text-sm font-bold text-left"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveAndRedistribute(index)}
+                          className="h-8 w-8 p-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                          title="حذف الدفعة وإعادة توزيع المبلغ"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Input
-                        type="number"
-                        min={0}
-                        value={installment.amount}
-                        onChange={(e) => onUpdateInstallment(index, 'amount', parseFloat(e.target.value) || 0)}
-                        className="w-28 h-8 text-sm font-bold text-left"
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onRemoveInstallment(index)}
-                        className="h-8 w-8 p-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                    
+                    {/* الصف الثاني: نوع الدفعة والتاريخ */}
+                    <div className="flex items-center gap-2 mr-9">
+                      <Select
+                        value={installment.paymentType}
+                        onValueChange={(v) => onUpdateInstallment(index, 'paymentType', v)}
                       >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                        <SelectTrigger className="h-7 text-xs w-32">
+                          <SelectValue placeholder="نوع الدفعة" />
+                        </SelectTrigger>
+                        <SelectContent className="z-[10000]">
+                          <SelectItem value="عند التوقيع">عند التوقيع</SelectItem>
+                          <SelectItem value="عند التركيب">عند التركيب</SelectItem>
+                          <SelectItem value="شهري">شهري</SelectItem>
+                          <SelectItem value="مقدم">مقدم</SelectItem>
+                          <SelectItem value="ربع سنوي">ربع سنوي</SelectItem>
+                          <SelectItem value="نصف سنوي">نصف سنوي</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        type="date"
+                        value={installment.dueDate}
+                        onChange={(e) => onUpdateInstallment(index, 'dueDate', e.target.value)}
+                        className="h-7 text-xs flex-1"
+                      />
                     </div>
                   </div>
                 </div>
@@ -582,16 +647,22 @@ export function InstallmentsManager({
           </div>
           
           {!isBalanced && installments.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={handleDistribute}
-              className="w-full mt-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
-            >
-              <Calculator className="h-4 w-4 mr-2" />
-              إعادة التوزيع تلقائياً
-            </Button>
+            <div className="space-y-2 mt-2">
+              <div className="p-2 rounded-lg bg-destructive/10 border border-destructive/30 text-destructive text-sm flex items-center gap-2">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>تحذير: لن يتم حفظ العقد حتى تتساوى الدفعات مع الإجمالي!</span>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleDistribute}
+                className="w-full border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+              >
+                <Calculator className="h-4 w-4 mr-2" />
+                إعادة التوزيع تلقائياً
+              </Button>
+            </div>
           )}
         </div>
       </CardContent>

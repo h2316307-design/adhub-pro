@@ -109,6 +109,8 @@ export interface BillboardPrintData {
   originalPrice?: string; // السعر الأصلي قبل التخفيض
   hasDiscount?: boolean; // هل هناك تخفيض
   gpsLink?: string;
+  rent_end_date?: string;
+  duration_days?: string;
 }
 
 export interface UnifiedPrintOptions {
@@ -564,6 +566,12 @@ function buildTablePageHTML(
           } else {
             cellContent = row.price || '';
           }
+          break;
+        case 'endDate':
+          cellContent = row.rent_end_date || '';
+          break;
+        case 'durationDays':
+          cellContent = row.duration_days || '';
           break;
         case 'location':
           // استخدام رابط قوقل ماب الافتراضي إذا لم يكن هناك رابط

@@ -5,6 +5,49 @@ import { Printer, Download, Eye } from 'lucide-react';
 import { ContractData } from '@/lib/pdfGenerator';
 import { toast } from 'sonner';
 import { saveHtmlAsPdf } from '@/utils/pdfHelpers';
+import { groupRepeatingPayments, Installment } from '@/utils/paymentGrouping';
+
+// دالة تنسيق التاريخ للعرض
+const formatDateForPrint = (dateStr: string): string => {
+  if (!dateStr) return '';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const year = date.getFullYear();
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateStr;
+  }
+};
+
+// دالة تنسيق ملخص الدفعات للطباعة - تُرجع مصفوفة أسطر
+const formatPaymentsForPrintLines = (installmentsData: string | null): string[] => {
+  if (!installmentsData) return ['دفعة واحدة عند التوقيع'];
+  
+  try {
+    const installments: Installment[] = JSON.parse(installmentsData);
+    if (!installments || installments.length === 0) return ['دفعة واحدة عند التوقيع'];
+    
+    const currencySymbol = 'د.ل';
+    
+    // عرض كل دفعة في سطر منفصل
+    return installments.map((inst, index) => {
+      const dateFormatted = formatDateForPrint(inst.dueDate);
+      const amount = Number(inst.amount).toLocaleString('ar-LY');
+      return `الدفعة ${index + 1}: ${amount} ${currencySymbol} - تاريخ الاستحقاق: ${dateFormatted}`;
+    });
+  } catch (e) {
+    console.error('Error parsing installments for print:', e);
+    return ['دفعة واحدة عند التوقيع'];
+  }
+};
+
+// دالة تنسيق ملخص الدفعات للطباعة - تُرجع نص واحد
+const formatPaymentsForPrint = (installmentsData: string | null): string => {
+  return formatPaymentsForPrintLines(installmentsData).join(' | ');
+};
 
 interface ContractPrintDialogProps {
   contract: ContractData;
@@ -38,7 +81,12 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
     const adType = contract.ad_type || contract['Ad Type'] || 'عقد إيجار لوحات إعلانية';
     const startDate = contract.start_date || contract['Contract Date'] || '';
     const endDate = contract.end_date || contract['End Date'] || '';
-    const totalCost = contract.rent_cost || contract['Total Rent'] || 0;
+    const totalCost = contract.rent_cost || contract['Total Rent'] || (contract as any).Total || 0;
+    
+    // Get installments data
+    const installmentsData = (contract as any).installments_data || null;
+    const paymentsText = formatPaymentsForPrint(installmentsData);
+    const paymentsLines = formatPaymentsForPrintLines(installmentsData);
     
     // Calculate duration in days
     let duration = '';
@@ -52,9 +100,21 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
     // Format price
     const formattedPrice = `${totalCost.toLocaleString('ar-LY')}`;
     
-    // Format dates
-    const formattedStartDate = startDate ? new Date(startDate).toLocaleDateString('ar-LY') : new Date().toLocaleDateString('ar-LY');
-    const formattedEndDate = endDate ? new Date(endDate).toLocaleDateString('ar-LY') : '';
+    // Format dates with Arabic month names
+    const formatArabicDate = (dateString: string): string => {
+      if (!dateString) return '';
+      const date = new Date(dateString);
+      const arabicMonths = [
+        'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
+        'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
+      ];
+      const day = date.getDate();
+      const month = arabicMonths[date.getMonth()];
+      const year = date.getFullYear();
+      return `${day} ${month} ${year}`;
+    };
+    const formattedStartDate = startDate ? formatArabicDate(startDate) : formatArabicDate(new Date().toISOString());
+    const formattedEndDate = endDate ? formatArabicDate(endDate) : '';
     
     // Get year from start date
     const year = startDate ? new Date(startDate).getFullYear() : new Date().getFullYear();
@@ -74,7 +134,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       year: year.toString(),
       companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
       phoneNumber: contract.phoneNumber || '0912612255',
-      billboardImage: getBillboardImage(contract)
+      billboardImage: getBillboardImage(contract),
+      payments: paymentsText,
+      paymentsLines: paymentsLines
     };
   };
 
@@ -87,6 +149,10 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
 
       // Normalize billboards and build table pages for printing
       const billboards: any[] = Array.isArray(contract.billboards) ? contract.billboards : [];
+
+      // Get contract dates for billboards
+      const contractStartDate = contract.start_date || contract['Contract Date'] || '';
+      const contractEndDate = contract.end_date || contract['End Date'] || '';
 
       const normalizeBillboard = (b: any) => {
         const id = String(b.ID ?? b.id ?? '');
@@ -103,6 +169,27 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           typeof priceVal === 'number'
             ? `${priceVal.toLocaleString('ar-LY')} د.ل`
             : (typeof priceVal === 'string' && priceVal.trim() !== '' ? priceVal : '');
+        
+        // Get end date - ALWAYS use contract end date for consistency
+        const endDateRaw = contractEndDate || b.Rent_End_Date || b.rent_end_date || b.end_date || '';
+        const endDate = endDateRaw ? formatDateForPrint(endDateRaw) : '';
+        
+        // Calculate days count using contract dates
+        const startDateRaw = contractStartDate || b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+        let daysCount = '';
+        if (startDateRaw && endDateRaw) {
+          const start = new Date(startDateRaw);
+          const end = new Date(endDateRaw);
+          if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            daysCount = days > 0 ? String(days) : '';
+          }
+        }
+        // Fallback to existing days count if calculation failed
+        if (!daysCount) {
+          daysCount = b.Days_Count ?? b.days_count ?? (contract as any).Duration ?? '';
+        }
+        
         let coords: string = String(
           b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? ''
         );
@@ -112,11 +199,59 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           if (lat != null && lng != null) coords = `${lat},${lng}`;
         }
         const mapLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : '#';
-        return { id, image, municipality, district, landmark, size, faces, price, mapLink };
+        return { id, image, municipality, district, landmark, size, faces, price, endDate, daysCount, mapLink };
       };
 
       const normalizedRows = billboards.map(normalizeBillboard);
       const ROWS_PER_PAGE = 12; // fits with image thumbnails comfortably
+
+      // Build installments table HTML
+      const installmentsData = (contract as any).installments_data || null;
+      let installmentsTableHtml = '';
+      if (installmentsData) {
+        try {
+          const installments: Installment[] = JSON.parse(installmentsData);
+          if (installments && installments.length > 0) {
+            installmentsTableHtml = `
+              <div class="template-container">
+                <img src="/bgc2.jpg" alt="خلفية جدول الدفعات" class="template-image" />
+                <div class="table-area payments-table-area">
+                  <h2 style="text-align: center; font-size: 32px; margin-bottom: 20px; color: #004aad;">جدول الدفعات</h2>
+                  <table class="btable payments-table" dir="rtl">
+                    <thead>
+                      <tr style="background: #004aad; color: white;">
+                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">رقم الدفعة</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">المبلغ</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">تاريخ الاستحقاق</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 20%;">نوع الدفعة</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">الوصف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${installments.map((inst, idx) => `
+                        <tr>
+                          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+                          <td style="text-align: center;">${Number(inst.amount).toLocaleString('ar-LY')} د.ل</td>
+                          <td style="text-align: center;">${formatDateForPrint(inst.dueDate)}</td>
+                          <td style="text-align: center;">${inst.paymentType || ''}</td>
+                          <td style="text-align: center;">${inst.description || ''}</td>
+                        </tr>
+                      `).join('')}
+                      <tr style="background: #f0f0f0; font-weight: bold;">
+                        <td style="text-align: center;">الإجمالي</td>
+                        <td style="text-align: center;">${installments.reduce((sum, i) => sum + Number(i.amount), 0).toLocaleString('ar-LY')} د.ل</td>
+                        <td colspan="3" style="text-align: center;">عدد الدفعات: ${installments.length}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          }
+        } catch (e) {
+          console.error('Error building installments table:', e);
+        }
+      }
 
       const tablePagesHtml = normalizedRows.length
         ? normalizedRows
@@ -132,14 +267,16 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 <div class="table-area">
                   <table class="btable" dir="rtl">
                     <colgroup>
-                      <col style="width:8%" />
+                      <col style="width:6%" />
+                      <col style="width:12%" />
+                      <col style="width:10%" />
+                      <col style="width:10%" />
                       <col style="width:14%" />
-                      <col style="width:12%" />
-                      <col style="width:12%" />
-                      <col style="width:18%" />
-                      <col style="width:10%" />
                       <col style="width:8%" />
+                      <col style="width:6%" />
                       <col style="width:10%" />
+                      <col style="width:10%" />
+                      <col style="width:6%" />
                       <col style="width:8%" />
                     </colgroup>
                     <tbody>
@@ -155,6 +292,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                             <td>${r.size}</td>
                             <td>${r.faces}</td>
                             <td>${r.price}</td>
+                            <td>${r.endDate}</td>
+                            <td>${r.daysCount}</td>
                             <td>${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">اضغط هنا</a>` : ''}</td>
                           </tr>`
                         )
@@ -166,6 +305,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
             `)
             .join('')
         : '';
+
+      // Combine billboards table + installments table
+      const allTablesHtml = tablePagesHtml + installmentsTableHtml;
 
       // Create HTML content for printing using the main6 design
       const installationEnabled = (contract as any).installation_enabled !== false && (contract as any).installation_enabled !== 0 && (contract as any).installation_enabled !== 'false';
@@ -618,36 +760,63 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 استغلال المساحات في المناسبات الوطنية و الانتخابات مع تعويض الطرف الثاني بفترة بديلة.
               </text>
 
-              <!-- البند الخامس – contract amount -->
+              <!-- البند الخامس – contract amount with payments -->
               <text
-                x="560"
+                x="2225"
                 y="2410"
                 font-family="Doran, sans-serif"
-                font-size="46"
-                fill="#000"
-                text-anchor="end"
-                dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
-              >
-                قيمة العقد ${contractData.price} دينار ليبي بدون طباعة، دفع عند توقيع العقد والنصف الآخر بعد
-              </text>
-              <text
-                x="1640"
-                y="2470"
-                font-family="Doran, sans-serif"
-                font-size="46"
+                font-weight="bold"
+                font-size="42"
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
                 style="direction: rtl; text-align: center"
               >
-                التركيب، وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
+                البند الخامس:
+              </text>
+              <text
+                x="1180"
+                y="2410"
+                font-family="Doran, sans-serif"
+                font-size="38"
+                fill="#000"
+                text-anchor="middle"
+                dominant-baseline="middle"
+                style="direction: rtl; text-align: center"
+              >
+                قيمة العقد ${contractData.price} دينار ليبي. جدول الدفعات:
+              </text>
+              ${contractData.paymentsLines.map((line: string, idx: number) => `
+              <text
+                x="1200"
+                y="${2470 + (idx * 50)}"
+                font-family="Doran, sans-serif"
+                font-size="32"
+                fill="#000"
+                text-anchor="middle"
+                dominant-baseline="middle"
+                style="direction: rtl; text-align: center"
+              >
+                ${line}
+              </text>
+              `).join('')}
+              <text
+                x="1640"
+                y="${2470 + (contractData.paymentsLines.length * 50) + 30}"
+                font-family="Doran, sans-serif"
+                font-size="36"
+                fill="#000"
+                text-anchor="middle"
+                dominant-baseline="middle"
+                style="direction: rtl; text-align: center"
+              >
+                وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
               </text>
 
               <!-- البند السادس – duration -->
               <text
                 x="2210"
-                y="2590"
+                y="2620"
                 font-family="Doran, sans-serif"
                 font-weight="bold"
                 font-size="42"
@@ -660,9 +829,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               </text>
               <text
                 x="1150"
-                y="2590"
+                y="2620"
                 font-family="Doran, sans-serif"
-                font-size="46"
+                font-size="42"
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
@@ -672,9 +841,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               </text>
               <text
                 x="1800"
-                y="2650"
+                y="2680"
                 font-family="Doran, sans-serif"
-                font-size="46"
+                font-size="42"
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
@@ -686,7 +855,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               <!-- البند السابع -->
               <text
                 x="2220"
-                y="2760"
+                y="2780"
                 font-family="Doran, sans-serif"
                 font-weight="bold"
                 font-size="42"
@@ -699,9 +868,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               </text>
               <text
                 x="1150"
-                y="2760"
+                y="2780"
                 font-family="Doran, sans-serif"
-                font-size="46"
+                font-size="40"
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
@@ -711,9 +880,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               </text>
               <text
                 x="2200"
-                y="2820"
+                y="2840"
                 font-family="Doran, sans-serif"
-                font-size="46"
+                font-size="40"
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
@@ -729,7 +898,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
             </div>
           </div>
 
-          ${tablePagesHtml}
+          ${allTablesHtml}
         </body>
         </html>
       `;
@@ -771,6 +940,10 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       // Normalize billboards and build table pages (نفس المنطق من handlePrintContract)
       const billboards: any[] = Array.isArray(contract.billboards) ? contract.billboards : [];
 
+      // Get contract dates for billboards
+      const contractStartDate = contract.start_date || contract['Contract Date'] || '';
+      const contractEndDate = contract.end_date || contract['End Date'] || '';
+
       const normalizeBillboard = (b: any) => {
         const id = String(b.ID ?? b.id ?? '');
         const image = String(
@@ -786,6 +959,27 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           typeof priceVal === 'number'
             ? `${priceVal.toLocaleString('ar-LY')} د.ل`
             : (typeof priceVal === 'string' && priceVal.trim() !== '' ? priceVal : '');
+        
+        // Get end date - ALWAYS use contract end date for consistency
+        const endDateRaw = contractEndDate || b.Rent_End_Date || b.rent_end_date || b.end_date || '';
+        const endDate = endDateRaw ? formatDateForPrint(endDateRaw) : '';
+        
+        // Calculate days count using contract dates
+        const startDateRaw = contractStartDate || b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+        let daysCount = '';
+        if (startDateRaw && endDateRaw) {
+          const start = new Date(startDateRaw);
+          const end = new Date(endDateRaw);
+          if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            daysCount = days > 0 ? String(days) : '';
+          }
+        }
+        // Fallback to existing days count if calculation failed
+        if (!daysCount) {
+          daysCount = b.Days_Count ?? b.days_count ?? (contract as any).Duration ?? '';
+        }
+        
         let coords: string = String(
           b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? ''
         );
@@ -795,11 +989,59 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           if (lat != null && lng != null) coords = `${lat},${lng}`;
         }
         const mapLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : '#';
-        return { id, image, municipality, district, landmark, size, faces, price, mapLink };
+        return { id, image, municipality, district, landmark, size, faces, price, endDate, daysCount, mapLink };
       };
 
       const normalizedRows = billboards.map(normalizeBillboard);
       const ROWS_PER_PAGE = 12;
+
+      // Build installments table HTML
+      const installmentsData = (contract as any).installments_data || null;
+      let installmentsTableHtml = '';
+      if (installmentsData) {
+        try {
+          const installments: Installment[] = JSON.parse(installmentsData);
+          if (installments && installments.length > 0) {
+            installmentsTableHtml = `
+              <div class="template-container">
+                <img src="/bgc2.jpg" alt="خلفية جدول الدفعات" class="template-image" />
+                <div class="table-area payments-table-area">
+                  <h2 style="text-align: center; font-size: 32px; margin-bottom: 20px; color: #004aad;">جدول الدفعات</h2>
+                  <table class="btable payments-table" dir="rtl">
+                    <thead>
+                      <tr style="background: #004aad; color: white;">
+                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">رقم الدفعة</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">المبلغ</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">تاريخ الاستحقاق</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 20%;">نوع الدفعة</th>
+                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">الوصف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      ${installments.map((inst, idx) => `
+                        <tr>
+                          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+                          <td style="text-align: center;">${Number(inst.amount).toLocaleString('ar-LY')} د.ل</td>
+                          <td style="text-align: center;">${formatDateForPrint(inst.dueDate)}</td>
+                          <td style="text-align: center;">${inst.paymentType || ''}</td>
+                          <td style="text-align: center;">${inst.description || ''}</td>
+                        </tr>
+                      `).join('')}
+                      <tr style="background: #f0f0f0; font-weight: bold;">
+                        <td style="text-align: center;">الإجمالي</td>
+                        <td style="text-align: center;">${installments.reduce((sum, i) => sum + Number(i.amount), 0).toLocaleString('ar-LY')} د.ل</td>
+                        <td colspan="3" style="text-align: center;">عدد الدفعات: ${installments.length}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            `;
+          }
+        } catch (e) {
+          console.error('Error building installments table:', e);
+        }
+      }
 
       const tablePagesHtml = normalizedRows.length
         ? normalizedRows
@@ -815,14 +1057,16 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 <div class="table-area">
                   <table class="btable" dir="rtl">
                     <colgroup>
-                      <col style="width:8%" />
+                      <col style="width:6%" />
+                      <col style="width:12%" />
+                      <col style="width:10%" />
+                      <col style="width:10%" />
                       <col style="width:14%" />
-                      <col style="width:12%" />
-                      <col style="width:12%" />
-                      <col style="width:18%" />
-                      <col style="width:10%" />
                       <col style="width:8%" />
+                      <col style="width:6%" />
                       <col style="width:10%" />
+                      <col style="width:10%" />
+                      <col style="width:6%" />
                       <col style="width:8%" />
                     </colgroup>
                     <tbody>
@@ -838,6 +1082,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                             <td>${r.size}</td>
                             <td>${r.faces}</td>
                             <td>${r.price}</td>
+                            <td>${r.endDate}</td>
+                            <td>${r.daysCount}</td>
                             <td>${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">اضغط هنا</a>` : ''}</td>
                           </tr>`
                         )
@@ -849,6 +1095,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
             `)
             .join('')
         : '';
+
+      // Combine billboards table + installments table
+      const allTablesHtml = tablePagesHtml + installmentsTableHtml;
 
       // نفس الـflags من handlePrintContract
       const installationEnabled = (contract as any).installation_enabled !== false && (contract as any).installation_enabled !== 0 && (contract as any).installation_enabled !== 'false';
@@ -1040,54 +1289,62 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               <text x="1530" y="2300" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 استغلال المساحات في المناسبات الوطنية و الانتخابات مع تعويض الطرف الثاني بفترة بديلة.
               </text>
-              <text x="560" y="2410" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="end" dominant-baseline="middle" style="direction: rtl; text-align: center">
-                قيمة العقد ${contractData.price} دينار ليبي بدون طباعة، دفع عند توقيع العقد والنصف الآخر بعد
+              <text x="2225" y="2410" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+                البند الخامس:
               </text>
-              <text x="1640" y="2470" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
-                التركيب، وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
+              <text x="1180" y="2410" font-family="Doran, sans-serif" font-size="38" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+                قيمة العقد ${contractData.price} دينار ليبي. جدول الدفعات:
               </text>
-              <text x="2210" y="2590" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              ${contractData.paymentsLines.map((line: string, idx: number) => `
+              <text x="1200" y="${2470 + (idx * 50)}" font-family="Doran, sans-serif" font-size="32" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+                ${line}
+              </text>
+              `).join('')}
+              <text x="1640" y="${2470 + (contractData.paymentsLines.length * 50) + 30}" font-family="Doran, sans-serif" font-size="36" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+                وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
+              </text>
+              <text x="2210" y="2620" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 البند السادس:
               </text>
-              <text x="1150" y="2590" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1150" y="2620" font-family="Doran, sans-serif" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 مدة العقد ${contractData.duration} يومًا تبدأ من ${contractData.startDate} وتنتهي في ${contractData.endDate}، ويجوز تجديده برضى الطرفين قبل
               </text>
-              <text x="1800" y="2650" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1800" y="2680" font-family="Doran, sans-serif" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 انتهائه بمدة لا تقل عن 15 يومًا وفق شروط يتم الاتفاق عليها .
               </text>
-              <text x="2220" y="2760" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="2220" y="2780" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 البند السابع:
               </text>
-              <text x="1150" y="2760" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1150" y="2780" font-family="Doran, sans-serif" font-size="40" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 في حال اعتراض الجهات الرسمية على محتوى الإعلان، يتحمل الطرف الثاني المسؤولية الكاملة ويلتزم بتصحيحه فورًا.
               </text>
               <text x="2220" y="2870" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 البند الثامن:
               </text>
-              <text x="1190" y="2870" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1190" y="2870" font-family="Doran, sans-serif" font-size="40" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 يُمنع استخدام المساحات لأغراض غير مشروعة أو مخالفة للقانون، وفي حال المخالفة يحق للطرف الأول إلغاء العقد دون رد المبلغ.
               </text>
-              <text x="2230" y="2985" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="2230" y="2960" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 البند التاسع:
               </text>
-              <text x="1170" y="2985" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1170" y="2960" font-family="Doran, sans-serif" font-size="40" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 يحق لأي طرف إلغاء العقد قبل انتهاء المدة بإخطار كتابي قبل 15 يومًا على الأقل، ويتحمل الطرف المُلغي أي خسائر مادية.
               </text>
-              <text x="2220" y="3100" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="2220" y="3050" font-family="Doran, sans-serif" font-weight="bold" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 البند العاشر:
               </text>
-              <text x="1220" y="3100" font-family="Doran, sans-serif" font-size="46" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1220" y="3050" font-family="Doran, sans-serif" font-size="40" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 يتم حل أي خلاف وديًا بين الطرفين أولاً، وفي حال عدم التوصل لحل يتم اللجوء إلى المحكمة المختصة في ليبيا.
               </text>
-              <text x="540" y="3220" font-family="Doran, sans-serif" font-weight="bold" font-size="50" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="540" y="3180" font-family="Doran, sans-serif" font-weight="bold" font-size="50" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 الطرف الثاني:
               </text>
-              <text x="1950" y="3220" font-family="Doran, sans-serif" font-weight="bold" font-size="50" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
+              <text x="1950" y="3180" font-family="Doran, sans-serif" font-weight="bold" font-size="50" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 الطرف الأول:
               </text>
             </svg>
           </div>
-          ${tablePagesHtml}
+          ${allTablesHtml}
         </body>
         </html>
       `;

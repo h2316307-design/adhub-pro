@@ -104,6 +104,7 @@ const sidebarSections: SidebarSection[] = [
       { id: 'pdf_templates', label: 'إعدادات قوالب PDF', icon: FileText, path: '/admin/pdf-templates' },
       { id: 'print_design', label: 'تصميم الطباعة', icon: Palette, path: '/admin/print-design' },
       { id: 'billboard_print_settings', label: 'إعدادات طباعة اللوحات', icon: Printer, path: '/admin/billboard-print-settings' },
+      { id: 'quick_print_settings', label: 'إعدادات الطباعة السريعة', icon: Palette, path: '/admin/quick-print-settings' },
       { id: 'contract_terms', label: 'بنود العقد', icon: FileText, path: '/admin/contract-terms' },
       { id: 'system_settings', label: 'إعدادات النظام', icon: Link, path: '/admin/system-settings' },
       { id: 'settings', label: 'الإعدادات', icon: Settings, path: '/admin/settings' },

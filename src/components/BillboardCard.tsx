@@ -3,7 +3,8 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, History, CheckCircle2, XCircle } from 'lucide-react';
+import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, History, CheckCircle2, XCircle, ZoomIn, X } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -39,6 +40,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   const [designsOpen, setDesignsOpen] = useState(false);
   const [installationOpen, setInstallationOpen] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+  const [imageDialogOpen, setImageDialogOpen] = useState(false);
   
   // State للبيانات
   const [latestTask, setLatestTask] = useState<any>(null);
@@ -254,21 +256,32 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
     <>
     <Card className="overflow-hidden rounded-2xl bg-gradient-card border-0 shadow-card hover:shadow-luxury transition-smooth">
       <div className="relative">
-        {/* صورة اللوحة */}
-        <div className="aspect-video bg-muted relative overflow-hidden">
+        {/* صورة اللوحة - قابلة للنقر للتكبير */}
+        <div 
+          className="aspect-video bg-muted relative overflow-hidden cursor-pointer group"
+          onClick={() => imgSrc && setImageDialogOpen(true)}
+        >
           {imgSrc ? (
-            <img
-              src={imgSrc}
-              alt={billboard.Billboard_Name}
-              className="w-full h-full object-cover"
-              onError={() => {
-                if (remoteUrl && imgSrc !== remoteUrl) {
-                  setImgSrc(remoteUrl);
-                } else {
-                  setImgSrc('');
-                }
-              }}
-            />
+            <>
+              <img
+                src={imgSrc}
+                alt={billboard.Billboard_Name}
+                className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                onError={() => {
+                  if (remoteUrl && imgSrc !== remoteUrl) {
+                    setImgSrc(remoteUrl);
+                  } else {
+                    setImgSrc('');
+                  }
+                }}
+              />
+              {/* أيقونة التكبير */}
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-all duration-300 flex items-center justify-center">
+                <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-black/50 rounded-full p-3">
+                  <ZoomIn className="h-6 w-6 text-white" />
+                </div>
+              </div>
+            </>
           ) : (
             <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/60">
               <Building className="h-12 w-12 text-muted-foreground" />
@@ -276,14 +289,14 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
           )}
 
           {/* حجم اللوحة */}
-          <div className="absolute top-3 right-3">
+          <div className="absolute top-3 right-3 z-10">
             <Badge variant="secondary" className="bg-primary/90 text-primary-foreground">
               {billboard.Size}
             </Badge>
           </div>
 
           {/* حالة اللوحة */}
-          <div className="absolute top-3 left-3">
+          <div className="absolute top-3 left-3 z-10">
             <Badge
               variant={isAvailable ? "default" : "destructive"}
               className={statusClass}
@@ -294,7 +307,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
 
           {/* تحذير القريبة من الانتهاء */}
           {isNearExpiry && (
-            <div className="absolute bottom-3 right-3">
+            <div className="absolute bottom-3 right-3 z-10">
               <Badge variant="outline" className="bg-yellow-500/90 text-yellow-900 border-yellow-600">
                 <Calendar className="h-3 w-3 mr-1" />
                 {daysRemaining} يوم متبقي
@@ -798,6 +811,40 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
       billboardId={billboard.ID}
       billboardName={billboard.Billboard_Name || `لوحة ${billboard.ID}`}
     />
+
+    {/* نافذة تكبير الصورة */}
+    <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0">
+        <div className="relative w-full h-full flex items-center justify-center">
+          {/* زر الإغلاق */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setImageDialogOpen(false)}
+            className="absolute top-4 right-4 z-50 bg-black/50 hover:bg-black/70 text-white rounded-full"
+          >
+            <X className="h-6 w-6" />
+          </Button>
+          
+          {/* معلومات اللوحة */}
+          <div className="absolute top-4 left-4 z-50 bg-black/50 rounded-lg px-4 py-2">
+            <h3 className="text-white font-bold text-lg">
+              {billboard.Billboard_Name || `لوحة ${billboard.ID}`}
+            </h3>
+            <p className="text-white/70 text-sm">{billboard.Size}</p>
+          </div>
+          
+          {/* الصورة المكبرة */}
+          {imgSrc && (
+            <img
+              src={imgSrc}
+              alt={billboard.Billboard_Name}
+              className="max-w-full max-h-[90vh] object-contain"
+            />
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
     </>
   );
 };

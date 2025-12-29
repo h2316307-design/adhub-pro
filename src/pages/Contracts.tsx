@@ -13,7 +13,7 @@ import { toast } from '@/components/ui/sonner';
 import { Plus, Eye, Edit, Trash2, Calendar, User, DollarSign, Search, Filter, Building, AlertCircle, Clock, CheckCircle, Printer, RefreshCcw, Hammer, Wrench, Percent, PaintBucket, FileText, Send, FileSpreadsheet, LayoutGrid, List, SlidersHorizontal, Hash, SplitSquareVertical, Download, X, Loader2, CheckSquare, Square, Ruler } from 'lucide-react';
 import { SendContractDialog } from '@/components/contracts/SendContractDialog';
 import { AddPaymentDialog } from '@/components/contracts/AddPaymentDialog';
-import { BillboardPrintIndividual } from '@/components/contracts/BillboardPrintIndividual';
+import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
 import { SendAlertsDialog } from '@/components/contracts/SendAlertsDialog';
 import { QuickContractDialog } from '@/components/contracts/QuickContractDialog';
 import { ContractCard } from '@/components/contracts/ContractCard';
@@ -76,10 +76,13 @@ export default function Contracts() {
 
   const [billboardPrintData, setBillboardPrintData] = useState<{
     contractNumber: string | number;
+    customerName: string;
+    adType?: string;
+    startDate?: string;
+    endDate?: string;
     billboards: any[];
-    designData?: any[] | null;
-    customerPhone?: string;
   } | null>(null);
+  const [billboardPrintOpen, setBillboardPrintOpen] = useState(false);
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
@@ -123,8 +126,9 @@ export default function Contracts() {
 
   useEffect(() => {
     const handleBillboardPrint = (event: any) => {
-      const { contractNumber, billboards, designData, customerPhone } = event.detail;
-      setBillboardPrintData({ contractNumber, billboards, designData, customerPhone });
+      const { contractNumber, billboards, customerName, adType, startDate, endDate } = event.detail;
+      setBillboardPrintData({ contractNumber, billboards, customerName, adType, startDate, endDate });
+      setBillboardPrintOpen(true);
     };
 
     window.addEventListener('openBillboardPrint', handleBillboardPrint);
@@ -1289,15 +1293,6 @@ export default function Contracts() {
                         try {
                           const contractWithBillboards = await getContractWithBillboards(String(c.id));
                           const billboardsData = (contractWithBillboards as any).billboards || [];
-                          let designData = null;
-                          try {
-                            const rawDesignData = (contractWithBillboards as any).design_data;
-                            if (rawDesignData) {
-                              designData = typeof rawDesignData === 'string' ? JSON.parse(rawDesignData) : rawDesignData;
-                            }
-                          } catch (e) {
-                            console.error('Failed to parse design_data:', e);
-                          }
                           if (billboardsData.length === 0) {
                             toast.info('لا توجد لوحات لهذا العقد');
                             return;
@@ -1306,8 +1301,10 @@ export default function Contracts() {
                             detail: {
                               contractNumber: c.id,
                               billboards: billboardsData,
-                              designData: designData,
-                              customerPhone: (c as any).Phone || (contractWithBillboards as any).Phone || ''
+                              customerName: c.customer_name || (contractWithBillboards as any).customer_name || (contractWithBillboards as any)['Customer Name'] || '',
+                              adType: (c as any)['Ad Type'] || (contractWithBillboards as any)['Ad Type'] || '',
+                              startDate: c.start_date || (contractWithBillboards as any).start_date || (contractWithBillboards as any)['Contract Date'] || '',
+                              endDate: c.end_date || (contractWithBillboards as any).end_date || (contractWithBillboards as any)['End Date'] || ''
                             }
                           }));
                         } catch (error) {
@@ -1363,15 +1360,6 @@ export default function Contracts() {
                           try {
                             const contractWithBillboards = await getContractWithBillboards(String(c.id));
                             const billboardsData = (contractWithBillboards as any).billboards || [];
-                            let designData = null;
-                            try {
-                              const rawDesignData = (contractWithBillboards as any).design_data;
-                              if (rawDesignData) {
-                                designData = typeof rawDesignData === 'string' ? JSON.parse(rawDesignData) : rawDesignData;
-                              }
-                            } catch (e) {
-                              console.error('Failed to parse design_data:', e);
-                            }
                             if (billboardsData.length === 0) {
                               toast.info('لا توجد لوحات لهذا العقد');
                               return;
@@ -1380,8 +1368,8 @@ export default function Contracts() {
                               detail: {
                                 contractNumber: c.id,
                                 billboards: billboardsData,
-                                designData: designData,
-                                customerPhone: (c as any).Phone || (contractWithBillboards as any).Phone || ''
+                                customerName: c.customer_name || (contractWithBillboards as any).customer_name || '',
+                                adType: (c as any)['Ad Type'] || (contractWithBillboards as any)['Ad Type'] || ''
                               }
                             }));
                           } catch (error) {
@@ -1450,7 +1438,10 @@ export default function Contracts() {
                           contractNumber: c.id,
                           billboards: billboardsData,
                           designData: designData,
-                          customerPhone: (c as any).Phone || (contractWithBillboards as any).Phone || ''
+                          customerName: c.customer_name || (contractWithBillboards as any).customer_name || (contractWithBillboards as any)['Customer Name'] || '',
+                          customerPhone: (c as any).Phone || (contractWithBillboards as any).Phone || '',
+                          startDate: c.start_date || (contractWithBillboards as any).start_date || (contractWithBillboards as any)['Contract Date'] || '',
+                          endDate: c.end_date || (contractWithBillboards as any).end_date || (contractWithBillboards as any)['End Date'] || ''
                         }
                       }));
                     } catch (error) {
@@ -2010,13 +2001,22 @@ export default function Contracts() {
         </DialogContent>
       </Dialog>
 
-      {/* Billboard Print Individual Dialog */}
+      {/* Billboard Bulk Print Dialog */}
       {billboardPrintData && (
-        <BillboardPrintIndividual
-          contractNumber={billboardPrintData.contractNumber}
+        <BillboardBulkPrintDialog
+          open={billboardPrintOpen}
+          onOpenChange={(open) => {
+            setBillboardPrintOpen(open);
+            if (!open) setBillboardPrintData(null);
+          }}
           billboards={billboardPrintData.billboards}
-          designData={billboardPrintData.designData}
-          customerPhone={billboardPrintData.customerPhone}
+          contractInfo={{
+            number: Number(billboardPrintData.contractNumber),
+            customerName: billboardPrintData.customerName || '',
+            adType: billboardPrintData.adType,
+            startDate: billboardPrintData.startDate,
+            endDate: billboardPrintData.endDate
+          }}
         />
       )}
 

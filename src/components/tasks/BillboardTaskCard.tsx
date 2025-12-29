@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,11 @@ export function BillboardTaskCard({
   const [editingDate, setEditingDate] = useState(item.installation_date || '');
   const [savingDate, setSavingDate] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+
+  // مزامنة اختيار التصميم مع بيانات العنصر (مهم عند التحديث الجماعي "توزيع التصاميم")
+  useEffect(() => {
+    setSelectedDesignId(item.selected_design_id || 'none');
+  }, [item.selected_design_id]);
 
   const handleEditDate = async () => {
     if (!editingDate) {

@@ -41,7 +41,7 @@ import {
   BarChart3
 } from 'lucide-react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { BillboardPrintIndividual } from '@/components/contracts/BillboardPrintIndividual';
+import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
 import { RemovalStatsDialog } from '@/components/reports/RemovalStatsDialog';
 
 interface RemovalTask {
@@ -87,11 +87,10 @@ export default function RemovalTasks() {
   const [printType, setPrintType] = useState<'individual' | 'table'>('individual');
   const [billboardPrintData, setBillboardPrintData] = useState<{
     contractNumber: string | number;
+    customerName: string;
     billboards: any[];
-    designData?: any[] | null;
-    taskItems?: any[];
-    printMode?: 'installation' | 'removal';
   } | null>(null);
+  const [billboardPrintOpen, setBillboardPrintOpen] = useState(false);
   const [selectedPrintTeam, setSelectedPrintTeam] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('all');
@@ -1010,10 +1009,15 @@ export default function RemovalTasks() {
     if (printType === 'individual') {
       setBillboardPrintData({
         contractNumber: contract?.Contract_Number || task.contract_id,
-        billboards: taskBillboards,
-        taskItems: taskItems,
-        printMode: 'removal'
+        customerName: contract?.['Customer Name'] || '',
+        billboards: taskBillboards.map(b => ({
+          ...b,
+          design_face_a: taskItems.find(ti => ti.billboard_id === b.ID)?.design_face_a,
+          design_face_b: taskItems.find(ti => ti.billboard_id === b.ID)?.design_face_b,
+          installed_image_url: taskItems.find(ti => ti.billboard_id === b.ID)?.installed_image_url
+        }))
       });
+      setBillboardPrintOpen(true);
       setPrintDialogOpen(false);
     } else {
       await printTableRemoval(taskBillboards, contract, task);
@@ -1881,6 +1885,19 @@ export default function RemovalTasks() {
                                     <Printer className="h-4 w-4" />
                                     طباعة
                                   </Button>
+                                  {/* زر طباعة اللوحات المنفصلة */}
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="gap-1 bg-primary/10 border-primary/30"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      window.location.href = `/admin/billboard-print-settings?task=${task.id}&mode=removal`;
+                                    }}
+                                  >
+                                    <Navigation className="h-4 w-4" />
+                                    طباعة منفصلة
+                                  </Button>
                                   <Button
                                     size="sm"
                                     variant="outline"
@@ -2461,14 +2478,10 @@ export default function RemovalTasks() {
 
                   setBillboardPrintData({
                     contractNumber: 'إزالة - جميع اللوحات',
-                    billboards: billboardsForPrint,
-                    designData: includeDesigns ? teamItems.map(item => ({
-                      design_face_a_url: item.design_face_a,
-                      design_face_b_url: item.design_face_b
-                    })) : null,
-                    taskItems: teamItems,
-                    printMode: 'removal'
+                    customerName: '',
+                    billboards: billboardsForPrint
                   });
+                  setBillboardPrintOpen(true);
                   setPrintAllDialogOpen(false);
                   toast.success(`تم تجهيز ${billboardsForPrint.length} لوحة للطباعة`);
                 }
@@ -2480,23 +2493,21 @@ export default function RemovalTasks() {
         </DialogContent>
       </Dialog>
 
-      {/* Billboard Print Individual Dialog */}
-      <Dialog open={!!billboardPrintData} onOpenChange={(open) => !open && setBillboardPrintData(null)} modal={true}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>خيارات طباعة اللوحات</DialogTitle>
-          </DialogHeader>
-          {billboardPrintData && (
-            <BillboardPrintIndividual
-              contractNumber={billboardPrintData.contractNumber}
-              billboards={billboardPrintData.billboards}
-              designData={billboardPrintData.designData}
-              taskItems={billboardPrintData.taskItems}
-              printMode={billboardPrintData.printMode || 'installation'}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* Billboard Bulk Print Dialog */}
+      {billboardPrintData && (
+        <BillboardBulkPrintDialog
+          open={billboardPrintOpen}
+          onOpenChange={(open) => {
+            setBillboardPrintOpen(open);
+            if (!open) setBillboardPrintData(null);
+          }}
+          billboards={billboardPrintData.billboards}
+          contractInfo={{
+            number: Number(billboardPrintData.contractNumber) || 0,
+            customerName: billboardPrintData.customerName || 'إزالة'
+          }}
+        />
+      )}
 
       {/* Removal Stats Dialog */}
       <RemovalStatsDialog

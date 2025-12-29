@@ -12,6 +12,7 @@ import { BillboardImage } from '@/components/BillboardImage';
 import InteractiveMap from '@/components/InteractiveMap';
 import { CustomerInfoForm } from '@/components/contracts/edit/CustomerInfoForm';
 import ContractPDFDialog from './ContractPDFDialog';
+import { OfferBillboardPrintDialog } from '@/components/offers/OfferBillboardPrintDialog';
 import { InstallmentsManager } from '@/components/contracts/edit/InstallmentsManager';
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
 import { 
@@ -158,6 +159,10 @@ export default function OffersPage() {
   // Print dialog state
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [selectedOfferForPrint, setSelectedOfferForPrint] = useState<any>(null);
+  
+  // Billboard print dialog state
+  const [billboardPrintDialogOpen, setBillboardPrintDialogOpen] = useState(false);
+  const [selectedOfferForBillboardPrint, setSelectedOfferForBillboardPrint] = useState<any>(null);
 
   // Convert to contract dialog
   const [showConvertDialog, setShowConvertDialog] = useState(false);
@@ -426,29 +431,10 @@ export default function OffersPage() {
   // للتوافق مع الكود القديم
   const finalTotal = totalAfterDiscount;
 
-  // Filter billboards based on start date
+  // إظهار جميع اللوحات (متاحة ومؤجرة) - يمكن إضافة أي لوحة للعرض
   const filteredBillboards = useMemo(() => {
-    return billboards.filter((b: any) => {
-      const status = String(b.Status || '').toLowerCase();
-      const rentEndDate = b.Rent_End_Date;
-      
-      if (status === 'متاح' || status === 'available') {
-        return true;
-      }
-      
-      if (startDate && rentEndDate) {
-        const offerStart = new Date(startDate);
-        const rentEnd = new Date(rentEndDate);
-        return rentEnd < offerStart;
-      }
-      
-      if (!startDate) {
-        return true;
-      }
-      
-      return false;
-    });
-  }, [billboards, startDate]);
+    return billboards; // إظهار كل اللوحات بدون فلتر الحالة
+  }, [billboards]);
 
   // Apply search and other filters
   const displayedBillboards = useMemo(() => {
@@ -840,60 +826,104 @@ export default function OffersPage() {
   // Installments helper functions
   const handleDistributeInstallments = (count: number) => {
     if (count < 1 || !grandTotal) return;
+    const baseDate = startDate || new Date().toISOString().split('T')[0];
+    
+    // دفعة واحدة
+    if (count === 1) {
+      setInstallments([{
+        amount: grandTotal,
+        paymentType: 'عند التوقيع',
+        description: 'الدفعة الكاملة',
+        dueDate: baseDate,
+      }]);
+      return;
+    }
+    
     const amount = Math.round((grandTotal / count) * 100) / 100;
-    const newInstallments = Array.from({ length: count }, (_, i) => ({
-      amount,
-      paymentType: 'شهري',
-      description: `الدفعة ${i + 1}`,
-      dueDate: startDate ? calculateDueDate('شهري', i, startDate) : '',
-    }));
+    const newInstallments = Array.from({ length: count }, (_, i) => {
+      const isLast = i === count - 1;
+      const installmentAmount = isLast ? Math.round((grandTotal - amount * (count - 1)) * 100) / 100 : amount;
+      return {
+        amount: installmentAmount,
+        paymentType: i === 0 ? 'عند التوقيع' : 'شهري',
+        description: i === 0 ? 'الدفعة الأولى' : `الدفعة ${i + 1}`,
+        dueDate: calculateDueDate('شهري', i, baseDate),
+      };
+    });
     setInstallments(newInstallments);
   };
 
   const handleDistributeWithInterval = (config: any) => {
-    const { firstPayment, firstPaymentType, interval, numPayments, lastPaymentDate, firstPaymentDate } = config;
+    const { firstPayment, firstPaymentType, interval, numPayments, firstPaymentDate } = config;
+    const baseDate = firstPaymentDate || startDate || new Date().toISOString().split('T')[0];
     
     const actualFirstPayment = firstPaymentType === 'percent' 
       ? Math.round((grandTotal * Math.min(100, Math.max(0, firstPayment)) / 100) * 100) / 100
-      : firstPayment;
+      : (firstPayment || 0);
     
+    const hasFirstPayment = actualFirstPayment > 0;
     const remaining = grandTotal - actualFirstPayment;
-    const paymentCount = numPayments || 3;
-    const recurringAmount = Math.round((remaining / paymentCount) * 100) / 100;
+    const paymentCount = numPayments || 2;
     
     const newInstallments: typeof installments = [];
-    const firstDate = firstPaymentDate || startDate;
     
-    if (actualFirstPayment > 0) {
+    // دفعة واحدة (المبلغ الكامل)
+    if (!hasFirstPayment && paymentCount === 1) {
+      setInstallments([{
+        amount: grandTotal,
+        paymentType: 'عند التوقيع',
+        description: 'الدفعة الكاملة',
+        dueDate: baseDate,
+      }]);
+      return;
+    }
+    
+    // دفعة أولى مختلفة
+    if (hasFirstPayment) {
       newInstallments.push({
         amount: actualFirstPayment,
-        paymentType: 'مقدم',
-        description: 'الدفعة الأولى (مقدم)',
-        dueDate: firstDate,
+        paymentType: 'عند التوقيع',
+        description: 'الدفعة الأولى',
+        dueDate: baseDate,
       });
     }
     
-    const intervalMonths = interval === 'month' ? 1 : interval === '2months' ? 2 : interval === '3months' ? 3 : 4;
+    // إذا لم يتبق شيء
+    if (remaining <= 0) {
+      setInstallments(newInstallments);
+      return;
+    }
     
+    const intervalMonths = interval === 'month' ? 1 : interval === '2months' ? 2 : interval === '3months' ? 3 : 4;
+    const recurringAmount = Math.round((remaining / paymentCount) * 100) / 100;
+    
+    let runningTotal = actualFirstPayment;
     for (let i = 0; i < paymentCount; i++) {
-      const date = new Date(firstDate);
-      date.setMonth(date.getMonth() + (i + 1) * intervalMonths);
+      const date = new Date(baseDate);
+      const monthOffset = hasFirstPayment ? (i + 1) : i;
+      date.setMonth(date.getMonth() + monthOffset * intervalMonths);
+      
       const isLast = i === paymentCount - 1;
-      const amount = isLast ? (remaining - recurringAmount * (paymentCount - 1)) : recurringAmount;
+      const amount = isLast ? Math.round((grandTotal - runningTotal) * 100) / 100 : recurringAmount;
+      const installmentNumber = hasFirstPayment ? i + 2 : i + 1;
       
       newInstallments.push({
         amount,
         paymentType: 'شهري',
-        description: `الدفعة ${actualFirstPayment > 0 ? i + 2 : i + 1}`,
+        description: `الدفعة ${installmentNumber}`,
         dueDate: date.toISOString().split('T')[0],
       });
+      
+      runningTotal += amount;
     }
     
     setInstallments(newInstallments);
   };
 
   const calculateDueDate = (paymentType: string, index: number, baseDate: string) => {
+    if (!baseDate) return '';
     const date = new Date(baseDate);
+    if (isNaN(date.getTime())) return '';
     date.setMonth(date.getMonth() + index);
     return date.toISOString().split('T')[0];
   };
@@ -1653,8 +1683,27 @@ export default function OffersPage() {
                             setPdfDialogOpen(true);
                           }}
                           className="gap-1 hover:bg-blue-500/10 hover:border-blue-500/30 hover:text-blue-600"
+                          title="طباعة العرض"
                         >
                           <Printer className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedOfferForBillboardPrint({
+                              offer_number: offer.offer_number,
+                              customer_name: offer.customer_name,
+                              ad_type: offer.ad_type,
+                              start_date: offer.start_date,
+                              billboards_data: offer.billboards_data,
+                            });
+                            setBillboardPrintDialogOpen(true);
+                          }}
+                          className="gap-1 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-600"
+                          title="طباعة لوحات منفصلة"
+                        >
+                          <LayoutGrid className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           size="sm"
@@ -2573,6 +2622,13 @@ export default function OffersPage() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Billboard Print Dialog */}
+        <OfferBillboardPrintDialog
+          open={billboardPrintDialogOpen}
+          onOpenChange={setBillboardPrintDialogOpen}
+          offer={selectedOfferForBillboardPrint}
+        />
       </div>
     </div>
   );

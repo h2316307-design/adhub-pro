@@ -9,6 +9,7 @@ import { Printer, FileDown, Users, Check, FileText } from 'lucide-react';
 import QRCode from 'qrcode';
 import html2pdf from 'html2pdf.js';
 import { supabase } from '@/integrations/supabase/client';
+import { BackgroundSelector } from '@/components/billboard-print/BackgroundSelector';
 
 interface PrintAllContractBillboardsDialogProps {
   open: boolean;
@@ -38,6 +39,7 @@ export function PrintAllContractBillboardsDialog({
   const [loading, setLoading] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [adType, setAdType] = useState('');
+  const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
 
   // جمع كل اللوحات من جميع الفرق للعقد المحدد
   const contractTasks = useMemo(() => 
@@ -253,8 +255,8 @@ export function PrintAllContractBillboardsDialog({
 
           <!-- النوع (عميل/فريق تركيب) -->
           ${printType === 'installation' ? `
-            <div class="absolute-field print-type" style="top: 45mm; right: 22mm; font-size: 14px; color: #d4af37; font-weight: bold;">
-               فريق التركيب
+            <div class="absolute-field print-type" style="top: 81mm; right: 72mm; font-size: 14px; color: #000; font-weight: bold;">
+               فريق التركيب: ${Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ')}
             </div>
           ` : ''}
 
@@ -320,12 +322,18 @@ export function PrintAllContractBillboardsDialog({
       `);
     }
 
+    // أسماء الفرق المختارة
+    const selectedTeamNames = Array.from(selectedTeamIds)
+      .map(id => teams[id]?.team_name)
+      .filter(Boolean)
+      .join(' - ');
+
     return `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8" />
-        <title>${printType === 'installation' ? 'تركيب' : 'طباعة'}${adType ? ` - ${adType}` : ''} - ${customerName} - عقد #${contractNumber} (${contractItems.length} لوحة)</title>
+        <title>تركيب #${contractNumber} - ${customerName} - ${adType || 'إعلان'} - ${contractItems.length} لوحة${selectedTeamNames ? ` - ${selectedTeamNames}` : ''}</title>
         <style>
           @font-face {
             font-family: 'Manrope';
@@ -375,7 +383,7 @@ export function PrintAllContractBillboardsDialog({
             left: 0;
             width: 100%;
             height: 100%;
-            background-image: url('/ipg.svg');
+            background-image: url('${customBackgroundUrl}');
             background-size: 210mm 297mm;
             background-repeat: no-repeat;
             z-index: 0;
@@ -660,6 +668,14 @@ export function PrintAllContractBillboardsDialog({
               <span className="text-sm text-muted-foreground">اللوحات المحددة:</span>
               <Badge className="text-sm font-bold">{contractItems.length} لوحة</Badge>
             </div>
+          </div>
+
+          {/* اختيار الخلفية */}
+          <div className="p-4 bg-muted/50 rounded-xl border">
+            <BackgroundSelector
+              value={customBackgroundUrl}
+              onChange={setCustomBackgroundUrl}
+            />
           </div>
 
           {/* خيارات الطباعة */}

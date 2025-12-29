@@ -24,6 +24,7 @@ export interface BillboardRowData {
   faces?: string | number;
   price?: string;
   rent_end_date?: string;
+  duration_days?: string;
   mapLink?: string;
 }
 
@@ -130,6 +131,8 @@ function getCellContent(
       return row.price || '';
     case 'endDate':
       return row.rent_end_date || '';
+    case 'durationDays':
+      return row.duration_days || '';
     case 'location':
       if (!row.mapLink) return '';
       const qrFg = (tblSettings.qrForegroundColor || '#000000').replace('#', '');

@@ -34,13 +34,14 @@ import { BillboardTaskCard } from '@/components/tasks/BillboardTaskCard';
 import { TaskDesignManager } from '@/components/tasks/TaskDesignManager';
 import { BulkDesignAssigner } from '@/components/tasks/BulkDesignAssigner';
 import { TaskCompletionDialog } from '@/components/tasks/TaskCompletionDialog';
-import { BillboardPrintIndividual } from '@/components/contracts/BillboardPrintIndividual';
+import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
 import { CreatePrintTaskFromInstallation } from '@/components/tasks/CreatePrintTaskFromInstallation';
 import { TaskTotalCostSummary } from '@/components/tasks/TaskTotalCostSummary';
 import { MergeTeamTasksDialog } from '@/components/tasks/MergeTeamTasksDialog';
 import { EditTaskTypeDialog } from '@/components/tasks/EditTaskTypeDialog';
 import { TransferBillboardsDialog } from '@/components/tasks/TransferBillboardsDialog';
 import { PrintAllContractBillboardsDialog } from '@/components/tasks/PrintAllContractBillboardsDialog';
+import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
 
 interface InstallationTask {
   id: string;
@@ -126,6 +127,9 @@ export default function InstallationTasks() {
   // Print all contract billboards dialog
   const [printAllDialogOpen, setPrintAllDialogOpen] = useState(false);
   const [selectedContractForPrint, setSelectedContractForPrint] = useState<{ contractNumber: number; customerName: string } | null>(null);
+  
+  // Print settings dialog state
+  const [printSettingsDialogTaskId, setPrintSettingsDialogTaskId] = useState<string | null>(null);
   
   // Create composite task for installation only
   const [createCompositeDialogOpen, setCreateCompositeDialogOpen] = useState(false);
@@ -1493,6 +1497,22 @@ export default function InstallationTasks() {
                                       <Printer className="h-4 w-4 mr-2" />
                                       طباعة
                                     </Button>
+                                    {/* زر طباعة اللوحات المنفصلة - يفتح نافذة منبثقة */}
+                                    <BillboardPrintSettingsDialog
+                                      open={printSettingsDialogTaskId === task.id}
+                                      onOpenChange={(open) => setPrintSettingsDialogTaskId(open ? task.id : null)}
+                                      taskId={task.id}
+                                    >
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="bg-primary/10 border-primary/30"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <FileText className="h-4 w-4 mr-2" />
+                                        طباعة منفصلة
+                                      </Button>
+                                    </BillboardPrintSettingsDialog>
                                     {/* زر تعديل نوع المهمة */}
                                     <Button
                                       variant="outline"
@@ -2181,24 +2201,40 @@ export default function InstallationTasks() {
       )}
 
       {/* Print Dialog */}
-      {printTaskId && (
-        <Dialog open={printDialogOpen} onOpenChange={setPrintDialogOpen}>
-          <DialogContent className="max-w-6xl max-h-[90vh]">
-            <DialogHeader>
-              <DialogTitle>طباعة اللوحات</DialogTitle>
-            </DialogHeader>
-            <BillboardPrintIndividual
-              contractNumber={tasks.find(t => t.id === printTaskId)?.contract_id || 0}
-              billboards={allTaskItems
-                .filter(i => i.task_id === printTaskId)
-                .map(i => billboardById[i.billboard_id])
-                .filter(Boolean)}
-              designData={designsByTask[printTaskId] || []}
-              taskItems={allTaskItems.filter(i => i.task_id === printTaskId)}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
+      {printTaskId && (() => {
+        const currentTask = tasks.find(t => t.id === printTaskId);
+        const taskBillboards = allTaskItems
+          .filter(i => i.task_id === printTaskId)
+          .map(i => billboardById[i.billboard_id])
+          .filter(Boolean);
+        const contract = contractById[currentTask?.contract_id || 0];
+        const customerName = contract?.['Customer Name'] || '';
+        const adType = contract?.['Ad Type'] || '';
+        const teamName = teamById[currentTask?.team_id || '']?.team_name || '';
+        
+        return (
+          <BillboardBulkPrintDialog
+            open={printDialogOpen}
+            onOpenChange={setPrintDialogOpen}
+            billboards={taskBillboards.map(b => {
+              const item = allTaskItems.find(i => i.billboard_id === b.ID && i.task_id === printTaskId);
+              return {
+                ...b,
+                design_face_a: item?.design_face_a || b.design_face_a,
+                design_face_b: item?.design_face_b || b.design_face_b,
+                installed_image_face_a_url: item?.installed_image_face_a_url,
+                installed_image_face_b_url: item?.installed_image_face_b_url,
+                installed_image_url: item?.installed_image_url
+              };
+            })}
+            contractInfo={{
+              number: currentTask?.contract_id || 0,
+              customerName: customerName,
+              adType: adType
+            }}
+          />
+        );
+      })()}
 
       {/* Create Print Task Dialog */}
       {selectedTaskForPrint && (

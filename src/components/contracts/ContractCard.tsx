@@ -350,6 +350,13 @@ export const ContractCard: React.FC<ContractCardProps> = ({
                 <FileText className="h-4 w-4 ml-2" />
                 لوحات منفصلة
               </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                const contractNum = (contract as any).Contract_Number || (contract as any)['Contract Number'] || contract.id;
+                window.location.href = `/admin/billboard-print-settings?contract=${contractNum}`;
+              }}>
+                <Printer className="h-4 w-4 ml-2" />
+                طباعة منفصلة (متقدم)
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onExport(contract, 'basic')}>
                 <FileSpreadsheet className="h-4 w-4 ml-2" />
@@ -480,6 +487,16 @@ export const ContractCard: React.FC<ContractCardProps> = ({
           >
             <Printer className="h-4 w-4" />
             طباعة
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => onBillboardPrint(contract)}
+            className="flex-1 gap-1"
+            title="طباعة لوحات منفصلة"
+          >
+            <FileText className="h-4 w-4" />
+            منفصلة
           </Button>
           <Button
             size="sm"

@@ -114,6 +114,25 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       // Normalize billboards and build table pages for printing
       const billboards: any[] = Array.isArray(contract.billboards) ? contract.billboards : [];
 
+      // Get contract dates for billboards
+      const contractStartDate = contract.start_date || contract['Contract Date'] || '';
+      const contractEndDate = contract.end_date || contract['End Date'] || '';
+      
+      // Format date helper
+      const formatDateForPrint = (dateStr: string): string => {
+        if (!dateStr) return '';
+        try {
+          const date = new Date(dateStr);
+          if (isNaN(date.getTime())) return dateStr;
+          const day = date.getDate().toString().padStart(2, '0');
+          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+          const year = date.getFullYear();
+          return `${day}/${month}/${year}`;
+        } catch {
+          return dateStr;
+        }
+      };
+
       const normalizeBillboard = (b: any) => {
         const id = String(b.ID ?? b.id ?? '');
         const image = String(
@@ -129,6 +148,27 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           typeof priceVal === 'number'
             ? `${priceVal.toLocaleString('ar-LY')} د.ل`
             : (typeof priceVal === 'string' && priceVal.trim() !== '' ? priceVal : '');
+        
+        // Get end date - ALWAYS use contract end date for consistency
+        const endDateRaw = contractEndDate || b.Rent_End_Date || b.rent_end_date || b.end_date || '';
+        const endDate = endDateRaw ? formatDateForPrint(endDateRaw) : '';
+        
+        // Calculate days count using contract dates
+        const startDateRaw = contractStartDate || b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+        let daysCount = '';
+        if (startDateRaw && endDateRaw) {
+          const start = new Date(startDateRaw);
+          const end = new Date(endDateRaw);
+          if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+            const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+            daysCount = days > 0 ? String(days) : '';
+          }
+        }
+        // Fallback to existing days count if calculation failed
+        if (!daysCount) {
+          daysCount = b.Days_Count ?? b.days_count ?? (contract as any).Duration ?? '';
+        }
+        
         let coords: string = String(
           b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? ''
         );
@@ -142,7 +182,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
         // Add sort order for sorting
         const sortOrder = sizeOrderMap[size] || 999;
         
-        return { id, image, municipality, district, landmark, size, faces, price, mapLink, sortOrder };
+        return { id, image, municipality, district, landmark, size, faces, price, endDate, daysCount, mapLink, sortOrder };
       };
 
       const normalizedRows = billboards.map(normalizeBillboard);
@@ -167,15 +207,17 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 <div class="table-area">
                   <table class="btable" dir="rtl">
                     <colgroup>
-                      <col style="width:8%" />
-                      <col style="width:14%" />
+                      <col style="width:6%" />
                       <col style="width:12%" />
-                      <col style="width:12%" />
-                      <col style="width:18%" />
                       <col style="width:10%" />
+                      <col style="width:10%" />
+                      <col style="width:16%" />
+                      <col style="width:8%" />
+                      <col style="width:6%" />
                       <col style="width:8%" />
                       <col style="width:10%" />
-                      <col style="width:8%" />
+                      <col style="width:7%" />
+                      <col style="width:7%" />
                     </colgroup>
                     <tbody>
                       ${rows
@@ -190,6 +232,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                             <td>${r.size}</td>
                             <td>${r.faces}</td>
                             <td>${r.price}</td>
+                            <td>${r.endDate}</td>
+                            <td>${r.daysCount}</td>
                             <td>${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">اضغط هنا</a>` : ''}</td>
                           </tr>`
                         )

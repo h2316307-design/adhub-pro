@@ -294,6 +294,36 @@ export type Database = {
         }
         Relationships: []
       }
+      billboard_print_profiles: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_default: boolean | null
+          profile_name: string
+          settings_data: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          profile_name: string
+          settings_data: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          profile_name?: string
+          settings_data?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       billboard_print_settings: {
         Row: {
           background_height: string | null
@@ -3721,6 +3751,42 @@ export type Database = {
           name?: string
           sort_order?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      print_backgrounds: {
+        Row: {
+          category: string | null
+          created_at: string
+          id: string
+          is_default: boolean | null
+          name: string
+          thumbnail_url: string | null
+          updated_at: string
+          url: string
+          usage_count: number | null
+        }
+        Insert: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          name: string
+          thumbnail_url?: string | null
+          updated_at?: string
+          url: string
+          usage_count?: number | null
+        }
+        Update: {
+          category?: string | null
+          created_at?: string
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          thumbnail_url?: string | null
+          updated_at?: string
+          url?: string
+          usage_count?: number | null
         }
         Relationships: []
       }

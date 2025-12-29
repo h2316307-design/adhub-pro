@@ -409,6 +409,31 @@ export async function getContractWithBillboards(contractId: string): Promise<any
 
     const c = contractResult.data || {};
 
+    // ✅ جلب مهام التركيب للعقد
+    const { data: contractTasks } = await supabase
+      .from('installation_tasks')
+      .select('id')
+      .eq('contract_id', contractId);
+    
+    // ✅ جلب عناصر مهام التركيب (صور التركيب والتصاميم)
+    let installationItemsMap = new Map<number, any>();
+    if (contractTasks && contractTasks.length > 0) {
+      const taskIds = contractTasks.map(t => t.id);
+      const { data: installationItems } = await supabase
+        .from('installation_task_items')
+        .select('billboard_id, design_face_a, design_face_b, installed_image_url, installed_image_face_a_url, installed_image_face_b_url, installation_date')
+        .in('task_id', taskIds);
+      
+      if (installationItems) {
+        installationItems.forEach((item: any) => {
+          if (item.billboard_id) {
+            // نحتفظ بآخر صور تركيب لكل لوحة
+            installationItemsMap.set(item.billboard_id, item);
+          }
+        });
+      }
+    }
+
     // دمج تصاميم اللوحات من design_data إن وجدت
     let mergedBillboards = (billboardResult.data || []) as any[];
     try {
@@ -436,6 +461,36 @@ export async function getContractWithBillboards(contractId: string): Promise<any
     } catch (e) {
       console.warn('Failed to parse/merge design_data for contract:', e);
     }
+
+    // ✅ دمج صور التركيب من installation_task_items وضمان وجود Image_URL
+    mergedBillboards = mergedBillboards.map((b: any) => {
+      const billboardId = b.ID ?? b.id;
+      const installationItem = installationItemsMap.get(billboardId);
+      
+      // ✅ ضمان وجود Image_URL (الصورة الافتراضية للوحة)
+      const defaultImageUrl = b.Image_URL || b.image_url || b.image || b.billboard_image || '';
+      
+      if (installationItem) {
+        return {
+          ...b,
+          // ✅ ضمان وجود الصورة الافتراضية
+          Image_URL: defaultImageUrl,
+          // صور التركيب
+          installed_image_url: installationItem.installed_image_url || b.installed_image_url,
+          installed_image_face_a_url: installationItem.installed_image_face_a_url || b.installed_image_face_a_url,
+          installed_image_face_b_url: installationItem.installed_image_face_b_url || b.installed_image_face_b_url,
+          // تصاميم من مهمة التركيب (لها أولوية إذا لم تكن موجودة من design_data)
+          design_face_a: b.design_face_a || installationItem.design_face_a,
+          design_face_b: b.design_face_b || installationItem.design_face_b,
+          installation_date: installationItem.installation_date,
+        };
+      }
+      return {
+        ...b,
+        // ✅ ضمان وجود الصورة الافتراضية
+        Image_URL: defaultImageUrl,
+      };
+    });
 
     const normalized = {
       ...c,
