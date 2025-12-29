@@ -114,7 +114,7 @@ export function PurchaseInvoicesSection({
       const printWindow = window.open('', '_blank');
       if (!printWindow) return;
 
-      const html = generatePurchaseInvoiceHTML(invoiceData);
+      const html = await generatePurchaseInvoiceHTML(invoiceData);
       printWindow.document.write(html);
       printWindow.document.close();
     } catch (error) {

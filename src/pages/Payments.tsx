@@ -13,6 +13,8 @@ import { Edit, Trash2, Printer, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Billboard } from '@/types';
 import { fetchAllBillboards } from '@/services/supabaseService';
+import { getMergedInvoiceStylesAsync } from '@/hooks/useInvoiceSettingsSync';
+
 
 interface PaymentRow {
   id: string;
@@ -487,7 +489,24 @@ export default function Customers() {
     }
   };
 
-  const printReceipt = (payment: PaymentRow) => {
+  const printReceipt = async (payment: PaymentRow) => {
+    const styles = await getMergedInvoiceStylesAsync('receipt');
+
+    const primary = styles.primaryColor || '#D4AF37';
+    const secondary = styles.secondaryColor || '#B8860B';
+
+    const companyName = styles.companyName || '';
+    const companySubtitle = styles.companySubtitle || '';
+
+    const companyBlock = (companyName || companySubtitle)
+      ? `
+            <div style="text-align:${styles.headerAlignment === 'left' ? 'left' : styles.headerAlignment === 'center' ? 'center' : 'right'}; width:100%;">
+              ${companyName ? `<div style="font-size: 22px; font-weight: bold; color: ${primary};">${companyName}</div>` : ''}
+              ${companySubtitle ? `<div style="color: ${primary}; font-size: 14px;">${companySubtitle}</div>` : ''}
+            </div>
+        `
+      : '';
+
     const html = `
       <html dir="rtl">
         <head>
@@ -557,9 +576,9 @@ export default function Customers() {
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="title">إيصال دفع</div>
-            <div class="company">شركة الفارس الذهبي للدعاية والإعلان</div>
+          <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${primary}; padding-bottom: 15px;">
+            ${companyBlock}
+            <div class="title" style="text-align: left; font-size: 24px; font-weight: bold; color: ${secondary};">إيصال دفع</div>
           </div>
           
           <div class="content">
@@ -596,11 +615,11 @@ export default function Customers() {
           </div>
           
           <div class="amount">
-            المبلغ المدفوع: ${(Number(payment.amount)||0).toLocaleString('ar-LY')} دينار ليبي
+            المبلغ المدفوع: ${(Number(payment.amount) || 0).toLocaleString('ar-LY')} دينار ليبي
           </div>
           
           <div class="footer">
-            <p>شكراً لتعاملكم معنا</p>
+            <p>${styles.footerText || ''}</p>
             <p>تم إنشاء هذا الإيصال في: ${new Date().toLocaleString('ar-LY')}</p>
           </div>
           
@@ -611,7 +630,7 @@ export default function Customers() {
           </script>
         </body>
       </html>`;
-    
+
     const w = window.open('', '_blank');
     if (w) {
       w.document.open();
@@ -619,6 +638,7 @@ export default function Customers() {
       w.document.close();
     }
   };
+
 
   const printMultiContractInvoice = () => {
     if (selectedContractsForInv.length === 0) {

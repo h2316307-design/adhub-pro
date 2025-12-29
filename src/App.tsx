@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { PrintSettingsProvider } from "@/store";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -57,7 +58,8 @@ import MunicipalityStickers from "./pages/MunicipalityStickers";
 import DelayedBillboards from "./pages/DelayedBillboards";
 import ExtendedBillboards from "./pages/ExtendedBillboards";
 import PricingFactors from "./pages/PricingFactors";
-import PrintDesign from "./pages/PrintDesignNew";
+
+import PrintSettingsPage from "./pages/PrintSettingsPage";
 import ContractTermsSettings from "./pages/ContractTermsSettings";
 import RolesManagement from "./pages/RolesManagement";
 import BillboardPrintSettings from "./pages/BillboardPrintSettings";
@@ -72,10 +74,11 @@ const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <ThemeProvider>
-        <Toaster />
-        <BrowserRouter>
-          <AuthProvider>
-            <Routes>
+        <PrintSettingsProvider>
+          <Toaster />
+          <BrowserRouter>
+            <AuthProvider>
+              <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
             <Route
@@ -571,7 +574,7 @@ const App = () => (
               element={
                 <ProtectedRoute requireAdmin>
                   <MainLayout>
-                    <PrintDesign />
+                    <PrintSettingsPage />
                   </MainLayout>
                 </ProtectedRoute>
               }
@@ -631,6 +634,7 @@ const App = () => (
           </Routes>
         </AuthProvider>
       </BrowserRouter>
+      </PrintSettingsProvider>
       </ThemeProvider>
     </TooltipProvider>
   </QueryClientProvider>

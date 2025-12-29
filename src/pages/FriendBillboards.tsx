@@ -337,10 +337,13 @@ export default function FriendBillboards() {
       </head>
       <body>
         <div class="invoice-container">
-          <div class="header">
-            <h1>شركة الفارس للدعاية والإعلان</h1>
-            <p class="subtitle">فاتورة تأجير لوحة من شركة صديقة</p>
-            <span class="invoice-type">فاتورة مشتريات</span>
+          <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #D4AF37; padding-bottom: 15px;">
+            <div style="text-align: right;">
+              <p class="subtitle" style="margin-top: 8px; font-size: 11px;">فاتورة تأجير لوحة من شركة صديقة</p>
+            </div>
+            <div style="text-align: left;">
+              <span class="invoice-type" style="background: #D4AF37; color: white; padding: 6px 12px; border-radius: 4px; font-weight: bold;">فاتورة مشتريات</span>
+            </div>
           </div>
           
           <div class="content">

@@ -113,7 +113,7 @@ export const generateModernPrintInvoiceHTML = async (data: ModernPrintInvoiceDat
         --text: ${styles.customerSectionTextColor};
       }
 
-      html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--text);font-family:${styles.fontFamily || 'Manrope, Doran, system-ui, sans-serif'}}
+      html,body{height:100%;margin:0;padding:0;background:var(--bg);color:var(--text);font-family:${styles.fontFamily || 'Manrope, Doran, system-ui, sans-serif'};direction:rtl}
       
       .paper{
         width:210mm;
@@ -139,14 +139,16 @@ export const generateModernPrintInvoiceHTML = async (data: ModernPrintInvoiceDat
       .content{position:relative;z-index:1;flex:1;display:flex;flex-direction:column}
       .main-content{flex:1;padding-bottom:${styles.contentBottomSpacing || 25}mm}
       
-      /* Header - matching UnifiedInvoicePreview */
+      /* Header - matching UnifiedInvoicePreview with dynamic alignment */
       .header{
         display:flex;
+        flex-direction:${styles.headerAlignment === 'left' ? 'row' : 'row-reverse'};
         justify-content:space-between;
         align-items:flex-start;
         margin-bottom:${styles.headerMarginBottom || 20}px;
         padding-bottom:15px;
         border-bottom:2px solid var(--primary);
+        direction:rtl;
       }
       
       .header-left{
@@ -154,7 +156,7 @@ export const generateModernPrintInvoiceHTML = async (data: ModernPrintInvoiceDat
         text-align:${styles.invoiceTitleAlignment === 'right' ? 'right' : styles.invoiceTitleAlignment === 'center' ? 'center' : 'left'};
         direction:ltr;
       }
-      
+
       .invoice-title{
         font-size:28px;
         font-weight:bold;
@@ -163,47 +165,52 @@ export const generateModernPrintInvoiceHTML = async (data: ModernPrintInvoiceDat
         letter-spacing:2px;
         color:var(--secondary);
       }
-      
+
       .invoice-meta{
         font-size:11px;
         color:var(--text);
         margin-top:8px;
         line-height:1.6;
       }
-      
+
       .header-right{
         flex:1;
         display:flex;
         flex-direction:column;
-        align-items:${styles.logoPosition === 'left' ? 'flex-start' : styles.logoPosition === 'center' ? 'center' : 'flex-end'};
+        align-items:${styles.headerAlignment === 'left' ? 'flex-start' : styles.headerAlignment === 'center' ? 'center' : 'flex-end'};
         gap:8px;
+        text-align:${styles.headerAlignment || 'right'};
       }
-      
+
       .logo img{
         height:${styles.logoSize}px;
         object-fit:contain;
+        align-self:${styles.logoPosition === 'left' ? 'flex-start' : styles.logoPosition === 'center' ? 'center' : 'flex-end'};
       }
-      
+
       .contact-info{
+        width:100%;
         font-size:${styles.contactInfoFontSize || 10}px;
         color:var(--text);
         line-height:1.6;
-        text-align:${styles.contactInfoAlignment || 'center'};
+        text-align:${styles.headerAlignment || 'right'};
       }
-      
+
       .company-info{
+        width:100%;
         font-size:11px;
         color:var(--text);
         line-height:1.8;
-        text-align:${styles.logoPosition === 'center' ? 'center' : styles.logoPosition === 'left' ? 'left' : 'right'};
+        text-align:${styles.headerAlignment || 'right'};
       }
-      
+
       .company-name{
         font-weight:bold;
         font-size:14px;
         color:var(--primary);
         margin-bottom:2px;
       }
+
       
       /* Customer Section - matching UnifiedInvoicePreview */
       .customer-section{
@@ -346,7 +353,7 @@ export const generateModernPrintInvoiceHTML = async (data: ModernPrintInvoiceDat
               
               ${styles.showCompanyInfo && (styles.showCompanyName || styles.showCompanySubtitle) ? `
               <div class="company-info">
-                ${styles.showCompanyName ? `<div class="company-name">${styles.companyName}</div>` : ''}
+                ${styles.showCompanyName && styles.companyName ? `<div class="company-name">${styles.companyName}</div>` : ''}
                 ${styles.showCompanySubtitle && styles.companySubtitle ? `<div>${styles.companySubtitle}</div>` : ''}
               </div>
               ` : ''}
@@ -462,31 +469,64 @@ export const generateModernPrintInvoiceHTML = async (data: ModernPrintInvoiceDat
 
 // Helper function to convert number to Arabic words (re-exported for convenience)
 export const numberToArabicWords = (num: number): string => {
+  // Handle invalid input
+  if (num === null || num === undefined || isNaN(num)) return '';
+  
+  // Round to whole number
+  num = Math.round(Math.abs(num));
+  
   if (num === 0) return 'صفر';
   
   const ones = ['', 'واحد', 'اثنان', 'ثلاثة', 'أربعة', 'خمسة', 'ستة', 'سبعة', 'ثمانية', 'تسعة'];
   const tens = ['', '', 'عشرون', 'ثلاثون', 'أربعون', 'خمسون', 'ستون', 'سبعون', 'ثمانون', 'تسعون'];
   const teens = ['عشرة', 'أحد عشر', 'اثنا عشر', 'ثلاثة عشر', 'أربعة عشر', 'خمسة عشر', 'ستة عشر', 'سبعة عشر', 'ثمانية عشر', 'تسعة عشر'];
   
-  if (num < 10) return ones[num];
-  if (num < 20) return teens[num - 10];
-  if (num < 100) {
-    const ten = Math.floor(num / 10);
-    const one = num % 10;
-    return tens[ten] + (one > 0 ? ' و' + ones[one] : '');
-  }
-  if (num < 1000) {
-    const hundred = Math.floor(num / 100);
-    const remainder = num % 100;
-    return ones[hundred] + ' مائة' + (remainder > 0 ? ' و' + numberToArabicWords(remainder) : '');
-  }
+  const convertHundreds = (n: number): string => {
+    if (n === 0) return '';
+    if (n < 10) return ones[n];
+    if (n < 20) return teens[n - 10];
+    if (n < 100) {
+      const ten = Math.floor(n / 10);
+      const one = n % 10;
+      return ones[one] + (one > 0 ? ' و' : '') + tens[ten];
+    }
+    const hundred = Math.floor(n / 100);
+    const remainder = n % 100;
+    let result = '';
+    if (hundred === 1) result = 'مائة';
+    else if (hundred === 2) result = 'مائتان';
+    else result = ones[hundred] + ' مائة';
+    if (remainder > 0) result += ' و' + convertHundreds(remainder);
+    return result;
+  };
+
+  if (num < 1000) return convertHundreds(num);
+  
   if (num < 1000000) {
-    const thousand = Math.floor(num / 1000);
+    const thousands = Math.floor(num / 1000);
     const remainder = num % 1000;
-    return numberToArabicWords(thousand) + ' ألف' + (remainder > 0 ? ' و' + numberToArabicWords(remainder) : '');
+    let result = '';
+    if (thousands === 1) result = 'ألف';
+    else if (thousands === 2) result = 'ألفان';
+    else if (thousands >= 3 && thousands <= 10) result = convertHundreds(thousands) + ' آلاف';
+    else result = convertHundreds(thousands) + ' ألف';
+    if (remainder > 0) result += ' و' + convertHundreds(remainder);
+    return result;
   }
   
-  return num.toString(); // Fallback for very large numbers
+  if (num < 1000000000) {
+    const millions = Math.floor(num / 1000000);
+    const remainder = num % 1000000;
+    let result = '';
+    if (millions === 1) result = 'مليون';
+    else if (millions === 2) result = 'مليونان';
+    else if (millions >= 3 && millions <= 10) result = convertHundreds(millions) + ' ملايين';
+    else result = convertHundreds(millions) + ' مليون';
+    if (remainder > 0) result += ' و' + numberToArabicWords(remainder);
+    return result;
+  }
+  
+  return num.toLocaleString('ar-LY');
 };
 
 // Generate invoice with modern template
@@ -507,8 +547,12 @@ export interface PurchaseInvoiceData {
   notes?: string;
 }
 
-export const generatePurchaseInvoiceHTML = (data: PurchaseInvoiceData): string => {
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+export const generatePurchaseInvoiceHTML = async (data: PurchaseInvoiceData): Promise<string> => {
+  const fontBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+  
+  // جلب الإعدادات المحفوظة
+  const styles = await getMergedInvoiceStylesAsync('purchase_invoice');
+  
   const FIXED_ROWS = 10;
   const displayItems = [...(data.items || [])];
   while (displayItems.length < FIXED_ROWS) {
@@ -517,15 +561,25 @@ export const generatePurchaseInvoiceHTML = (data: PurchaseInvoiceData): string =
 
   const subtotal = (data.items || []).reduce((sum, item) => sum + (Number(item.total) || 0), 0);
   const discount = data.discount || 0;
+  const logoUrl = styles.logoPath || '/logofaresgold.svg';
+  const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${fontBaseUrl}${logoUrl}`;
+  
+  // استخدام الخلفية من الإعدادات
+  const bgImageUrl = styles.backgroundImage ? (styles.backgroundImage.startsWith('http') ? styles.backgroundImage : `${fontBaseUrl}${styles.backgroundImage}`) : '';
 
-  const rowsHtml = displayItems.map((item, idx) => `
-    <tr style="background:${idx % 2 === 0 ? '#f8f9fa' : '#ffffff'}">
-      <td style="padding:14px;text-align:right;border:1px solid #e0e0e0;font-size:14px">${item.description || ''}</td>
-      <td style="padding:14px;text-align:center;border:1px solid #e0e0e0;font-size:14px;font-weight:600">${item.quantity || ''}</td>
-      <td style="padding:14px;text-align:center;border:1px solid #e0e0e0;font-size:14px;font-weight:600">${item.unitPrice ? (Number(item.unitPrice)).toLocaleString('ar-LY') : ''}</td>
-      <td style="padding:14px;text-align:center;border:1px solid #e0e0e0;font-size:14px;font-weight:700">${item.total ? (Number(item.total)).toLocaleString('ar-LY') + ' د.ل' : ''}</td>
+  const rowsHtml = displayItems.map((item, idx) => {
+    const rowBg = idx % 2 === 0 
+      ? hexToRgba(styles.tableRowEvenColor, styles.tableRowOpacity) 
+      : hexToRgba(styles.tableRowOddColor, styles.tableRowOpacity);
+    return `
+    <tr style="background:${rowBg}">
+      <td style="padding:12px 8px;text-align:right;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;color:${styles.tableTextColor}">${item.description || ''}</td>
+      <td style="padding:12px 8px;text-align:center;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;font-weight:600;color:${styles.tableTextColor}">${item.quantity || ''}</td>
+      <td style="padding:12px 8px;text-align:center;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;font-weight:600;color:${styles.tableTextColor}">${item.unitPrice ? (Number(item.unitPrice)).toLocaleString('ar-LY') : ''}</td>
+      <td style="padding:12px 8px;text-align:center;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;font-weight:700;color:${styles.tableTextColor}">${item.total ? (Number(item.total)).toLocaleString('ar-LY') + ' د.ل' : ''}</td>
     </tr>
-  `).join('');
+  `;
+  }).join('');
 
   return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -534,321 +588,356 @@ export const generatePurchaseInvoiceHTML = (data: PurchaseInvoiceData): string =
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>فاتورة مشتريات - ${data.invoiceNumber}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap');
+    @font-face { font-family: 'Doran'; src: url('${fontBaseUrl}/Doran-Bold.otf') format('opentype'); font-weight: 700; }
+    @font-face { font-family: 'Doran'; src: url('${fontBaseUrl}/Doran-Regular.otf') format('opentype'); font-weight: 400; }
     
     * { margin: 0; padding: 0; box-sizing: border-box; }
     
-    body {
-      font-family: 'Cairo', 'Tajawal', Arial, sans-serif;
-      background: #f5f5f5;
-      padding: 8px;
-      color: #1a1a1a;
-      line-height: 1.3;
-    }
-    
-    .invoice-container {
-      max-width: 900px;
-      margin: 0 auto;
+    html, body {
+      height: 100%;
+      margin: 0;
+      padding: 0;
       background: #ffffff;
-      border: 1px solid #e0e0e0;
-      position: relative;
+      color: ${styles.tableTextColor};
+      font-family: ${styles.fontFamily || 'Doran, Manrope, system-ui, sans-serif'};
+      direction: rtl;
     }
     
-    /* Header Section */
-    .header {
+    .unified-paper {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 0 auto;
+      padding: ${styles.pageMarginTop}mm ${styles.pageMarginRight}mm ${styles.pageMarginBottom}mm ${styles.pageMarginLeft}mm;
+      background: #ffffff;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .unified-bg-layer {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      ${bgImageUrl ? `
+        background-image: url('${bgImageUrl}');
+        background-position: ${styles.backgroundPosX || 50}% ${styles.backgroundPosY || 50}%;
+        background-repeat: no-repeat;
+        background-size: ${styles.backgroundScale || 100}%;
+        opacity: ${(styles.backgroundOpacity || 10) / 100};
+      ` : ''}
+      pointer-events: none;
+      z-index: 0;
+    }
+    
+    .unified-content {
+      position: relative;
+      z-index: 1;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    /* ===== UNIFIED HEADER ===== */
+    .unified-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding: 20px 30px;
-      border-bottom: 2px solid #000000;
+      align-items: flex-start;
+      margin-bottom: ${styles.headerMarginBottom || 20}px;
+      padding-bottom: 15px;
+      border-bottom: 3px solid ${styles.primaryColor};
     }
     
-    .header-right {
-      text-align: right;
-      flex: 1;
+    .unified-header-left {
+      flex: 0 0 45%;
+      text-align: left;
+      direction: ltr;
     }
     
-    .invoice-title {
-      font-size: 22px;
+    .unified-invoice-title {
+      font-size: 26px;
       font-weight: 700;
-      color: #000000;
+      margin: 0 0 5px 0;
+      font-family: Manrope, sans-serif;
+      letter-spacing: 1px;
+      color: ${styles.secondaryColor};
+      text-transform: uppercase;
+    }
+    
+    .unified-invoice-subtitle {
+      font-size: 16px;
+      font-weight: 600;
+      color: ${styles.primaryColor};
+      margin-bottom: 10px;
+    }
+    
+    .unified-invoice-meta {
+      font-size: 11px;
+      color: ${styles.customerSectionTextColor};
+      line-height: 1.8;
+      padding: 8px 0;
+    }
+    
+    .unified-invoice-meta-row {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 4px;
+    }
+    
+    .unified-invoice-meta-label {
+      font-weight: 700;
+      color: ${styles.primaryColor};
+    }
+    
+    .unified-header-right {
+      flex: 0 0 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 8px;
+    }
+    
+    .unified-logo {
+      height: ${styles.logoSize}px;
+      object-fit: contain;
+    }
+    
+    .unified-company-info {
+      text-align: right;
+      line-height: 1.6;
+    }
+    
+    .unified-company-name {
+      font-size: 18px;
+      font-weight: 700;
+      color: ${styles.primaryColor};
+      margin-bottom: 2px;
+    }
+    
+    .unified-company-subtitle {
+      font-size: 13px;
+      color: ${styles.secondaryColor};
       margin-bottom: 6px;
     }
     
-    .invoice-meta {
-      font-size: 12px;
-      color: #666;
-      line-height: 1.5;
+    .unified-contact-info {
+      font-size: 10px;
+      color: ${styles.customerSectionTextColor};
     }
     
-    .header-center {
-      flex: 1;
-      text-align: center;
-      padding: 0 15px;
+    /* ===== CUSTOMER SECTION ===== */
+    .unified-customer-section {
+      background: ${styles.customerSectionBgColor};
+      border-right: 4px solid ${styles.customerSectionBorderColor};
+      padding: 15px 20px;
+      margin-bottom: 20px;
     }
     
-    .company-logo {
-      max-width: 300px;
-      height: auto;
-      margin: 0 auto;
-    }
-    
-    .header-left {
-      text-align: left;
-      flex: 1;
-      font-size: 11px;
-      color: #666;
-      line-height: 1.5;
-    }
-    
-    /* Info Box */
-    .info-box {
-      background: #f8f9fa;
-      padding: 12px 20px;
-      margin: 15px 30px;
-      border: 1px solid #e0e0e0;
-      border-right: 4px solid #000000;
-      border-radius: 6px;
-    }
-    
-    .info-title {
-      font-size: 14px;
+    .unified-customer-title {
+      font-size: ${styles.headerFontSize}px;
       font-weight: 700;
-      color: #000000;
-      margin-bottom: 8px;
-      padding-bottom: 6px;
-      border-bottom: 2px solid #000000;
+      color: ${styles.customerSectionTitleColor};
+      margin-bottom: 10px;
     }
     
-    .info-row {
-      display: flex;
-      justify-content: space-between;
-      padding: 4px 0;
-      font-size: 12px;
+    .unified-customer-details {
+      font-size: ${styles.bodyFontSize}px;
+      color: ${styles.customerSectionTextColor};
+      line-height: 1.8;
     }
     
-    .info-label {
-      color: #666;
-      font-weight: 600;
-    }
-    
-    .info-value {
-      color: #1a1a1a;
-      font-weight: 700;
-    }
-    
-    /* Table */
-    .items-table {
-      width: calc(100% - 60px);
-      margin: 15px 30px;
+    /* ===== UNIFIED TABLE ===== */
+    .unified-table {
+      width: 100%;
       border-collapse: collapse;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      overflow: hidden;
+      margin-bottom: 0;
+      font-size: ${styles.bodyFontSize}px;
     }
     
-    .items-table thead {
-      background: #000000;
-      color: #ffffff;
+    .unified-table thead th {
+      background: ${styles.tableHeaderBgColor};
+      color: ${styles.tableHeaderTextColor};
+      padding: 12px 8px;
+      text-align: center;
+      font-weight: 700;
+      font-size: ${styles.headerFontSize}px;
+      border: 1px solid ${styles.tableBorderColor};
     }
     
-    .items-table thead th {
+    .unified-table tbody td {
+      border: 1px solid ${styles.tableBorderColor};
       padding: 10px 8px;
       text-align: center;
-      font-size: 13px;
-      font-weight: 700;
-      border: 1px solid #000000;
+      vertical-align: middle;
+      color: ${styles.tableTextColor};
     }
     
-    .items-table tbody td {
-      padding: 8px;
-      border: 1px solid #e0e0e0;
-      font-size: 12px;
+    /* ===== TOTALS INSIDE TABLE ===== */
+    .totals-row {
+      background: ${styles.subtotalBgColor} !important;
     }
     
-    /* Total Section */
-    .total-section {
-      margin: 15px 30px;
-    }
-
-    .summary-table {
-      width: 100%;
-      max-width: 380px;
-      margin-left: auto;
-      border-collapse: collapse;
-      background: #f8f9fa;
-      border-radius: 6px;
-      overflow: hidden;
-    }
-
-    .summary-table tr {
-      border-bottom: 1px solid #e0e0e0;
-    }
-
-    .summary-table td {
-      padding: 8px 12px;
-      font-size: 13px;
-    }
-
-    .summary-table td:first-child {
-      text-align: right;
-      color: #666;
+    .totals-row td {
+      padding: 12px 8px;
       font-weight: 600;
+      color: ${styles.subtotalTextColor};
     }
-
-    .summary-table td:last-child {
-      text-align: left;
+    
+    .discount-row {
+      background: #fff5f5 !important;
+    }
+    
+    .discount-row td {
+      color: ${styles.discountTextColor || '#e74c3c'};
+    }
+    
+    .grand-total-row {
+      background: ${styles.totalBgColor} !important;
+    }
+    
+    .grand-total-row td {
+      padding: 15px 12px;
       font-weight: 700;
-      color: #1a1a1a;
-    }
-
-    .summary-table tr.discount-row td {
-      color: #e74c3c;
-      font-weight: 700;
-    }
-
-    .summary-table tr.total-row {
-      background: #000000;
-      color: #ffffff;
-      font-weight: 800;
-      border-bottom: none;
-    }
-
-    .summary-table tr.total-row td {
-      padding: 12px;
-      font-size: 15px;
-      color: #ffffff;
+      font-size: ${styles.headerFontSize + 2}px;
+      color: ${styles.totalTextColor};
     }
     
-    
-    /* Notes */
-    .notes-section {
-      margin: 15px 30px;
-      padding: 10px;
-      background: #f8f9fa;
-      border: 1px solid #e0e0e0;
-      border-radius: 6px;
-      font-size: 12px;
-      color: #666;
-    }
-    
-    /* Footer */
-    .footer {
+    /* ===== NOTES ===== */
+    .unified-notes {
       margin-top: 20px;
-      padding: 12px 30px;
-      border-top: 1px dashed #e0e0e0;
-      text-align: center;
-      font-size: 11px;
-      color: #999;
+      padding: 15px;
+      background: ${styles.notesBgColor || '#f8f9fa'};
+      border: 1px solid ${styles.notesBorderColor || '#e9ecef'};
+      border-radius: 4px;
+      font-size: ${styles.bodyFontSize}px;
+      line-height: 1.8;
+      color: ${styles.notesTextColor || '#333333'};
+    }
+    
+    .unified-notes-title {
+      font-weight: 700;
+      color: ${styles.primaryColor};
+      margin-bottom: 8px;
+    }
+    
+    /* ===== UNIFIED FOOTER ===== */
+    .unified-footer {
+      margin-top: auto;
+      padding-top: 15px;
+      border-top: 2px solid ${styles.notesBorderColor || styles.primaryColor};
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 10px;
+      color: ${styles.footerTextColor || '#666666'};
     }
     
     @media print {
-      body { background: white; padding: 0; }
-      .invoice-container { border: none; box-shadow: none; }
-      @page { size: A4; margin: 5mm; }
+      html, body { background: white; }
+      .unified-paper { 
+        margin: 0; 
+        border: none; 
+        box-shadow: none;
+        page-break-after: always;
+      }
+      @page { size: A4; margin: 0; }
       
       * {
         -webkit-print-color-adjust: exact !important;
         print-color-adjust: exact !important;
-        color-adjust: exact !important;
       }
-      
-      .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      .info-box { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #f8f9fa !important; border-right: 4px solid #000000 !important; }
-      .info-title { -webkit-print-color-adjust: exact; print-color-adjust: exact; border-bottom: 2px solid #000000 !important; }
-      .items-table thead { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #000000 !important; color: #ffffff !important; }
-      .items-table thead th { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #000000 !important; color: #ffffff !important; }
-      .items-table tbody tr:nth-child(even) { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #f8f9fa !important; }
-      .summary-table { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #f8f9fa !important; }
-      .summary-table tr.total-row { -webkit-print-color-adjust: exact; print-color-adjust: exact; background: #000000 !important; }
-      .summary-table tr.total-row td { -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #ffffff !important; }
-      .summary-table tr.discount-row td { -webkit-print-color-adjust: exact; print-color-adjust: exact; color: #e74c3c !important; }
     }
   </style>
 </head>
 <body>
-  <div class="invoice-container">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-right">
-        <div class="invoice-title">${data.invoiceName || 'فاتورة مشتريات'}</div>
-        <div class="invoice-meta">
-          رقم الفاتورة: ${data.invoiceNumber}<br/>
-          التاريخ: ${new Date(data.invoiceDate).toLocaleDateString('ar-LY', { year: 'numeric', month: '2-digit', day: '2-digit' })}
+  <div class="unified-paper">
+    ${bgImageUrl ? '<div class="unified-bg-layer"></div>' : ''}
+    <div class="unified-content">
+      <!-- UNIFIED HEADER - RTL -->
+      <div class="unified-header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; padding-bottom: 15px; border-bottom: 3px solid #D4AF37;">
+        <div class="unified-header-right" style="text-align: right;">
+          <img src="${fullLogoUrl}" alt="Logo" class="unified-logo" onerror="this.style.display='none'"/>
+          <div class="unified-company-info">
+            ${styles.companyName ? `<div class="unified-company-name" style="font-size: 22px; font-weight: 700; color: #D4AF37;">${styles.companyName}</div>` : ''}
+            ${styles.companySubtitle ? `<div class="unified-company-subtitle" style="font-size: 14px; color: #B8860B;">${styles.companySubtitle}</div>` : ''}
+            <div class="unified-contact-info" style="font-size: 10px;">
+              ${styles.companyAddress ? `<div>${styles.companyAddress}</div>` : ''}
+              ${styles.companyPhone ? `<div>هاتف: ${styles.companyPhone}</div>` : ''}
+            </div>
+          </div>
+        </div>
+        
+        <div class="unified-header-left" style="text-align: left;">
+          <h1 class="unified-invoice-title" style="font-size: 28px; font-weight: 700; color: #B8860B; text-transform: uppercase; letter-spacing: 2px;">PURCHASE INVOICE</h1>
+          <div class="unified-invoice-subtitle" style="font-size: 16px; font-weight: 600; color: #D4AF37; margin-bottom: 10px;">${data.invoiceName || 'فاتورة مشتريات'}</div>
+          <div class="unified-invoice-meta" style="direction: rtl; text-align: right; font-size: 12px;">
+            <div class="unified-invoice-meta-row" style="display: flex; gap: 8px; margin-bottom: 6px;">
+              <span class="unified-invoice-meta-label" style="font-weight: 700; color: #D4AF37;">رقم الفاتورة:</span>
+              <span style="color: #B8860B;">${data.invoiceNumber}</span>
+            </div>
+            <div class="unified-invoice-meta-row" style="display: flex; gap: 8px; margin-bottom: 6px;">
+              <span class="unified-invoice-meta-label" style="font-weight: 700; color: #D4AF37;">التاريخ:</span>
+              <span style="color: #B8860B;">${new Date(data.invoiceDate).toLocaleDateString('ar-LY', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+            </div>
+          </div>
         </div>
       </div>
       
-      <div class="header-center">
-        <img class="company-logo" src="${baseUrl}/logofares.svg" alt="شعار الشركة" />
+      <!-- CUSTOMER SECTION -->
+      <div class="unified-customer-section">
+        <h3 class="unified-customer-title">بيانات الفاتورة</h3>
+        <div class="unified-customer-details">
+          <div><strong>العميل:</strong> ${data.customerName}</div>
+          <div><strong>طريقة الدفع:</strong> نقدي</div>
+        </div>
       </div>
       
-      <div class="header-left">
-        طرابلس - طريق المطار، حي الزهور<br/>
-        هاتف: 0912612255
-      </div>
-    </div>
-    
-    <!-- Info Box -->
-    <div class="info-box">
-      <div class="info-title">بيانات الفاتورة</div>
-      <div class="info-row">
-        <span class="info-label">العميل:</span>
-        <span class="info-value">${data.customerName}</span>
-      </div>
-      <div class="info-row">
-        <span class="info-label">طريقة الدفع:</span>
-        <span class="info-value">نقدي</span>
-      </div>
-    </div>
-    
-    <!-- Items Table -->
-    <table class="items-table">
-      <thead>
-        <tr>
-          <th style="width:40%">البيان</th>
-          <th style="width:15%">الكمية</th>
-          <th style="width:20%">الفئة</th>
-          <th style="width:25%">السعر الاجمالي</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${rowsHtml}
-      </tbody>
-    </table>
-    
-    <!-- Total Section -->
-    <div class="total-section">
-      <table class="summary-table">
-        <tbody>
+      <!-- UNIFIED TABLE WITH TOTALS -->
+      <table class="unified-table">
+        <thead>
           <tr>
-            <td>إجمالي الكمية:</td>
-            <td>${(data.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)} قطعة</td>
+            <th style="width:40%">البيان</th>
+            <th style="width:15%">الكمية</th>
+            <th style="width:20%">الفئة</th>
+            <th style="width:25%">السعر الإجمالي</th>
           </tr>
-          <tr>
-            <td>المجموع الفرعي:</td>
-            <td>د.ل ${subtotal.toLocaleString('ar-LY')}</td>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+          <!-- TOTALS ROWS -->
+          <tr class="totals-row">
+            <td colspan="2" style="text-align:right;font-weight:700;">إجمالي الكمية:</td>
+            <td colspan="2" style="font-weight:700;">${(data.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)} قطعة</td>
+          </tr>
+          <tr class="totals-row">
+            <td colspan="3" style="text-align:left;font-weight:700;">المجموع الفرعي</td>
+            <td style="font-weight:700;">${subtotal.toLocaleString('ar-LY')} د.ل</td>
           </tr>
           ${discount > 0 ? `
           <tr class="discount-row">
-            <td>التخفيض:</td>
-            <td>- د.ل ${discount.toLocaleString('ar-LY')}</td>
+            <td colspan="3" style="text-align:left;">التخفيض</td>
+            <td>- ${discount.toLocaleString('ar-LY')} د.ل</td>
           </tr>
           ` : ''}
-          <tr class="total-row">
-            <td>الإجمالي النهائي:</td>
-            <td>د.ل ${data.totalAmount.toLocaleString('ar-LY')}</td>
+          <tr class="grand-total-row">
+            <td colspan="3" style="text-align:left;">المجموع الإجمالي</td>
+            <td>${data.totalAmount.toLocaleString('ar-LY')} د.ل</td>
           </tr>
         </tbody>
       </table>
-    </div>
-    
-    <!-- Notes -->
-    ${data.notes ? `<div class="notes-section"><strong>ملاحظات:</strong> ${data.notes}</div>` : ''}
-    
-    <!-- Footer -->
-    <div class="footer">
-      شكراً لتعاملكم معنا | Thank you for your business<br/>
-      هذه فاتورة إلكترونية ولا تحتاج إلى ختم أو توقيع
+      
+      <!-- NOTES -->
+      ${data.notes ? `
+      <div class="unified-notes">
+        <div class="unified-notes-title">ملاحظات</div>
+        <div>${data.notes}</div>
+      </div>
+      ` : ''}
+      
+      <!-- UNIFIED FOOTER -->
+      <div class="unified-footer">
+        <div>شكراً لتعاملكم معنا | Thank you for your business</div>
+        <div>صفحة 1 من 1</div>
+      </div>
     </div>
   </div>
   
@@ -861,13 +950,13 @@ export const generatePurchaseInvoiceHTML = (data: PurchaseInvoiceData): string =
 </html>`;
 };
 
-// Generate sales invoice with same design
-export const generateSalesInvoiceHTML = (data: PurchaseInvoiceData): string => {
-  const html = generatePurchaseInvoiceHTML(data);
-  // Replace "فاتورة قطع" and "فاتورة مشتريات" with "فاتورة مبيعات" if no custom invoice name
+// Generate sales invoice with unified design
+export const generateSalesInvoiceHTML = async (data: PurchaseInvoiceData): Promise<string> => {
+  const html = await generatePurchaseInvoiceHTML(data);
+  // Replace titles for sales invoice
   if (!data.invoiceName) {
     return html
-      .replace(/فاتورة قطع/g, 'فاتورة مبيعات')
+      .replace(/PURCHASE INVOICE/g, 'SALES INVOICE')
       .replace(/فاتورة مشتريات/g, 'فاتورة مبيعات');
   }
   return html;

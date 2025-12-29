@@ -5,8 +5,8 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { Printer, X, FileText, Calendar } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { getMergedInvoiceStylesAsync, hexToRgba } from '@/hooks/useInvoiceSettingsSync';
-import { unifiedHeaderFooterCss, unifiedHeaderHtml, unifiedFooterHtml } from '@/lib/unifiedPrintFragments';
+import { formatArabicNumber, formatDate } from '@/lib/printHtmlGenerator';
+import { useAccountStatementPrint } from './AccountStatementPrint';
 
 interface AccountStatementDialogProps {
   open: boolean;
@@ -24,24 +24,6 @@ const CURRENCIES = [
   { code: 'SAR', name: 'ريال سعودي', symbol: 'ر.س', writtenName: 'ريال سعودي' },
   { code: 'AED', name: 'درهم إماراتي', symbol: 'د.إ', writtenName: 'درهم إماراتي' },
 ];
-
-// ✅ دالة تنسيق الأرقام العربية
-const formatArabicNumber = (num: number): string => {
-  if (isNaN(num) || num === null || num === undefined) return '0';
-  
-  const numStr = num.toString();
-  const parts = numStr.split('.');
-  const integerPart = parts[0];
-  const decimalPart = parts[1];
-  
-  const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  
-  if (decimalPart) {
-    return `${formattedInteger}.${decimalPart}`;
-  }
-  
-  return formattedInteger;
-};
 
 // ✅ دالة تحديد حالة العقد
 const getContractStatus = (endDate: string | null): { status: string; className: string } => {
@@ -124,6 +106,9 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
   const [endDate, setEndDate] = useState('');
   const [currency, setCurrency] = useState(CURRENCIES[0]);
 
+  // ✅ استخدام نظام الطباعة الموحد
+  const { print: printStatement, isPrinting } = useAccountStatementPrint();
+
   // ✅ تحميل بيانات العميل
   const loadCustomerData = async () => {
     try {
@@ -140,7 +125,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           setCustomerData({ name: customerName, id: customerId });
         }
       } else {
-        // إذا لم يكن هناك customerId، ابحث بالاسم
         const { data } = await supabase
           .from('customers')
           .select('*')
@@ -160,11 +144,11 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
     }
   };
 
-  // ✅ FIXED: تحميل العقود والدفعات من الجداول الصحيحة
+  // ✅ تحميل العقود والدفعات
   const loadAccountData = async () => {
     setIsLoading(true);
     try {
-      // ✅ تحميل العقود من جدول Contract
+      // تحميل العقود
       let contractsData: any[] = [];
       
       if (customerId) {
@@ -179,7 +163,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
       
-      // إذا لم نجد عقود بالـ customer_id، ابحث بالاسم
       if (contractsData.length === 0 && customerName) {
         const { data, error } = await supabase
           .from('Contract')
@@ -193,9 +176,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
       }
       
       setContracts(contractsData);
-      console.log('✅ تم تحميل العقود:', contractsData);
 
-      // ✅ تحميل الدفعات من جدول customer_payments
+      // تحميل الدفعات
       let paymentsData: any[] = [];
       
       if (customerId) {
@@ -203,9 +185,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           .from('customer_payments')
           .select('*')
           .eq('customer_id', customerId)
-          .order('paid_at', { ascending: true }); // ✅ FIXED: ترتيب من الأقدم للأجدد
+          .order('paid_at', { ascending: true });
 
-        // تطبيق فلتر التاريخ إذا تم تحديده
         if (startDate) {
           paymentsQuery = paymentsQuery.gte('paid_at', startDate);
         }
@@ -220,15 +201,13 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
       
-      // إذا لم نجد دفعات بالـ customer_id، ابحث بالاسم
       if (paymentsData.length === 0 && customerName) {
         let paymentsQuery = supabase
           .from('customer_payments')
           .select('*')
           .ilike('customer_name', `%${customerName}%`)
-          .order('paid_at', { ascending: true }); // ✅ FIXED: ترتيب من الأقدم للأجدد
+          .order('paid_at', { ascending: true });
 
-        // تطبيق فلتر التاريخ إذا تم تحديده
         if (startDate) {
           paymentsQuery = paymentsQuery.gte('paid_at', startDate);
         }
@@ -244,9 +223,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
       }
       
       setPayments(paymentsData);
-      console.log('✅ تم تحميل الدفعات:', paymentsData);
 
-      // ✅ FIXED: تحميل فواتير الطباعة من جدول printed_invoices
+      // تحميل فواتير الطباعة
       let printedInvoicesData: any[] = [];
       
       if (customerId) {
@@ -261,7 +239,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
       
-      // إذا لم نجد فواتير طباعة بالـ customer_id، ابحث بالاسم
       if (printedInvoicesData.length === 0 && customerName) {
         const { data, error } = await supabase
           .from('printed_invoices')
@@ -273,10 +250,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           printedInvoicesData = data;
         }
       }
-      
-      console.log('✅ تم تحميل فواتير الطباعة:', printedInvoicesData);
 
-      // ✅ NEW: تحميل الخصومات العامة
+      // تحميل الخصومات العامة
       let generalDiscountsData: any[] = [];
       
       if (customerId) {
@@ -291,10 +266,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           generalDiscountsData = data;
         }
       }
-      
-      console.log('✅ تم تحميل الخصومات العامة:', generalDiscountsData);
 
-      // ✅ تحميل فواتير المشتريات من الزبون
+      // تحميل فواتير المشتريات
       let purchaseInvoicesData: any[] = [];
       
       if (customerId) {
@@ -305,13 +278,15 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           .order('created_at', { ascending: true });
 
         if (!error && data) {
-          purchaseInvoicesData = data;
+          // فلترة لاستبعاد الفواتير المحذوفة أو الملغاة
+          purchaseInvoicesData = data.filter(inv => {
+            const invAny = inv as any;
+            return !invAny.is_deleted && invAny.status !== 'deleted' && invAny.status !== 'cancelled';
+          });
         }
       }
-      
-      console.log('✅ تم تحميل فواتير المشتريات:', purchaseInvoicesData);
 
-      // ✅ تحميل فواتير المبيعات للزبون
+      // تحميل فواتير المبيعات
       let salesInvoicesData: any[] = [];
       
       if (customerId) {
@@ -326,7 +301,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
       
-      // إذا لم نجد فواتير مبيعات بالـ customer_id، ابحث بالاسم
       if (salesInvoicesData.length === 0 && customerName) {
         const { data, error } = await supabase
           .from('sales_invoices')
@@ -338,10 +312,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           salesInvoicesData = data;
         }
       }
-      
-      console.log('✅ تم تحميل فواتير المبيعات:', salesInvoicesData);
 
-      // ✅ NEW: تحميل المهام المجمعة مع بيانات مهمة التركيب للحصول على العقود المتعددة
+      // تحميل المهام المجمعة
       let compositeTasksData: any[] = [];
       
       if (customerId) {
@@ -355,14 +327,11 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           compositeTasksData = data;
         }
       }
-      
-      console.log('✅ تم تحميل المهام المجمعة:', compositeTasksData);
 
-      // ✅ تحميل إيجارات اللوحات من الشركات الصديقة
+      // تحميل إيجارات اللوحات الصديقة
       let friendBillboardRentalsData: any[] = [];
       
       if (customerId) {
-        // أولاً نحصل على linked_friend_company_id
         const { data: customerInfo } = await supabase
           .from('customers')
           .select('linked_friend_company_id')
@@ -384,16 +353,12 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           }
         }
       }
-      
-      console.log('✅ تم تحميل إيجارات اللوحات الصديقة:', friendBillboardRentalsData);
 
-      // إنشاء مجموعة لفواتير المهام المجمعة لاستثنائها من فواتير الطباعة
+      // إنشاء قائمة موحدة لجميع الحركات
       const compositeTaskInvoiceIds = new Set(compositeTasksData.map(t => t.combined_invoice_id).filter(Boolean));
-
-      // ✅ NEW: إنشاء قائمة موحدة لجميع الحركات (دائن ومدين)
       const transactions: any[] = [];
       
-      // إضافة العقود كحركات مدينة
+      // إضافة العقود
       contractsData.forEach(contract => {
         transactions.push({
           id: `contract-${contract.Contract_Number}`,
@@ -402,13 +367,13 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           description: `عقد رقم ${contract.Contract_Number} - ${contract['Ad Type'] || 'غير محدد'}`,
           debit: Number(contract['Total']) || 0,
           credit: 0,
-          balance: 0, // سيتم حسابه لاحقاً
+          balance: 0,
           reference: `عقد-${contract.Contract_Number}`,
           notes: `نوع الإعلان: ${contract['Ad Type'] || 'غير محدد'}`,
         });
       });
 
-      // ✅ إضافة الخصومات العامة كحركات دائنة
+      // إضافة الخصومات
       generalDiscountsData.forEach(discount => {
         const amount = Number(discount.discount_value) || 0;
         const description = discount.discount_type === 'percentage' 
@@ -421,19 +386,17 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           type: 'discount',
           description: description,
           debit: 0,
-          credit: discount.discount_type === 'fixed' ? amount : 0, // الخصم الثابت فقط يُحسب كدائن
+          credit: discount.discount_type === 'fixed' ? amount : 0,
           balance: 0,
           reference: 'خصم عام',
           notes: discount.reason || '—',
         });
       });
 
-      // ✅ إضافة فواتير الطباعة كحركات مدينة (استثناء فواتير المهام المجمعة)
+      // إضافة فواتير الطباعة
       printedInvoicesData.forEach(invoice => {
-        // استثناء فواتير المهام المجمعة لتجنب التكرار
         if (compositeTaskInvoiceIds.has(invoice.id)) return;
         
-        // ✅ تحديد نوع الطباعة
         let invoiceTypeText = '';
         if (invoice.invoice_type === 'print_only') {
           invoiceTypeText = ' (طباعة فقط)';
@@ -445,159 +408,146 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         
         transactions.push({
           id: `print-invoice-${invoice.id}`,
-          date: invoice.invoice_date || invoice.created_at, // ✅ استخدام تاريخ الفاتورة الفعلي
+          date: invoice.invoice_date || invoice.created_at,
           type: 'print_invoice',
           description: `فاتورة طباعة رقم ${invoice.invoice_number || invoice.id}${invoiceTypeText}`,
           debit: Number(invoice.total_amount) || 0,
           credit: 0,
-          balance: 0, // سيتم حسابه لاحقاً
-          reference: invoice.invoice_number || `فاتورة-${invoice.id}`,
-          notes: invoice.notes || 'فاتورة طباعة',
+          balance: 0,
+          reference: `فاتورة-${invoice.invoice_number || invoice.id}`,
+          notes: invoice.notes || '—',
         });
       });
 
-      // ✅ NEW: إضافة المهام المجمعة كحركات مدينة
+      // إضافة المهام المجمعة
       compositeTasksData.forEach(task => {
-        // تحديد نوع المهمة
-        let taskTypeText = 'مهمة مجمعة';
-        if (task.task_type === 'new_installation') {
-          taskTypeText = 'تركيب جديد';
-        } else if (task.task_type === 'reinstallation') {
-          taskTypeText = 'إعادة تركيب';
-        }
-        
-        // جلب العقود المتعددة من installation_tasks إذا وجدت
-        const installationTask = task.installation_tasks;
-        const contractIds = installationTask?.contract_ids && installationTask.contract_ids.length > 0
-          ? installationTask.contract_ids
-          : [task.contract_id];
-        
-        // تنسيق أرقام العقود
-        const contractsText = contractIds.length > 1
-          ? `عقود #${contractIds.join(', #')}`
-          : `عقد #${task.contract_id}`;
+        const taskContractIds = task.installation_tasks?.contract_ids || 
+          (task.installation_tasks?.contract_id ? [task.installation_tasks.contract_id] : []);
+        const contractsRef = taskContractIds.length > 0 
+          ? `عقود: ${taskContractIds.join(', ')}`
+          : task.contract_id ? `عقد-${task.contract_id}` : '—';
         
         transactions.push({
-          id: `composite-task-${task.id}`,
-          date: task.created_at,
+          id: `composite-${task.id}`,
+          date: task.invoice_date || task.created_at,
           type: 'composite_task',
-          description: `${taskTypeText} - ${contractsText}`,
+          description: `مهمة مجمعة - ${task.task_type || 'غير محدد'}`,
           debit: Number(task.customer_total) || 0,
           credit: 0,
-          balance: 0, // سيتم حسابه لاحقاً
-          reference: `مهمة-${contractIds.join(',')}`,
-          notes: '—', // ✅ إزالة التفاصيل من الملاحظات
+          balance: 0,
+          reference: contractsRef,
+          notes: '—', // ✅ إخفاء الملاحظات (تكلفة القص والتركيب)
         });
       });
 
-      // ✅ إضافة فواتير المشتريات كحركات دائنة (تخفض من الرصيد) - تستخدم تاريخ الفاتورة
+      // إضافة فواتير المشتريات
       purchaseInvoicesData.forEach(invoice => {
         transactions.push({
-          id: `purchase-invoice-${invoice.id}`,
-          date: invoice.invoice_date || invoice.created_at, // ✅ استخدام تاريخ الفاتورة الفعلي
+          id: `purchase-${invoice.id}`,
+          date: invoice.invoice_date || invoice.created_at,
           type: 'purchase_invoice',
-          description: `فاتورة شراء رقم ${invoice.invoice_number || invoice.id}`,
+          description: `فاتورة مشتريات رقم ${invoice.invoice_number || invoice.id}`,
           debit: 0,
           credit: Number(invoice.total_amount) || 0,
-          balance: 0, // سيتم حسابه لاحقاً
-          reference: invoice.invoice_number || `شراء-${invoice.id}`,
-          notes: invoice.notes || 'فاتورة شراء من الزبون',
-        });
-      });
-
-      // ✅ إضافة إيجارات اللوحات الصديقة كحركات دائنة (مشتريات من المورد)
-      friendBillboardRentalsData.forEach(rental => {
-        const billboard = rental.billboards;
-        const startDate = rental.start_date ? new Date(rental.start_date).toLocaleDateString('ar-LY') : '—';
-        const endDate = rental.end_date ? new Date(rental.end_date).toLocaleDateString('ar-LY') : '—';
-        const durationDays = rental.start_date && rental.end_date 
-          ? Math.ceil((new Date(rental.end_date).getTime() - new Date(rental.start_date).getTime()) / (1000 * 60 * 60 * 24)) + 1
-          : 0;
-        
-        transactions.push({
-          id: `friend-rental-${rental.id}`,
-          date: rental.start_date || rental.created_at,
-          type: 'friend_billboard_rental',
-          description: `إيجار لوحة: ${billboard?.Billboard_Name || '—'} (${billboard?.Size || '—'}) - ${durationDays} يوم`,
-          debit: 0,
-          credit: Number(rental.friend_rental_cost) || 0,
           balance: 0,
-          reference: `عقد-${rental.contract_number}`,
-          notes: `من ${startDate} إلى ${endDate} • ${billboard?.Municipality || '—'}`,
+          reference: `مشتريات-${invoice.invoice_number || invoice.id}`,
+          notes: invoice.notes || '—',
         });
       });
 
-      // ✅ إضافة فواتير المبيعات كحركات مدينة (تزيد من الرصيد) - تستخدم تاريخ الفاتورة
+      // إضافة فواتير المبيعات
       salesInvoicesData.forEach(invoice => {
         transactions.push({
-          id: `sales-invoice-${invoice.id}`,
+          id: `sales-${invoice.id}`,
           date: invoice.invoice_date || invoice.created_at,
           type: 'sales_invoice',
           description: `فاتورة مبيعات رقم ${invoice.invoice_number || invoice.id}`,
           debit: Number(invoice.total_amount) || 0,
           credit: 0,
-          balance: 0, // سيتم حسابه لاحقاً
-          reference: invoice.invoice_number || `مبيعات-${invoice.id}`,
-          notes: invoice.notes || 'فاتورة مبيعات للزبون',
+          balance: 0,
+          reference: `مبيعات-${invoice.invoice_number || invoice.id}`,
+          notes: invoice.notes || '—',
         });
       });
 
-      // إضافة الدفعات كحركات دائنة أو مدينة
-      paymentsData.forEach(payment => {
-        const rawAmount = Number(payment.amount) || 0;
-        const amount = Math.abs(rawAmount); // استخدام القيمة المطلقة
+      // إضافة إيجارات اللوحات الصديقة من جدول friend_billboard_rentals
+      friendBillboardRentalsData.forEach(rental => {
+        const billboardInfo = rental.billboards;
+        const billboardName = billboardInfo?.Billboard_Name || `لوحة ${rental.billboard_id}`;
+        // ✅ استخدام friend_rental_cost بدلاً من rental_amount
+        const rentalCost = Number(rental.friend_rental_cost) || Number(rental.customer_rental_price) || 0;
         
-        // ✅ تجاهل الدفعات بدون مبلغ
-        if (amount === 0) return;
-        
-        // ✅ FIXED: تحديد نوع الحركة بناءً على entry_type والمبلغ
-        // فاتورة المشتريات (purchase_invoice) دائماً دائنة (تخفض الرصيد)
-        // المدفوعات (payment) دائماً دائنة (تخفض الرصيد)
-        // الفواتير والديون (invoice, debt) مدينة (تزيد الرصيد)
-        let isDebit = false;
-        
-        if (payment.entry_type === 'invoice' || payment.entry_type === 'debt' || payment.entry_type === 'sales_invoice') {
-          isDebit = true;
-        } else if (payment.entry_type === 'purchase_invoice' || payment.entry_type === 'payment' || payment.entry_type === 'receipt') {
-          isDebit = false;
-        } else {
-          // للأنواع الأخرى، استخدم إشارة المبلغ
-          isDebit = rawAmount > 0;
+        transactions.push({
+          id: `friend-rental-${rental.id}`,
+          date: rental.start_date,
+          type: 'friend_billboard_rental',
+          description: `إيجار لوحة: ${billboardName}`,
+          debit: 0,
+          credit: rentalCost,
+          balance: 0,
+          reference: `إيجار-${rental.id.slice(0, 8)}`,
+          notes: `${rental.start_date} - ${rental.end_date}`,
+        });
+      });
+
+      // إضافة إيجارات الشركات الصديقة من friend_rental_data في العقود
+      contractsData.forEach(contract => {
+        const friendData = contract.friend_rental_data as any;
+        if (friendData && typeof friendData === 'object') {
+          const entries = Object.entries(friendData) as [string, any][];
+          entries.forEach(([billboardId, entry]) => {
+            if (entry && typeof entry.rental_cost === 'number' && entry.rental_cost > 0) {
+              transactions.push({
+                id: `friend-contract-${contract.Contract_Number}-${billboardId}`,
+                date: contract['Contract Date'],
+                type: 'friend_rental_contract',
+                description: `إيجار لوحة صديقة - عقد ${contract.Contract_Number}`,
+                debit: 0,
+                credit: Number(entry.rental_cost) || 0,
+                balance: 0,
+                reference: `عقد-${contract.Contract_Number}`,
+                notes: entry.company_name || '—',
+              });
+            }
+          });
         }
-        
-        const hasDistributedPaymentId = !!payment.distributed_payment_id;
+      });
+
+      // إضافة الدفعات
+      paymentsData.forEach(payment => {
+        const paymentInfo = formatPaymentType(payment.entry_type || 'payment', !!payment.distributed_payment_id);
+        const contractRef = payment.contract_number ? `عقد-${payment.contract_number}` : '—';
         
         transactions.push({
           id: `payment-${payment.id}`,
           date: payment.paid_at,
-          type: payment.entry_type,
-          description: formatPaymentType(payment.entry_type, hasDistributedPaymentId).text,
-          debit: isDebit ? amount : 0,
-          credit: isDebit ? 0 : amount,
-          balance: 0, // سيتم حسابه لاحقاً
-          reference: payment.reference || payment.contract_number || '—',
+          type: payment.entry_type || 'payment',
+          description: `${paymentInfo.text}${payment.reference ? ` - ${payment.reference}` : ''}`,
+          debit: 0,
+          credit: Number(payment.amount) || 0,
+          balance: 0,
+          reference: contractRef,
           notes: payment.notes || '—',
-          method: payment.method || '—',
-          hasDistributedPaymentId, // لاستخدامها في العرض
+          hasDistributedPaymentId: !!payment.distributed_payment_id,
         });
       });
 
-      // ترتيب الحركات حسب التاريخ من الأقدم للأجدد
-      transactions.sort((a, b) => new Date(a.date || '1900-01-01').getTime() - new Date(b.date || '1900-01-01').getTime());
+      // ترتيب وحساب الرصيد
+      transactions.sort((a, b) => {
+        const dateA = a.date ? new Date(a.date).getTime() : 0;
+        const dateB = b.date ? new Date(b.date).getTime() : 0;
+        return dateA - dateB;
+      });
 
-      // حساب الرصيد المتراكم
       let runningBalance = 0;
       transactions.forEach(transaction => {
-        runningBalance += (transaction.debit - transaction.credit);
+        runningBalance += transaction.debit - transaction.credit;
         transaction.balance = runningBalance;
       });
 
       setAllTransactions(transactions);
-      console.log('✅ تم إنشاء قائمة الحركات:', transactions);
-
     } catch (error) {
       console.error('Error loading account data:', error);
-      toast.error('حدث خطأ في تحميل بيانات الحساب');
     } finally {
       setIsLoading(false);
     }
@@ -606,493 +556,90 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
   useEffect(() => {
     if (open) {
       loadCustomerData();
-      // تعيين التواريخ الافتراضية (آخر سنة)
-      const today = new Date();
-      const oneYearAgo = new Date(today.getFullYear() - 1, today.getMonth(), today.getDate());
-      setStartDate(oneYearAgo.toISOString().slice(0, 10));
-      setEndDate(today.toISOString().slice(0, 10));
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (open && (customerId || customerName)) {
       loadAccountData();
     }
   }, [open, customerId, customerName, startDate, endDate]);
 
-  // ✅ FIXED: حساب الإحصائيات من البيانات الصحيحة
-  // ✅ FIXED: حساب الإحصائيات مع تضمين فواتير الطباعة
+  // ✅ حساب الإحصائيات
   const calculateStatistics = () => {
-    const totalContracts = contracts.length;
+    let totalDebits = 0;
+    let totalCredits = 0;
+    
+    allTransactions.forEach(t => {
+      totalDebits += t.debit;
+      totalCredits += t.credit;
+    });
+
     const activeContracts = contracts.filter(c => {
-      const endDate = new Date(c['End Date'] || c.end_date);
-      return endDate >= new Date();
+      if (!c['End Date']) return false;
+      return new Date(c['End Date']) >= new Date();
     }).length;
 
-    const totalContractValue = contracts.reduce((sum, contract) => {
-      return sum + (Number(contract['Total']) || 0);
-    }, 0);
-
-    // ✅ حساب إجمالي المدين والدائن من الحركات (يشمل فواتير الطباعة)
-    const totalDebits = allTransactions.reduce((sum, transaction) => sum + transaction.debit, 0);
-    const totalCredits = allTransactions.reduce((sum, transaction) => sum + transaction.credit, 0);
-    const balance = totalDebits - totalCredits;
-
-    // ✅ حساب عدد فواتير الطباعة
-    const printInvoicesCount = allTransactions.filter(t => t.type === 'print_invoice').length;
-    const totalPrintInvoices = allTransactions
-      .filter(t => t.type === 'print_invoice')
-      .reduce((sum, t) => sum + t.debit, 0);
-
-    // ✅ حساب المشتريات والمبيعات
-    const purchaseInvoicesCount = allTransactions.filter(t => t.type === 'purchase_invoice').length;
     const totalPurchaseInvoices = allTransactions
       .filter(t => t.type === 'purchase_invoice')
       .reduce((sum, t) => sum + t.credit, 0);
-
-    // ✅ حساب إيجارات اللوحات الصديقة
-    const friendRentalsCount = allTransactions.filter(t => t.type === 'friend_billboard_rental').length;
-    const totalFriendRentals = allTransactions
-      .filter(t => t.type === 'friend_billboard_rental')
-      .reduce((sum, t) => sum + t.credit, 0);
-
-    const salesInvoicesCount = allTransactions.filter(t => t.type === 'sales_invoice').length;
+    
     const totalSalesInvoices = allTransactions
       .filter(t => t.type === 'sales_invoice')
       .reduce((sum, t) => sum + t.debit, 0);
 
     return {
-      totalContracts,
+      totalContracts: contracts.length,
       activeContracts,
-      totalContractValue,
       totalDebits,
       totalCredits,
-      balance,
-      printInvoicesCount,
-      totalPrintInvoices,
-      purchaseInvoicesCount,
+      balance: totalDebits - totalCredits,
+      totalPayments: payments.length,
       totalPurchaseInvoices,
-      friendRentalsCount,
-      totalFriendRentals,
-      salesInvoicesCount,
-      totalSalesInvoices
+      totalSalesInvoices,
     };
   };
 
-  // ✅ طباعة كشف الحساب
+  // ✅ تحميل الشعار - يستخدم config من النظام الموحد
+  const loadLogoAsDataUri = async (logoPath: string): Promise<string> => {
+    try {
+      const response = await fetch(logoPath);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (error) {
+      console.error('Error loading logo:', error);
+      return '';
+    }
+  };
+
+  // ✅ طباعة كشف الحساب باستخدام MasterLayout الموحد
   const handlePrintStatement = async () => {
     if (!customerData) {
-      toast.error('لا توجد بيانات عميل للطباعة');
+      toast.error('يجب تحميل بيانات العميل أولاً');
       return;
     }
 
     setIsGenerating(true);
-    
+
     try {
-      // ✅ جلب إعدادات القالب الموحدة
-      const styles = await getMergedInvoiceStylesAsync('account_statement');
-      const baseUrl = window.location.origin;
-      const logoUrl = styles.logoPath || '/logofares.svg';
-      const logoDataUri = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
-      
       const statistics = calculateStatistics();
-      const statementDate = new Date().toLocaleDateString('ar-LY');
-      const statementNumber = `STMT-${Date.now()}`;
       
-      // تنسيق فترة الكشف
-      const periodStart = startDate ? new Date(startDate).toLocaleDateString('ar-LY') : 'غير محدد';
-      const periodEnd = endDate ? new Date(endDate).toLocaleDateString('ar-LY') : 'غير محدد';
-
-      const htmlContent = `
-        <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
-          <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <title>كشف حساب ${customerData.name}</title>
-          <style>
-            @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&display=swap');
-            
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
-            }
-            
-            html, body {
-              width: 210mm;
-              font-family: 'Noto Sans Arabic', Arial, sans-serif;
-              direction: rtl;
-              text-align: right;
-              background: white;
-              color: #000;
-              font-size: 12px;
-              line-height: 1.4;
-              overflow: visible;
-            }
-            
-            .statement-container {
-              width: 210mm;
-              min-height: 297mm;
-              padding: 15mm;
-              padding-bottom: 32mm;
-              display: flex;
-              flex-direction: column;
-              margin: 0 auto; /* توسيط المحتوى */
-            }
-            
-            .header {
-              display: flex;
-              justify-content: space-between;
-              align-items: flex-start;
-              margin-bottom: 30px;
-              border-bottom: 2px solid #000;
-              padding-bottom: 20px;
-              position: relative;
-            }
-            
-            .statement-info {
-              text-align: left;
-              direction: ltr;
-            }
-            
-            .statement-title {
-              font-size: 28px;
-              font-weight: bold;
-              color: #000;
-              margin-bottom: 10px;
-            }
-            
-            .statement-details {
-              font-size: 12px;
-              color: #666;
-              line-height: 1.6;
-            }
-            
-            .company-info {
-              text-align: right;
-            }
-            
-            .company-logo {
-              max-width: 260px;
-              max-height: 120px;
-              height: auto;
-              object-fit: contain;
-              margin-bottom: 8px;
-              display: block;
-              margin-right: 0;
-            }
-            
-            .customer-info {
-              background: #f8f9fa;
-              padding: 20px;
-              border-radius: 0;
-              margin-bottom: 25px;
-              border-right: 4px solid #000;
-            }
-            
-            .customer-title {
-              font-size: 16px;
-              font-weight: bold;
-              margin-bottom: 10px;
-              color: #000;
-            }
-            
-            .customer-details {
-              font-size: 13px;
-              line-height: 1.6;
-            }
-            
-            .transactions-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 25px;
-              table-layout: fixed;
-            }
-
-            thead { display: table-header-group; }
-            tfoot { display: table-footer-group; }
-            tr { page-break-inside: avoid; }
-            
-            .transactions-table th {
-              background: #000;
-              color: white;
-              padding: 12px 8px;
-              text-align: center;
-              font-weight: bold;
-              border: 1px solid #000;
-              font-size: 11px;
-              height: 40px;
-            }
-            
-            .transactions-table td {
-              padding: 8px 6px;
-              text-align: center;
-              border: 1px solid #ddd;
-              font-size: 10px;
-              vertical-align: middle;
-              height: 30px;
-              word-break: break-word;
-              overflow-wrap: break-word;
-              max-width: 0;
-            }
-            
-            .transactions-table td.description-cell {
-              text-align: right;
-              padding-right: 8px;
-              white-space: normal;
-              word-break: break-word;
-              overflow-wrap: break-word;
-              line-height: 1.3;
-            }
-            
-            .transactions-table tbody tr:nth-child(even) {
-              background: #f8f9fa;
-            }
-            
-            .debit {
-              color: #dc2626;
-              font-weight: bold;
-            }
-            
-            .credit {
-              color: #16a34a;
-              font-weight: bold;
-            }
-            
-            .balance {
-              font-weight: bold;
-            }
-            
-            .summary-section {
-              margin-top: auto;
-              border-top: 2px solid #000;
-              padding-top: 20px;
-            }
-            
-            .summary-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              padding: 8px 0;
-              font-size: 14px;
-            }
-
-            .summary-row.total-debits {
-              font-size: 16px;
-              font-weight: bold;
-              color: #dc2626;
-              margin-bottom: 10px;
-            }
-
-            .summary-row.total-credits {
-              font-size: 16px;
-              font-weight: bold;
-              color: #16a34a;
-              margin-bottom: 10px;
-            }
-            
-            .summary-row.balance {
-              font-size: 20px;
-              font-weight: bold;
-              background: #000;
-              color: white;
-              padding: 20px 25px;
-              border-radius: 0;
-              margin-top: 15px;
-              border: none;
-            }
-            
-            .currency {
-              font-weight: bold;
-              color: #FFD700;
-              text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-            }
-            
-            .footer {
-              position: fixed;
-              left: 15mm;
-              right: 15mm;
-              bottom: 12mm;
-              text-align: center;
-              font-size: 11px;
-              color: #666;
-              border-top: 1px solid #ddd;
-              padding-top: 10px;
-              background: white;
-            }
-            
-            @page {
-              size: A4 portrait;
-              margin: 15mm;
-            }
-            
-            @media print {
-              html, body {
-                width: 100% !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-              }
-
-              /* توسيط المحتوى في صفحة A4 */
-              .statement-container {
-                width: 100% !important;
-                max-width: 180mm !important;
-                padding: 0 !important;
-                margin-left: auto !important;
-                margin-right: auto !important;
-              }
-
-              .header {
-                position: static !important;
-                margin-bottom: 12px !important;
-              }
-
-              .company-logo {
-                max-width: 75mm !important;
-                max-height: 34mm !important;
-              }
-
-              .footer {
-                position: static !important;
-                margin-top: 16px !important;
-              }
-
-              .transactions-table {
-                width: 100% !important;
-                max-width: 180mm !important;
-                font-size: 10px !important;
-              }
-              
-              .transactions-table th,
-              .transactions-table td {
-                padding: 3px 5px !important;
-              }
-
-              .transactions-table thead {
-                display: table-header-group !important;
-              }
-
-              .transactions-table tr {
-                page-break-inside: avoid !important;
-              }
-
-              .summary-section {
-                page-break-inside: avoid !important;
-              }
-            }
-          </style>
-        </head>
-        <body>
-          <div class="statement-container">
-            <div class="header">
-              <div class="statement-info">
-                <div class="statement-title">كشف حساب</div>
-                <div class="statement-details">
-                  رقم الكشف: ${statementNumber}<br>
-                  التاريخ: ${statementDate}<br>
-                  الفترة: ${periodStart} - ${periodEnd}
-                </div>
-              </div>
-              
-              <div class="company-info">
-                <img src="${logoDataUri}" alt="شعار الشركة" class="company-logo">
-              </div>
-            </div>
-            
-            <div class="customer-info">
-              <div class="customer-title">بيانات العميل</div>
-              <div class="customer-details">
-                <strong>الاسم:</strong> ${customerData.name}<br>
-                ${customerData.company ? `<strong>الشركة:</strong> ${customerData.company}<br>` : ''}
-                ${customerData.phone ? `<strong>الهاتف:</strong> ${customerData.phone}<br>` : ''}
-                ${customerData.email ? `<strong>البريد الإلكتروني:</strong> ${customerData.email}<br>` : ''}
-                <strong>رقم العميل:</strong> ${customerData.id}
-              </div>
-            </div>
-            
-            <table class="transactions-table">
-              <thead>
-                <tr>
-                  <th style="width: 8%">#</th>
-                  <th style="width: 12%">التاريخ</th>
-                  <th style="width: 20%">البيان</th>
-                  <th style="width: 12%">المرجع</th>
-                  <th style="width: 12%">مدين</th>
-                  <th style="width: 12%">دائن</th>
-                  <th style="width: 12%">الرصيد</th>
-                  <th style="width: 12%">ملاحظات</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${allTransactions.map((transaction, index) => `
-                  <tr>
-                    <td>${index + 1}</td>
-                    <td>${transaction.date ? new Date(transaction.date).toLocaleDateString('ar-LY') : '—'}</td>
-                    <td class="description-cell">${transaction.description}</td>
-                    <td>${transaction.reference}</td>
-                    <td class="debit">${transaction.debit > 0 ? `${currency.symbol} ${formatArabicNumber(transaction.debit)}` : '—'}</td>
-                    <td class="credit">${transaction.credit > 0 ? `${currency.symbol} ${formatArabicNumber(transaction.credit)}` : '—'}</td>
-                    <td class="balance">${currency.symbol} ${formatArabicNumber(transaction.balance)}</td>
-                    <td class="description-cell">${transaction.notes !== '—' ? transaction.notes : ''}</td>
-                  </tr>
-                `).join('')}
-              </tbody>
-            </table>
-            
-            <div class="summary-section">
-              <div class="summary-row total-debits">
-                <span>إجمالي المدين:</span>
-                <span>${currency.symbol} ${formatArabicNumber(statistics.totalDebits)}</span>
-              </div>
-              <div class="summary-row total-credits">
-                <span>إجمالي الدائن:</span>
-                <span>- ${currency.symbol} ${formatArabicNumber(statistics.totalCredits)}</span>
-              </div>
-              <div class="summary-row balance" style="background: ${statistics.balance > 0 ? '#000' : '#065f46'};">
-                <span>الرصيد النهائي:</span>
-                <span class="currency">${currency.symbol} ${formatArabicNumber(Math.abs(statistics.balance))}${statistics.balance < 0 ? ' (رصيد دائن)' : statistics.balance === 0 ? ' (مسدد بالكامل)' : ''}</span>
-              </div>
-              <div style="margin-top: 15px; font-size: 13px; color: #666; text-align: center;">
-                الرصيد بالكلمات: ${formatArabicNumber(Math.abs(statistics.balance))} ${currency.writtenName}${statistics.balance < 0 ? ' (رصيد دائن)' : statistics.balance === 0 ? ' (مسدد بالكامل)' : ''}
-              </div>
-            </div>
-            
-            <div class="footer">
-              شكراً لتعاملكم معنا | Thank you for your business<br>
-              هذا كشف حساب إلكتروني ولا يحتاج إلى ختم أو توقيع
-            </div>
-          </div>
-          
-          <script>
-            window.addEventListener('load', function() {
-              setTimeout(function() {
-                window.focus();
-                window.print();
-              }, 500);
-            });
-          </script>
-        </body>
-        </html>
-      `;
-
-      // فتح نافذة الطباعة
-      const windowFeatures = 'width=1200,height=800,scrollbars=yes,resizable=yes,toolbar=no,menubar=no,location=no,status=no';
-      const printWindow = window.open('', '_blank', windowFeatures);
-
-      if (!printWindow) {
-        throw new Error('فشل في فتح نافذة الطباعة. يرجى التحقق من إعدادات المتصفح والسماح بالنوافذ المنبثقة.');
-      }
-
-      printWindow.document.title = `كشف_حساب_${customerData.name}_${statementNumber}`;
-      printWindow.document.open();
-      printWindow.document.write(htmlContent);
-      printWindow.document.close();
-
-      toast.success(`تم فتح كشف الحساب للطباعة بنجاح بعملة ${currency.name}!`);
+      await printStatement({
+        customerData: {
+          id: customerData.id,
+          name: customerData.name,
+          company: customerData.company,
+          phone: customerData.phone,
+          email: customerData.email,
+        },
+        transactions: allTransactions,
+        statistics,
+        currency,
+        startDate,
+        endDate,
+      });
+      
       onOpenChange(false);
-
     } catch (error) {
       console.error('Error in handlePrintStatement:', error);
       const errorMessage = error instanceof Error ? error.message : 'خطأ غير معروف';
@@ -1106,7 +653,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
 
   return (
     <UIDialog.Dialog open={open} onOpenChange={onOpenChange}>
-      {/* ✅ FIXED: تطبيق العرض والارتفاع المناسبين */}
       <UIDialog.DialogContent className="w-[69rem] max-w-[69rem] h-[85vh] max-h-[85vh] overflow-hidden">
         <UIDialog.DialogHeader>
           <UIDialog.DialogTitle className="flex items-center gap-2">
@@ -1119,7 +665,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           </UIDialog.DialogClose>
         </UIDialog.DialogHeader>
         
-        {/* ✅ FIXED: إضافة scroll للمحتوى مع ارتفاع محدود */}
         <div className="flex-1 overflow-y-auto space-y-4 px-1">
           {isGenerating ? (
             <div className="text-center py-8">
@@ -1188,7 +733,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                 </div>
               )}
 
-              {/* ✅ FIXED: الإحصائيات بستايل الموقع */}
+              {/* الإحصائيات */}
               {!isLoading && (
                 <div className="grid grid-cols-2 md:grid-cols-7 gap-4">
                   <div className="expenses-preview-item">
@@ -1222,7 +767,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                 </div>
               )}
 
-              {/* ✅ NEW: جدول جميع الحركات (دائن ومدين) */}
+              {/* جدول جميع الحركات */}
               {!isLoading && allTransactions.length > 0 && (
                 <div className="expenses-preview-item">
                   <h3 className="expenses-preview-label">جميع حركات الحساب ({allTransactions.length}):</h3>
@@ -1247,31 +792,9 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                               {transaction.date ? new Date(transaction.date).toLocaleDateString('ar-LY') : '—'}
                             </td>
                              <td className="border border-border p-2 text-right">
-                               {transaction.type === 'contract' && (
-                                 <span className="bg-gradient-to-r from-purple-500/20 to-purple-600/20 text-purple-400 px-3 py-1 rounded-full text-xs font-semibold border border-purple-500/30">
-                                   {transaction.description}
-                                 </span>
-                               )}
-                               {transaction.type === 'print_invoice' && (
-                                 <span className="bg-gradient-to-r from-blue-500/20 to-blue-600/20 text-blue-400 px-3 py-1 rounded-full text-xs font-semibold border border-blue-500/30">
-                                   {transaction.description}
-                                 </span>
-                               )}
-                               {transaction.type === 'purchase_invoice' && (
-                                 <span className="bg-gradient-to-r from-purple-500/20 to-purple-600/20 text-purple-400 px-3 py-1 rounded-full text-xs font-semibold border border-purple-500/30">
-                                   {transaction.description}
-                                 </span>
-                               )}
-                               {transaction.type === 'sales_invoice' && (
-                                 <span className="bg-gradient-to-r from-indigo-500/20 to-indigo-600/20 text-indigo-400 px-3 py-1 rounded-full text-xs font-semibold border border-indigo-500/30">
-                                   {transaction.description}
-                                 </span>
-                               )}
-                               {!['contract', 'print_invoice', 'purchase_invoice', 'sales_invoice'].includes(transaction.type) && (
-                                 <span className={formatPaymentType(transaction.type, transaction.hasDistributedPaymentId).className}>
-                                   {formatPaymentType(transaction.type, transaction.hasDistributedPaymentId).text}
-                                 </span>
-                               )}
+                               <span className={formatPaymentType(transaction.type, transaction.hasDistributedPaymentId).className}>
+                                 {transaction.description}
+                               </span>
                              </td>
                             <td className="border border-border p-2 text-center">{transaction.reference}</td>
                             <td className="border border-border p-2 text-center font-medium text-red-400">
@@ -1291,7 +814,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                 </div>
               )}
 
-              {/* ✅ UPDATED: جدول العقود مع حالة العقد */}
+              {/* جدول العقود */}
               {!isLoading && contracts.length > 0 && (
                 <div className="expenses-preview-item">
                   <h3 className="expenses-preview-label">العقود ({contracts.length}):</h3>
@@ -1300,32 +823,32 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                       <thead>
                         <tr className="bg-primary text-primary-foreground">
                           <th className="border border-border p-2 text-center">رقم العقد</th>
+                          <th className="border border-border p-2 text-center">التاريخ</th>
                           <th className="border border-border p-2 text-center">نوع الإعلان</th>
-                          <th className="border border-border p-2 text-center">تاريخ البداية</th>
-                          <th className="border border-border p-2 text-center">تاريخ النهاية</th>
-                          <th className="border border-border p-2 text-center">حالة العقد</th>
-                          <th className="border border-border p-2 text-center">القيمة</th>
+                          <th className="border border-border p-2 text-center">المبلغ</th>
+                          <th className="border border-border p-2 text-center">تاريخ الانتهاء</th>
+                          <th className="border border-border p-2 text-center">الحالة</th>
                         </tr>
                       </thead>
                       <tbody>
                         {contracts.map((contract, index) => {
-                          const contractStatus = getContractStatus(contract['End Date']);
+                          const status = getContractStatus(contract['End Date']);
                           return (
-                            <tr key={index} className={index % 2 === 0 ? 'bg-card/50' : 'bg-background'}>
-                              <td className="border border-border p-2 text-center font-medium">{contract.Contract_Number}</td>
-                              <td className="border border-border p-2 text-right">{contract['Ad Type'] || '—'}</td>
+                            <tr key={contract.Contract_Number} className={index % 2 === 0 ? 'bg-card/50' : 'bg-background'}>
+                              <td className="border border-border p-2 text-center font-semibold">{contract.Contract_Number}</td>
                               <td className="border border-border p-2 text-center">
                                 {contract['Contract Date'] ? new Date(contract['Contract Date']).toLocaleDateString('ar-LY') : '—'}
+                              </td>
+                              <td className="border border-border p-2 text-center">{contract['Ad Type'] || '—'}</td>
+                              <td className="border border-border p-2 text-center text-primary font-medium">
+                                {formatArabicNumber(Number(contract['Total']) || 0)} {currency.symbol}
                               </td>
                               <td className="border border-border p-2 text-center">
                                 {contract['End Date'] ? new Date(contract['End Date']).toLocaleDateString('ar-LY') : '—'}
                               </td>
-                              <td className={`border border-border p-2 text-center ${contractStatus.className}`}>
-                                {contractStatus.status}
+                              <td className={`border border-border p-2 text-center ${status.className}`}>
+                                {status.status}
                               </td>
-            <td className="border border-border p-2 text-center font-medium">
-              {(Number(contract['Total']) || 0).toLocaleString('ar-LY')} {currency.symbol}
-            </td>
                             </tr>
                           );
                         })}
@@ -1335,40 +858,28 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                 </div>
               )}
 
-              {isLoading && (
-                <div className="text-center py-8">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                  <p className="text-sm text-muted-foreground">جاري تحميل بيانات الحساب...</p>
-                </div>
-              )}
-
-              {/* رسالة عدم وجود بيانات */}
-              {!isLoading && contracts.length === 0 && payments.length === 0 && (
-                <div className="text-center py-8 bg-yellow-50 rounded-lg border border-yellow-200">
-                  <p className="text-yellow-800 font-medium">لا توجد بيانات للعميل في الفترة المحددة</p>
-                  <p className="text-yellow-600 text-sm mt-2">يرجى التحقق من اسم العميل أو تغيير الفترة الزمنية</p>
+              {/* رسالة إذا لم توجد بيانات */}
+              {!isLoading && allTransactions.length === 0 && (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>لا توجد حركات لهذا العميل</p>
                 </div>
               )}
             </>
           )}
         </div>
 
-        {/* ✅ FIXED: أزرار العمليات في أسفل النافذة */}
-        <div className="flex gap-2 justify-end pt-4 border-t border-border">
-          <Button 
-            variant="outline" 
-            onClick={() => onOpenChange(false)}
-            className="border-primary/30 hover:bg-primary/10"
-          >
-            إغلاق
+        <div className="flex justify-end gap-3 pt-4 border-t">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            إلغاء
           </Button>
           <Button 
             onClick={handlePrintStatement}
-            className="bg-gradient-to-r from-primary to-primary-glow hover:from-primary-glow hover:to-primary text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300"
             disabled={isGenerating || isLoading || allTransactions.length === 0}
+            className="gap-2"
           >
-            <Printer className="h-4 w-4 ml-2" />
-            طباعة كشف الحساب
+            <Printer className="h-4 w-4" />
+            {isGenerating ? 'جاري التحضير...' : 'طباعة كشف الحساب'}
           </Button>
         </div>
       </UIDialog.DialogContent>

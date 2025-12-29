@@ -586,20 +586,21 @@ export default function PrintInstallationInvoice() {
 </head>
 <body>
   <div class="invoice-container">
-    <div class="header">
-      <div class="company-info">
-        <div class="company-name">شركة الفارس الذهبي للدعاية والإعلان</div>
-        <div class="company-details">
-          طرابلس – طريق المطار، حي الزهور<br>
-          هاتف: 0912612255
-        </div>
+    <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #D4AF37; padding-bottom: 15px;">
+      <div class="company-info" style="text-align: right;">
+        ${settings?.companyName ? `<div class="company-name" style="font-size: 22px; font-weight: bold; color: #D4AF37;">${settings.companyName}</div>` : ''}
+        ${settings?.companySubtitle ? `<div style="color: #D4AF37; font-size: 14px;">${settings.companySubtitle}</div>` : ''}
+        ${(settings?.companyAddress || settings?.companyPhone) ? `<div class="company-details" style="font-size: 11px; margin-top: 6px;">
+          ${settings.companyAddress ? settings.companyAddress : ''}${settings.companyAddress && settings.companyPhone ? '<br>' : ''}
+          ${settings.companyPhone ? `هاتف: ${settings.companyPhone}` : ''}
+        </div>` : ''}
       </div>
       
-      <div class="invoice-info">
+      <div class="invoice-info" style="text-align: left;">
         <div class="invoice-title">${typeLabel}</div>
-        <div class="invoice-details">
-          رقم الفاتورة: ${data.invoiceNumber}<br>
-          التاريخ: ${data.date}
+        <div class="invoice-details" style="font-size: 12px; margin-top: 8px;">
+          <div style="display: flex; gap: 8px;"><span style="font-weight: bold; color: #D4AF37;">رقم الفاتورة:</span><span>${data.invoiceNumber}</span></div>
+          <div style="display: flex; gap: 8px; margin-top: 4px;"><span style="font-weight: bold; color: #D4AF37;">التاريخ:</span><span>${data.date}</span></div>
         </div>
       </div>
     </div>

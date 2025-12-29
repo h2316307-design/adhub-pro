@@ -13,6 +13,7 @@ import InteractiveMap from '@/components/InteractiveMap';
 import { CustomerInfoForm } from '@/components/contracts/edit/CustomerInfoForm';
 import ContractPDFDialog from './ContractPDFDialog';
 import { OfferBillboardPrintDialog } from '@/components/offers/OfferBillboardPrintDialog';
+import { UnifiedPrintAllDialog, BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import { InstallmentsManager } from '@/components/contracts/edit/InstallmentsManager';
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
 import { 
@@ -160,7 +161,17 @@ export default function OffersPage() {
   const [pdfDialogOpen, setPdfDialogOpen] = useState(false);
   const [selectedOfferForPrint, setSelectedOfferForPrint] = useState<any>(null);
   
-  // Billboard print dialog state
+  // Billboard print dialog state (Unified)
+  const [unifiedPrintDialogOpen, setUnifiedPrintDialogOpen] = useState(false);
+  const [unifiedPrintData, setUnifiedPrintData] = useState<{
+    offerNumber: number;
+    customerName: string;
+    adType: string;
+    items: BillboardPrintItem[];
+    billboards: Record<number, any>;
+  } | null>(null);
+  
+  // Legacy billboard print dialog (OfferBillboardPrintDialog)
   const [billboardPrintDialogOpen, setBillboardPrintDialogOpen] = useState(false);
   const [selectedOfferForBillboardPrint, setSelectedOfferForBillboardPrint] = useState<any>(null);
 
@@ -1690,20 +1701,49 @@ export default function OffersPage() {
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => {
-                            setSelectedOfferForBillboardPrint({
-                              offer_number: offer.offer_number,
-                              customer_name: offer.customer_name,
-                              ad_type: offer.ad_type,
-                              start_date: offer.start_date,
-                              billboards_data: offer.billboards_data,
+                          onClick={async () => {
+                            // Parse billboards from offer
+                            const billboardsData = (() => {
+                              try {
+                                return JSON.parse(offer.billboards_data || '[]');
+                              } catch { return []; }
+                            })();
+                            
+                            const billboardIds = billboardsData.map((b: any) => b.ID || b.id);
+                            
+                            // Fetch full billboard details
+                            const { data: fullBillboards } = await supabase
+                              .from('billboards')
+                              .select('*')
+                              .in('ID', billboardIds);
+                            
+                            const billboardsMap: Record<number, any> = {};
+                            (fullBillboards || []).forEach((b: any) => {
+                              billboardsMap[b.ID] = b;
                             });
-                            setBillboardPrintDialogOpen(true);
+                            
+                            // Create print items
+                            const items: BillboardPrintItem[] = billboardsData.map((b: any) => ({
+                              id: b.ID || b.id,
+                              billboard_id: b.ID || b.id,
+                              design_face_a: b.design_face_a || null,
+                              design_face_b: b.design_face_b || null,
+                            }));
+                            
+                            setUnifiedPrintData({
+                              offerNumber: offer.offer_number,
+                              customerName: offer.customer_name,
+                              adType: offer.ad_type || 'عرض سعر',
+                              items,
+                              billboards: billboardsMap,
+                            });
+                            setUnifiedPrintDialogOpen(true);
                           }}
-                          className="gap-1 hover:bg-amber-500/10 hover:border-amber-500/30 hover:text-amber-600"
-                          title="طباعة لوحات منفصلة"
+                          className="gap-1 hover:bg-green-500/10 hover:border-green-500/30 hover:text-green-600"
+                          title="طباعة الكل"
                         >
-                          <LayoutGrid className="h-3.5 w-3.5" />
+                          <Printer className="h-3.5 w-3.5" />
+                          الكل
                         </Button>
                         <Button
                           size="sm"
@@ -2623,12 +2663,30 @@ export default function OffersPage() {
           </DialogContent>
         </Dialog>
 
-        {/* Billboard Print Dialog */}
+        {/* Legacy Billboard Print Dialog */}
         <OfferBillboardPrintDialog
           open={billboardPrintDialogOpen}
           onOpenChange={setBillboardPrintDialogOpen}
           offer={selectedOfferForBillboardPrint}
         />
+
+        {/* Unified Print All Dialog */}
+        {unifiedPrintData && (
+          <UnifiedPrintAllDialog
+            open={unifiedPrintDialogOpen}
+            onOpenChange={(open) => {
+              setUnifiedPrintDialogOpen(open);
+              if (!open) setUnifiedPrintData(null);
+            }}
+            contextType="offer"
+            contextNumber={unifiedPrintData.offerNumber}
+            customerName={unifiedPrintData.customerName}
+            adType={unifiedPrintData.adType}
+            items={unifiedPrintData.items}
+            billboards={unifiedPrintData.billboards}
+            title="طباعة لوحات العرض"
+          />
+        )}
       </div>
     </div>
   );

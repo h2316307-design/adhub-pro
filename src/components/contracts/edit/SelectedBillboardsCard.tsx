@@ -789,6 +789,13 @@ export function SelectedBillboardsCard({
                   totalForBoard += installPrice;
                 }
 
+                // ✅ حساب صافي الإيجار للوحة (بعد خصم التكاليف المضمنة في السعر)
+                // صافي الإيجار = الإيجار الأساسي - تكاليف الطباعة المضمنة - تكاليف التركيب المضمنة
+                const includedPrintCost = (printCostEnabled && includePrintInPrice) ? printCostForBillboard : 0;
+                const includedInstallCost = (installationEnabled && includeInstallationInPrice) ? installPrice : 0;
+                const netRentalForBoard = baseTotalForBoard - includedPrintCost - includedInstallCost;
+                const hasIncludedCosts = includedPrintCost > 0 || includedInstallCost > 0;
+
                 // Calculate proportional discount
                 const billboardPricePercentage = totalPriceBeforeDiscount > 0
                   ? baseTotalForBoard / totalPriceBeforeDiscount
@@ -899,6 +906,17 @@ export function SelectedBillboardsCard({
                           <span className="text-lg font-bold text-primary">{baseTotalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
                         </div>
 
+                        {/* Print Cost - Show when enabled and included in price (deducted from rental) */}
+                        {printCostEnabled && includePrintInPrice && printCostForBillboard > 0 && (
+                          <div className="flex justify-between items-center bg-orange-500/10 rounded-lg px-3 py-2 -mx-1">
+                            <span className="text-sm font-medium text-orange-600 flex items-center gap-1.5">
+                              <Printer className="h-3.5 w-3.5" />
+                              طباعة مضمنة
+                            </span>
+                            <span className="text-base font-bold text-orange-600">- {printCostForBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                          </div>
+                        )}
+
                         {/* Print Cost - Show when enabled and NOT included in price */}
                         {printCostEnabled && !includePrintInPrice && printCostForBillboard > 0 && (
                           <div className="flex justify-between items-center bg-blue-500/10 rounded-lg px-3 py-2 -mx-1">
@@ -910,6 +928,17 @@ export function SelectedBillboardsCard({
                           </div>
                         )}
 
+                        {/* Installation Cost - Show when enabled and included in price (deducted from rental) */}
+                        {installationEnabled && includeInstallationInPrice && installPrice > 0 && (
+                          <div className="flex justify-between items-center bg-amber-500/10 rounded-lg px-3 py-2 -mx-1">
+                            <span className="text-sm font-medium text-amber-600 flex items-center gap-1.5">
+                              <Wrench className="h-3.5 w-3.5" />
+                              تركيب مضمن
+                            </span>
+                            <span className="text-base font-bold text-amber-600">- {installPrice.toLocaleString('ar-LY')} {currencySymbol}</span>
+                          </div>
+                        )}
+
                         {/* Installation Cost - Show when enabled and NOT included in price */}
                         {installationEnabled && !includeInstallationInPrice && installPrice > 0 && (
                           <div className="flex justify-between items-center bg-accent/10 rounded-lg px-3 py-2 -mx-1">
@@ -918,6 +947,14 @@ export function SelectedBillboardsCard({
                               تكلفة التركيب
                             </span>
                             <span className="text-base font-bold text-accent">+ {installPrice.toLocaleString('ar-LY')} {currencySymbol}</span>
+                          </div>
+                        )}
+
+                        {/* ✅ صافي الإيجار - يظهر عندما تكون هناك تكاليف مضمنة */}
+                        {hasIncludedCosts && (
+                          <div className="flex justify-between items-center bg-green-500/10 rounded-lg px-3 py-2 -mx-1 border border-green-500/20">
+                            <span className="text-sm font-bold text-green-600">صافي الإيجار</span>
+                            <span className="text-lg font-bold text-green-600">{netRentalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -939,7 +976,7 @@ export function SelectedBillboardsCard({
                             </div>
                             {/* Net */}
                             <div className="flex justify-between items-center bg-primary/10 rounded-lg px-3 py-2 -mx-1">
-                              <span className="text-sm font-medium text-primary">الصافي</span>
+                              <span className="text-sm font-medium text-primary">الصافي بعد الخصم</span>
                               <div className="text-left">
                                 <span className="text-lg font-bold text-primary">
                                   {priceAfterDiscount.toLocaleString('ar-LY')} {currencySymbol}

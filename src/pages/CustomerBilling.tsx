@@ -1414,10 +1414,12 @@ export default function CustomerBilling() {
         totalSales={totalSales}
         totalPrintedInvoices={totalPrintedInvoices}
         totalFriendRentals={friendBillboardRentals.reduce((sum, r) => sum + (Number(r.friend_rental_cost) || 0), 0)}
+        totalCompositeTasks={totalCompositeTasks}
+        totalDebits={totalDebits}
         lastContractDate={contracts.length > 0 ? contracts[0]['Contract Date'] : undefined}
         lastPaymentDate={
           payments
-            .filter(p => p.entry_type === 'receipt' || p.entry_type === 'account_payment')
+            .filter(p => p.entry_type === 'receipt' || p.entry_type === 'account_payment' || p.entry_type === 'payment')
             .sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())[0]?.paid_at
         }
       />

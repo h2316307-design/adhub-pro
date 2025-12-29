@@ -137,7 +137,7 @@ export function PurchaseInvoiceDialog({
     }
   };
 
-  const handlePrint = (invoice: any, items: PurchaseItem[]) => {
+  const handlePrint = async (invoice: any, items: PurchaseItem[]) => {
     const invoiceData = {
       invoiceNumber: invoice.invoice_number,
       invoiceDate: invoice.invoice_date,
@@ -156,7 +156,7 @@ export function PurchaseInvoiceDialog({
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const html = generatePurchaseInvoiceHTML(invoiceData);
+    const html = await generatePurchaseInvoiceHTML(invoiceData);
     printWindow.document.write(html);
     printWindow.document.close();
   };

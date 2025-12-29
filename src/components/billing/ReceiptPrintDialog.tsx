@@ -126,20 +126,20 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
       // العقود
       const { data: contracts } = await supabase
         .from('Contract')
-        .select('Contract_Number, Total')
+        .select('*')
         .eq('customer_id', customerId);
 
       // فواتير المبيعات حتى تاريخ الدفعة
       const { data: salesInvoices } = await supabase
         .from('sales_invoices')
-        .select('total_amount, invoice_date')
+        .select('*')
         .eq('customer_id', customerId)
         .lte('invoice_date', paymentDate.toISOString().split('T')[0]);
 
       // فواتير الطباعة حتى تاريخ الدفعة
       const { data: printedInvoices } = await supabase
         .from('printed_invoices')
-        .select('total_amount, print_cost, invoice_date')
+        .select('*')
         .eq('customer_id', customerId)
         .lte('invoice_date', paymentDate.toISOString().split('T')[0]);
 
@@ -155,11 +155,31 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
       // المشتريات حتى تاريخ الدفعة
       const { data: purchaseInvoices } = await supabase
         .from('purchase_invoices')
-        .select('total_amount, used_as_payment, purchase_date')
+        .select('*')
         .eq('customer_id', customerId)
         .lte('purchase_date', paymentDate.toISOString().split('T')[0]);
 
-      // استخدام الدالة الموحدة
+      // ✅ المهام المجمعة
+      const { data: compositeTasks } = await supabase
+        .from('composite_tasks')
+        .select('*')
+        .eq('customer_id', customerId);
+
+      // ✅ حساب إيجارات الشركات الصديقة
+      let friendRentals = 0;
+      for (const contract of (contracts || [])) {
+        const friendData = (contract as any).friend_rental_data;
+        if (friendData && typeof friendData === 'object') {
+          const entries = Object.values(friendData) as any[];
+          for (const entry of entries) {
+            if (entry && typeof entry.rental_cost === 'number') {
+              friendRentals += entry.rental_cost;
+            }
+          }
+        }
+      }
+
+      // ✅ استخدام الدالة الموحدة مع جميع المعاملات
       const { calculateTotalRemainingDebt } = await import('./BillingUtils');
       const remainingBalance = calculateTotalRemainingDebt(
         (contracts || []) as any[],
@@ -167,7 +187,9 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
         salesInvoices || [],
         printedInvoices || [],
         purchaseInvoices || [],
-        totalDiscounts
+        totalDiscounts,
+        compositeTasks || [],
+        friendRentals
       );
 
       return {

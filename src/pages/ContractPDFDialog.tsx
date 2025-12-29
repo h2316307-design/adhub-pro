@@ -85,6 +85,49 @@ const formatPaymentsSummary = (installmentsData: string | null): string => {
   }
 };
 
+// ✅ نسخة نظيفة بدون HTML للطباعة SVG
+const formatPaymentsSummaryPlain = (installmentsData: string | null): string => {
+  if (!installmentsData) return 'دفعة واحدة عند التوقيع';
+  
+  try {
+    const installments: Installment[] = typeof installmentsData === 'string' 
+      ? JSON.parse(installmentsData) 
+      : installmentsData;
+    if (!installments || installments.length === 0) return 'دفعة واحدة عند التوقيع';
+    
+    const groups = groupRepeatingPayments(installments);
+    const currencySymbol = 'د.ل';
+    
+    const parts: string[] = [];
+    
+    groups.forEach((group, index) => {
+      const startDateFormatted = formatDateForDisplay(group.startDate);
+      const endDateFormatted = formatDateForDisplay(group.endDate);
+      
+      if (group.isGrouped) {
+        if (index === 0) {
+          parts.push(`${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
+        } else {
+          parts.push(`ثم ${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
+        }
+      } else {
+        const inst = group.originalInstallments[0];
+        if (index === 0) {
+          parts.push(`دفعة أولى ${group.amount} ${currencySymbol} ${inst.paymentType} بتاريخ ${startDateFormatted}`);
+        } else {
+          parts.push(`ودفعة ${group.amount} ${currencySymbol} بتاريخ ${startDateFormatted}`);
+        }
+      }
+    });
+    
+    // ✅ فصل الدفعات بفاصل نصي للطباعة
+    return parts.join(' | ');
+  } catch (e) {
+    console.error('Error parsing installments:', e);
+    return 'دفعة واحدة عند التوقيع';
+  }
+};
+
 // ✅ NEW: Currency options with written names in Arabic
 const CURRENCIES = [
   { code: 'LYD', name: 'دينار ليبي', symbol: 'د.ل', writtenName: 'دينار ليبي' },
@@ -1722,8 +1765,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         rentalCost: contractDetails.rentalCost,
         duration: contractDetails.duration,
         year: year.toString(),
-        companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-        phoneNumber: '0912612255',
+        companyName: '',
+        phoneNumber: '',
         payments: paymentInstallments,
         currencyInfo: currencyInfo,
         discountInfo: discountInfo,
@@ -1896,8 +1939,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         enabled: printCostEnabled
       });
 
-      // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات
-      const paymentsHtml = formatPaymentsSummary(contract?.installments_data);
+      // ✅ استخدام النسخة النظيفة للطباعة SVG
+      const paymentsHtml = formatPaymentsSummaryPlain(contract?.installments_data);
 
       // ✅ UPDATED: Generate enhanced PDF title with contract number, ad type, customer, billboards count and currency
       const billboardsCount = contract?.billboards_count || (contract?.billboard_ids ? contract.billboard_ids.split(',').length : 1);
@@ -2596,8 +2639,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         rentalCost: contractDetails.rentalCost,
         duration: contractDetails.duration,
         year: year.toString(),
-        companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-        phoneNumber: '0912612255',
+        companyName: '',
+        phoneNumber: '',
         payments: paymentInstallments,
         currencyInfo: currencyInfo,
         discountInfo: discountInfo
@@ -2820,8 +2863,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         contract?.print_cost_enabled === "1"
       );
 
-      // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات
-      const paymentsHtml = formatPaymentsSummary(contract?.installments_data);
+      // ✅ استخدام النسخة النظيفة للطباعة SVG
+      const paymentsHtml = formatPaymentsSummaryPlain(contract?.installments_data);
 
       // ✅ نفس HTML الذي يستخدمه handlePrintContract (كامل مع كل البنود والخلفية الصحيحة)
       const billboardsCount = contract?.billboards_count || (contract?.billboard_ids ? contract.billboard_ids.split(',').length : 1);
@@ -3318,8 +3361,9 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
               : contract.billboard_prices;
             if (Array.isArray(pricesData)) {
               const priceItem = pricesData.find((item: any) => String(item.billboardId) === id);
-              if (priceItem && priceItem.priceBeforeDiscount != null) {
-                const origPriceNum = Number(priceItem.priceBeforeDiscount);
+              if (priceItem) {
+                // ✅ FIX: التحقق من كلا الحقلين priceBeforeDiscount و basePriceBeforeDiscount
+                const origPriceNum = Number(priceItem.priceBeforeDiscount ?? priceItem.basePriceBeforeDiscount ?? 0);
                 if (!isNaN(origPriceNum) && origPriceNum > priceNum) {
                   originalPrice = `${formatArabicNumber(origPriceNum)} ${currencyInfo.symbol}`;
                   hasDiscount = true;
@@ -3384,7 +3428,9 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       
       // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات مع التفاصيل الكاملة
       const paymentsSummary = formatPaymentsSummary(contract?.installments_data);
-      // ✅ FIX: تنسيق أفضل للبند الخامس - فصل الإجمالي عن الدفعات
+      // ✅ FIX: نسخة نظيفة بدون HTML tags للطباعة الموحدة (SVG) + إضافة نص التخفيض
+      const paymentsText = `إجمالي تكلفة الإيجار لعدد (${sortedBillboards.length}) لوحة إعلانية هو (${formatArabicNumber(finalTotalAmount)}) ${currencyInfo.writtenName}${discountText} (${installationText}، ${printCostText}). يتم السداد وفقاً للدفعات المتفق عليها: ${paymentsSummary}`;
+      // ✅ نسخة HTML للمعاينة فقط
       const paymentsHtml = `إجمالي تكلفة الإيجار لعدد (<strong>${sortedBillboards.length}</strong>) لوحة إعلانية هو (<strong>${formatArabicNumber(finalTotalAmount)}</strong>) ${currencyInfo.writtenName} (${installationText}، ${printCostText}).<br><br><strong>يتم السداد وفقاً للدفعات المتفق عليها:</strong><br>- ${paymentsSummary}`;
 
       // Convert contract terms
@@ -3414,29 +3460,29 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           const startOfYear = `${cYear}-01-01`;
           const endOfYear = `${cYear}-12-31`;
           
+          // ✅ FIX: الترتيب حسب رقم العقد فقط (تصاعدي) لضمان التسلسل الصحيح
           const { data: yearContracts } = await supabase
             .from('Contract')
             .select('Contract_Number, "Contract Date"')
             .gte('"Contract Date"', startOfYear)
             .lte('"Contract Date"', endOfYear)
-            .order('"Contract Date"', { ascending: true })
             .order('Contract_Number', { ascending: true });
           
           if (yearContracts && yearContracts.length > 0) {
             const currentContractNum = contract?.Contract_Number || contract?.id;
             const order = yearContracts.findIndex(c => c.Contract_Number === currentContractNum) + 1;
             if (order > 0) {
-              return `${yearShort}/${order}`;
+              return `${order}/${yearShort}`;
             }
           }
           
           // إذا لم نجد، نستخدم رقم العقد كترتيب
           const contractNum = parseInt(String(contract?.Contract_Number || contract?.id || '0'));
-          return `${yearShort}/${contractNum}`;
+          return `${contractNum}/${yearShort}`;
         } catch (error) {
           console.error('Error getting yearly code:', error);
           const contractNum = parseInt(String(contract?.Contract_Number || contract?.id || '0'));
-          return `${yearShort}/${contractNum}`;
+          return `${contractNum}/${yearShort}`;
         }
       };
       
@@ -3471,7 +3517,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           installationCost: contractDetails.installationCost,
           duration: contractDetails.duration,
         },
-        paymentsHtml,
+        paymentsHtml: paymentsText, // استخدام النسخة النظيفة بدون HTML للطباعة
       });
 
       // Open print window

@@ -43,6 +43,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
 import { RemovalStatsDialog } from '@/components/reports/RemovalStatsDialog';
+import { UnifiedPrintAllDialog, BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 
 interface RemovalTask {
   id: string;
@@ -99,7 +100,17 @@ export default function RemovalTasks() {
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'pending' | 'completed'>('pending');
   
-  // Print all options
+  // Print all options (Unified)
+  const [unifiedPrintDialogOpen, setUnifiedPrintDialogOpen] = useState(false);
+  const [unifiedPrintData, setUnifiedPrintData] = useState<{
+    teamId: string;
+    teamName: string;
+    items: BillboardPrintItem[];
+    billboards: Record<number, any>;
+    teams: Record<string, any>;
+  } | null>(null);
+  
+  // Legacy print all options
   const [printAllDialogOpen, setPrintAllDialogOpen] = useState(false);
   const [printAllTeamId, setPrintAllTeamId] = useState<string | null>(null);
   const [printImageType, setPrintImageType] = useState<'default' | 'installed'>('default');
@@ -610,6 +621,15 @@ export default function RemovalTasks() {
     });
     return m;
   }, [taskContracts]);
+
+  // Map task_id to task for quick lookup
+  const taskById = useMemo(() => {
+    const m: Record<string, any> = {};
+    (tasks || []).forEach((t: any) => {
+      m[t.id] = t;
+    });
+    return m;
+  }, [tasks]);
 
   const createManualTasksMutation = useMutation({
     mutationFn: async () => {
@@ -1765,8 +1785,37 @@ export default function RemovalTasks() {
                               variant="outline"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                setPrintAllTeamId(teamId);
-                                setPrintAllDialogOpen(true);
+                                
+                                // Get pending items for this team
+                                const pendingTeamItems = teamItems.filter(i => i.status === 'pending');
+                                
+                                // Create print items with contract info
+                                const items: BillboardPrintItem[] = pendingTeamItems.map(item => {
+                                  // Get task for this item
+                                  const task = taskById[item.task_id];
+                                  const contractId = task?.contract_id;
+                                  const contract = contractId ? contractByNumber[contractId] : null;
+                                  
+                                  return {
+                                    id: item.id,
+                                    billboard_id: item.billboard_id,
+                                    design_face_a: item.design_face_a || null,
+                                    design_face_b: item.design_face_b || null,
+                                    installed_image_face_a_url: item.installed_image_url || null,
+                                    team_id: teamId,
+                                    contract_number: contract?.Contract_Number || contractId,
+                                    ad_type: contract?.['Ad Type'] || null,
+                                  };
+                                });
+                                
+                                setUnifiedPrintData({
+                                  teamId,
+                                  teamName: team.team_name,
+                                  items,
+                                  billboards: billboardById,
+                                  teams: teamById,
+                                });
+                                setUnifiedPrintDialogOpen(true);
                               }}
                               className="gap-1"
                             >
@@ -1830,6 +1879,27 @@ export default function RemovalTasks() {
                                   onCheckedChange={() => toggleTaskSelection(task.id)}
                                   onClick={(e) => e.stopPropagation()}
                                 />
+                                {/* صورة التصميم الكبيرة */}
+                                {(() => {
+                                  const designItem = taskItems.find(item => item.design_face_a || item.design_face_b);
+                                  const designImage = designItem?.design_face_a || designItem?.design_face_b;
+                                  return designImage ? (
+                                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-red-400 shadow-lg flex-shrink-0 group">
+                                      <img
+                                        src={designImage}
+                                        alt="التصميم"
+                                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).style.display = 'none';
+                                        }}
+                                      />
+                                      <div className="absolute inset-0 bg-gradient-to-t from-red-900/80 via-transparent to-transparent" />
+                                      <div className="absolute bottom-1 left-1 right-1">
+                                        <span className="text-[9px] text-white font-bold bg-red-600/90 px-1.5 py-0.5 rounded">للإزالة</span>
+                                      </div>
+                                    </div>
+                                  ) : null;
+                                })()}
                                 <div className="text-right">
                                   <div className="flex items-center gap-2">
                                     <span className="font-semibold">عقد #{task.contract_id}</span>
@@ -2514,6 +2584,25 @@ export default function RemovalTasks() {
         open={statsDialogOpen}
         onOpenChange={setStatsDialogOpen}
       />
+
+      {/* Unified Print All Dialog */}
+      {unifiedPrintData && (
+        <UnifiedPrintAllDialog
+          open={unifiedPrintDialogOpen}
+          onOpenChange={(open) => {
+            setUnifiedPrintDialogOpen(open);
+            if (!open) setUnifiedPrintData(null);
+          }}
+          contextType="removal"
+          contextNumber={`إزالة - ${unifiedPrintData.teamName}`}
+          customerName=""
+          items={unifiedPrintData.items}
+          billboards={unifiedPrintData.billboards}
+          teams={unifiedPrintData.teams}
+          showTeamFilter={false}
+          title={`طباعة لوحات الإزالة - ${unifiedPrintData.teamName}`}
+        />
+      )}
     </div>
   );
 }

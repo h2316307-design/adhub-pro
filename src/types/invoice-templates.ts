@@ -452,52 +452,53 @@ export interface IndividualInvoiceSettings {
 }
 
 export const DEFAULT_SHARED_SETTINGS: SharedInvoiceSettings = {
-  companyName: 'الفـــــارس الذهبــــي',
-  companySubtitle: 'للدعـــــايــــة والإعــــلان',
-  companyAddress: 'طرابلس – طريق المطار، حي الزهور',
-  companyPhone: '0912612255',
+  // مهم: بدون نصوص افتراضية داخل الهيدر (يظهر فقط إذا أدخل المستخدم بياناته)
+  companyName: '',
+  companySubtitle: '',
+  companyAddress: '',
+  companyPhone: '',
   logoPath: '/logofaresgold.svg',
-  
+
   logoSize: 60,
   logoPosition: 'right',
-  
-  showContactInfo: true,
+
+  showContactInfo: false,
   contactInfoFontSize: 10,
   contactInfoAlignment: 'center',
-  
+
   headerBgColor: '#D4AF37',
   headerTextColor: '#ffffff',
   headerBgOpacity: 100,
   headerAlignment: 'right',
-  
+
   invoiceTitle: 'فاتورة',
   invoiceTitleEn: 'INVOICE',
   showInvoiceTitle: true,
   invoiceTitleAlignment: 'left',
   invoiceTitleFontSize: 28,
-  
+
   backgroundImage: '',
   backgroundOpacity: 100,
   backgroundScale: 100,
   backgroundPosX: 50,
   backgroundPosY: 50,
-  
+
   fontFamily: 'Doran',
-  
+
   showLogo: true,
   showCompanyInfo: true,
   showCompanyName: true,
   showCompanySubtitle: true,
   showCompanyAddress: true,
   showCompanyPhone: true,
-  
+
   showFooter: true,
   showPageNumber: true,
   footerText: 'شكراً لتعاملكم معنا',
   footerAlignment: 'center',
   footerBgColor: 'transparent',
   footerTextColor: '#666666',
-  
+
   headerMarginBottom: 20,
   footerPosition: 15,
   contentBottomSpacing: 25,
@@ -506,6 +507,7 @@ export const DEFAULT_SHARED_SETTINGS: SharedInvoiceSettings = {
   pageMarginLeft: 15,
   pageMarginRight: 15,
 };
+
 
 export const DEFAULT_INDIVIDUAL_SETTINGS: IndividualInvoiceSettings = {
   primaryColor: '#D4AF37',

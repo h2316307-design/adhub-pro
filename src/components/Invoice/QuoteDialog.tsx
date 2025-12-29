@@ -51,12 +51,12 @@ function buildQuoteHtml(props: Props) {
     date: props.meta?.date || new Date(),
     adType: props.meta?.adType || '—',
     clientName: props.meta?.clientName || '—',
-    clientRep: props.meta?.clientRep || '��',
-    clientPhone: props.meta?.clientPhone || '—',
-    companyName: props.meta?.companyName || 'شركة الفارس الذهبي للدعاية والإعلان',
-    companyAddress: props.meta?.companyAddress || 'طرا��لس – طريق المطار، حي الزهور',
-    companyRep: props.meta?.companyRep || 'جمال امحمد زحيلق (المدير العام)',
-    iban: props.meta?.iban || 'LY15014051021405100053401',
+    clientRep: props.meta?.clientRep || '',
+    clientPhone: props.meta?.clientPhone || '',
+    companyName: props.meta?.companyName || '',
+    companyAddress: props.meta?.companyAddress || '',
+    companyRep: props.meta?.companyRep || '',
+    iban: props.meta?.iban || '',
     durationMonths: props.meta?.durationMonths || Math.max(1, Math.max(...items.map(b => monthsById[b.id] || 1)))
   };
 

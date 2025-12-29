@@ -75,8 +75,8 @@ export function OfferPrintDialog({ offer, trigger }: OfferPrintDialogProps) {
       price: formattedPrice,
       duration,
       year: year.toString(),
-      companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-      phoneNumber: '0912612255',
+      companyName: '',
+      phoneNumber: '',
       currencySymbol,
     };
   };
@@ -348,7 +348,7 @@ export function OfferPrintDialog({ offer, trigger }: OfferPrintDialogProps) {
                 text-anchor="middle"
                 dominant-baseline="middle"
               >
-                شركة الفارس الذهبي للدعاية والإعلان، طرابلس – طريق المطار، حي الزهور.
+                <!-- Company info from settings -->
               </text>
               <text
                 x="1960"

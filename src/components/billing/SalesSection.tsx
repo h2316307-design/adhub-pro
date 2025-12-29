@@ -89,7 +89,7 @@ export function SalesSection({
     }
   };
 
-  const handlePrint = (invoice: any) => {
+  const handlePrint = async (invoice: any) => {
     const items = typeof invoice.items === 'string' ? JSON.parse(invoice.items) : invoice.items;
     const invoiceData = {
       invoiceNumber: invoice.invoice_number,
@@ -108,7 +108,7 @@ export function SalesSection({
     const printWindow = window.open('', '_blank');
     if (!printWindow) return;
 
-    const html = generateSalesInvoiceHTML(invoiceData);
+    const html = await generateSalesInvoiceHTML(invoiceData);
     printWindow.document.write(html);
     printWindow.document.close();
   };

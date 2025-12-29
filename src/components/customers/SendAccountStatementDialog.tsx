@@ -835,10 +835,6 @@ export function SendAccountStatementDialog({
           <div class="header">
             <div class="company-info">
               <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
-              <div class="company-details">
-                طرابلس – طريق المطار، حي الزهور<br>
-                هاتف: 0912612255
-              </div>
             </div>
 
             <div class="statement-info">

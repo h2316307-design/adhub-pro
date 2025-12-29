@@ -33,10 +33,10 @@ export type OfferMeta = {
 export function buildAlFaresOfferHtml(items: Billboard[], meta: OfferMeta) {
   const months = meta.months;
   const customer = meta.customer || CUSTOMERS[0];
-  const companyName = meta.companyName || 'شركة الفا��س الذهبي للدعاية والإعلان';
-  const companyAddress = meta.companyAddress || 'طرابلس – طريق المطار، حي الزهور';
-  const companyRep = meta.companyRep || 'جمال امحمد زحيلق (المدير العام)';
-  const iban = meta.iban || 'LY15014051021405100053401';
+  const companyName = meta.companyName || '';
+  const companyAddress = meta.companyAddress || '';
+  const companyRep = meta.companyRep || '';
+  const iban = meta.iban || '';
   const date = meta.date || new Date();
   const contractNumber = meta.contractNumber || `${new Date().getFullYear()}-${String(Date.now()).slice(-4)}`;
   const adType = meta.adType || '—';

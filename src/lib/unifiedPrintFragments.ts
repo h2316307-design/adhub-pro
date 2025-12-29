@@ -9,6 +9,10 @@ export interface UnifiedPrintStyles {
   logoPath?: string;
   logoSize?: number;
   logoPosition?: AlignmentOption;
+
+  // Header alignment (applies to the company/info column as a whole)
+  headerAlignment?: AlignmentOption;
+
   showLogo?: boolean;
   showContactInfo?: boolean;
   contactInfoFontSize?: number;
@@ -46,16 +50,20 @@ export function unifiedHeaderFooterCss(styles: UnifiedPrintStyles) {
   const headerMarginBottom = styles.headerMarginBottom ?? 20;
   const footerPosition = styles.footerPosition ?? 15;
 
+  const companyAlign = styles.headerAlignment ?? styles.logoPosition;
+
   return `
   /* Unified Header/Footer (matches UnifiedInvoicePreview layout) */
-  .u-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${headerMarginBottom}px;padding-bottom:15px;border-bottom:2px solid ${styles.primaryColor}}
+  .u-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${headerMarginBottom}px;padding-bottom:15px;border-bottom:2px solid ${styles.primaryColor};direction:rtl;flex-direction:row-reverse}
   .u-header-left{flex:1;text-align:${textAlign(styles.invoiceTitleAlignment)};direction:ltr}
   .u-title{font-size:28px;font-weight:700;margin:0;font-family:Manrope, sans-serif;letter-spacing:2px;color:${styles.secondaryColor}}
   .u-meta{font-size:11px;color:${styles.customerSectionTextColor};margin-top:8px;line-height:1.6}
-  .u-header-right{flex:1;display:flex;flex-direction:column;align-items:${flexAlign(styles.logoPosition)};gap:8px}
-  .u-logo{height:${styles.logoSize ?? 70}px;object-fit:contain;flex-shrink:0}
-  .u-contact{font-size:${styles.contactInfoFontSize ?? 10}px;color:${styles.customerSectionTextColor};line-height:1.6;text-align:${textAlign(styles.contactInfoAlignment)}}
-  .u-company{font-size:11px;color:${styles.customerSectionTextColor};line-height:1.8;text-align:${textAlign(styles.logoPosition)}}
+
+  /* Company column alignment comes from headerAlignment; logo can still be positioned separately */
+  .u-header-right{flex:1;display:flex;flex-direction:column;align-items:${flexAlign(companyAlign)};gap:8px}
+  .u-logo{height:${styles.logoSize ?? 70}px;object-fit:contain;flex-shrink:0;align-self:${flexAlign(styles.logoPosition)}}
+  .u-contact{width:100%;font-size:${styles.contactInfoFontSize ?? 10}px;color:${styles.customerSectionTextColor};line-height:1.6;text-align:${textAlign(companyAlign)}}
+  .u-company{width:100%;font-size:11px;color:${styles.customerSectionTextColor};line-height:1.8;text-align:${textAlign(companyAlign)}}
   .u-company-name{font-weight:700;font-size:14px;color:${styles.primaryColor};margin-bottom:2px}
 
   .u-footer{width:100%;margin-bottom:${footerPosition}mm;padding-top:10px;border-top:1px solid ${styles.tableBorderColor};background:${styles.footerBgColor && styles.footerBgColor !== 'transparent' ? styles.footerBgColor : 'transparent'};color:${styles.footerTextColor};font-size:10px;display:flex;align-items:center;justify-content:${flexJustify(styles.footerAlignment)};gap:20px}
@@ -73,7 +81,7 @@ export function unifiedHeaderHtml(opts: {
 
   const titleEn = opts.titleEn || styles.invoiceTitleEn || 'INVOICE';
 
-  const showInvoiceTitle = styles.showCompanyInfo !== false ? true : true; // always show for now
+  const showInvoiceTitle = true;
   const showLogo = styles.showLogo !== false;
 
   return `
@@ -97,7 +105,7 @@ export function unifiedHeaderHtml(opts: {
 
       ${styles.showCompanyInfo && (styles.showCompanyName || styles.showCompanySubtitle) ? `
       <div class="u-company">
-        ${styles.showCompanyName ? `<div class="u-company-name">${styles.companyName || ''}</div>` : ''}
+        ${styles.showCompanyName && styles.companyName ? `<div class="u-company-name">${styles.companyName}</div>` : ''}
         ${styles.showCompanySubtitle && styles.companySubtitle ? `<div>${styles.companySubtitle}</div>` : ''}
       </div>
       ` : ''}
@@ -116,3 +124,4 @@ export function unifiedFooterHtml(styles: UnifiedPrintStyles, pageText = 'صفح
   </div>
   `;
 }
+

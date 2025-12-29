@@ -98,8 +98,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       price: formattedPrice,
       duration: duration,
       year: year.toString(),
-      companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-      phoneNumber: contract.phoneNumber || '0912612255',
+      companyName: '',
+      phoneNumber: contract.phoneNumber || '',
       billboardImage: getBillboardImage(contract)
     };
   };
@@ -434,7 +434,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 dominant-baseline="middle"
                 style="direction: rtl; text-align: center"
               >
-                شركة الفارس الذهبي للدعاية والإعلان، طرابلس – طريق المطار، حي الزهور.
+                <!-- Company info from settings -->
               </text>
               <text
                 x="1960"

@@ -343,7 +343,7 @@ export default function TeamPaymentReceiptDialog({
                 </div>
                 <div class="signature-box">
                   <div>توقيع المسلم</div>
-                  <div class="signature-name">${styles.companyName || 'شركة فارس للدعاية والإعلان'}</div>
+                  <div class="signature-name">${styles.companyName || ''}</div>
                 </div>
               </div>
             </div>

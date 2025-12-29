@@ -8,7 +8,7 @@ import {
   Building, AlertCircle, Clock, CheckCircle, Printer, 
   Hammer, Wrench, Percent, PaintBucket, FileText, 
   Send, FileSpreadsheet, MoreHorizontal, Phone,
-  TrendingUp, TrendingDown, Minus, ImageIcon
+  TrendingUp, TrendingDown, Minus, ImageIcon, RefreshCw
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -22,6 +22,7 @@ import { useNavigate } from 'react-router-dom';
 import { AddPaymentDialog } from './AddPaymentDialog';
 import { SendContractDialog } from './SendContractDialog';
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface ContractCardProps {
   contract: Contract;
@@ -30,6 +31,7 @@ interface ContractCardProps {
   onPrint: (contract: Contract) => void;
   onInstall: (contract: Contract) => void;
   onBillboardPrint: (contract: Contract) => void;
+  onPrintAll?: (contract: Contract) => void;
   onExport: (contract: Contract, type: 'basic' | 'detailed' | 'installation') => void;
   onRefresh: () => void;
   isSelected?: boolean;
@@ -43,6 +45,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   onPrint,
   onInstall,
   onBillboardPrint,
+  onPrintAll,
   onExport,
   onRefresh,
   isSelected = false,
@@ -52,6 +55,74 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   const [designImage, setDesignImage] = useState<string | null>(null);
   const [dominantColor, setDominantColor] = useState<string | null>(null);
   const [actualPaid, setActualPaid] = useState<number | null>(null);
+  const [isRenewing, setIsRenewing] = useState(false);
+
+  // دالة تجديد العقد - إنشاء عقد جديد من بيانات العقد الحالي
+  const handleRenewContract = async () => {
+    try {
+      setIsRenewing(true);
+      
+      const contractData = contract as any;
+      const billboardIds = contractData.billboard_ids || '';
+      
+      // حساب التواريخ الجديدة
+      const today = new Date();
+      const origStart = contractData['Contract Date'] || contractData.start_date;
+      const origEnd = contractData['End Date'] || contractData.end_date;
+      
+      let durationMonths = 3; // افتراضي
+      if (origStart && origEnd) {
+        const sd = new Date(origStart);
+        const ed = new Date(origEnd);
+        const diffDays = Math.ceil((ed.getTime() - sd.getTime()) / (1000 * 60 * 60 * 24));
+        durationMonths = Math.max(1, Math.round(diffDays / 30));
+      }
+      
+      const newEndDate = new Date(today);
+      newEndDate.setMonth(newEndDate.getMonth() + durationMonths);
+      
+      // إنشاء العقد الجديد
+      const { data: newContract, error } = await supabase
+        .from('Contract')
+        .insert({
+          'Customer Name': contractData['Customer Name'] || contractData.customer_name,
+          customer_id: contractData.customer_id,
+          'Contract Date': today.toISOString().slice(0, 10),
+          'End Date': newEndDate.toISOString().slice(0, 10),
+          'Ad Type': contractData['Ad Type'] || contractData.ad_type || 'إعلان',
+          'Total Rent': contractData['Total Rent'] || contractData.total_rent || 0,
+          Discount: 0,
+          Total: contractData['Total'] || contractData.total || 0,
+          billboard_ids: billboardIds,
+          billboards_count: billboardIds ? billboardIds.split(',').filter(Boolean).length : 0,
+          customer_category: contractData.customer_category,
+          contract_currency: contractData.contract_currency || 'LYD',
+          exchange_rate: contractData.exchange_rate || '1',
+          installation_cost: contractData.installation_cost || 0,
+          installation_enabled: contractData.installation_enabled !== false,
+          print_cost: contractData.print_cost || 0,
+          print_cost_enabled: contractData.print_cost_enabled || 'false',
+          print_price_per_meter: contractData.print_price_per_meter || '0',
+          operating_fee_rate: contractData.operating_fee_rate || 3,
+          payment_status: 'unpaid',
+          'Renewal Status': 'نشط',
+        })
+        .select('Contract_Number')
+        .single();
+      
+      if (error) throw error;
+      
+      if (newContract?.Contract_Number) {
+        toast.success(`تم إنشاء العقد الجديد رقم ${newContract.Contract_Number}`);
+        navigate(`/admin/contracts/edit?contract=${newContract.Contract_Number}`);
+      }
+    } catch (error) {
+      console.error('Error renewing contract:', error);
+      toast.error('حدث خطأ أثناء تجديد العقد');
+    } finally {
+      setIsRenewing(false);
+    }
+  };
   
   // جلب المدفوعات الفعلية من customer_payments
   useEffect(() => {
@@ -77,6 +148,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   const printCost = Number((contract as any).print_cost || 0);
   const operatingFee = Number((contract as any).fee || 0);
   const totalCost = Number((contract as any).total_cost || (contract as any)['Total'] || 0);
+  const discount = Number((contract as any).Discount || (contract as any).discount || 0);
   
   // إذا كان الإيجار = 0، لا نحسب التركيب والطباعة في المجموع المستحق لأنها لم تحدث بعد
   const hasRentalActivity = totalRent > 0 || totalCost > 0;
@@ -136,18 +208,20 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     const fetchDesignImage = async () => {
       const contractId = (contract as any).Contract_Number || (contract as any)['Contract Number'] || contract.id;
       
+      // جلب جميع مهام التركيب للعقد
       const { data: tasks } = await supabase
         .from('installation_tasks')
         .select('id')
-        .eq('contract_id', contractId)
-        .limit(1);
+        .eq('contract_id', contractId);
       
       if (tasks && tasks.length > 0) {
+        // البحث في جميع المهام عن أي عنصر يحتوي على تصميم
+        const taskIds = tasks.map(t => t.id);
         const { data: items } = await supabase
           .from('installation_task_items')
           .select('design_face_a, design_face_b')
-          .eq('task_id', tasks[0].id)
-          .not('design_face_a', 'is', null)
+          .in('task_id', taskIds)
+          .or('design_face_a.not.is.null,design_face_b.not.is.null')
           .limit(1);
         
         if (items && items.length > 0) {
@@ -337,6 +411,14 @@ export const ContractCard: React.FC<ContractCardProps> = ({
                 <Edit className="h-4 w-4 ml-2" />
                 تعديل
               </DropdownMenuItem>
+              <DropdownMenuItem 
+                onClick={handleRenewContract}
+                disabled={isRenewing}
+                className="text-green-600 focus:text-green-600"
+              >
+                <RefreshCw className={`h-4 w-4 ml-2 ${isRenewing ? 'animate-spin' : ''}`} />
+                {isRenewing ? 'جاري التجديد...' : 'تجديد العقد'}
+              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onPrint(contract)}>
                 <Printer className="h-4 w-4 ml-2" />
@@ -350,6 +432,12 @@ export const ContractCard: React.FC<ContractCardProps> = ({
                 <FileText className="h-4 w-4 ml-2" />
                 لوحات منفصلة
               </DropdownMenuItem>
+              {onPrintAll && (
+                <DropdownMenuItem onClick={() => onPrintAll(contract)}>
+                  <Printer className="h-4 w-4 ml-2" />
+                  طباعة الكل
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onClick={() => {
                 const contractNum = (contract as any).Contract_Number || (contract as any)['Contract Number'] || contract.id;
                 window.location.href = `/admin/billboard-print-settings?contract=${contractNum}`;
@@ -440,6 +528,16 @@ export const ContractCard: React.FC<ContractCardProps> = ({
                 <span>رسوم التشغيل</span>
               </div>
               <span className="font-medium text-blue-600">{operatingFee.toLocaleString('ar-LY')} د.ل</span>
+            </div>
+          )}
+          
+          {discount > 0 && (
+            <div className="flex justify-between items-center text-sm">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <TrendingDown className="h-3 w-3" />
+                <span>التخفيض</span>
+              </div>
+              <span className="font-medium text-red-500">- {discount.toLocaleString('ar-LY')} د.ل</span>
             </div>
           )}
           

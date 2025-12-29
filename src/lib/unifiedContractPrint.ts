@@ -167,6 +167,19 @@ function wrapText(text: string, maxCharsPerLine: number): string[] {
   return lines;
 }
 
+// IMPORTANT: We generate raw SVG markup as a string.
+// Any user/db-provided text MUST be escaped, otherwise strings like "<br>" will break the SVG
+// and the remaining content will render outside with no styles.
+function escapeSvgText(input: string): string {
+  return (input ?? '')
+    .toString()
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Replace variables in term content
 function replaceVariables(
   text: string, 
@@ -185,11 +198,13 @@ function replaceVariables(
     .replace(/{totalAmount}/g, contractDetails.finalTotal)
     .replace(/{currency}/g, currencyInfo.writtenName)
     .replace(/{billboardsCount}/g, String(billboardsCount))
+    // NOTE: paymentsHtml may contain <br> etc. We keep it as-is for wrapping,
+    // but it MUST be escaped at render time inside SVG text.
     .replace(/{payments}/g, paymentsHtml);
 }
 
 // ===== BUILD FIRST PAGE SVG (Contract Terms) - متطابق تماماً مع المعاينة في ContractTermsSettings =====
-function buildFirstPageSVG(options: UnifiedPrintOptions): string {
+function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeight: number } {
   const { settings, contractData, terms, contractDetails, currencyInfo, billboards, paymentsHtml } = options;
   
   // نفس المعاينة بالضبط - المعاينة تستخدم textAnchor="end" دائماً للبنود
@@ -225,11 +240,14 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): string {
       if (lineIndex === 0) {
         const colonIndex = line.indexOf(':');
         if (colonIndex !== -1) {
-          const titlePart = line.substring(0, colonIndex + 1);
-          const contentPart = line.substring(colonIndex + 1);
+          const titlePartRaw = line.substring(0, colonIndex + 1);
+          const contentPartRaw = line.substring(colonIndex + 1);
           const titleWeight = settings.termsTitleWeight || 'bold';
-          const titleWidth = Math.round(measureTextWidthPx(titlePart, fontSize, 'Doran, sans-serif', titleWeight));
-          
+          const titleWidth = Math.round(measureTextWidthPx(titlePartRaw, fontSize, 'Doran, sans-serif', titleWeight));
+
+          const titlePart = escapeSvgText(titlePartRaw);
+          const contentPart = escapeSvgText(contentPartRaw);
+
           // الخط الذهبي خلف العنوان فقط - نفس المعاينة بالضبط (rectX = termsX - titleWidth)
           if (goldLineSettings.visible !== false) {
             const goldLineHeight = lineHeight * (goldLineSettings.heightPercent / 100);
@@ -238,7 +256,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): string {
             const rectY = y - (goldLineHeight / 2);
             termsSvg += `<rect x="${rectX}" y="${rectY}" width="${titleWidth}" height="${goldLineHeight}" fill="${goldLineSettings.color}" rx="2" />`;
           }
-          
+
           termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">`;
           termsSvg += `<tspan font-weight="${settings.termsTitleWeight || 'bold'}">${titlePart}</tspan>`;
           termsSvg += `<tspan font-weight="${settings.termsContentWeight || 'normal'}">${contentPart}</tspan>`;
@@ -246,13 +264,17 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): string {
           return;
         }
       }
-      
-      termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-weight="${settings.termsContentWeight || 'normal'}" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">${line}</text>`;
+
+      termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-weight="${settings.termsContentWeight || 'normal'}" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">${escapeSvgText(line)}</text>`;
     });
   });
   
-  // SVG overlay - نفس بنية المعاينة تماماً
-  return `
+  // ✅ استخدام ارتفاع ثابت = DESIGN_H مثل المعاينة في ContractTermsSettings
+  // المعاينة تستخدم viewBox="0 0 2480 3508" ثابت ولا تغيره
+  const svgHeight = DESIGN_H;
+  
+  // SVG overlay - نفس بنية المعاينة تماماً بدون تغييرات ديناميكية
+  const svg = `
     <svg 
       class="overlay-svg" 
       viewBox="0 0 ${DESIGN_W} ${DESIGN_H}" 
@@ -271,7 +293,11 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): string {
           fill="#000" 
           text-anchor="${settings.header.textAlign || 'middle'}"
           dominant-baseline="middle"
-        >${contractData.isOffer ? `عرض سعر رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} - صالح لمدة 24 ساعة` : `عقد إيجار مواقع إعلانية رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} سنة ${contractData.year}`}</text>
+        >${escapeSvgText(
+          contractData.isOffer
+            ? `عرض سعر رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} - صالح لمدة 24 ساعة`
+            : `عقد إيجار مواقع إعلانية رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} سنة ${contractData.year}`
+        )}</text>
       ` : ''}
       
       <!-- التاريخ - نفس المعاينة -->
@@ -288,81 +314,83 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): string {
         >التاريخ: ${contractData.startDate}</text>
       ` : ''}
       
-      <!-- نوع الإعلان - جديد -->
-      ${settings.adType?.visible ? `
-        <text 
-          x="${settings.adType.x}" 
-          y="${settings.adType.y}" 
-          font-family="Doran, sans-serif" 
-          font-weight="bold" 
-          font-size="${settings.adType.fontSize}" 
-          fill="#1a1a2e" 
-          text-anchor="${settings.adType.textAlign || 'end'}"
-          dominant-baseline="middle"
-        >نوع الإعلان: ${contractData.adType || 'غير محدد'}</text>
-      ` : ''}
-      
-      <!-- الطرف الأول - نفس المعاينة (fontSize + 4 للعنوان) -->
-      ${settings.firstParty.visible ? `
-        <g>
-          <text 
-            x="${settings.firstParty.x}" 
-            y="${settings.firstParty.y}" 
-            font-family="Doran, sans-serif" 
-            font-weight="bold" 
-            font-size="${settings.firstParty.fontSize + 4}" 
-            fill="#000" 
-            text-anchor="${settings.firstParty.textAlign || 'end'}"
-            dominant-baseline="middle"
-          >الطرف الأول: ${settings.firstPartyData.companyName}، ${settings.firstPartyData.address}</text>
-          <text 
-            x="${settings.firstParty.x}" 
-            y="${settings.firstParty.y + (settings.firstParty.lineSpacing || 50)}" 
-            font-family="Doran, sans-serif" 
-            font-size="${settings.firstParty.fontSize}" 
-            fill="#000" 
-            text-anchor="${settings.firstParty.textAlign || 'end'}"
-            dominant-baseline="middle"
-          >${settings.firstPartyData.representative}</text>
-        </g>
-      ` : ''}
-      
-      <!-- الطرف الثاني - اسم الشركة -->
-      ${settings.secondParty.visible ? `
-        <g>
-          <text 
-            x="${settings.secondParty.x}" 
-            y="${settings.secondParty.y}" 
-            font-family="Doran, sans-serif" 
-            font-weight="bold" 
-            font-size="${settings.secondParty.fontSize}" 
-            fill="#000" 
-            text-anchor="${settings.secondParty.textAlign || 'end'}"
-            dominant-baseline="middle"
-          >الطرف الثاني: ${contractData.customerCompany || contractData.customerName}</text>
-        </g>
-      ` : ''}
-      
-      <!-- الطرف الثاني - اسم الزبون والهاتف -->
-      ${settings.secondPartyCustomer?.visible ? `
-        <g>
-          <text 
-            x="${settings.secondPartyCustomer.x}" 
-            y="${settings.secondPartyCustomer.y}" 
-            font-family="Doran, sans-serif" 
-            font-size="${settings.secondPartyCustomer.fontSize}" 
-            fill="#000" 
-            text-anchor="${settings.secondPartyCustomer.textAlign || 'end'}"
-            dominant-baseline="middle"
-            direction="rtl"
-          >يمثلها السيد ${contractData.customerName} - هاتف: <tspan direction="ltr" unicode-bidi="embed">${contractData.customerPhone || 'غير محدد'}</tspan></text>
-        </g>
-      ` : ''}
+       <!-- نوع الإعلان - جديد -->
+       ${settings.adType?.visible ? `
+         <text 
+           x="${settings.adType.x}" 
+           y="${settings.adType.y}" 
+           font-family="Doran, sans-serif" 
+           font-weight="bold" 
+           font-size="${settings.adType.fontSize}" 
+           fill="#1a1a2e" 
+           text-anchor="${settings.adType.textAlign || 'end'}"
+           dominant-baseline="middle"
+         >${escapeSvgText(`نوع الإعلان: ${contractData.adType || 'غير محدد'}`)}</text>
+       ` : ''}
+       
+       <!-- الطرف الأول - نفس المعاينة (fontSize + 4 للعنوان) -->
+       ${settings.firstParty.visible ? `
+         <g>
+           <text 
+             x="${settings.firstParty.x}" 
+             y="${settings.firstParty.y}" 
+             font-family="Doran, sans-serif" 
+             font-weight="bold" 
+             font-size="${settings.firstParty.fontSize + 4}" 
+             fill="#000" 
+             text-anchor="${settings.firstParty.textAlign || 'end'}"
+             dominant-baseline="middle"
+           >${escapeSvgText(`الطرف الأول: ${settings.firstPartyData.companyName}، ${settings.firstPartyData.address}`)}</text>
+           <text 
+             x="${settings.firstParty.x}" 
+             y="${settings.firstParty.y + (settings.firstParty.lineSpacing || 50)}" 
+             font-family="Doran, sans-serif" 
+             font-size="${settings.firstParty.fontSize}" 
+             fill="#000" 
+             text-anchor="${settings.firstParty.textAlign || 'end'}"
+             dominant-baseline="middle"
+           >${escapeSvgText(settings.firstPartyData.representative)}</text>
+         </g>
+       ` : ''}
+       
+       <!-- الطرف الثاني - اسم الشركة -->
+       ${settings.secondParty.visible ? `
+         <g>
+           <text 
+             x="${settings.secondParty.x}" 
+             y="${settings.secondParty.y}" 
+             font-family="Doran, sans-serif" 
+             font-weight="bold" 
+             font-size="${settings.secondParty.fontSize}" 
+             fill="#000" 
+             text-anchor="${settings.secondParty.textAlign || 'end'}"
+             dominant-baseline="middle"
+           >${escapeSvgText(`الطرف الثاني: ${contractData.customerCompany || contractData.customerName}`)}</text>
+         </g>
+       ` : ''}
+       
+       <!-- الطرف الثاني - اسم الزبون والهاتف -->
+       ${settings.secondPartyCustomer?.visible ? `
+         <g>
+           <text 
+             x="${settings.secondPartyCustomer.x}" 
+             y="${settings.secondPartyCustomer.y}" 
+             font-family="Doran, sans-serif" 
+             font-size="${settings.secondPartyCustomer.fontSize}" 
+             fill="#000" 
+             text-anchor="${settings.secondPartyCustomer.textAlign || 'end'}"
+             dominant-baseline="middle"
+             direction="rtl"
+           >${escapeSvgText(`يمثلها السيد ${contractData.customerName} - هاتف: `)}<tspan direction="ltr" unicode-bidi="embed">${escapeSvgText(contractData.customerPhone || 'غير محدد')}</tspan></text>
+         </g>
+       ` : ''}
       
       <!-- البنود الديناميكية -->
       ${termsSvg}
     </svg>
   `;
+  
+  return { svg, svgHeight };
 }
 
 // ===== BUILD TABLE PAGE HTML (متطابق مع المعاينة في ContractTermsSettings) =====
@@ -545,20 +573,22 @@ function buildTablePageHTML(
           // إعدادات عرض التخفيض
           const discountSettings: DiscountDisplaySettings = settings.discountDisplay || DEFAULT_DISCOUNT_DISPLAY;
           
-          if (row.hasDiscount && row.originalPrice && discountSettings.enabled && discountSettings.showOriginalPrice) {
+          // ✅ FIX: إظهار الخصم إذا كان هناك خصم فعلي (hasDiscount && originalPrice)
+          // حتى لو كان enabled=false في الإعدادات، نعرض الخصم إذا وجد
+          if (row.hasDiscount && row.originalPrice) {
             // عرض السعر الأصلي مشطوب فوق السعر الجديد
             cellContent = `
               <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.2;">
                 <span style="
-                  font-size: ${discountSettings.originalPriceFontSize}px;
-                  color: ${discountSettings.originalPriceColor};
+                  font-size: ${discountSettings.originalPriceFontSize || 18}px;
+                  color: ${discountSettings.originalPriceColor || '#888888'};
                   text-decoration: line-through;
-                  text-decoration-color: ${discountSettings.strikethroughColor};
-                  text-decoration-thickness: ${discountSettings.strikethroughWidth}px;
+                  text-decoration-color: ${discountSettings.strikethroughColor || '#cc0000'};
+                  text-decoration-thickness: ${discountSettings.strikethroughWidth || 2}px;
                 ">${row.originalPrice}</span>
                 <span style="
-                  font-size: ${discountSettings.discountedPriceFontSize}px;
-                  color: ${discountSettings.discountedPriceColor};
+                  font-size: ${discountSettings.discountedPriceFontSize || 24}px;
+                  color: ${discountSettings.discountedPriceColor || '#000000'};
                   font-weight: bold;
                 ">${row.price || ''}</span>
               </div>
@@ -708,7 +738,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   }
   
   // Build first page
-  const firstPageSVG = buildFirstPageSVG(options);
+  const { svg: firstPageSVG } = buildFirstPageSVG(options);
   const firstPageHTML = `
     <div class="contract-preview-container" style="
       position: relative;
@@ -749,12 +779,10 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   
-  // Scale لتحويل التصميم (2480x3508) إلى A4 (210x297mm)
-  // 210mm = 793.7px at 96 DPI, لكن نستخدم mm مباشرة في CSS
-  // scale = 210mm / 2480px = 0.0847mm/px
-  // أو بالـ px: 793.7 / 2480 = 0.32
-  // لكن للطباعة نستخدم mm مباشرة ونترك المتصفح يتعامل معها
-  const scaleToA4 = (210 / DESIGN_W); // ~0.0847 (من px إلى mm)
+  // تحويل A4 إلى px (Fallback) - سنستخدم قياس ديناميكي أدق داخل نافذة الطباعة
+  // المستخدم أكد أن 150% تملأ الصفحة بشكل صحيح، لذا نضرب في 1.5
+  const a4WidthPx = (210 / 25.4) * 96;
+  const printScale = (a4WidthPx / DESIGN_W) * 1.5;
   
   return `
     <!DOCTYPE html>
@@ -766,10 +794,12 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
       <title>${contractData.isOffer ? 'عرض سعر' : 'عقد'} #${contractData.contractNumber} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${contractData.billboardsCount || 1} لوحة • ${contractData.currencyName || ''}</title>
       ${stylesHtml}
       <style>
+        :root { --print-scale: ${printScale}; }
+
         @page { size: A4; margin: 0; }
         html, body { 
           width: 210mm; 
-          height: auto; 
+          height: 297mm; 
           margin: 0; 
           padding: 0; 
           background: white; 
@@ -793,12 +823,12 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
 
         body { font-family: 'Doran', 'Tajawal', sans-serif; direction: ltr; }
 
-        /* صفحة طباعة A4 فعلية */
+        /* صفحة طباعة A4 فعلية، لتفادي تجزئة العنصر إلى أكثر من صفحة */
         .print-page {
           width: 210mm;
           height: 297mm;
           position: relative;
-          overflow: visible;
+          overflow: hidden;
           direction: ltr;
           page-break-after: always;
           page-break-inside: avoid;
@@ -810,23 +840,26 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
           page-break-after: auto;
         }
 
-        /* التصميم الأصلي 2480x3508px يتم تصغيره ليلائم A4 باستخدام zoom */
+        /* نطبع نفس تصميم المعاينة (2480×3508) لكن نُصغّره ليلائم A4 */
         .print-page .contract-preview-container {
           position: absolute !important;
           left: 0 !important;
           top: 0 !important;
-          width: 2480px !important;
-          height: 3508px !important;
-          zoom: 0.32 !important;
-          -moz-transform: scale(0.32);
-          -moz-transform-origin: top left;
+          right: auto !important;
+          width: ${DESIGN_W}px !important;
+          height: ${DESIGN_H}px !important;
+          transform: scale(var(--print-scale)) !important;
+          transform-origin: top left !important;
           margin: 0 !important;
           border-radius: 0 !important;
           box-shadow: none !important;
           direction: ltr;
         }
+
+        /* منع تحجيم الصور بشكل غير متوقع */
+        .contract-preview-container img { max-width: none !important; }
         
-        /* للشاشة فقط - نعرض بحجم أصغر للمعاينة */
+        /* للشاشة فقط */
         @media screen {
           .print-page {
             transform-origin: top left;
@@ -869,7 +902,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
         @media print {
           html, body { 
             width: 210mm !important; 
-            min-height: 297mm !important; 
+            height: 297mm !important; 
             margin: 0 !important; 
             padding: 0 !important;
             background: white !important;
@@ -881,15 +914,14 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
             margin: 0 !important;
             padding: 0 !important;
             box-shadow: none !important;
-            overflow: visible !important;
+            overflow: hidden !important;
           }
           
           .print-page .contract-preview-container {
-            width: 2480px !important;
-            height: 3508px !important;
-            zoom: 0.32 !important;
-            -moz-transform: scale(0.32) !important;
-            -moz-transform-origin: top left !important;
+            width: ${DESIGN_W}px !important;
+            height: ${DESIGN_H}px !important;
+            transform: scale(var(--print-scale)) !important;
+            transform-origin: top left !important;
           }
         }
       </style>
@@ -901,7 +933,32 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
       </div>
       ${tablePages.map(page => `<div class="print-page">${page}</div>`).join('')}
       <script>
+        function setDynamicPrintScale() {
+          try {
+            const probe = document.createElement('div');
+            probe.style.width = '210mm';
+            probe.style.height = '1mm';
+            probe.style.position = 'absolute';
+            probe.style.left = '-9999px';
+            probe.style.top = '-9999px';
+            probe.style.visibility = 'hidden';
+            document.body.appendChild(probe);
+
+            const measuredA4WidthPx = probe.getBoundingClientRect().width || probe.offsetWidth;
+            document.body.removeChild(probe);
+
+            if (measuredA4WidthPx && measuredA4WidthPx > 0) {
+              const dynamicScale = measuredA4WidthPx / ${DESIGN_W};
+              document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
+            }
+          } catch (e) {
+            // ignore
+          }
+        }
+
         window.addEventListener('load', function () {
+          setDynamicPrintScale();
+
           function waitForCss() {
             const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
             return Promise.all(links.map((l) => new Promise((res) => {

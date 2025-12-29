@@ -5,11 +5,13 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Printer, FileDown, Users, Check, FileText } from 'lucide-react';
+import { Printer, FileDown, Users, Check, FileText, Settings2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import html2pdf from 'html2pdf.js';
 import { supabase } from '@/integrations/supabase/client';
 import { BackgroundSelector } from '@/components/billboard-print/BackgroundSelector';
+import { PrintCustomizationDialog } from '@/components/print-customization';
+import { usePrintCustomization, PrintCustomizationSettings } from '@/hooks/usePrintCustomization';
 
 interface PrintAllContractBillboardsDialogProps {
   open: boolean;
@@ -40,6 +42,10 @@ export function PrintAllContractBillboardsDialog({
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [adType, setAdType] = useState('');
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
+  const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
+  
+  // جلب إعدادات التخصيص من قاعدة البيانات
+  const { settings: customSettings, loading: settingsLoading } = usePrintCustomization();
 
   // جمع كل اللوحات من جميع الفرق للعقد المحدد
   const contractTasks = useMemo(() => 
@@ -222,40 +228,43 @@ export function PrintAllContractBillboardsDialog({
         ? new Date(item.installation_date).toLocaleDateString('ar-LY', { year: 'numeric', month: '2-digit', day: '2-digit' })
         : '';
 
+      // استخدام الإعدادات المخصصة من قاعدة البيانات
+      const s = customSettings;
+      
       pages.push(`
         <div class="page">
           <div class="background"></div>
 
           <!-- رقم العقد ونوع الإعلان معاً -->
-          <div class="absolute-field contract-number" style="top: 39.869mm;right: 22mm;">
+          <div class="absolute-field contract-number" style="top: ${s.contract_number_top}; right: ${s.contract_number_right}; font-size: ${s.contract_number_font_size}; font-weight: ${s.contract_number_font_weight};">
             عقد رقم: ${contractNumber}${adType ? ' - نوع الإعلان: ' + adType : ''}
           </div>
 
           <!-- تاريخ التركيب -->
           ${installationDate ? `
-          <div class="absolute-field installation-date" style="top: 42.869mm; right: 116mm; font-family: 'Doran', Arial, sans-serif; font-size: 11px; font-weight: 400;">
+          <div class="absolute-field installation-date" style="top: ${s.installation_date_top}; right: ${s.installation_date_right}; font-family: '${s.primary_font}', Arial, sans-serif; font-size: ${s.installation_date_font_size}; font-weight: 400;">
             تاريخ التركيب: ${installationDate}
           </div>
           ` : ''}
 
           <!-- اسم اللوحة -->
-          <div class="absolute-field billboard-name" style="top: 55.588mm;left: 15.5%;transform: translateX(-50%);width: 120mm;text-align: center;">
+          <div class="absolute-field billboard-name" style="top: ${s.billboard_name_top}; left: ${s.billboard_name_left}; transform: translateX(-50%); width: 120mm; text-align: center; font-size: ${s.billboard_name_font_size}; font-weight: ${s.billboard_name_font_weight}; color: ${s.billboard_name_color};">
             ${name}
           </div>
 
           <!-- المقاس -->
-          <div class="absolute-field size" style="top: 51mm;left: 63%;transform: translateX(-50%);width: 80mm;text-align: center;">
+          <div class="absolute-field size" style="top: ${s.size_top}; left: ${s.size_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.size_font_size}; font-weight: ${s.size_font_weight}; color: ${s.size_color};">
             ${size}
           </div>
           
           <!-- عدد الأوجه تحت المقاس -->
-          <div class="absolute-field faces-count" style="top: 63mm;left: 64%;transform: translateX(-50%);width: 80mm;text-align: center;font-size: 12px;color: #000;">
+          <div class="absolute-field faces-count" style="top: ${s.faces_count_top}; left: ${s.faces_count_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color};">
             ${item.has_cutout ? 'مجسم - ' : ''}عدد ${facesCount} ${facesCount === 1 ? 'وجه' : 'أوجه'}
           </div>
 
           <!-- النوع (عميل/فريق تركيب) -->
           ${printType === 'installation' ? `
-            <div class="absolute-field print-type" style="top: 81mm; right: 72mm; font-size: 14px; color: #000; font-weight: bold;">
+            <div class="absolute-field print-type" style="top: ${s.team_name_top}; right: ${s.team_name_right}; font-size: ${s.team_name_font_size}; color: #000; font-weight: ${s.team_name_font_weight};">
                فريق التركيب: ${Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ')}
             </div>
           ` : ''}
@@ -263,57 +272,57 @@ export function PrintAllContractBillboardsDialog({
           <!-- صورة اللوحة أو صور التركيب للوجهين -->
           ${installedImageFaceA && installedImageFaceB ? `
             <!-- عرض صورتي التركيب بجانب بعض -->
-            <div class="absolute-field" style="top: 88mm; left: 50%; transform: translateX(-50%); width: 180mm; display: flex; gap: 5mm;">
+            <div class="absolute-field" style="top: ${s.installed_images_top}; left: ${s.installed_images_left}; transform: translateX(-50%); width: ${s.installed_images_width}; display: flex; gap: ${s.installed_images_gap};">
               <div style="flex: 1; text-align: center;">
                 <div style="font-size: 12px; font-weight: 600; color: #000; margin-bottom: 3mm;">التركيب - الوجه الأمامي</div>
-                <div style="height: ${imageHeight}; overflow: hidden; border: 2px solid #000; border-radius: 8px;">
+                <div style="height: ${s.installed_image_height}; overflow: hidden; border: 2px solid #000; border-radius: 8px;">
                   <img src="${installedImageFaceA}" alt="التركيب - الوجه الأمامي" style="width: 100%; height: 100%; object-fit: contain;" />
                 </div>
               </div>
               <div style="flex: 1; text-align: center;">
                 <div style="font-size: 12px; font-weight: 600; color: #000; margin-bottom: 3mm;">التركيب - الوجه الخلفي</div>
-                <div style="height: ${imageHeight}; overflow: hidden; border: 2px solid #000; border-radius: 8px;">
+                <div style="height: ${s.installed_image_height}; overflow: hidden; border: 2px solid #000; border-radius: 8px;">
                   <img src="${installedImageFaceB}" alt="التركيب - الوجه الخلفي" style="width: 100%; height: 100%; object-fit: contain;" />
                 </div>
               </div>
             </div>
           ` : mainImage ? `
             <!-- عرض الصورة الواحدة -->
-            <div class="absolute-field image-container" style="top: 90mm; left: 50%; transform: translateX(-50%); width: 120mm; height: ${imageHeight};">
+            <div class="absolute-field image-container" style="top: ${s.main_image_top}; left: ${s.main_image_left}; transform: translateX(-50%); width: ${s.main_image_width}; height: ${includeDesigns && hasDesigns ? s.installed_image_height : s.main_image_height};">
               <img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />
             </div>
           ` : ''}
 
           <!-- البلدية - الحي -->
-          <div class="absolute-field location-info" style="top: 233mm;left: 0;width: 150mm;">
+          <div class="absolute-field location-info" style="top: ${s.location_info_top}; left: ${s.location_info_left}; width: ${s.location_info_width}; font-size: ${s.location_info_font_size};">
             ${municipalityDistrict}
           </div>
 
           <!-- أقرب معلم -->
-          <div class="absolute-field landmark-info" style="top: 241mm;left: 0mm;width: 150mm;">
+          <div class="absolute-field landmark-info" style="top: ${s.landmark_info_top}; left: ${s.landmark_info_left}; width: ${s.landmark_info_width}; font-size: ${s.landmark_info_font_size};">
             ${landmark || '—'}
           </div>
 
           <!-- QR Code -->
           ${qrCodeDataUrl ? `
-            <div class="absolute-field qr-container" style="top: 255mm; left: 65mm; width: 30mm; height: 30mm;">
+            <div class="absolute-field qr-container" style="top: ${s.qr_top}; left: ${s.qr_left}; width: ${s.qr_size}; height: ${s.qr_size};">
               <img src="${qrCodeDataUrl}" alt="QR" class="qr-code" />
             </div>
           ` : ''}
 
           <!-- التصاميم -->
           ${includeDesigns && hasDesigns ? `
-            <div class="absolute-field designs-section" style="top: 178mm; left: 16mm; width: 178mm; display: flex; gap: 10mm;">
+            <div class="absolute-field designs-section" style="top: ${s.designs_top}; left: ${s.designs_left}; width: ${s.designs_width}; display: flex; gap: ${s.designs_gap};">
               ${designFaceA ? `
                 <div class="design-item">
                   <div class="design-label">التصميم - الوجه الأمامي</div>
-                  <img src="${designFaceA}" alt="التصميم - الوجه الأمامي" class="design-image" />
+                  <img src="${designFaceA}" alt="التصميم - الوجه الأمامي" class="design-image" style="max-height: ${s.design_image_height};" />
                 </div>
               ` : ''}
               ${designFaceB ? `
                 <div class="design-item">
                   <div class="design-label">التصميم - الوجه الخلفي</div>
-                  <img src="${designFaceB}" alt="التصميم - الوجه الخلفي" class="design-image" />
+                  <img src="${designFaceB}" alt="التصميم - الوجه الخلفي" class="design-image" style="max-height: ${s.design_image_height};" />
                 </div>
               ` : ''}
             </div>
@@ -670,12 +679,23 @@ export function PrintAllContractBillboardsDialog({
             </div>
           </div>
 
-          {/* اختيار الخلفية */}
-          <div className="p-4 bg-muted/50 rounded-xl border">
-            <BackgroundSelector
-              value={customBackgroundUrl}
-              onChange={setCustomBackgroundUrl}
-            />
+          {/* اختيار الخلفية وزر التخصيص */}
+          <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
+            <div className="flex items-center justify-between">
+              <BackgroundSelector
+                value={customBackgroundUrl}
+                onChange={setCustomBackgroundUrl}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCustomizationDialogOpen(true)}
+                className="flex items-center gap-2"
+              >
+                <Settings2 className="h-4 w-4" />
+                تخصيص الطباعة
+              </Button>
+            </div>
           </div>
 
           {/* خيارات الطباعة */}
@@ -712,17 +732,24 @@ export function PrintAllContractBillboardsDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               إلغاء
             </Button>
-            <Button onClick={handlePrint} disabled={loading || contractItems.length === 0} className="flex-1">
+            <Button onClick={handlePrint} disabled={loading || settingsLoading || contractItems.length === 0} className="flex-1">
               <Printer className="h-4 w-4 ml-2" />
               طباعة
             </Button>
-            <Button onClick={handleDownloadPDF} disabled={loading || contractItems.length === 0} variant="secondary" className="flex-1">
+            <Button onClick={handleDownloadPDF} disabled={loading || settingsLoading || contractItems.length === 0} variant="secondary" className="flex-1">
               <FileDown className="h-4 w-4 ml-2" />
               PDF
             </Button>
           </div>
         </div>
       </DialogContent>
+      
+      {/* نافذة التخصيص */}
+      <PrintCustomizationDialog
+        open={customizationDialogOpen}
+        onOpenChange={setCustomizationDialogOpen}
+        backgroundUrl={customBackgroundUrl}
+      />
     </Dialog>
   );
 }

@@ -429,11 +429,12 @@ export default function ContractInvoiceDialog({ open, onOpenChange, contract }: 
       <body>
         <div class="invoice-container">
           <!-- Header -->
-          <div class="invoice-header">
-            <div class="company-info">
-              <div class="company-name">الفـــــارس الذهبــــي</div>
-              <div class="company-name" style="font-size: 18px; margin-top: -5px;">AL FARES AL DAHABI</div>
-              <div class="company-subtitle">للدعـــــايــــة والإعــــلان</div>
+          <div class="invoice-header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start;">
+            <div class="company-info" style="text-align: right;">
+              <div class="company-name" style="font-size: 22px; font-weight: bold; color: #D4AF37;">الفارس الذهبي</div>
+              <div class="company-name" style="font-size: 14px; margin-top: 2px;">AL FARES AL DAHABI</div>
+              <div class="company-subtitle" style="color: #D4AF37;">للدعاية والإعلان</div>
+              <div class="company-full-name" style="font-size: 12px; color: #D4AF37; margin-top: 4px; border-bottom: 1px solid rgba(212,175,55,0.3); padding-bottom: 4px;">الفارس الذهبي للدعاية والإعلان</div>
             </div>
             <div class="invoice-title">فاتورة مبيعات</div>
           </div>

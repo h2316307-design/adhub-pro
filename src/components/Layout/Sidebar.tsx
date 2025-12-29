@@ -103,6 +103,7 @@ const sidebarSections: SidebarSection[] = [
       { id: 'currency_settings', label: 'إعدادات العملة', icon: DollarSign, path: '/admin/currency-settings' },
       { id: 'pdf_templates', label: 'إعدادات قوالب PDF', icon: FileText, path: '/admin/pdf-templates' },
       { id: 'print_design', label: 'تصميم الطباعة', icon: Palette, path: '/admin/print-design' },
+      { id: 'print_settings', label: 'إعدادات طباعة الفواتير', icon: FileText, path: '/admin/print-design' },
       { id: 'billboard_print_settings', label: 'إعدادات طباعة اللوحات', icon: Printer, path: '/admin/billboard-print-settings' },
       { id: 'quick_print_settings', label: 'إعدادات الطباعة السريعة', icon: Palette, path: '/admin/quick-print-settings' },
       { id: 'contract_terms', label: 'بنود العقد', icon: FileText, path: '/admin/contract-terms' },

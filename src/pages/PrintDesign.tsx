@@ -114,11 +114,11 @@ const DEFAULT_PRINT_TEMPLATE = {
   borderRadius: 8,
   cellPadding: 12,
   reportBackground: '',
-  // بيانات الشركة
-  companyName: 'الفـــــارس الذهبــــي',
-  companySubtitle: 'للدعـــــايــــة والإعــــلان',
-  companyAddress: 'طرابلس – طريق المطار، حي الزهور',
-  companyPhone: '0912612255',
+  // بيانات الشركة - فارغة افتراضياً
+  companyName: '',
+  companySubtitle: '',
+  companyAddress: '',
+  companyPhone: '',
   logoPath: '/logofaresgold.svg',
   printBackground: '',
   fontFamily: 'Doran',

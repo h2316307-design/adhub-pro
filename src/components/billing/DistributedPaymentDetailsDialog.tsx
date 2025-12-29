@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { useState, useEffect } from "react";
 import IntermediaryReceiptPrintDialog from "./IntermediaryReceiptPrintDialog";
 import { ConvertToCustodyDialog } from "./ConvertToCustodyDialog";
+import { useUnifiedReceiptPrint } from "./UnifiedReceiptPrint";
 
 interface CustodyInfo {
   id: string;
@@ -78,6 +79,9 @@ export function DistributedPaymentDetailsDialog({
   const [withdrawals, setWithdrawals] = useState<WithdrawalInfo[]>([]);
   const [loadingCustody, setLoadingCustody] = useState(false);
   const [showIntermediaryInReceipt, setShowIntermediaryInReceipt] = useState(true);
+
+  // ✅ استخدام Hook الطباعة الموحد
+  const { print: printReceipt, isPrinting } = useUnifiedReceiptPrint();
 
   // تحميل معلومات العهدة المرتبطة بالدفعة
   const loadCustodyInfo = async (distributedPaymentId: string) => {
@@ -218,13 +222,17 @@ export function DistributedPaymentDetailsDialog({
             collector_name: null,
             receiver_name: null,
             delivery_location: null,
-            collection_date: null
+            collection_date: null,
+            intermediary_commission: null,
+            commission_notes: null,
           })
           .eq('distributed_payment_id', distributedPaymentId);
 
         if (error) throw error;
         toast.success('تم إلغاء تفعيل الوسيط بنجاح');
-        setSaving(false);
+
+        // Reload the data to reflect changes
+        window.location.reload();
         return;
       }
 
@@ -263,8 +271,8 @@ export function DistributedPaymentDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" dir="rtl">
-        <DialogHeader className="border-b pb-4">
+      <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col overflow-hidden" dir="rtl">
+        <DialogHeader className="border-b pb-4 flex-shrink-0">
           <DialogTitle className="text-xl font-bold text-primary">
             تفاصيل الدفعة الموزعة
           </DialogTitle>
@@ -301,7 +309,7 @@ export function DistributedPaymentDetailsDialog({
           </div>
         </DialogHeader>
 
-        <div className="space-y-4 pt-4">
+        <div className="flex-1 overflow-y-auto space-y-4 pt-4">
           {/* ملخص المبلغ والعمولات */}
           <div className="space-y-3">
             <div className="p-4 rounded-lg bg-primary/10 border border-primary/30">
@@ -516,10 +524,6 @@ export function DistributedPaymentDetailsDialog({
                                 <div class="header">
                                   <div class="company-info">
                                     <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
-                                    <div class="company-details">
-                                      طرابلس – طريق المطار، حي الزهور<br>
-                                      هاتف: 0912612255
-                                    </div>
                                   </div>
                                   <div class="receipt-info">
                                     <div class="receipt-title">إيصال استلام عهدة مالية</div>
@@ -767,10 +771,6 @@ export function DistributedPaymentDetailsDialog({
                                 <div class="header">
                                   <div class="company-info">
                                     <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
-                                    <div class="company-details">
-                                      طرابلس – طريق المطار، حي الزهور<br>
-                                      هاتف: 0912612255
-                                    </div>
                                   </div>
                                   <div class="receipt-info">
                                     <div class="receipt-title">إيصال تسليم مبلغ للموظف</div>
@@ -1013,10 +1013,6 @@ export function DistributedPaymentDetailsDialog({
                                 <div class="header">
                                   <div class="company-info">
                                     <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
-                                    <div class="company-details">
-                                      طرابلس – طريق المطار، حي الزهور<br>
-                                      هاتف: 0912612255
-                                    </div>
                                   </div>
                                   <div class="receipt-info">
                                     <div class="receipt-title">إيصال سحب من رصيد الموظف</div>
@@ -1156,7 +1152,7 @@ export function DistributedPaymentDetailsDialog({
               </Label>
             </div>
 
-            {viaIntermediary && (
+            {viaIntermediary ? (
               <div className="space-y-4 mt-4 border-t pt-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
@@ -1259,7 +1255,25 @@ export function DistributedPaymentDetailsDialog({
                   )}
                 </div>
               </div>
-            )}
+            ) : firstPayment.collected_via_intermediary ? (
+              // إظهار زر الحفظ عند إلغاء تفعيل الوسيط إذا كانت الدفعة مسجلة كوسيط سابقاً
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-5 w-5 text-amber-600" />
+                  <span className="text-sm text-amber-700 dark:text-amber-400">
+                    هذه الدفعة مسجلة كقبض عن طريق وسيط. لإلغاء ذلك اضغط على زر الحفظ.
+                  </span>
+                </div>
+                <Button
+                  onClick={handleSaveIntermediaryData}
+                  disabled={saving}
+                  className="w-full mt-3 bg-amber-600 hover:bg-amber-700"
+                  size="sm"
+                >
+                  {saving ? 'جاري الحفظ...' : 'حفظ (إلغاء الوسيط)'}
+                </Button>
+              </div>
+            ) : null}
           </div>
 
           {/* قسم تحويل إلى عهدة - منفصل */}
@@ -1286,9 +1300,10 @@ export function DistributedPaymentDetailsDialog({
               </p>
             </div>
           )}
+        </div>
 
-          {/* أزرار الطباعة والحذف والتعديل */}
-          <div className="space-y-4 pt-4 border-t">
+        {/* أزرار الطباعة والحذف والتعديل - ثابتة في الأسفل */}
+        <div className="flex-shrink-0 space-y-4 pt-4 border-t bg-background">
             {/* خيار إظهار الوسيط في الإيصال */}
             {(custodyInfo.length > 0 || employeeAdvances.length > 0 || withdrawals.length > 0) && (
               <div className="flex items-center gap-2 p-3 bg-muted/50 rounded-lg">
@@ -1306,20 +1321,139 @@ export function DistributedPaymentDetailsDialog({
             
             <div className="flex gap-3">
               <Button
-                onClick={() => {
-                  // Pass intermediary info to print function
-                  if (showIntermediaryInReceipt && (custodyInfo.length > 0 || employeeAdvances.length > 0 || withdrawals.length > 0)) {
-                    // Store in sessionStorage for the print function to access
-                    sessionStorage.setItem('printReceiptIntermediaryInfo', JSON.stringify({
-                      custodyInfo,
-                      employeeAdvances,
-                      withdrawals,
-                      showIntermediary: true
-                    }));
-                  } else {
-                    sessionStorage.removeItem('printReceiptIntermediaryInfo');
+                onClick={async () => {
+                  // ✅ استخدام نظام الطباعة الموحد الجديد (مثل كشف الحساب)
+                  const firstPaymentData = groupedPayments[0];
+                  
+                  // جلب بيانات العميل
+                  let customerData = { id: '', name: customerName, company: '', phone: '' };
+                  if (firstPaymentData.customer_id) {
+                    const { data } = await supabase
+                      .from('customers')
+                      .select('id, name, company, phone')
+                      .eq('id', firstPaymentData.customer_id)
+                      .single();
+                    if (data) customerData = data;
                   }
-                  onPrintCombined();
+
+                  // جلب بيانات العقود (مرة واحدة) لإظهار نوع الإعلان + المتبقي لكل عقد
+                  const contractNumbers = Array.from(new Set(
+                    groupedPayments
+                      .map(p => p.contract_number)
+                      .filter(Boolean)
+                      .map(v => Number(v))
+                      .filter(n => !Number.isNaN(n))
+                  ));
+
+                  const contractMap: Record<number, any> = {};
+                  if (contractNumbers.length > 0) {
+                    const { data: contractsData, error: contractsError } = await supabase
+                      .from('Contract')
+                      .select('Contract_Number, "Ad Type", Total, "Total Paid"')
+                      .in('Contract_Number', contractNumbers);
+                    if (contractsError) throw contractsError;
+                    
+                    // جلب المدفوعات لهذه العقود لحساب المتبقي الصحيح
+                    const { data: allPayments } = await supabase
+                      .from('customer_payments')
+                      .select('contract_number, amount, entry_type')
+                      .in('contract_number', contractNumbers);
+                    
+                    // حساب إجمالي المدفوع لكل عقد
+                    const paidByContract: Record<number, number> = {};
+                    (allPayments || []).forEach((p: any) => {
+                      const cn = Number(p.contract_number);
+                      if (!paidByContract[cn]) paidByContract[cn] = 0;
+                      if (p.entry_type === 'receipt' || p.entry_type === 'payment' || p.entry_type === 'account_payment') {
+                        paidByContract[cn] += Number(p.amount) || 0;
+                      }
+                    });
+                    
+                    (contractsData || []).forEach((c: any) => {
+                      const cn = c.Contract_Number;
+                      const total = Number(c.Total) || 0;
+                      const paid = paidByContract[cn] || 0;
+                      const remaining = Math.max(0, total - paid);
+                      contractMap[cn] = { ...c, calculatedRemaining: remaining, calculatedPaid: paid };
+                    });
+                  }
+
+                  const distributedContracts = groupedPayments.map((p) => {
+                    const cn = p.contract_number ? Number(p.contract_number) : null;
+                    const c = cn ? contractMap[cn] : null;
+                    return {
+                      contractNumber: String(p.contract_number || '—'),
+                      adType: c?.['Ad Type'] || 'لوحة إعلانية',
+                      amount: Number(p.amount) || 0,
+                      total: c?.Total ?? null,
+                      totalPaid: c?.calculatedPaid ?? null,
+                      remaining: c?.calculatedRemaining ?? null,
+                    };
+                  });
+
+                  // حساب المتبقي الإجمالي للعميل
+                  let remainingDebt: number | undefined = undefined;
+                  
+                  // أولاً: محاولة استخدام remaining_debt من الدفعة إذا كان موجوداً
+                  if (typeof firstPaymentData.remaining_debt === 'number') {
+                    remainingDebt = firstPaymentData.remaining_debt;
+                  } else if (customerData.id) {
+                    // جلب جميع العقود والمدفوعات للعميل لحساب المتبقي الإجمالي
+                    const { data: customerContracts } = await supabase
+                      .from('Contract')
+                      .select('Contract_Number, Total')
+                      .eq('customer_id', customerData.id);
+                    
+                    const { data: customerPayments } = await supabase
+                      .from('customer_payments')
+                      .select('amount, entry_type')
+                      .eq('customer_id', customerData.id);
+                    
+                    const totalContracts = (customerContracts || []).reduce((sum, c) => sum + (Number(c.Total) || 0), 0);
+                    const totalPaid = (customerPayments || []).reduce((sum, p) => {
+                      if (p.entry_type === 'receipt' || p.entry_type === 'payment' || p.entry_type === 'account_payment') {
+                        return sum + (Number(p.amount) || 0);
+                      }
+                      return sum;
+                    }, 0);
+                    
+                    remainingDebt = Math.max(0, totalContracts - totalPaid);
+                  }
+
+                  await printReceipt({
+                    payment: {
+                      id: firstPaymentData.id,
+                      amount: totalAmount,
+                      paid_at: firstPaymentData.paid_at,
+                      method: firstPaymentData.method || 'نقدي',
+                      reference: firstPaymentData.reference || undefined,
+                      notes: firstPaymentData.notes || undefined,
+                      contract_number: null,
+                      collector_name: firstPaymentData.collector_name || undefined,
+                      receiver_name: firstPaymentData.receiver_name || undefined,
+                      delivery_location: firstPaymentData.delivery_location || undefined,
+                      source_bank: firstPaymentData.source_bank || undefined,
+                      destination_bank: firstPaymentData.destination_bank || undefined,
+                      transfer_reference: firstPaymentData.transfer_reference || undefined,
+                      distributed_payment_id: firstPaymentData.distributed_payment_id || undefined,
+                    },
+                    customerData: {
+                      id: customerData.id,
+                      name: customerData.name,
+                      company: customerData.company || undefined,
+                      phone: customerData.phone || undefined,
+                    },
+                    currency: {
+                      code: 'LYD',
+                      symbol: 'د.ل',
+                      name: 'دينار ليبي',
+                      writtenName: 'دينار ليبي',
+                    },
+                    distributedContracts,
+                    ...(typeof remainingDebt === 'number'
+                      ? { balanceInfo: { remainingBalance: remainingDebt, totalPaid: 0 } }
+                      : {}),
+                  });
                 }}
                 className="flex-1 bg-primary hover:bg-primary/90 gap-2"
                 size="lg"
@@ -1364,7 +1498,6 @@ export function DistributedPaymentDetailsDialog({
               </Button>
             </div>
           </div>
-        </div>
 
         {/* Dialog for Intermediary Receipt */}
         <IntermediaryReceiptPrintDialog

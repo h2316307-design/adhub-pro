@@ -312,8 +312,8 @@ export default function InstallationPDFDialog({ open, onOpenChange, contract }: 
         endDate: contractDetails.endDate,
         duration: contractDetails.duration,
         year: year.toString(),
-        companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-        phoneNumber: '0912612255'
+        companyName: '',
+        phoneNumber: ''
       };
 
       let billboardsToShow = await getBillboardsData();

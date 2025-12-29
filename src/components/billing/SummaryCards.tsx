@@ -1,5 +1,5 @@
 import { Card, CardContent } from '@/components/ui/card';
-import { TrendingUp, TrendingDown, DollarSign, Wallet, Calendar, Receipt, Printer, Building2, CreditCard, Percent } from 'lucide-react';
+import { TrendingUp, TrendingDown, DollarSign, Wallet, Calendar, Receipt, Printer, Building2, CreditCard, Percent, Layers, Calculator } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 
 interface SummaryCardsProps {
@@ -15,6 +15,8 @@ interface SummaryCardsProps {
   totalSales?: number;
   totalPrintedInvoices?: number;
   totalFriendRentals?: number;
+  totalCompositeTasks?: number;
+  totalDebits?: number;
 }
 
 export function SummaryCards({
@@ -29,13 +31,91 @@ export function SummaryCards({
   totalPurchases = 0,
   totalSales = 0,
   totalPrintedInvoices = 0,
-  totalFriendRentals = 0
+  totalFriendRentals = 0,
+  totalCompositeTasks = 0,
+  totalDebits = 0
 }: SummaryCardsProps) {
   // حساب نسبة السداد
   const paymentPercentage = totalRent > 0 ? Math.min(100, Math.round((totalCredits / totalRent) * 100)) : 0;
   
+  // حساب نسبة السداد الإجمالية
+  const overallPaymentPercentage = totalDebits > 0 ? Math.min(100, Math.round((totalCredits / totalDebits) * 100)) : 0;
+  
   return (
     <div className="container mx-auto px-6 py-6">
+      {/* كرت الملخص المالي الشامل */}
+      <Card className="mb-6 border-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 shadow-2xl overflow-hidden">
+        <CardContent className="p-0">
+          <div className="flex items-center gap-4 px-6 py-4 bg-gradient-to-r from-primary/20 to-transparent border-b border-white/10">
+            <div className="w-12 h-12 bg-primary/30 rounded-xl flex items-center justify-center">
+              <Calculator className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">الملخص المالي الشامل</h3>
+              <p className="text-sm text-slate-400">جميع المعاملات المالية للعميل</p>
+            </div>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-0 divide-y md:divide-y-0 md:divide-x md:divide-x-reverse divide-white/10">
+            {/* إجمالي الديون */}
+            <div className="p-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <TrendingUp className="h-5 w-5 text-sky-400" />
+                <p className="text-sm font-medium text-slate-400">إجمالي الديون</p>
+              </div>
+              <p className="text-3xl font-bold text-sky-400">{totalDebits.toLocaleString('ar-LY')}</p>
+              <p className="text-xs text-slate-500 mt-1">إجمالي المبيعات</p>
+            </div>
+            
+            {/* إجمالي المدفوعات */}
+            <div className="p-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CreditCard className="h-5 w-5 text-emerald-400" />
+                <p className="text-sm font-medium text-slate-400">إجمالي المدفوعات</p>
+              </div>
+              <p className="text-3xl font-bold text-emerald-400">{totalCredits.toLocaleString('ar-LY')}</p>
+              <p className="text-xs text-slate-500 mt-1">جميع الدفعات المستلمة</p>
+            </div>
+            
+            {/* المتبقي الإجمالي */}
+            <div className="p-6 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <DollarSign className={`h-5 w-5 ${balance > 0 ? 'text-rose-400' : 'text-emerald-400'}`} />
+                <p className="text-sm font-medium text-slate-400">المتبقي الإجمالي</p>
+              </div>
+              <p className={`text-3xl font-bold ${balance > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+                {balance >= 0 ? balance.toLocaleString('ar-LY') : `(${Math.abs(balance).toLocaleString('ar-LY')})`}
+              </p>
+              <p className="text-xs text-slate-500 mt-1">
+                {balance < 0 ? 'رصيد دائن للعميل' : 'مستحق على العميل'}
+              </p>
+            </div>
+          </div>
+          
+          {/* شريط نسبة السداد */}
+          <div className="px-6 pb-6">
+            <div className="flex items-center justify-between text-sm text-slate-400 mb-2">
+              <span>نسبة السداد الإجمالية</span>
+              <span className={`font-bold ${
+                overallPaymentPercentage >= 100 ? 'text-emerald-400' :
+                overallPaymentPercentage >= 50 ? 'text-amber-400' :
+                'text-rose-400'
+              }`}>{overallPaymentPercentage}%</span>
+            </div>
+            <div className="h-3 w-full bg-slate-700 rounded-full overflow-hidden">
+              <div 
+                className={`h-full rounded-full transition-all duration-700 ${
+                  overallPaymentPercentage >= 100 ? 'bg-gradient-to-r from-emerald-600 to-emerald-400' :
+                  overallPaymentPercentage >= 50 ? 'bg-gradient-to-r from-amber-600 to-amber-400' :
+                  'bg-gradient-to-r from-rose-600 to-rose-400'
+                }`}
+                style={{ width: `${Math.min(100, overallPaymentPercentage)}%` }}
+              />
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* البطاقات الرئيسية الكبيرة */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         {/* إجمالي العقود */}
@@ -220,6 +300,23 @@ export function SummaryCards({
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">شركة صديقة</p>
                   <p className="text-lg font-bold text-orange-600 dark:text-orange-400 truncate">{totalFriendRentals.toLocaleString('ar-LY')}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* الفواتير المجمعة */}
+        {totalCompositeTasks > 0 && (
+          <Card className="group hover:shadow-lg hover:scale-[1.02] transition-all duration-300 border border-pink-500/20 bg-pink-500/5">
+            <CardContent className="pt-4 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-pink-500/20 rounded-xl flex items-center justify-center">
+                  <Layers className="h-5 w-5 text-pink-600 dark:text-pink-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs text-muted-foreground truncate">فواتير مجمعة</p>
+                  <p className="text-lg font-bold text-pink-600 dark:text-pink-400 truncate">{totalCompositeTasks.toLocaleString('ar-LY')}</p>
                 </div>
               </div>
             </CardContent>

@@ -885,10 +885,6 @@ export default function ModernPrintInvoiceDialog({
       <div className="flex justify-between items-start mb-6 pb-4 border-b-2 border-primary">
         <div className="text-right">
           <img src="/logofares.svg" alt="شعار الشركة" className="max-w-[200px] h-auto mb-3" />
-          <div className="text-sm text-muted-foreground">
-            طرابلس – طريق المطار، حي الزهور<br />
-            هاتف: 0912612255
-          </div>
         </div>
         <div className="text-left" dir="ltr">
           <h1 className="text-3xl font-bold text-primary mb-3">INVOICE</h1>

@@ -294,6 +294,255 @@ export type Database = {
         }
         Relationships: []
       }
+      billboard_print_customization: {
+        Row: {
+          billboard_name_alignment: string | null
+          billboard_name_color: string | null
+          billboard_name_font_size: string | null
+          billboard_name_font_weight: string | null
+          billboard_name_left: string | null
+          billboard_name_offset_x: string | null
+          billboard_name_top: string | null
+          contract_number_alignment: string | null
+          contract_number_color: string | null
+          contract_number_font_size: string | null
+          contract_number_font_weight: string | null
+          contract_number_offset_x: string | null
+          contract_number_right: string | null
+          contract_number_top: string | null
+          created_at: string
+          design_image_height: string | null
+          designs_gap: string | null
+          designs_left: string | null
+          designs_top: string | null
+          designs_width: string | null
+          faces_count_alignment: string | null
+          faces_count_color: string | null
+          faces_count_font_size: string | null
+          faces_count_left: string | null
+          faces_count_offset_x: string | null
+          faces_count_top: string | null
+          id: string
+          installation_date_alignment: string | null
+          installation_date_color: string | null
+          installation_date_font_size: string | null
+          installation_date_font_weight: string | null
+          installation_date_offset_x: string | null
+          installation_date_right: string | null
+          installation_date_top: string | null
+          installed_image_height: string | null
+          installed_images_gap: string | null
+          installed_images_left: string | null
+          installed_images_top: string | null
+          installed_images_width: string | null
+          landmark_info_alignment: string | null
+          landmark_info_color: string | null
+          landmark_info_font_size: string | null
+          landmark_info_left: string | null
+          landmark_info_offset_x: string | null
+          landmark_info_top: string | null
+          landmark_info_width: string | null
+          location_info_alignment: string | null
+          location_info_color: string | null
+          location_info_font_size: string | null
+          location_info_left: string | null
+          location_info_offset_x: string | null
+          location_info_top: string | null
+          location_info_width: string | null
+          main_image_height: string | null
+          main_image_left: string | null
+          main_image_top: string | null
+          main_image_width: string | null
+          preview_background: string | null
+          preview_zoom: string | null
+          primary_font: string | null
+          qr_left: string | null
+          qr_size: string | null
+          qr_top: string | null
+          secondary_font: string | null
+          setting_key: string
+          size_alignment: string | null
+          size_color: string | null
+          size_font_size: string | null
+          size_font_weight: string | null
+          size_left: string | null
+          size_offset_x: string | null
+          size_top: string | null
+          team_name_alignment: string | null
+          team_name_color: string | null
+          team_name_font_size: string | null
+          team_name_font_weight: string | null
+          team_name_offset_x: string | null
+          team_name_right: string | null
+          team_name_top: string | null
+          updated_at: string
+        }
+        Insert: {
+          billboard_name_alignment?: string | null
+          billboard_name_color?: string | null
+          billboard_name_font_size?: string | null
+          billboard_name_font_weight?: string | null
+          billboard_name_left?: string | null
+          billboard_name_offset_x?: string | null
+          billboard_name_top?: string | null
+          contract_number_alignment?: string | null
+          contract_number_color?: string | null
+          contract_number_font_size?: string | null
+          contract_number_font_weight?: string | null
+          contract_number_offset_x?: string | null
+          contract_number_right?: string | null
+          contract_number_top?: string | null
+          created_at?: string
+          design_image_height?: string | null
+          designs_gap?: string | null
+          designs_left?: string | null
+          designs_top?: string | null
+          designs_width?: string | null
+          faces_count_alignment?: string | null
+          faces_count_color?: string | null
+          faces_count_font_size?: string | null
+          faces_count_left?: string | null
+          faces_count_offset_x?: string | null
+          faces_count_top?: string | null
+          id?: string
+          installation_date_alignment?: string | null
+          installation_date_color?: string | null
+          installation_date_font_size?: string | null
+          installation_date_font_weight?: string | null
+          installation_date_offset_x?: string | null
+          installation_date_right?: string | null
+          installation_date_top?: string | null
+          installed_image_height?: string | null
+          installed_images_gap?: string | null
+          installed_images_left?: string | null
+          installed_images_top?: string | null
+          installed_images_width?: string | null
+          landmark_info_alignment?: string | null
+          landmark_info_color?: string | null
+          landmark_info_font_size?: string | null
+          landmark_info_left?: string | null
+          landmark_info_offset_x?: string | null
+          landmark_info_top?: string | null
+          landmark_info_width?: string | null
+          location_info_alignment?: string | null
+          location_info_color?: string | null
+          location_info_font_size?: string | null
+          location_info_left?: string | null
+          location_info_offset_x?: string | null
+          location_info_top?: string | null
+          location_info_width?: string | null
+          main_image_height?: string | null
+          main_image_left?: string | null
+          main_image_top?: string | null
+          main_image_width?: string | null
+          preview_background?: string | null
+          preview_zoom?: string | null
+          primary_font?: string | null
+          qr_left?: string | null
+          qr_size?: string | null
+          qr_top?: string | null
+          secondary_font?: string | null
+          setting_key?: string
+          size_alignment?: string | null
+          size_color?: string | null
+          size_font_size?: string | null
+          size_font_weight?: string | null
+          size_left?: string | null
+          size_offset_x?: string | null
+          size_top?: string | null
+          team_name_alignment?: string | null
+          team_name_color?: string | null
+          team_name_font_size?: string | null
+          team_name_font_weight?: string | null
+          team_name_offset_x?: string | null
+          team_name_right?: string | null
+          team_name_top?: string | null
+          updated_at?: string
+        }
+        Update: {
+          billboard_name_alignment?: string | null
+          billboard_name_color?: string | null
+          billboard_name_font_size?: string | null
+          billboard_name_font_weight?: string | null
+          billboard_name_left?: string | null
+          billboard_name_offset_x?: string | null
+          billboard_name_top?: string | null
+          contract_number_alignment?: string | null
+          contract_number_color?: string | null
+          contract_number_font_size?: string | null
+          contract_number_font_weight?: string | null
+          contract_number_offset_x?: string | null
+          contract_number_right?: string | null
+          contract_number_top?: string | null
+          created_at?: string
+          design_image_height?: string | null
+          designs_gap?: string | null
+          designs_left?: string | null
+          designs_top?: string | null
+          designs_width?: string | null
+          faces_count_alignment?: string | null
+          faces_count_color?: string | null
+          faces_count_font_size?: string | null
+          faces_count_left?: string | null
+          faces_count_offset_x?: string | null
+          faces_count_top?: string | null
+          id?: string
+          installation_date_alignment?: string | null
+          installation_date_color?: string | null
+          installation_date_font_size?: string | null
+          installation_date_font_weight?: string | null
+          installation_date_offset_x?: string | null
+          installation_date_right?: string | null
+          installation_date_top?: string | null
+          installed_image_height?: string | null
+          installed_images_gap?: string | null
+          installed_images_left?: string | null
+          installed_images_top?: string | null
+          installed_images_width?: string | null
+          landmark_info_alignment?: string | null
+          landmark_info_color?: string | null
+          landmark_info_font_size?: string | null
+          landmark_info_left?: string | null
+          landmark_info_offset_x?: string | null
+          landmark_info_top?: string | null
+          landmark_info_width?: string | null
+          location_info_alignment?: string | null
+          location_info_color?: string | null
+          location_info_font_size?: string | null
+          location_info_left?: string | null
+          location_info_offset_x?: string | null
+          location_info_top?: string | null
+          location_info_width?: string | null
+          main_image_height?: string | null
+          main_image_left?: string | null
+          main_image_top?: string | null
+          main_image_width?: string | null
+          preview_background?: string | null
+          preview_zoom?: string | null
+          primary_font?: string | null
+          qr_left?: string | null
+          qr_size?: string | null
+          qr_top?: string | null
+          secondary_font?: string | null
+          setting_key?: string
+          size_alignment?: string | null
+          size_color?: string | null
+          size_font_size?: string | null
+          size_font_weight?: string | null
+          size_left?: string | null
+          size_offset_x?: string | null
+          size_top?: string | null
+          team_name_alignment?: string | null
+          team_name_color?: string | null
+          team_name_font_size?: string | null
+          team_name_font_weight?: string | null
+          team_name_offset_x?: string | null
+          team_name_right?: string | null
+          team_name_top?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       billboard_print_profiles: {
         Row: {
           created_at: string
@@ -3899,6 +4148,261 @@ export type Database = {
           },
         ]
       }
+      print_settings: {
+        Row: {
+          accent_color: string | null
+          background_image: string | null
+          background_opacity: number | null
+          body_font_size: number | null
+          border_radius: number | null
+          border_width: number | null
+          company_address: string | null
+          company_email: string | null
+          company_name: string | null
+          company_phone: string | null
+          company_subtitle: string | null
+          company_subtitle_color: string | null
+          company_tax_id: string | null
+          company_website: string | null
+          created_at: string | null
+          customer_section_bg_color: string | null
+          customer_section_border_color: string | null
+          customer_section_title: string | null
+          customer_text_color: string | null
+          date_format: string | null
+          direction: string | null
+          document_info_alignment: string | null
+          document_info_bg_color: string | null
+          document_info_margin_top: number | null
+          document_info_text_color: string | null
+          document_title_alignment: string | null
+          document_title_ar: string | null
+          document_title_en: string | null
+          document_title_margin_top: number | null
+          document_type: string
+          font_family: string | null
+          footer_alignment: string | null
+          footer_text: string | null
+          footer_text_color: string | null
+          header_alignment: string | null
+          header_bg_color: string | null
+          header_direction: string | null
+          header_font_size: number | null
+          header_margin_bottom: number | null
+          header_style: string | null
+          header_text_color: string | null
+          id: string
+          logo_path: string | null
+          logo_position: string | null
+          logo_position_order: number | null
+          logo_size: number | null
+          logo_size_preset: string | null
+          page_margin_bottom: number | null
+          page_margin_left: number | null
+          page_margin_right: number | null
+          page_margin_top: number | null
+          primary_color: string | null
+          secondary_color: string | null
+          show_company_address: boolean | null
+          show_company_contact: boolean | null
+          show_company_name: boolean | null
+          show_company_subtitle: boolean | null
+          show_customer_section: boolean | null
+          show_document_date: boolean | null
+          show_document_number: boolean | null
+          show_email: boolean | null
+          show_footer: boolean | null
+          show_logo: boolean | null
+          show_page_number: boolean | null
+          show_tax_id: boolean | null
+          show_website: boolean | null
+          summary_bg_color: string | null
+          summary_border_color: string | null
+          table_border_color: string | null
+          table_header_bg_color: string | null
+          table_header_text_color: string | null
+          table_row_even_color: string | null
+          table_row_odd_color: string | null
+          table_text_color: string | null
+          title_font_size: number | null
+          totals_box_bg_color: string | null
+          totals_box_border_color: string | null
+          totals_box_border_radius: number | null
+          totals_box_text_color: string | null
+          totals_title_font_size: number | null
+          totals_value_font_size: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          accent_color?: string | null
+          background_image?: string | null
+          background_opacity?: number | null
+          body_font_size?: number | null
+          border_radius?: number | null
+          border_width?: number | null
+          company_address?: string | null
+          company_email?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          company_subtitle?: string | null
+          company_subtitle_color?: string | null
+          company_tax_id?: string | null
+          company_website?: string | null
+          created_at?: string | null
+          customer_section_bg_color?: string | null
+          customer_section_border_color?: string | null
+          customer_section_title?: string | null
+          customer_text_color?: string | null
+          date_format?: string | null
+          direction?: string | null
+          document_info_alignment?: string | null
+          document_info_bg_color?: string | null
+          document_info_margin_top?: number | null
+          document_info_text_color?: string | null
+          document_title_alignment?: string | null
+          document_title_ar?: string | null
+          document_title_en?: string | null
+          document_title_margin_top?: number | null
+          document_type: string
+          font_family?: string | null
+          footer_alignment?: string | null
+          footer_text?: string | null
+          footer_text_color?: string | null
+          header_alignment?: string | null
+          header_bg_color?: string | null
+          header_direction?: string | null
+          header_font_size?: number | null
+          header_margin_bottom?: number | null
+          header_style?: string | null
+          header_text_color?: string | null
+          id?: string
+          logo_path?: string | null
+          logo_position?: string | null
+          logo_position_order?: number | null
+          logo_size?: number | null
+          logo_size_preset?: string | null
+          page_margin_bottom?: number | null
+          page_margin_left?: number | null
+          page_margin_right?: number | null
+          page_margin_top?: number | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          show_company_address?: boolean | null
+          show_company_contact?: boolean | null
+          show_company_name?: boolean | null
+          show_company_subtitle?: boolean | null
+          show_customer_section?: boolean | null
+          show_document_date?: boolean | null
+          show_document_number?: boolean | null
+          show_email?: boolean | null
+          show_footer?: boolean | null
+          show_logo?: boolean | null
+          show_page_number?: boolean | null
+          show_tax_id?: boolean | null
+          show_website?: boolean | null
+          summary_bg_color?: string | null
+          summary_border_color?: string | null
+          table_border_color?: string | null
+          table_header_bg_color?: string | null
+          table_header_text_color?: string | null
+          table_row_even_color?: string | null
+          table_row_odd_color?: string | null
+          table_text_color?: string | null
+          title_font_size?: number | null
+          totals_box_bg_color?: string | null
+          totals_box_border_color?: string | null
+          totals_box_border_radius?: number | null
+          totals_box_text_color?: string | null
+          totals_title_font_size?: number | null
+          totals_value_font_size?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          accent_color?: string | null
+          background_image?: string | null
+          background_opacity?: number | null
+          body_font_size?: number | null
+          border_radius?: number | null
+          border_width?: number | null
+          company_address?: string | null
+          company_email?: string | null
+          company_name?: string | null
+          company_phone?: string | null
+          company_subtitle?: string | null
+          company_subtitle_color?: string | null
+          company_tax_id?: string | null
+          company_website?: string | null
+          created_at?: string | null
+          customer_section_bg_color?: string | null
+          customer_section_border_color?: string | null
+          customer_section_title?: string | null
+          customer_text_color?: string | null
+          date_format?: string | null
+          direction?: string | null
+          document_info_alignment?: string | null
+          document_info_bg_color?: string | null
+          document_info_margin_top?: number | null
+          document_info_text_color?: string | null
+          document_title_alignment?: string | null
+          document_title_ar?: string | null
+          document_title_en?: string | null
+          document_title_margin_top?: number | null
+          document_type?: string
+          font_family?: string | null
+          footer_alignment?: string | null
+          footer_text?: string | null
+          footer_text_color?: string | null
+          header_alignment?: string | null
+          header_bg_color?: string | null
+          header_direction?: string | null
+          header_font_size?: number | null
+          header_margin_bottom?: number | null
+          header_style?: string | null
+          header_text_color?: string | null
+          id?: string
+          logo_path?: string | null
+          logo_position?: string | null
+          logo_position_order?: number | null
+          logo_size?: number | null
+          logo_size_preset?: string | null
+          page_margin_bottom?: number | null
+          page_margin_left?: number | null
+          page_margin_right?: number | null
+          page_margin_top?: number | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          show_company_address?: boolean | null
+          show_company_contact?: boolean | null
+          show_company_name?: boolean | null
+          show_company_subtitle?: boolean | null
+          show_customer_section?: boolean | null
+          show_document_date?: boolean | null
+          show_document_number?: boolean | null
+          show_email?: boolean | null
+          show_footer?: boolean | null
+          show_logo?: boolean | null
+          show_page_number?: boolean | null
+          show_tax_id?: boolean | null
+          show_website?: boolean | null
+          summary_bg_color?: string | null
+          summary_border_color?: string | null
+          table_border_color?: string | null
+          table_header_bg_color?: string | null
+          table_header_text_color?: string | null
+          table_row_even_color?: string | null
+          table_row_odd_color?: string | null
+          table_text_color?: string | null
+          title_font_size?: number | null
+          totals_box_bg_color?: string | null
+          totals_box_border_color?: string | null
+          totals_box_border_radius?: number | null
+          totals_box_text_color?: string | null
+          totals_title_font_size?: number | null
+          totals_value_font_size?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       print_task_items: {
         Row: {
           area: number | null
@@ -5057,6 +5561,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      site_theme_settings: {
+        Row: {
+          accent_color: string | null
+          background_color: string | null
+          border_color: string | null
+          created_at: string
+          id: string
+          muted_color: string | null
+          primary_color: string | null
+          secondary_color: string | null
+          setting_key: string
+          text_color: string | null
+          updated_at: string
+        }
+        Insert: {
+          accent_color?: string | null
+          background_color?: string | null
+          border_color?: string | null
+          created_at?: string
+          id?: string
+          muted_color?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          setting_key?: string
+          text_color?: string | null
+          updated_at?: string
+        }
+        Update: {
+          accent_color?: string | null
+          background_color?: string | null
+          border_color?: string | null
+          created_at?: string
+          id?: string
+          muted_color?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
+          setting_key?: string
+          text_color?: string | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       sizes: {
         Row: {

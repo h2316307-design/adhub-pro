@@ -14,6 +14,7 @@ import { Plus, Eye, Edit, Trash2, Calendar, User, DollarSign, Search, Filter, Bu
 import { SendContractDialog } from '@/components/contracts/SendContractDialog';
 import { AddPaymentDialog } from '@/components/contracts/AddPaymentDialog';
 import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
+import { UnifiedPrintAllDialog } from '@/components/shared/printing';
 import { SendAlertsDialog } from '@/components/contracts/SendAlertsDialog';
 import { QuickContractDialog } from '@/components/contracts/QuickContractDialog';
 import { ContractCard } from '@/components/contracts/ContractCard';
@@ -85,6 +86,16 @@ export default function Contracts() {
   const [billboardPrintOpen, setBillboardPrintOpen] = useState(false);
   const [alertsDialogOpen, setAlertsDialogOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
+  
+  // Print All Dialog state
+  const [printAllDialogOpen, setPrintAllDialogOpen] = useState(false);
+  const [printAllData, setPrintAllData] = useState<{
+    contractNumber: number;
+    customerName: string;
+    adType: string;
+    items: any[];
+    billboards: Record<number, any>;
+  } | null>(null);
 
   const [formData, setFormData] = useState<ContractCreate>({
     customer_name: '',
@@ -643,7 +654,7 @@ export default function Contracts() {
     const year = startDate.getFullYear();
     const yearShort = year.toString().slice(-2);
     
-    // فلترة العقود في نفس السنة وترتيبها حسب التاريخ
+    // فلترة العقود في نفس السنة وترتيبها حسب رقم العقد (تصاعدي)
     const sameYearContracts = contracts
       .filter(c => {
         const cDateStr = c.start_date || (c as any)['Contract Date'] || (c as any).contract_date;
@@ -651,9 +662,9 @@ export default function Contracts() {
         return cDate && !isNaN(cDate.getTime()) && cDate.getFullYear() === year;
       })
       .sort((a, b) => {
-        const aDateStr = a.start_date || (a as any)['Contract Date'] || (a as any).contract_date;
-        const bDateStr = b.start_date || (b as any)['Contract Date'] || (b as any).contract_date;
-        return new Date(aDateStr).getTime() - new Date(bDateStr).getTime();
+        const aNum = (a as any).Contract_Number || a.id || 0;
+        const bNum = (b as any).Contract_Number || b.id || 0;
+        return aNum - bNum;
       });
     
     // استخدام Contract_Number أو id للمقارنة
@@ -1289,6 +1300,37 @@ export default function Contracts() {
                       onDelete={handleDeleteContract}
                       onPrint={handlePrintContract}
                       onInstall={openInstallDialog}
+                      onPrintAll={async (c) => {
+                        try {
+                          const contractWithBillboards = await getContractWithBillboards(String(c.id));
+                          const billboardsData = (contractWithBillboards as any).billboards || [];
+                          if (billboardsData.length === 0) {
+                            toast.info('لا توجد لوحات لهذا العقد');
+                            return;
+                          }
+                          const billboardsMap: Record<number, any> = {};
+                          const items = billboardsData.map((bb: any) => {
+                            billboardsMap[bb.ID] = bb;
+                            return {
+                              id: bb.ID,
+                              billboard_id: bb.ID,
+                              design_face_a: bb.design_face_a,
+                              design_face_b: bb.design_face_b,
+                            };
+                          });
+                          setPrintAllData({
+                            contractNumber: (c as any).Contract_Number || c.id,
+                            customerName: c.customer_name || '',
+                            adType: (c as any)['Ad Type'] || '',
+                            items,
+                            billboards: billboardsMap
+                          });
+                          setPrintAllDialogOpen(true);
+                        } catch (error) {
+                          console.error('Error:', error);
+                          toast.error('فشل في تحميل البيانات');
+                        }
+                      }}
                       onBillboardPrint={async (c) => {
                         try {
                           const contractWithBillboards = await getContractWithBillboards(String(c.id));
@@ -2032,6 +2074,24 @@ export default function Contracts() {
         open={quickCreateOpen}
         onOpenChange={setQuickCreateOpen}
       />
+
+      {/* Unified Print All Dialog */}
+      {printAllData && (
+        <UnifiedPrintAllDialog
+          open={printAllDialogOpen}
+          onOpenChange={(open) => {
+            setPrintAllDialogOpen(open);
+            if (!open) setPrintAllData(null);
+          }}
+          contextType="contract"
+          contextNumber={printAllData.contractNumber}
+          customerName={printAllData.customerName}
+          adType={printAllData.adType}
+          items={printAllData.items}
+          billboards={printAllData.billboards}
+          title="طباعة لوحات العقد"
+        />
+      )}
     </div>
   );
 }

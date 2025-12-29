@@ -1,6 +1,23 @@
+/**
+ * PaymentsStatementPrintDialog - كشف الدفعات والإيصالات
+ * ✅ يستخدم نظام الطباعة الموحد (Unified Print Engine)
+ */
+
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { X, Printer } from "lucide-react";
+import { usePrintSettingsByType } from '@/store/printSettingsStore';
+import { DOCUMENT_TYPES } from '@/types/document-types';
+import { getPrintLayoutConfig } from '@/lib/printLayoutHelper';
+import {
+  generateBasePrintCSS,
+  generateDocumentHeader,
+  generateDocumentFooter,
+  formatArabicNumber,
+  formatDate,
+  openPrintWindow,
+  type DocumentHeaderData,
+} from '@/lib/printHtmlGenerator';
 
 interface Payment {
   id: string;
@@ -28,42 +45,9 @@ export function PaymentsStatementPrintDialog({
   payments,
 }: PaymentsStatementPrintDialogProps) {
   
-  const handlePrint = () => {
-    const printContent = document.getElementById('payments-statement-print');
-    if (!printContent) return;
-    
-    const printWindow = window.open('', '_blank');
-    if (!printWindow) return;
-    
-    printWindow.document.write(`
-      <!DOCTYPE html>
-      <html dir="rtl" lang="ar">
-      <head>
-        <meta charset="UTF-8">
-        <title>كشف الدفعات والإيصالات</title>
-        ${printContent.querySelector('style')?.outerHTML || ''}
-      </head>
-      <body>
-        ${printContent.innerHTML}
-      </body>
-      </html>
-    `);
-    
-    printWindow.document.close();
-    setTimeout(() => {
-      printWindow.print();
-      printWindow.close();
-    }, 250);
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('ar-LY');
-  };
-
-  const formatCurrency = (amount: number) => {
-    return amount.toLocaleString('ar-LY');
-  };
-
+  // ✅ استخدام إعدادات الطباعة الموحدة
+  const { settings: printSettings } = usePrintSettingsByType(DOCUMENT_TYPES.PAYMENT_RECEIPT);
+  
   const getEntryTypeLabel = (type: string) => {
     const labels: Record<string, string> = {
       'receipt': 'إيصال',
@@ -84,6 +68,147 @@ export function PaymentsStatementPrintDialog({
     return sum;
   }, 0);
 
+  const handlePrint = async () => {
+    // ✅ الحصول على config من النظام الموحد
+    const config = getPrintLayoutConfig(printSettings);
+    
+    // تحميل الشعار
+    let logoDataUri = '';
+    if (config.showLogo && config.logoPath) {
+      try {
+        const response = await fetch(config.logoPath);
+        const blob = await response.blob();
+        logoDataUri = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsDataURL(blob);
+        });
+      } catch (error) {
+        console.error('Error loading logo:', error);
+      }
+    }
+
+    const statementNumber = `PAY-${Date.now()}`;
+    const statementDate = new Date().toLocaleDateString('ar-LY');
+
+    // بيانات الهيدر
+    const headerData: DocumentHeaderData = {
+      titleEn: 'PAYMENTS STATEMENT',
+      titleAr: 'كشف الدفعات والإيصالات',
+      documentNumber: statementNumber,
+      date: statementDate,
+      additionalDetails: [
+        { label: 'عدد المعاملات', value: totalReceipts.toString() },
+      ],
+    };
+
+    // ملخص الإحصائيات
+    const summaryHtml = `
+      <div class="summary-section" style="margin-bottom: 25px;">
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="summary-value neutral">${formatArabicNumber(totalReceipts)}</div>
+            <div class="summary-label">عدد المعاملات</div>
+          </div>
+          <div class="summary-item">
+            <div class="summary-value positive">${formatArabicNumber(totalAmount)} د.ل</div>
+            <div class="summary-label">إجمالي المبالغ</div>
+          </div>
+        </div>
+      </div>
+    `;
+
+    // جدول الدفعات
+    const tableHtml = `
+      <table class="print-table">
+        <thead>
+          <tr>
+            <th style="width: 5%">#</th>
+            <th style="width: 15%">العميل</th>
+            <th style="width: 10%">النوع</th>
+            <th style="width: 12%">المبلغ</th>
+            <th style="width: 10%">التاريخ</th>
+            <th style="width: 10%">رقم العقد</th>
+            <th style="width: 10%">الطريقة</th>
+            <th style="width: 10%">المرجع</th>
+            <th style="width: 10%">المتبقي</th>
+            <th style="width: 8%">ملاحظات</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${payments.map((payment, index) => {
+            const isCredit = payment.entry_type === 'receipt' || payment.entry_type === 'payment' || payment.entry_type === 'account_payment' || payment.entry_type === 'general_credit';
+            
+            return `
+              <tr>
+                <td>${index + 1}</td>
+                <td style="font-weight: 700;">${payment.customer_name}</td>
+                <td>
+                  <span style="
+                    display: inline-block;
+                    padding: 4px 10px;
+                    border-radius: 4px;
+                    font-weight: 600;
+                    font-size: 10px;
+                    background: ${isCredit ? '#d1fae5' : '#fee2e2'};
+                    color: ${isCredit ? '#065f46' : '#991b1b'};
+                    border: 1px solid ${isCredit ? '#10b981' : '#dc2626'};
+                  ">
+                    ${getEntryTypeLabel(payment.entry_type)}
+                  </span>
+                </td>
+                <td class="${isCredit ? 'credit-cell' : 'debit-cell'}">${formatArabicNumber(payment.amount)} د.ل</td>
+                <td>${formatDate(payment.paid_at)}</td>
+                <td>${payment.contract_number || '—'}</td>
+                <td>${payment.method || '—'}</td>
+                <td style="font-size: 10px;">${payment.reference || '—'}</td>
+                <td class="balance-cell" style="color: ${payment.remaining_debt > 0 ? '#dc2626' : '#059669'}">
+                  ${formatArabicNumber(payment.remaining_debt)} د.ل
+                </td>
+                <td style="font-size: 10px; color: #666;">${payment.notes || '—'}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+
+    // توليد HTML الكامل
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html dir="${config.direction}" lang="ar">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>كشف الدفعات والإيصالات</title>
+        <style>
+          ${generateBasePrintCSS(config)}
+        </style>
+      </head>
+      <body>
+        <div class="print-container">
+          ${generateDocumentHeader(config, headerData, logoDataUri)}
+          ${summaryHtml}
+          ${tableHtml}
+          ${generateDocumentFooter(config)}
+        </div>
+        
+        <script>
+          window.addEventListener('load', function() {
+            setTimeout(function() {
+              window.focus();
+              window.print();
+            }, 500);
+          });
+        </script>
+      </body>
+      </html>
+    `;
+
+    openPrintWindow(htmlContent, `كشف_الدفعات_${statementNumber}`);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
@@ -100,285 +225,61 @@ export function PaymentsStatementPrintDialog({
           </div>
         </div>
 
-        <div id="payments-statement-print" className="bg-white">
-          <style>{`
-            @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700;900&display=swap');
-            
-            @media print {
-              @page {
-                size: A4 portrait;
-                margin: 8mm;
-              }
-              
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-                color-adjust: exact !important;
-              }
-              
-              body {
-                margin: 0;
-                padding: 0;
-              }
-              
-              #payments-statement-print {
-                width: 100% !important;
-                max-width: 210mm !important;
-                padding: 0 !important;
-                margin: 0 auto !important;
-                font-size: 11px !important;
-                margin: 0 !important;
-              }
-            }
-            
-            #payments-statement-print {
-              font-family: 'Noto Sans Arabic', Arial, sans-serif;
-              direction: rtl;
-              color: #1f2937;
-              line-height: 1.6;
-              background: white;
-              padding: 40px;
-            }
-            
-            .statement-header {
-              background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-              color: white;
-              padding: 30px;
-              border-radius: 12px;
-              text-align: center;
-              margin-bottom: 30px;
-              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }
-            
-            .statement-title {
-              font-size: 32px;
-              font-weight: 900;
-              margin-bottom: 8px;
-              text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-            }
-            
-            .statement-subtitle {
-              font-size: 16px;
-              opacity: 0.95;
-              font-weight: 600;
-            }
-            
-            .company-logo {
-              text-align: center;
-              margin-bottom: 20px;
-            }
-            
-            .company-logo img {
-              max-width: 200px;
-              height: auto;
-            }
-            
-            .summary-section {
-              background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-              color: white;
-              padding: 25px;
-              border-radius: 12px;
-              margin-bottom: 30px;
-              display: grid;
-              grid-template-columns: repeat(2, 1fr);
-              gap: 20px;
-              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            }
-            
-            .summary-item {
-              text-align: center;
-            }
-            
-            .summary-label {
-              font-size: 14px;
-              font-weight: 600;
-              margin-bottom: 8px;
-              opacity: 0.95;
-            }
-            
-            .summary-value {
-              font-size: 28px;
-              font-weight: 900;
-              text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-            }
-            
-            .payments-table {
-              width: 100%;
-              border-collapse: collapse;
-              margin-bottom: 30px;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-              border-radius: 8px;
-              overflow: hidden;
-            }
-            
-            .payments-table thead {
-              background: linear-gradient(135deg, #1f2937 0%, #111827 100%);
-              color: white;
-            }
-            
-            .payments-table th {
-              padding: 10px 8px;
-              text-align: center;
-              font-weight: 700;
-              font-size: 11px;
-              border: 1px solid #374151;
-            }
-            
-            .payments-table td {
-              padding: 8px 6px;
-              text-align: center;
-              border: 1px solid #e5e7eb;
-              font-size: 10px;
-            }
-            
-            @media print {
-              .payments-table th {
-                padding: 6px 4px;
-                font-size: 9px;
-              }
-              
-              .payments-table td {
-                padding: 5px 3px;
-                font-size: 8px;
-              }
-            }
-            
-            .payments-table tbody tr:nth-child(even) {
-              background: #f9fafb;
-            }
-            
-            .payments-table tbody tr:hover {
-              background: #f3f4f6;
-            }
-            
-            .entry-type-badge {
-              display: inline-block;
-              padding: 6px 12px;
-              border-radius: 6px;
-              font-weight: 700;
-              font-size: 12px;
-            }
-            
-            .entry-type-receipt {
-              background: #d1fae5;
-              color: #065f46;
-              border: 1px solid #10b981;
-            }
-            
-            .entry-type-debt {
-              background: #fee2e2;
-              color: #991b1b;
-              border: 1px solid #dc2626;
-            }
-            
-            .amount-cell {
-              font-weight: 900;
-              font-size: 15px;
-            }
-            
-            .amount-credit {
-              color: #059669;
-            }
-            
-            .amount-debit {
-              color: #dc2626;
-            }
-            
-            .footer {
-              background: #f9fafb;
-              border-top: 3px solid #1f2937;
-              padding: 20px;
-              text-align: center;
-              margin-top: 40px;
-              border-radius: 8px;
-            }
-            
-            .footer-date {
-              color: #6b7280;
-              font-size: 13px;
-              font-weight: 600;
-              margin-bottom: 8px;
-            }
-            
-            .footer-text {
-              color: #9ca3af;
-              font-size: 11px;
-              font-weight: 500;
-            }
-          `}</style>
-
-          <div className="company-logo">
-            <img src="/logofares.svg" alt="شعار الشركة" />
-          </div>
-
-          <div className="statement-header">
-            <div className="statement-title">كشف الدفعات والإيصالات</div>
-            <div className="statement-subtitle">بيان شامل بجميع المعاملات المالية</div>
-          </div>
-
-          <div className="summary-section">
-            <div className="summary-item">
-              <div className="summary-label">عدد المعاملات</div>
-              <div className="summary-value">{totalReceipts}</div>
+        {/* معاينة الكشف */}
+        <div className="bg-card rounded-lg p-4 border">
+          {/* ملخص */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-primary/10 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-primary">{formatArabicNumber(totalReceipts)}</div>
+              <div className="text-sm text-muted-foreground">عدد المعاملات</div>
             </div>
-            <div className="summary-item">
-              <div className="summary-label">إجمالي المبالغ</div>
-              <div className="summary-value">{formatCurrency(totalAmount)} د.ل</div>
+            <div className="bg-green-500/10 rounded-lg p-4 text-center">
+              <div className="text-2xl font-bold text-green-600">{formatArabicNumber(totalAmount)} د.ل</div>
+              <div className="text-sm text-muted-foreground">إجمالي المبالغ</div>
             </div>
           </div>
 
-          <table className="payments-table">
-            <thead>
-              <tr>
-                <th style={{width: '5%'}}>#</th>
-                <th style={{width: '15%'}}>العميل</th>
-                <th style={{width: '10%'}}>النوع</th>
-                <th style={{width: '12%'}}>المبلغ</th>
-                <th style={{width: '10%'}}>التاريخ</th>
-                <th style={{width: '10%'}}>رقم العقد</th>
-                <th style={{width: '10%'}}>الطريقة</th>
-                <th style={{width: '10%'}}>المرجع</th>
-                <th style={{width: '10%'}}>المتبقي</th>
-                <th style={{width: '8%'}}>ملاحظات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {payments.map((payment, index) => {
-                const isCredit = payment.entry_type === 'receipt' || payment.entry_type === 'payment' || payment.entry_type === 'account_payment' || payment.entry_type === 'general_credit';
-                
-                return (
-                  <tr key={payment.id}>
-                    <td>{index + 1}</td>
-                    <td style={{fontWeight: '700'}}>{payment.customer_name}</td>
-                    <td>
-                      <span className={`entry-type-badge ${isCredit ? 'entry-type-receipt' : 'entry-type-debt'}`}>
-                        {getEntryTypeLabel(payment.entry_type)}
-                      </span>
-                    </td>
-                    <td className={`amount-cell ${isCredit ? 'amount-credit' : 'amount-debit'}`}>
-                      {formatCurrency(payment.amount)} د.ل
-                    </td>
-                    <td style={{fontWeight: '600'}}>{formatDate(payment.paid_at)}</td>
-                    <td>{payment.contract_number || '—'}</td>
-                    <td>{payment.method || '—'}</td>
-                    <td style={{fontSize: '12px'}}>{payment.reference || '—'}</td>
-                    <td className="amount-cell" style={{color: payment.remaining_debt > 0 ? '#dc2626' : '#059669'}}>
-                      {formatCurrency(payment.remaining_debt)} د.ل
-                    </td>
-                    <td style={{fontSize: '11px', color: '#6b7280'}}>{payment.notes || '—'}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-
-          <div className="footer">
-            <div className="footer-date">
-              تاريخ الطباعة: {formatDate(new Date().toISOString())} | الوقت: {new Date().toLocaleTimeString('ar-LY')}
-            </div>
-            <div className="footer-text">
-              شكراً لتعاملكم معنا | هذا البيان صادر آلياً من نظام الإدارة
-            </div>
+          {/* جدول المعاينة */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b bg-muted/50">
+                  <th className="p-2 text-center">#</th>
+                  <th className="p-2 text-right">العميل</th>
+                  <th className="p-2 text-center">النوع</th>
+                  <th className="p-2 text-center">المبلغ</th>
+                  <th className="p-2 text-center">التاريخ</th>
+                  <th className="p-2 text-center">رقم العقد</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.slice(0, 10).map((payment, index) => {
+                  const isCredit = payment.entry_type === 'receipt' || payment.entry_type === 'payment' || payment.entry_type === 'account_payment' || payment.entry_type === 'general_credit';
+                  
+                  return (
+                    <tr key={payment.id} className="border-b">
+                      <td className="p-2 text-center">{index + 1}</td>
+                      <td className="p-2 text-right font-medium">{payment.customer_name}</td>
+                      <td className="p-2 text-center">
+                        <span className={`px-2 py-1 rounded text-xs font-medium ${isCredit ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {getEntryTypeLabel(payment.entry_type)}
+                        </span>
+                      </td>
+                      <td className={`p-2 text-center font-bold ${isCredit ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatArabicNumber(payment.amount)} د.ل
+                      </td>
+                      <td className="p-2 text-center">{formatDate(payment.paid_at)}</td>
+                      <td className="p-2 text-center">{payment.contract_number || '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {payments.length > 10 && (
+              <div className="text-center text-sm text-muted-foreground mt-2">
+                ... و {payments.length - 10} معاملة أخرى
+              </div>
+            )}
           </div>
         </div>
       </DialogContent>

@@ -208,9 +208,9 @@ export const DEFAULT_SECTION_SETTINGS: PageSectionSettings = {
   adType: { x: 2200, y: 770, fontSize: 40, visible: true, textAlign: 'end' },
   firstParty: { x: 2200, y: 900, fontSize: 38, visible: true, textAlign: 'end', lineSpacing: 50 },
   firstPartyData: {
-    companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-    address: 'طرابلس – طريق المطار، حي الزهور',
-    representative: 'يمثلها السيد جمال أحمد زحيل (المدير العام)',
+    companyName: '',
+    address: '',
+    representative: '',
   },
   secondParty: { x: 2200, y: 1050, fontSize: 38, visible: true, textAlign: 'end', lineSpacing: 50 },
   secondPartyCustomer: { x: 2200, y: 1120, fontSize: 36, visible: true, textAlign: 'end', lineSpacing: 50 },

@@ -699,8 +699,7 @@ export default function PartnershipDashboard() {
           {selectedTransaction && (
             <div className="space-y-4 p-4 border rounded-lg bg-white text-black" id="receipt-content">
               <div className="text-center border-b pb-3">
-                <h2 className="text-xl font-bold">شركة الفارس للإعلان</h2>
-                <p className="text-sm text-gray-600">إيصال سحب مستحقات</p>
+                <h2 className="text-xl font-bold">إيصال سحب مستحقات</h2>
               </div>
               
               <div className="space-y-2 text-sm">

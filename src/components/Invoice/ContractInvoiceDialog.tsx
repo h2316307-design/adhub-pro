@@ -291,10 +291,11 @@ export default function ContractInvoiceDialog({
         @media print{body{background:white!important;color:black!important;padding:10px} .header,.customer-info,table{background:white!important} th{background:#f5f5f5!important;color:black!important} .total-row{background:#fff7ed!important;color:#92400e!important} .final-total{background:#ecfeff!important;color:#0891b2!important}}
       </style></head><body>
       
-      <div class="header">
-        <div class="title">فاتورة طباعة</div>
-        <div class="company">شركة الفارس الذهبي للدعاية والإعلان</div>
-        <div style="font-size:14px;color:#94a3b8">هاتف: 123456789 | العنوان: طرابلس، ليبيا</div>
+      <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #D4AF37; padding-bottom: 15px;">
+        <div style="text-align: right;">
+          <!-- Company info from settings -->
+        </div>
+        <div class="title" style="text-align: left;">فاتورة طباعة</div>
       </div>
       
       <div class="customer-info">
@@ -405,10 +406,16 @@ export default function ContractInvoiceDialog({
         @media print{body{background:white!important;color:black!important;padding:10px} .header,.order-info,table,.notes{background:white!important} th{background:#f5f5f5!important;color:black!important} .total-row{background:#fff7ed!important;color:#92400e!important}}
       </style></head><body>
       
-      <div class="header">
-        <div class="title">أمر طباعة للمطبعة</div>
-        <div class="company">شركة الفارس الذهبي للدعاية والإعلان</div>
-        <div style="font-size:14px;color:#94a3b8">أمر طباعة رقم: ${Date.now()}</div>
+      <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #D4AF37; padding-bottom: 15px;">
+        <div style="text-align: right;">
+          <div style="font-size: 22px; font-weight: bold; color: #D4AF37;">الفارس الذهبي</div>
+          <div style="color: #D4AF37; font-size: 14px;">للدعاية والإعلان</div>
+          <div style="font-size: 12px; color: #D4AF37; margin-top: 4px;">الفارس الذهبي للدعاية والإعلان</div>
+        </div>
+        <div style="text-align: left;">
+          <div class="title">أمر طباعة للمطبعة</div>
+          <div style="font-size:12px;color:#94a3b8;margin-top:4px">أمر طباعة رقم: ${Date.now()}</div>
+        </div>
       </div>
       
       <div class="order-info">

@@ -42,6 +42,7 @@ import { EditTaskTypeDialog } from '@/components/tasks/EditTaskTypeDialog';
 import { TransferBillboardsDialog } from '@/components/tasks/TransferBillboardsDialog';
 import { PrintAllContractBillboardsDialog } from '@/components/tasks/PrintAllContractBillboardsDialog';
 import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
+import { TaskCardWrapper } from '@/components/tasks/TaskCardWrapper';
 
 interface InstallationTask {
   id: string;
@@ -1334,40 +1335,19 @@ export default function InstallationTasks() {
                         const isFullyCompleted = completedItems === taskItems.length && taskItems.length > 0;
                         const isPartiallyCompleted = completedItems > 0 && completedItems < taskItems.length;
                         
+                        // استخراج صورة التصميم من عناصر المهمة
+                        const designItem = taskItems.find(item => item.design_face_a || item.design_face_b);
+                        const designImage = designItem?.design_face_a || designItem?.design_face_b;
+                        
                         return (
                           <Collapsible key={task.id}>
-                            <Card className={`
-                              relative overflow-hidden border-2 transition-all duration-300
-                              ${isFullyCompleted 
-                                ? 'border-green-500/50 bg-gradient-to-br from-green-50/80 to-emerald-50/50 dark:from-green-950/30 dark:to-emerald-950/20 shadow-lg shadow-green-500/10' 
-                                : isPartiallyCompleted 
-                                  ? 'border-orange-400/50 bg-gradient-to-br from-amber-50/80 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 shadow-lg shadow-orange-400/10'
-                                  : 'border-border/50 bg-card/95 backdrop-blur-sm'
-                              }
-                            `}>
-                              {/* شريط الحالة العلوي */}
-                              <div className={`
-                                absolute top-0 left-0 right-0 h-1.5 transition-all duration-500
-                                ${isFullyCompleted 
-                                  ? 'bg-gradient-to-r from-green-400 via-emerald-500 to-green-400' 
-                                  : isPartiallyCompleted 
-                                    ? 'bg-gradient-to-r from-orange-300 via-amber-400 to-orange-300'
-                                    : 'bg-gradient-to-r from-muted-foreground/20 via-muted-foreground/30 to-muted-foreground/20'
-                                }
-                              `}>
-                                {/* شريط التقدم */}
-                                {isPartiallyCompleted && (
-                                  <div 
-                                    className="h-full bg-gradient-to-r from-green-400 via-emerald-500 to-green-400 transition-all duration-700 ease-out"
-                                    style={{ width: `${completionPercentage}%` }}
-                                  />
-                                )}
-                              </div>
-                              
-                              {/* تأثير زجاجي */}
-                              <div className="absolute inset-0 bg-gradient-to-br from-white/10 via-transparent to-black/5 pointer-events-none" />
-                              
-                              <CardHeader className="space-y-0 relative z-10">
+                            <TaskCardWrapper 
+                              designImage={designImage}
+                              isCompleted={isFullyCompleted}
+                              isPartiallyCompleted={isPartiallyCompleted}
+                              completionPercentage={completionPercentage}
+                            >
+                              <CardHeader className="space-y-0 relative z-10 py-3">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
                                     <div className="text-right space-y-1">
@@ -1954,7 +1934,7 @@ export default function InstallationTasks() {
                                   </div>
                                 </CardContent>
                               </CollapsibleContent>
-                            </Card>
+                            </TaskCardWrapper>
                           </Collapsible>
                         );
                       })}

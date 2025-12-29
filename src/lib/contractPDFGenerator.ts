@@ -27,7 +27,7 @@ export async function generateContractHTML(data: ContractPDFData): Promise<strin
     price,
     duration = '',
     year,
-    phoneNumber = '0912612255',
+    phoneNumber = '',
     billboards = [],
     useInstallationImage = false
   } = data;
@@ -314,11 +314,8 @@ export async function generateContractHTML(data: ContractPDFData): Promise<strin
     </div>
 
     <!-- الذيل -->
-    <div class="footer">
-      <strong>شركة الفارس الذهبي للدعاية والإعلان</strong>
-      <div class="company-info">
-        طرابلس - طريق المطار - حي الزهور | هاتف: 0912612255
-      </div>
+    <div class="footer" style="direction: rtl; text-align: center; border-top: 3px solid #D4AF37; padding-top: 15px; margin-top: 30px;">
+      <!-- Footer content from settings -->
     </div>
   </div>
 </body>

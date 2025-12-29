@@ -132,8 +132,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       price: formattedPrice,
       duration: duration,
       year: year.toString(),
-      companyName: 'شركة الفارس الذهبي للدعاية والإعلان',
-      phoneNumber: contract.phoneNumber || '0912612255',
+      companyName: '',
+      phoneNumber: '',
       billboardImage: getBillboardImage(contract),
       payments: paymentsText,
       paymentsLines: paymentsLines
@@ -523,7 +523,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 dominant-baseline="middle"
                 style="direction: rtl; text-align: center"
               >
-                شركة الفارس الذهبي للدعاية والإعلان، طرابلس – طريق المطار، حي الزهور.
+                <!-- Company info from settings -->
               </text>
               <text
                 x="1960"
@@ -1233,7 +1233,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 الطرف الأول:
               </text>
               <text x="1500" y="1140" font-family="Doran, sans-serif" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
-                شركة الفارس الذهبي للدعاية والإعلان، طرابلس – طريق المطار، حي الزهور.
+                <!-- Company info from settings -->
               </text>
               <text x="1960" y="1200" font-family="Doran, sans-serif" font-size="42" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
                 يمثلها السيد جمال أحمد زحيل (المدير العام).

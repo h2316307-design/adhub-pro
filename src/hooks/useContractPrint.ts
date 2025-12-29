@@ -35,9 +35,10 @@ export function useContractPrint() {
       return false;
     }
 
-    // Calculate print scale for A4
+    // Calculate print scale for A4 (fallback) + dynamic scale inside print window
+    // 150% scale confirmed by user to fill page correctly
     const a4WidthPx = (210 / 25.4) * 96;
-    const printScale = a4WidthPx / designWidth;
+    const printScale = (a4WidthPx / designWidth) * 1.5;
 
     // Clone the element and reset transforms
     const clonedEl = previewEl.cloneNode(true) as HTMLElement;
@@ -65,6 +66,8 @@ export function useContractPrint() {
         <title>${title}</title>
         ${stylesHtml}
         <style>
+          :root { --print-scale: ${printScale}; }
+
           @page { size: A4; margin: 0; }
           html, body { width: 210mm; height: 297mm; margin: 0; padding: 0; background: white; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
@@ -107,7 +110,7 @@ export function useContractPrint() {
             right: auto !important;
             width: ${designWidth}px !important;
             height: ${designHeight}px !important;
-            transform: scale(${printScale}) !important;
+            transform: scale(var(--print-scale)) !important;
             transform-origin: top left !important;
             margin: 0 !important;
             border-radius: 0 !important;
@@ -144,7 +147,32 @@ export function useContractPrint() {
           ${clonedEl.outerHTML}
         </div>
         <script>
+          function setDynamicPrintScale() {
+            try {
+              const probe = document.createElement('div');
+              probe.style.width = '210mm';
+              probe.style.height = '1mm';
+              probe.style.position = 'absolute';
+              probe.style.left = '-9999px';
+              probe.style.top = '-9999px';
+              probe.style.visibility = 'hidden';
+              document.body.appendChild(probe);
+
+              const measuredA4WidthPx = probe.getBoundingClientRect().width || probe.offsetWidth;
+              document.body.removeChild(probe);
+
+              if (measuredA4WidthPx && measuredA4WidthPx > 0) {
+                const dynamicScale = measuredA4WidthPx / ${designWidth};
+                document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
           window.addEventListener('load', function () {
+            setDynamicPrintScale();
+
             function waitForCss() {
               const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
               return Promise.all(links.map((l) => new Promise((res) => {
@@ -210,9 +238,10 @@ export function useContractPrint() {
       return false;
     }
 
-    // Calculate print scale for A4
+    // Calculate print scale for A4 (fallback) + dynamic scale inside print window
+    // 150% scale confirmed by user to fill page correctly
     const a4WidthPx = (210 / 25.4) * 96;
-    const printScale = a4WidthPx / designWidth;
+    const printScale = (a4WidthPx / designWidth) * 1.5;
 
     // Get all styles from the current page
     const stylesHtml = Array.from(
@@ -242,6 +271,8 @@ export function useContractPrint() {
         <title>${title}</title>
         ${stylesHtml}
         <style>
+          :root { --print-scale: ${printScale}; }
+
           @page { size: A4; margin: 0; }
           html, body { width: 210mm; margin: 0; padding: 0; background: white; }
           * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
@@ -283,7 +314,7 @@ export function useContractPrint() {
             right: auto !important;
             width: ${designWidth}px !important;
             height: ${designHeight}px !important;
-            transform: scale(${printScale}) !important;
+            transform: scale(var(--print-scale)) !important;
             transform-origin: top left !important;
             margin: 0 !important;
             border-radius: 0 !important;
@@ -321,7 +352,32 @@ export function useContractPrint() {
       <body>
         ${pagesContent}
         <script>
+          function setDynamicPrintScale() {
+            try {
+              const probe = document.createElement('div');
+              probe.style.width = '210mm';
+              probe.style.height = '1mm';
+              probe.style.position = 'absolute';
+              probe.style.left = '-9999px';
+              probe.style.top = '-9999px';
+              probe.style.visibility = 'hidden';
+              document.body.appendChild(probe);
+
+              const measuredA4WidthPx = probe.getBoundingClientRect().width || probe.offsetWidth;
+              document.body.removeChild(probe);
+
+              if (measuredA4WidthPx && measuredA4WidthPx > 0) {
+                const dynamicScale = measuredA4WidthPx / ${designWidth};
+                document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
           window.addEventListener('load', function () {
+            setDynamicPrintScale();
+
             function waitForCss() {
               const links = Array.from(document.querySelectorAll('link[rel="stylesheet"]'));
               return Promise.all(links.map((l) => new Promise((res) => {
@@ -351,6 +407,7 @@ export function useContractPrint() {
             });
           });
         </script>
+
       </body>
       </html>
     `;

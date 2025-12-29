@@ -220,74 +220,147 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
   const renderHeader = () => {
     if (!individualSettings.showHeader) return null;
 
+    const headerAlign = sharedSettings.headerAlignment || 'right';
+    const companyAlignItems = getFlexJustify(headerAlign);
+    const companyTextAlign = getTextAlign(headerAlign);
+    const logoAlignSelf = getFlexJustify(sharedSettings.logoPosition || 'right');
+
     return (
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
-        marginBottom: `${headerMarginBottom}px`,
-        paddingBottom: '15px',
-        borderBottom: `2px solid ${individualSettings.primaryColor}`,
-      }}>
-        {/* Invoice Title Side */}
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'row-reverse',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          marginBottom: `${headerMarginBottom}px`,
+          paddingBottom: '15px',
+          borderBottom: `2px solid ${individualSettings.primaryColor}`,
+          direction: 'rtl',
+        }}
+      >
+        {/* الجانب الأيسر - عنوان الفاتورة ومعلوماتها */}
         {sharedSettings.showInvoiceTitle && (
-          <div style={{ flex: 1, textAlign: getTextAlign(sharedSettings.invoiceTitleAlignment), direction: 'ltr' }}>
-            <h1 style={{ 
-              fontSize: `${sharedSettings.invoiceTitleFontSize || 28}px`, fontWeight: 'bold', margin: 0,
-              fontFamily: 'Manrope, sans-serif', letterSpacing: '2px',
-              color: individualSettings.secondaryColor,
-            }}>
+          <div
+            style={{
+              flex: '0 0 40%',
+              textAlign: getTextAlign(sharedSettings.invoiceTitleAlignment),
+              direction: 'ltr',
+            }}
+          >
+            <h1
+              style={{
+                fontSize: `${sharedSettings.invoiceTitleFontSize || 28}px`,
+                fontWeight: 'bold',
+                margin: 0,
+                fontFamily: 'Manrope, sans-serif',
+                letterSpacing: '2px',
+                color: individualSettings.secondaryColor,
+              }}
+            >
               {titles.en}
             </h1>
-            <div style={{ fontSize: '11px', color: individualSettings.customerSectionTextColor, marginTop: '8px', lineHeight: 1.6 }}>
-              رقم الفاتورة: {sampleData.invoiceNumber}<br/>
-              التاريخ: {sampleData.date}<br/>
-              {sampleData.contractNumber && <>رقم العقد: {sampleData.contractNumber}</>}
+            <div
+              style={{
+                fontSize: '11px',
+                color: individualSettings.customerSectionTextColor,
+                marginTop: '10px',
+                lineHeight: 1.8,
+                padding: '8px 0',
+                direction: 'rtl',
+                textAlign: 'right',
+              }}
+            >
+              <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 'bold' }}>رقم الفاتورة:</span>
+                <span>{sampleData.invoiceNumber}</span>
+              </div>
+              <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 'bold' }}>التاريخ:</span>
+                <span>{sampleData.date}</span>
+              </div>
+              {sampleData.contractNumber && (
+                <div style={{ display: 'flex', width: '100%', justifyContent: 'space-between' }}>
+                  <span style={{ fontWeight: 'bold' }}>رقم العقد:</span>
+                  <span>{sampleData.contractNumber}</span>
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Company Info Side */}
-        <div style={{ 
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: sharedSettings.logoPosition === 'left' ? 'flex-start' 
-                    : sharedSettings.logoPosition === 'center' ? 'center' : 'flex-end',
-          gap: '8px',
-        }}>
+        {/* الجانب الأيمن - الشعار ومعلومات الشركة */}
+        <div
+          style={{
+            flex: '0 0 55%',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: companyAlignItems,
+            gap: '8px',
+          }}
+        >
           {sharedSettings.showLogo && (
-            <img src={sharedSettings.logoPath} alt="Logo" 
-              style={{ height: `${sharedSettings.logoSize}px`, objectFit: 'contain', flexShrink: 0 }}
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            <img
+              src={sharedSettings.logoPath}
+              alt="Logo"
+              style={{
+                height: `${sharedSettings.logoSize}px`,
+                objectFit: 'contain',
+                flexShrink: 0,
+                alignSelf: logoAlignSelf,
+              }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none';
+              }}
             />
           )}
-          
-          {sharedSettings.showContactInfo && (
-            <div style={{ 
-              fontSize: `${sharedSettings.contactInfoFontSize || 10}px`, 
-              color: individualSettings.customerSectionTextColor, lineHeight: 1.6,
-              textAlign: sharedSettings.contactInfoAlignment || 'center',
-            }}>
-              {sharedSettings.companyAddress && <div>{sharedSettings.companyAddress}</div>}
-              {sharedSettings.companyPhone && <div>هاتف: {sharedSettings.companyPhone}</div>}
-            </div>
-          )}
-          
+
           {sharedSettings.showCompanyInfo && (sharedSettings.showCompanyName || sharedSettings.showCompanySubtitle) && (
-            <div style={{ fontSize: '11px', color: individualSettings.customerSectionTextColor, lineHeight: 1.8, textAlign: 'right' }}>
-              {sharedSettings.showCompanyName && (
-                <div style={{ fontWeight: 'bold', fontSize: '14px', color: individualSettings.primaryColor, marginBottom: '2px' }}>
+            <div
+              style={{
+                width: '100%',
+                fontSize: '11px',
+                color: individualSettings.customerSectionTextColor,
+                lineHeight: 1.8,
+                textAlign: companyTextAlign,
+              }}
+            >
+              {sharedSettings.showCompanyName && sharedSettings.companyName && (
+                <div
+                  style={{
+                    fontWeight: 'bold',
+                    fontSize: '16px',
+                    color: individualSettings.primaryColor,
+                    marginBottom: '4px',
+                  }}
+                >
                   {sharedSettings.companyName}
                 </div>
               )}
-              {sharedSettings.showCompanySubtitle && (
-                <div>{sharedSettings.companySubtitle}</div>
+              {sharedSettings.showCompanySubtitle && sharedSettings.companySubtitle && (
+                <div style={{ fontSize: '12px', marginBottom: '4px' }}>{sharedSettings.companySubtitle}</div>
               )}
+            </div>
+          )}
+
+          {sharedSettings.showContactInfo && (
+            <div
+              style={{
+                width: '100%',
+                fontSize: `${sharedSettings.contactInfoFontSize || 10}px`,
+                color: individualSettings.customerSectionTextColor,
+                lineHeight: 1.6,
+                textAlign: companyTextAlign,
+              }}
+            >
+              {sharedSettings.companyAddress && <div>{sharedSettings.companyAddress}</div>}
+              {sharedSettings.companyPhone && <div>هاتف: {sharedSettings.companyPhone}</div>}
             </div>
           )}
         </div>
       </div>
     );
   };
+
 
   const renderCustomerSection = () => {
     if (!individualSettings.showCustomerSection || !hasSection(templateType, 'customer')) return null;
@@ -318,6 +391,8 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
     if (!individualSettings.showBillboardsSection || !hasSection(templateType, 'billboards')) return null;
     const billboards = (sampleData as any).billboards;
     if (!billboards) return null;
+    const data = sampleData as any;
+    const showTotalsInTable = individualSettings.showTotalsSection && hasSection(templateType, 'totals') && templateType !== 'sizes_invoice' && data.subtotal !== undefined && !hasSection(templateType, 'items');
 
     return (
       <div style={{ marginBottom: '20px' }}>
@@ -327,25 +402,44 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: `${individualSettings.bodyFontSize}px` }}>
           <thead>
             <tr style={{ backgroundColor: individualSettings.tableHeaderBgColor }}>
-              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>م</th>
+              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '40px' }}>م</th>
               <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>اسم اللوحة</th>
-              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>المقاس</th>
-              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>الأوجه</th>
+              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '80px' }}>المقاس</th>
+              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '60px' }}>الأوجه</th>
               <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>الموقع</th>
-              {templateType !== 'installation' && <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>السعر</th>}
+              {templateType !== 'installation' && <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '120px' }}>السعر</th>}
             </tr>
           </thead>
           <tbody>
             {billboards.map((b: any, i: number) => (
               <tr key={i} style={{ backgroundColor: hexToRgba(i % 2 === 0 ? individualSettings.tableRowEvenColor : individualSettings.tableRowOddColor, individualSettings.tableRowOpacity) }}>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{i + 1}</td>
-                <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{b.name}</td>
+                <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'right', color: individualSettings.tableTextColor }}>{b.name}</td>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{b.size}</td>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{b.faces}</td>
-                <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{b.location}</td>
+                <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'right', color: individualSettings.tableTextColor }}>{b.location}</td>
                 {templateType !== 'installation' && <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontWeight: 'bold' }}>{b.price?.toLocaleString()} د.ل</td>}
               </tr>
             ))}
+            {/* المجاميع داخل الجدول - مباشرة بعد آخر صف */}
+            {showTotalsInTable && templateType !== 'installation' && (
+              <>
+                <tr style={{ backgroundColor: individualSettings.subtotalBgColor }}>
+                  <td colSpan={5} style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'left', fontWeight: 'bold', color: individualSettings.subtotalTextColor }}>المجموع الفرعي</td>
+                  <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', fontWeight: 'bold', color: individualSettings.subtotalTextColor }}>{data.subtotal.toLocaleString()} د.ل</td>
+                </tr>
+                {data.discount > 0 && (
+                  <tr style={{ backgroundColor: '#fff9f9' }}>
+                    <td colSpan={5} style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'left', color: individualSettings.discountTextColor }}>خصم</td>
+                    <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.discountTextColor }}>- {data.discount.toLocaleString()} د.ل</td>
+                  </tr>
+                )}
+                <tr style={{ backgroundColor: individualSettings.totalBgColor }}>
+                  <td colSpan={5} style={{ padding: '15px 12px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'left', fontWeight: 'bold', fontSize: `${individualSettings.headerFontSize}px`, color: individualSettings.totalTextColor }}>المجموع الإجمالي</td>
+                  <td style={{ padding: '15px 12px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: `${individualSettings.headerFontSize}px`, color: individualSettings.totalTextColor }}>{data.total.toLocaleString()} د.ل</td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -356,6 +450,8 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
     if (!individualSettings.showItemsSection || !hasSection(templateType, 'items')) return null;
     const items = (sampleData as any).items;
     if (!items) return null;
+    const data = sampleData as any;
+    const showTotalsInTable = individualSettings.showTotalsSection && hasSection(templateType, 'totals') && templateType !== 'sizes_invoice' && data.subtotal !== undefined;
 
     return (
       <div style={{ marginBottom: '20px' }}>
@@ -364,21 +460,40 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
             <tr style={{ backgroundColor: individualSettings.tableHeaderBgColor }}>
               <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '40px' }}>م</th>
               <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>الوصف</th>
-              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>الكمية</th>
-              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>السعر/الوحدة</th>
-              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center' }}>المجموع</th>
+              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '80px' }}>الكمية</th>
+              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '100px' }}>السعر/الوحدة</th>
+              <th style={{ padding: '12px 8px', color: individualSettings.tableHeaderTextColor, border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', width: '120px' }}>المجموع</th>
             </tr>
           </thead>
           <tbody>
             {items.map((item: any, i: number) => (
               <tr key={i} style={{ backgroundColor: hexToRgba(i % 2 === 0 ? individualSettings.tableRowEvenColor : individualSettings.tableRowOddColor, individualSettings.tableRowOpacity) }}>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{i + 1}</td>
-                <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{item.description}</td>
+                <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'right', color: individualSettings.tableTextColor }}>{item.description}</td>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{item.qty}</td>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor }}>{item.unitPrice.toLocaleString()} د.ل</td>
                 <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.tableTextColor, fontWeight: 'bold' }}>{item.total.toLocaleString()} د.ل</td>
               </tr>
             ))}
+            {/* المجاميع داخل الجدول - مباشرة بعد آخر صف */}
+            {showTotalsInTable && (
+              <>
+                <tr style={{ backgroundColor: individualSettings.subtotalBgColor }}>
+                  <td colSpan={4} style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'left', fontWeight: 'bold', color: individualSettings.subtotalTextColor }}>المجموع الفرعي</td>
+                  <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', fontWeight: 'bold', color: individualSettings.subtotalTextColor }}>{data.subtotal.toLocaleString()} د.ل</td>
+                </tr>
+                {data.discount > 0 && (
+                  <tr style={{ backgroundColor: '#fff9f9' }}>
+                    <td colSpan={4} style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'left', color: individualSettings.discountTextColor }}>خصم</td>
+                    <td style={{ padding: '12px 8px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', color: individualSettings.discountTextColor }}>- {data.discount.toLocaleString()} د.ل</td>
+                  </tr>
+                )}
+                <tr style={{ backgroundColor: individualSettings.totalBgColor }}>
+                  <td colSpan={4} style={{ padding: '15px 12px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'left', fontWeight: 'bold', fontSize: `${individualSettings.headerFontSize}px`, color: individualSettings.totalTextColor }}>المجموع الإجمالي</td>
+                  <td style={{ padding: '15px 12px', border: `1px solid ${individualSettings.tableBorderColor}`, textAlign: 'center', fontWeight: 'bold', fontSize: `${individualSettings.headerFontSize}px`, color: individualSettings.totalTextColor }}>{data.total.toLocaleString()} د.ل</td>
+                </tr>
+              </>
+            )}
           </tbody>
         </table>
       </div>
@@ -688,6 +803,9 @@ export function UnifiedInvoicePreview({ templateType, sharedSettings, individual
     if (templateType === 'sizes_invoice') return null;
     const data = sampleData as any;
     if (data.subtotal === undefined) return null;
+    
+    // Skip if this template type has items section (totals already rendered in table)
+    if (hasSection(templateType, 'items') && individualSettings.showItemsSection) return null;
 
     return (
       <div style={{ marginTop: '30px', textAlign: getTextAlign(individualSettings.totalsAlignment) }}>

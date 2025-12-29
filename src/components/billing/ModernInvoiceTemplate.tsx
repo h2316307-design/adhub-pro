@@ -422,13 +422,16 @@ export const generateModernInvoiceHTML = (data: ModernInvoiceData): string => {
     }
   </style>
 </head>
-<body>
-  <div class="invoice-container">
-    <div class="header">
-      <div class="company-logo">ف</div>
-      <div class="company-name">شركة الفارس الذهبي</div>
-      <div class="invoice-title">فاتورة مبيعات</div>
-    </div>
+  <body>
+    <div class="invoice-container">
+      <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #D4AF37; padding-bottom: 15px;">
+        <div style="text-align: right; display: flex; align-items: center; gap: 12px;">
+          <div class="company-logo" style="background: #D4AF37; color: white; width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; font-weight: bold;">ف</div>
+          <!-- بدون أي نصوص ثابتة: يتم التحكم في الهيدر من القالب الموحد فقط -->
+        </div>
+        <div class="invoice-title" style="text-align: left; font-size: 24px; font-weight: bold; color: #B8860B;">فاتورة مبيعات</div>
+      </div>
+
     
     <div class="content">
       <div class="invoice-info">

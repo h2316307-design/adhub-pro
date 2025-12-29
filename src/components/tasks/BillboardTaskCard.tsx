@@ -632,6 +632,51 @@ export function BillboardTaskCard({
             <span className="line-clamp-1">{billboard.Nearest_Landmark}</span>
           </div>
         )}
+        
+        {/* عرض صورة التصميم المحفوظة في العنصر - يظهر دائماً إذا كان هناك تصميم محفوظ */}
+        {(item.design_face_a || item.design_face_b) && (
+          <div className="mt-2 p-2 bg-accent/10 rounded-lg border border-accent/20">
+            <p className="text-[10px] font-semibold text-accent mb-1.5 flex items-center gap-1">
+              <PaintBucket className="h-3 w-3" />
+              التصميم المحفوظ
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {item.design_face_a && (
+                <div className="space-y-1">
+                  <div className="text-[9px] text-center text-muted-foreground font-medium">الوجه الأمامي</div>
+                  <div className="relative aspect-video rounded overflow-hidden bg-white dark:bg-gray-900 border-2 border-accent/30 shadow-sm">
+                    <img
+                      src={item.design_face_a}
+                      alt="الوجه الأمامي"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "/placeholder.svg";
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+              {item.design_face_b && (
+                <div className="space-y-1">
+                  <div className="text-[9px] text-center text-muted-foreground font-medium">الوجه الخلفي</div>
+                  <div className="relative aspect-video rounded overflow-hidden bg-white dark:bg-gray-900 border-2 border-accent/30 shadow-sm">
+                    <img
+                      src={item.design_face_b}
+                      alt="الوجه الخلفي"
+                      className="w-full h-full object-contain"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        target.src = "/placeholder.svg";
+                      }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+        
         {/* قسم اختيار التصميم - يظهر فقط إذا كان هناك تصاميم */}
         {taskDesigns.length > 0 && (
           <div className="mt-3 pt-2 border-t border-border">

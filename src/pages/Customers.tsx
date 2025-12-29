@@ -24,6 +24,8 @@ import { SendOverdueRemindersDialog } from '@/components/billing/SendOverdueRemi
 import { SendDebtRemindersDialog } from '@/components/billing/SendDebtRemindersDialog';
 import { BulkAccountStatementDialog } from '@/components/customers/BulkAccountStatementDialog';
 import { Mail, FileSpreadsheet, AlertTriangle, DollarSign } from 'lucide-react';
+import { getMergedInvoiceStylesAsync } from '@/hooks/useInvoiceSettingsSync';
+import { calculateCustomerFinancials } from '@/hooks/useCustomerFinancials';
 
 interface PaymentRow {
   id: string;
@@ -54,9 +56,11 @@ interface CustomerSummary {
   phone: string | null;
   company: string | null;
   contractsCount: number;
-  totalRent: number;
-  totalPaid: number;
+  totalRent: number;       // إجمالي الديون (العقود + الفواتير + المهام المجمعة)
+  totalPaid: number;       // إجمالي المدفوعات الصحيحة
   accountBalance: number;
+  remainingDebt: number;   // ✅ المتبقي من الدين باستخدام المنطق الصحيح
+  repaymentPercentage: number; // ✅ نسبة السداد الصحيحة
   isSupplier?: boolean;
   isCustomer?: boolean;
   supplierType?: string | null;
@@ -285,6 +289,14 @@ export default function Customers() {
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<ContractRow[]>([]);
   const [customers, setCustomers] = useState<{id:string; name:string; phone?: string | null; company?: string | null}[]>([]);
+  
+  // ✅ بيانات إضافية للحساب الصحيح
+  const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
+  const [printedInvoices, setPrintedInvoices] = useState<any[]>([]);
+  const [purchaseInvoices, setPurchaseInvoices] = useState<any[]>([]);
+  const [discounts, setDiscounts] = useState<any[]>([]);
+  const [compositeTasks, setCompositeTasks] = useState<any[]>([]);
+  
   const [search, setSearch] = useState('');
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [selectedCustomerName, setSelectedCustomerName] = useState<string>('');
@@ -366,15 +378,17 @@ export default function Customers() {
   const loadData = async () => {
     try {
       console.log('Loading data...');
-      const [pRes, cRes, cuRes] = await Promise.all([
+      // ✅ تحميل جميع البيانات المطلوبة للحساب الصحيح
+      const [pRes, cRes, cuRes, siRes, piRes, puRes, dRes, ctRes] = await Promise.all([
         supabase.from('customer_payments').select('*').order('paid_at', { ascending: false }),
         supabase.from('Contract').select('*'),
-        supabase.from('customers').select('*').order('name', { ascending: true })
+        supabase.from('customers').select('*').order('name', { ascending: true }),
+        supabase.from('sales_invoices').select('*'),
+        supabase.from('printed_invoices').select('*'),
+        supabase.from('purchase_invoices').select('*'),
+        supabase.from('customer_general_discounts').select('*').eq('status', 'active'),
+        supabase.from('composite_tasks').select('*'),
       ]);
-
-      console.log('Payments result:', pRes);
-      console.log('Contracts result:', cRes);
-      console.log('Customers result:', cuRes);
 
       if (pRes.error) {
         console.error('Payments error:', pRes.error);
@@ -393,6 +407,14 @@ export default function Customers() {
       } else {
         setCustomers(cuRes.data || []);
       }
+
+      // ✅ تخزين البيانات الإضافية
+      setSalesInvoices(siRes.data || []);
+      setPrintedInvoices(piRes.data || []);
+      setPurchaseInvoices(puRes.data || []);
+      setDiscounts(dRes.data || []);
+      setCompositeTasks(ctRes.data || []);
+      
     } catch (error) {
       console.error('Error loading data:', error);
       toast.error('خطأ في تحميل البيانات');
@@ -458,13 +480,8 @@ export default function Customers() {
     })();
   }, [sizeCounts]);
 
-  // Build summary per customer using customers table, payments + contracts
+  // ✅ Build summary per customer using the CORRECT calculation logic (same as debt summary card)
   const customersSummary = useMemo((): CustomerSummary[] => {
-    console.log('Building customer summary...');
-    console.log('Customers:', customers);
-    console.log('Contracts:', contracts);
-    console.log('Payments:', payments);
-
     // initialize map from customers list with all customer data
     const map = new Map<string, CustomerSummary>();
     for (const c of (customers || [])) {
@@ -481,20 +498,19 @@ export default function Customers() {
         totalRent: 0, 
         totalPaid: 0,
         accountBalance: 0,
+        remainingDebt: 0,
+        repaymentPercentage: 0,
         isSupplier: (c as any).is_supplier ?? false,
         isCustomer: (c as any).is_customer ?? true,
         supplierType: (c as any).supplier_type ?? null
       });
     }
 
-    // contracts info
+    // Count contracts per customer
     for (const ct of contracts) {
       const cid = ct.customer_id ?? null;
-      const rent = Number(ct['Total'] || 0) || 0;
       if (cid && map.has(cid)) {
-        const cur = map.get(cid)!;
-        cur.contractsCount += 1;
-        cur.totalRent += rent;
+        map.get(cid)!.contractsCount += 1;
       } else {
         // fallback: group by name if customer_id missing
         const name = (ct['Customer Name'] || '').toString() || '—';
@@ -509,87 +525,133 @@ export default function Customers() {
             totalRent: 0, 
             totalPaid: 0,
             accountBalance: 0,
+            remainingDebt: 0,
+            repaymentPercentage: 0,
+            isSupplier: false,
+            isCustomer: true,
+            supplierType: null
+          });
+        }
+        map.get(key)!.contractsCount += 1;
+      }
+    }
+
+    // ✅ للمستخدمين الذين لديهم customer_id حقيقي، نستخدم الدالة الموحدة للحساب
+    for (const [customerId, customerData] of map.entries()) {
+      // تجاهل العملاء الذين ليس لديهم id حقيقي
+      if (customerId.startsWith('name:')) continue;
+      
+      // تصفية البيانات الخاصة بهذا العميل
+      const customerContracts = contracts.filter(c => c.customer_id === customerId);
+      const customerPayments = payments.filter(p => p.customer_id === customerId);
+      const customerSalesInvoices = salesInvoices.filter(inv => inv.customer_id === customerId);
+      const customerPrintedInvoices = printedInvoices.filter(inv => inv.customer_id === customerId);
+      const customerPurchaseInvoices = purchaseInvoices.filter(inv => inv.customer_id === customerId);
+      const customerDiscounts = discounts.filter(d => d.customer_id === customerId);
+      const customerCompositeTasks = compositeTasks.filter(t => t.customer_id === customerId);
+      
+      // حساب إيجارات الشركات الصديقة
+      let friendRentals = 0;
+      for (const contract of customerContracts) {
+        const friendData = (contract as any).friend_rental_data;
+        if (friendData && typeof friendData === 'object') {
+          const entries = Object.values(friendData) as any[];
+          for (const entry of entries) {
+            if (entry && typeof entry.rental_cost === 'number') {
+              friendRentals += entry.rental_cost;
+            }
+          }
+        }
+      }
+      
+      // ✅ استخدام الدالة الموحدة للحساب الصحيح
+      const financials = calculateCustomerFinancials(
+        customerContracts,
+        customerPayments,
+        customerSalesInvoices,
+        customerPrintedInvoices,
+        customerPurchaseInvoices,
+        customerDiscounts,
+        customerCompositeTasks,
+        friendRentals
+      );
+      
+      customerData.totalRent = financials.totalDebt;
+      customerData.totalPaid = financials.totalPaid;
+      customerData.remainingDebt = financials.remainingDebt;
+      customerData.repaymentPercentage = financials.repaymentPercentage;
+      
+      // تحديد الموردين
+      for (const p of customerPayments) {
+        if (p.entry_type === 'general_debit') {
+          customerData.isSupplier = true;
+          break;
+        }
+      }
+      
+      // حساب رصيد الحساب
+      customerData.accountBalance = customerPayments
+        .filter(p => p.entry_type === 'account_payment' || (!p.contract_number && (p.entry_type === 'receipt' || p.entry_type === 'payment')))
+        .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+    }
+
+    // ✅ للعملاء بدون customer_id (fallback by name) - استخدام المنطق القديم المبسط
+    for (const p of payments) {
+      if (p.customer_id && map.has(p.customer_id)) continue; // تم معالجته أعلاه
+      
+      if (p.customer_name) {
+        const name = p.customer_name || '—';
+        const key = `name:${name}`;
+        if (!map.has(key)) {
+          map.set(key, { 
+            id: key, 
+            name, 
+            phone: null, 
+            company: null, 
+            contractsCount: 0, 
+            totalRent: 0, 
+            totalPaid: 0,
+            accountBalance: 0,
+            remainingDebt: 0,
+            repaymentPercentage: 0,
             isSupplier: false,
             isCustomer: true,
             supplierType: null
           });
         }
         const cur = map.get(key)!;
-        cur.contractsCount += 1;
-        cur.totalRent += rent;
-      }
-    }
-
-    // payments - separate contract payments from account payments
-    for (const p of payments) {
-      const cid = (p.customer_id || null) as string | null;
-      const amt = Number(p.amount || 0) || 0;
-      
-      if (cid && map.has(cid)) {
-        const cur = map.get(cid)!;
+        const amt = Number(p.amount || 0) || 0;
         
-        // ✅ تحديد الموردين
         if (p.entry_type === 'general_debit') {
           cur.isSupplier = true;
         }
         
         if (p.entry_type === 'account_payment' || !p.contract_number) {
           cur.accountBalance += amt;
-        } else {
+        } else if (p.entry_type === 'receipt' || p.entry_type === 'payment') {
           cur.totalPaid += amt;
-        }
-      } else if (p.customer_name) {
-        // try to find customer by name
-        const match = Array.from(map.values()).find(x => x.name && x.name.toLowerCase() === String(p.customer_name).toLowerCase());
-        if (match) {
-          // ✅ تحديد الموردين
-          if (p.entry_type === 'general_debit') {
-            match.isSupplier = true;
-          }
-          
-          if (p.entry_type === 'account_payment' || !p.contract_number) {
-            match.accountBalance += amt;
-          } else {
-            match.totalPaid += amt;
-          }
-        } else {
-        const name = p.customer_name || '—';
-          const key = `name:${name}`;
-          if (!map.has(key)) {
-            map.set(key, { 
-              id: key, 
-              name, 
-              phone: null, 
-              company: null, 
-              contractsCount: 0, 
-              totalRent: 0, 
-              totalPaid: 0,
-              accountBalance: 0,
-              isSupplier: false,
-              isCustomer: true,
-              supplierType: null
-            });
-          }
-          const cur = map.get(key)!;
-          
-          // ✅ تحديد الموردين
-          if (p.entry_type === 'general_debit') {
-            cur.isSupplier = true;
-          }
-          
-          if (p.entry_type === 'account_payment' || !p.contract_number) {
-            cur.accountBalance += amt;
-          } else {
-            cur.totalPaid += amt;
-          }
         }
       }
     }
 
+    // حساب المتبقي ونسبة السداد للعملاء بدون customer_id
+    for (const [customerId, customerData] of map.entries()) {
+      if (customerId.startsWith('name:')) {
+        // استخدام المنطق المبسط للعملاء بدون customer_id
+        const customerContracts = contracts.filter(c => 
+          !c.customer_id && (c['Customer Name'] || '').toString().toLowerCase() === customerData.name.toLowerCase()
+        );
+        customerData.totalRent = customerContracts.reduce((sum, c) => sum + (Number(c['Total']) || 0), 0);
+        customerData.remainingDebt = Math.max(0, customerData.totalRent - customerData.totalPaid);
+        customerData.repaymentPercentage = customerData.totalRent > 0 
+          ? Math.round((customerData.totalPaid / customerData.totalRent) * 100) 
+          : 100;
+      }
+    }
+
     const result = Array.from(map.values()).sort((a, b) => b.totalRent - a.totalRent);
-    console.log('Customer summary result:', result);
     return result;
-  }, [payments, contracts, customers]);
+  }, [payments, contracts, customers, salesInvoices, printedInvoices, purchaseInvoices, discounts, compositeTasks]);
 
   const totalAllPaid = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
@@ -860,7 +922,24 @@ export default function Customers() {
     }
   };
 
-  const printReceipt = (payment: PaymentRow) => {
+  const printReceipt = async (payment: PaymentRow) => {
+    const styles = await getMergedInvoiceStylesAsync('receipt');
+
+    const primary = styles.primaryColor || '#D4AF37';
+    const secondary = styles.secondaryColor || '#B8860B';
+
+    const companyName = styles.companyName || '';
+    const companySubtitle = styles.companySubtitle || '';
+
+    const companyBlock = (companyName || companySubtitle)
+      ? `
+            <div style="text-align:${styles.headerAlignment === 'left' ? 'left' : styles.headerAlignment === 'center' ? 'center' : 'right'}; width:100%;">
+              ${companyName ? `<div style="font-size: 22px; font-weight: bold; color: ${primary};">${companyName}</div>` : ''}
+              ${companySubtitle ? `<div style="color: ${primary}; font-size: 14px;">${companySubtitle}</div>` : ''}
+            </div>
+        `
+      : '';
+
     const html = `
       <html dir="rtl">
         <head>
@@ -930,9 +1009,9 @@ export default function Customers() {
           </style>
         </head>
         <body>
-          <div class="header">
-            <div class="title">إيصال دفع</div>
-            <div class="company">شركة الفارس الذهبي للدعاية والإعلان</div>
+          <div class="header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid ${primary}; padding-bottom: 15px;">
+            ${companyBlock}
+            <div class="title" style="text-align: left; font-size: 24px; font-weight: bold; color: ${secondary};">إيصال دفع</div>
           </div>
           
           <div class="content">
@@ -969,11 +1048,11 @@ export default function Customers() {
           </div>
           
           <div class="amount">
-            المبلغ المدفوع: ${(Number(payment.amount)||0).toLocaleString('ar-LY')} دينار ليبي
+            المبلغ المدفوع: ${(Number(payment.amount) || 0).toLocaleString('ar-LY')} دينار ليبي
           </div>
           
           <div class="footer">
-            <p>شكراً لتعاملكم معنا</p>
+            <p>${styles.footerText || ''}</p>
             <p>تم إنشاء هذا الإيصال في: ${new Date().toLocaleString('ar-LY')}</p>
           </div>
           
@@ -984,7 +1063,7 @@ export default function Customers() {
           </script>
         </body>
       </html>`;
-    
+
     const w = window.open('', '_blank');
     if (w) {
       w.document.open();
@@ -992,6 +1071,7 @@ export default function Customers() {
       w.document.close();
     }
   };
+
 
   const printMultiContractInvoice = () => {
     if (selectedContractsForInv.length === 0) {
@@ -1583,9 +1663,10 @@ export default function Customers() {
               </TableHeader>
               <TableBody>
                 {visible.map(c => {
-                  const remaining = Math.max(0, c.totalRent - c.totalPaid);
-                  const paymentPercentage = c.totalRent > 0 ? Math.round((c.totalPaid / c.totalRent) * 100) : 0;
-                  
+                  // ✅ استخدام القيم المحسوبة مسبقاً بالمنطق الصحيح
+                  const remaining = c.remainingDebt;
+                  const paymentPercentage = c.repaymentPercentage;
+
                   return (
                     <CustomerRow
                       key={c.id}
