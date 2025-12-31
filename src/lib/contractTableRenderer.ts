@@ -286,9 +286,11 @@ export function renderBillboardsTablePage(options: RenderTableOptions): string {
         position: absolute;
         top: 0;
         left: 0;
-        width: 210mm;
-        height: 297mm;
+        width: 100%;
+        height: 100%;
         object-fit: cover;
+        transform: scale(1.5);
+        transform-origin: center;
         z-index: 1;
       " onerror="console.warn('Failed to load table background')" />
       ${tableTermHtml}

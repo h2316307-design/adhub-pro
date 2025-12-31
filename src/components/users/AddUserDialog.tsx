@@ -40,8 +40,23 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
       return;
     }
 
-    if (formData.password.length < 6) {
-      toast.error('كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+    if (formData.password.length < 8) {
+      toast.error('كلمة المرور يجب أن تكون 8 أحرف على الأقل');
+      return;
+    }
+
+    if (!/[A-Z]/.test(formData.password)) {
+      toast.error('كلمة المرور يجب أن تحتوي على حرف كبير');
+      return;
+    }
+
+    if (!/[a-z]/.test(formData.password)) {
+      toast.error('كلمة المرور يجب أن تحتوي على حرف صغير');
+      return;
+    }
+
+    if (!/[0-9]/.test(formData.password)) {
+      toast.error('كلمة المرور يجب أن تحتوي على رقم');
       return;
     }
 

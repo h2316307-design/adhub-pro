@@ -62,6 +62,12 @@ interface CustodyExpense {
   notes: string | null;
 }
 
+// Helper to get account info for display
+const getAccountInfo = (accountId: string, accounts: CustodyAccount[]) => {
+  const account = accounts.find(a => a.id === accountId);
+  return account ? `${account.account_number} - ${(account.employee as any)?.name || ''}` : '';
+};
+
 export default function CustodyManagement() {
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [accounts, setAccounts] = useState<CustodyAccount[]>([]);
@@ -100,6 +106,9 @@ export default function CustodyManagement() {
   
   // Add expense directly to account
   const [selectedAccountForExpense, setSelectedAccountForExpense] = useState<CustodyAccount | null>(null);
+  
+  // Editing expense state
+  const [editingExpense, setEditingExpense] = useState<CustodyExpense | null>(null);
   
   // Transaction form
   const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -269,29 +278,118 @@ export default function CustodyManagement() {
     }
 
     try {
-      const { error } = await supabase
-        .from('custody_expenses')
-        .insert({
-          custody_account_id: expenseAccountId,
-          expense_category: expenseCategory,
-          amount: parseFloat(expenseAmount),
-          expense_date: expenseDate,
-          description: expenseDescription,
-          receipt_number: expenseReceiptNumber || null,
-          vendor_name: vendorName || null,
-          notes: expenseNotes || null
-        });
+      if (editingExpense) {
+        // Update existing expense
+        const { error } = await supabase
+          .from('custody_expenses')
+          .update({
+            expense_category: expenseCategory,
+            amount: parseFloat(expenseAmount),
+            expense_date: expenseDate,
+            description: expenseDescription,
+            receipt_number: expenseReceiptNumber || null,
+            vendor_name: vendorName || null,
+            notes: expenseNotes || null
+          })
+          .eq('id', editingExpense.id);
 
-      if (error) throw error;
+        if (error) throw error;
+        toast.success('تم تعديل المصروف بنجاح');
+      } else {
+        // Insert new expense
+        const { error } = await supabase
+          .from('custody_expenses')
+          .insert({
+            custody_account_id: expenseAccountId,
+            expense_category: expenseCategory,
+            amount: parseFloat(expenseAmount),
+            expense_date: expenseDate,
+            description: expenseDescription,
+            receipt_number: expenseReceiptNumber || null,
+            vendor_name: vendorName || null,
+            notes: expenseNotes || null
+          });
 
-      toast.success('تم إضافة المصروف بنجاح');
+        if (error) throw error;
+        toast.success('تم إضافة المصروف بنجاح');
+      }
+
       setExpenseDialogOpen(false);
       resetExpenseForm();
       loadData();
     } catch (error) {
-      console.error('Error adding expense:', error);
-      toast.error('فشل في إضافة المصروف');
+      console.error('Error adding/updating expense:', error);
+      toast.error(editingExpense ? 'فشل في تعديل المصروف' : 'فشل في إضافة المصروف');
     }
+  };
+
+  // Delete expense
+  const handleDeleteExpense = async (expense: CustodyExpense) => {
+    if (!confirm(`هل تريد حذف هذا المصروف؟\n${expense.description}\nالمبلغ: ${expense.amount.toLocaleString('ar-LY')} د.ل`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('custody_expenses')
+        .delete()
+        .eq('id', expense.id);
+
+      if (error) throw error;
+      toast.success('تم حذف المصروف بنجاح');
+      loadData();
+    } catch (error) {
+      console.error('Error deleting expense:', error);
+      toast.error('فشل في حذف المصروف');
+    }
+  };
+
+  // Open edit expense dialog
+  const handleEditExpense = (expense: CustodyExpense) => {
+    setEditingExpense(expense);
+    setExpenseAccountId(expense.custody_account_id);
+    setExpenseCategory(expense.expense_category);
+    setExpenseAmount(expense.amount.toString());
+    setExpenseDate(expense.expense_date);
+    setExpenseDescription(expense.description);
+    setExpenseReceiptNumber(expense.receipt_number || '');
+    setVendorName(expense.vendor_name || '');
+    setExpenseNotes(expense.notes || '');
+    setExpenseDialogOpen(true);
+  };
+
+  // Delete transaction
+  const handleDeleteTransaction = async (transaction: CustodyTransaction) => {
+    if (!confirm(`هل تريد حذف هذه الحركة؟\n${transaction.description || transaction.transaction_type}\nالمبلغ: ${transaction.amount.toLocaleString('ar-LY')} د.ل`)) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('custody_transactions')
+        .delete()
+        .eq('id', transaction.id);
+
+      if (error) throw error;
+      toast.success('تم حذف الحركة بنجاح');
+      loadData();
+    } catch (error) {
+      console.error('Error deleting transaction:', error);
+      toast.error('فشل في حذف الحركة');
+    }
+  };
+
+  // Open edit transaction dialog
+  const handleEditTransaction = (transaction: CustodyTransaction) => {
+    setEditingTransaction(transaction);
+    setSelectedAccountId(transaction.custody_account_id);
+    setTransactionType(transaction.transaction_type);
+    setTransactionAmount(transaction.amount.toString());
+    setTransactionDate(transaction.transaction_date);
+    setTransactionDescription(transaction.description || '');
+    setReceiptNumber(transaction.receipt_number || '');
+    setReceiverName(transaction.receiver_name || '');
+    setTransactionDialogOpen(true);
   };
 
   const resetAccountForm = () => {
@@ -367,6 +465,7 @@ export default function CustodyManagement() {
     setExpenseReceiptNumber('');
     setVendorName('');
     setExpenseNotes('');
+    setEditingExpense(null);
   };
 
   const resetDepositForm = () => {
@@ -477,63 +576,105 @@ export default function CustodyManagement() {
 
   return (
     <div className="container mx-auto p-6 space-y-6" dir="rtl">
-      <div className="flex justify-between items-center">
+      {/* Header */}
+      <div className="flex justify-between items-center bg-gradient-to-l from-primary/10 to-transparent p-4 rounded-xl">
         <div>
-          <h1 className="text-3xl font-bold">إدارة العهد المالية</h1>
-          <p className="text-muted-foreground mt-1">متابعة وإدارة العهد المالية للموظفين</p>
+          <h1 className="text-3xl font-bold flex items-center gap-3">
+            <div className="p-2 bg-primary/20 rounded-lg">
+              <Wallet className="h-7 w-7 text-primary" />
+            </div>
+            إدارة العهد المالية
+          </h1>
+          <p className="text-muted-foreground mt-1 mr-12">متابعة وإدارة العهد المالية للموظفين</p>
         </div>
-        <Button onClick={() => setAccountDialogOpen(true)} className="gap-2">
-          <Plus className="h-4 w-4" />
+        <Button onClick={() => setAccountDialogOpen(true)} className="gap-2 shadow-lg" size="lg">
+          <Plus className="h-5 w-5" />
           إنشاء عهدة جديدة
         </Button>
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
+      <div className="grid gap-4 md:grid-cols-4">
+        <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">إجمالي العهد النشطة</CardTitle>
-            <Wallet className="h-4 w-4 text-primary" />
+            <div className="p-2 bg-primary/20 rounded-full">
+              <Wallet className="h-4 w-4 text-primary" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
               {totalCustodyBalance.toLocaleString('ar-LY')} د.ل
             </div>
+            <p className="text-xs text-muted-foreground mt-1">الرصيد المتاح</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-green-500/5 to-green-500/10 border-green-500/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">عدد العهد النشطة</CardTitle>
-            <FileText className="h-4 w-4 text-green-600" />
+            <div className="p-2 bg-green-500/20 rounded-full">
+              <FileText className="h-4 w-4 text-green-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-green-600">
               {accounts.filter(acc => acc.status === 'active').length}
             </div>
+            <p className="text-xs text-muted-foreground mt-1">عهدة فعالة</p>
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="bg-gradient-to-br from-amber-500/5 to-amber-500/10 border-amber-500/20">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">عدد الموظفين</CardTitle>
+            <div className="p-2 bg-amber-500/20 rounded-full">
+              <Users className="h-4 w-4 text-amber-600" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">
+              {new Set(accounts.filter(a => a.status === 'active').map(a => a.employee_id)).size}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">لديهم عهد</p>
+          </CardContent>
+        </Card>
+
+        <Card className="bg-gradient-to-br from-red-500/5 to-red-500/10 border-red-500/20">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">إجمالي المصروفات</CardTitle>
-            <TrendingDown className="h-4 w-4 text-red-600" />
+            <div className="p-2 bg-red-500/20 rounded-full">
+              <TrendingDown className="h-4 w-4 text-red-600" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-red-600">
               {totalExpenses.toLocaleString('ar-LY')} د.ل
             </div>
+            <p className="text-xs text-muted-foreground mt-1">إجمالي المنصرف</p>
           </CardContent>
         </Card>
       </div>
 
       {/* Tabs */}
       <Tabs defaultValue="by-employee" className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="by-employee">حسب الموظف</TabsTrigger>
-          <TabsTrigger value="accounts">العهد المالية</TabsTrigger>
-          <TabsTrigger value="transactions">الحركات</TabsTrigger>
-          <TabsTrigger value="expenses">المصروفات</TabsTrigger>
+        <TabsList className="bg-muted/50 p-1">
+          <TabsTrigger value="by-employee" className="gap-2">
+            <Users className="h-4 w-4" />
+            حسب الموظف
+          </TabsTrigger>
+          <TabsTrigger value="accounts" className="gap-2">
+            <Wallet className="h-4 w-4" />
+            العهد المالية
+          </TabsTrigger>
+          <TabsTrigger value="transactions" className="gap-2">
+            <DollarSign className="h-4 w-4" />
+            الحركات
+          </TabsTrigger>
+          <TabsTrigger value="expenses" className="gap-2">
+            <TrendingDown className="h-4 w-4" />
+            المصروفات
+          </TabsTrigger>
         </TabsList>
 
         {/* By Employee Tab */}
@@ -921,68 +1062,86 @@ export default function CustodyManagement() {
               </Button>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">التاريخ</TableHead>
-                    <TableHead className="text-right">نوع الحركة</TableHead>
-                    <TableHead className="text-right">المبلغ</TableHead>
-                    <TableHead className="text-right">المستلم</TableHead>
-                    <TableHead className="text-right">الوصف</TableHead>
-                    <TableHead className="text-right">رقم الإيصال</TableHead>
-                    <TableHead className="text-right">الإجراءات</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {transactions.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                        لا توجد حركات مسجلة
-                      </TableCell>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right font-semibold">التاريخ</TableHead>
+                      <TableHead className="text-right font-semibold">العهدة</TableHead>
+                      <TableHead className="text-right font-semibold">نوع الحركة</TableHead>
+                      <TableHead className="text-right font-semibold">المبلغ</TableHead>
+                      <TableHead className="text-right font-semibold">المستلم</TableHead>
+                      <TableHead className="text-right font-semibold">الوصف</TableHead>
+                      <TableHead className="text-right font-semibold">رقم الإيصال</TableHead>
+                      <TableHead className="text-right font-semibold">الإجراءات</TableHead>
                     </TableRow>
-                  ) : (
-                    transactions.map((transaction) => (
-                      <TableRow key={transaction.id}>
-                        <TableCell>
-                          {new Date(transaction.transaction_date).toLocaleDateString('ar-LY')}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant={transaction.transaction_type === 'deposit' ? 'default' : 'destructive'}>
-                            {transaction.transaction_type === 'deposit' ? 'إيداع' : 
-                             transaction.transaction_type === 'withdrawal' ? 'سحب' : 'مصروف'}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="font-bold">
-                          {transaction.amount.toLocaleString('ar-LY')} د.ل
-                        </TableCell>
-                        <TableCell>{transaction.receiver_name || '-'}</TableCell>
-                        <TableCell>{transaction.description || '-'}</TableCell>
-                        <TableCell>{transaction.receipt_number || '-'}</TableCell>
-                        <TableCell>
-                          <Button 
-                            variant="outline" 
-                            size="sm"
-                            onClick={() => {
-                              setEditingTransaction(transaction);
-                              const account = accounts.find(a => a.id === transaction.custody_account_id);
-                              setSelectedAccountId(transaction.custody_account_id);
-                              setTransactionType(transaction.transaction_type);
-                              setTransactionAmount(transaction.amount.toString());
-                              setTransactionDate(transaction.transaction_date);
-                              setTransactionDescription(transaction.description || '');
-                              setReceiptNumber(transaction.receipt_number || '');
-                              setReceiverName(transaction.receiver_name || '');
-                              setTransactionDialogOpen(true);
-                            }}
-                          >
-                            تعديل
-                          </Button>
+                  </TableHeader>
+                  <TableBody>
+                    {transactions.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <DollarSign className="h-8 w-8 text-muted-foreground/50" />
+                            <span>لا توجد حركات مسجلة</span>
+                          </div>
                         </TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      transactions.map((transaction) => (
+                        <TableRow key={transaction.id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell>
+                            {new Date(transaction.transaction_date).toLocaleDateString('ar-LY')}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs text-muted-foreground">
+                              {getAccountInfo(transaction.custody_account_id, accounts)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant={transaction.transaction_type === 'deposit' ? 'default' : 'destructive'}
+                              className={transaction.transaction_type === 'deposit' ? 'bg-green-600' : ''}
+                            >
+                              {transaction.transaction_type === 'deposit' ? (
+                                <><TrendingUp className="h-3 w-3 ml-1" /> إيداع</>
+                              ) : (
+                                <><TrendingDown className="h-3 w-3 ml-1" /> سحب</>
+                              )}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className={`font-bold ${transaction.transaction_type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
+                            {transaction.transaction_type === 'deposit' ? '+' : '-'}
+                            {transaction.amount.toLocaleString('ar-LY')} د.ل
+                          </TableCell>
+                          <TableCell>{transaction.receiver_name || '-'}</TableCell>
+                          <TableCell className="max-w-[200px] truncate">{transaction.description || '-'}</TableCell>
+                          <TableCell>{transaction.receipt_number || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="gap-1 text-purple-600 border-purple-300 hover:bg-purple-50"
+                                onClick={() => handleEditTransaction(transaction)}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                                onClick={() => handleDeleteTransaction(transaction)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -995,50 +1154,87 @@ export default function CustodyManagement() {
                 <TrendingDown className="h-5 w-5 text-red-600" />
                 مصروفات العهدة
               </CardTitle>
-              <Button onClick={() => setExpenseDialogOpen(true)} size="sm" className="gap-2" variant="destructive">
+              <Button onClick={() => {
+                resetExpenseForm();
+                setExpenseDialogOpen(true);
+              }} size="sm" className="gap-2" variant="destructive">
                 <Plus className="h-4 w-4" />
                 إضافة مصروف
               </Button>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="text-right">التاريخ</TableHead>
-                    <TableHead className="text-right">الفئة</TableHead>
-                    <TableHead className="text-right">المبلغ</TableHead>
-                    <TableHead className="text-right">الوصف</TableHead>
-                    <TableHead className="text-right">المورد</TableHead>
-                    <TableHead className="text-right">رقم الإيصال</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {expenses.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        لا توجد مصروفات مسجلة
-                      </TableCell>
+              <div className="rounded-lg border border-border overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="bg-muted/50">
+                      <TableHead className="text-right font-semibold">التاريخ</TableHead>
+                      <TableHead className="text-right font-semibold">العهدة</TableHead>
+                      <TableHead className="text-right font-semibold">الفئة</TableHead>
+                      <TableHead className="text-right font-semibold">المبلغ</TableHead>
+                      <TableHead className="text-right font-semibold">الوصف</TableHead>
+                      <TableHead className="text-right font-semibold">المورد</TableHead>
+                      <TableHead className="text-right font-semibold">رقم الإيصال</TableHead>
+                      <TableHead className="text-right font-semibold">الإجراءات</TableHead>
                     </TableRow>
-                  ) : (
-                    expenses.map((expense) => (
-                      <TableRow key={expense.id}>
-                        <TableCell>
-                          {new Date(expense.expense_date).toLocaleDateString('ar-LY')}
+                  </TableHeader>
+                  <TableBody>
+                    {expenses.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
+                          <div className="flex flex-col items-center gap-2">
+                            <Receipt className="h-8 w-8 text-muted-foreground/50" />
+                            <span>لا توجد مصروفات مسجلة</span>
+                          </div>
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{expense.expense_category}</Badge>
-                        </TableCell>
-                        <TableCell className="font-bold text-red-600">
-                          {expense.amount.toLocaleString('ar-LY')} د.ل
-                        </TableCell>
-                        <TableCell>{expense.description}</TableCell>
-                        <TableCell>{expense.vendor_name || '-'}</TableCell>
-                        <TableCell>{expense.receipt_number || '-'}</TableCell>
                       </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
+                    ) : (
+                      expenses.map((expense) => (
+                        <TableRow key={expense.id} className="hover:bg-muted/30 transition-colors">
+                          <TableCell>
+                            {new Date(expense.expense_date).toLocaleDateString('ar-LY')}
+                          </TableCell>
+                          <TableCell>
+                            <span className="text-xs text-muted-foreground">
+                              {getAccountInfo(expense.custody_account_id, accounts)}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
+                              {expense.expense_category || 'عام'}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-bold text-red-600">
+                            -{expense.amount.toLocaleString('ar-LY')} د.ل
+                          </TableCell>
+                          <TableCell className="max-w-[200px] truncate">{expense.description}</TableCell>
+                          <TableCell>{expense.vendor_name || '-'}</TableCell>
+                          <TableCell>{expense.receipt_number || '-'}</TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="gap-1 text-purple-600 border-purple-300 hover:bg-purple-50"
+                                onClick={() => handleEditExpense(expense)}
+                              >
+                                <Pencil className="h-3 w-3" />
+                              </Button>
+                              <Button 
+                                variant="outline" 
+                                size="sm"
+                                className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
+                                onClick={() => handleDeleteExpense(expense)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -1225,17 +1421,31 @@ export default function CustodyManagement() {
         </UIDialog.DialogContent>
       </UIDialog.Dialog>
 
-      {/* Add Expense Dialog */}
-      <UIDialog.Dialog open={expenseDialogOpen} onOpenChange={setExpenseDialogOpen}>
+      {/* Add/Edit Expense Dialog */}
+      <UIDialog.Dialog open={expenseDialogOpen} onOpenChange={(open) => {
+        setExpenseDialogOpen(open);
+        if (!open) resetExpenseForm();
+      }}>
         <UIDialog.DialogContent className="max-w-2xl">
           <UIDialog.DialogHeader>
-            <UIDialog.DialogTitle>إضافة مصروف جديد</UIDialog.DialogTitle>
+            <UIDialog.DialogTitle>
+              {editingExpense ? 'تعديل المصروف' : 'إضافة مصروف جديد'}
+            </UIDialog.DialogTitle>
+            {editingExpense && (
+              <p className="text-sm text-muted-foreground">
+                العهدة: {getAccountInfo(editingExpense.custody_account_id, accounts)}
+              </p>
+            )}
           </UIDialog.DialogHeader>
           
           <div className="grid gap-4 py-4">
             <div className="grid gap-2">
               <label className="text-sm font-medium">العهدة *</label>
-              <Select value={expenseAccountId} onValueChange={setExpenseAccountId}>
+              <Select 
+                value={expenseAccountId} 
+                onValueChange={setExpenseAccountId}
+                disabled={!!editingExpense}
+              >
                 <SelectTrigger>
                   <SelectValue placeholder="اختر العهدة" />
                 </SelectTrigger>
@@ -1323,10 +1533,15 @@ export default function CustodyManagement() {
           </div>
 
           <UIDialog.DialogFooter>
-            <Button variant="outline" onClick={() => setExpenseDialogOpen(false)}>
+            <Button variant="outline" onClick={() => {
+              setExpenseDialogOpen(false);
+              resetExpenseForm();
+            }}>
               إلغاء
             </Button>
-            <Button onClick={handleAddExpense} variant="destructive">إضافة المصروف</Button>
+            <Button onClick={handleAddExpense} variant={editingExpense ? "default" : "destructive"}>
+              {editingExpense ? 'حفظ التعديلات' : 'إضافة المصروف'}
+            </Button>
           </UIDialog.DialogFooter>
         </UIDialog.DialogContent>
       </UIDialog.Dialog>

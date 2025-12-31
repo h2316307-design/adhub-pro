@@ -202,9 +202,11 @@ export const DEFAULT_FALLBACK_SETTINGS: FallbackSettings = {
   useDefaultQR: true,
 };
 
+// ✅ القيم الافتراضية موحدة مع صفحة الإعدادات (ContractTermsSettings)
+// نظام الإحداثيات: x من اليمين، y من الأعلى (RTL)
 export const DEFAULT_SECTION_SETTINGS: PageSectionSettings = {
-  header: { x: 1240, y: 155, fontSize: 64, visible: true, textAlign: 'middle' },
-  date: { x: 1240, y: 240, fontSize: 38, visible: true, textAlign: 'middle' },
+  header: { x: 2200, y: 680, fontSize: 52, visible: true, textAlign: 'end' },
+  date: { x: 300, y: 680, fontSize: 42, visible: true, textAlign: 'start' },
   adType: { x: 2200, y: 770, fontSize: 40, visible: true, textAlign: 'end' },
   firstParty: { x: 2200, y: 900, fontSize: 38, visible: true, textAlign: 'end', lineSpacing: 50 },
   firstPartyData: {

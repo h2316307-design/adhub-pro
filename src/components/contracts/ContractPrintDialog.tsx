@@ -22,22 +22,90 @@ const formatDateForPrint = (dateStr: string): string => {
   }
 };
 
+// دالة لتحويل الأرقام إلى عربية لحل مشكلة RTL
+const toArabicNumbers = (str: string): string => {
+  const arabicNums = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+  return str.replace(/[0-9]/g, (d) => arabicNums[parseInt(d)]);
+};
+
+// علامة عربية تساعد على تثبيت اتجاه النص عند بداية السطر بأرقام/تواريخ
+const ALM = '\u061C';
+const rtlSafe = (text: string) => `${ALM}${text}`;
+
 // دالة تنسيق ملخص الدفعات للطباعة - تُرجع مصفوفة أسطر
-const formatPaymentsForPrintLines = (installmentsData: string | null): string[] => {
+// القاعدة المطلوبة:
+// - دائماً اعرض أول 3 دفعات بالتفصيل
+// - بعد ذلك: اجمع الدفعات المتبقية إن كانت متكررة (نفس المبلغ) لتصبح مختصرة
+const formatPaymentsForPrintLines = (
+  installmentsData: string | null,
+  detailCount: number = 3
+): string[] => {
   if (!installmentsData) return ['دفعة واحدة عند التوقيع'];
-  
+
   try {
-    const installments: Installment[] = JSON.parse(installmentsData);
-    if (!installments || installments.length === 0) return ['دفعة واحدة عند التوقيع'];
-    
+    const raw: any[] = JSON.parse(installmentsData);
+    const installments: Installment[] = Array.isArray(raw) ? raw : [];
+    if (installments.length === 0) return ['دفعة واحدة عند التوقيع'];
+
     const currencySymbol = 'د.ل';
-    
-    // عرض كل دفعة في سطر منفصل
-    return installments.map((inst, index) => {
+
+    const normalize = (inst: any, idx: number): Installment => {
+      const amount = Number(inst?.amount ?? 0) || 0;
+      const paymentType = String(inst?.paymentType ?? inst?.type ?? inst?.payment_type ?? '').trim();
+      const description = String(inst?.description ?? inst?.desc ?? '').trim();
+      const dueDate = String(inst?.dueDate ?? inst?.due_date ?? '').trim();
+      return {
+        amount,
+        paymentType,
+        description: description || `الدفعة ${idx + 1}`,
+        dueDate
+      };
+    };
+
+    const normalized = installments.map(normalize);
+    const head = normalized.slice(0, Math.min(detailCount, normalized.length));
+    const tail = normalized.slice(Math.min(detailCount, normalized.length));
+
+    const lines: string[] = [];
+
+    // 1) أول 3 دفعات تفصيلاً
+    head.forEach((inst, index) => {
       const dateFormatted = formatDateForPrint(inst.dueDate);
       const amount = Number(inst.amount).toLocaleString('ar-LY');
-      return `الدفعة ${index + 1}: ${amount} ${currencySymbol} - تاريخ الاستحقاق: ${dateFormatted}`;
+      const typeLabel = inst.paymentType ? `(${inst.paymentType})` : '';
+      const descLabel = inst.description ? `- ${inst.description}` : '';
+      lines.push(
+        rtlSafe(
+          `الدفعة ${toArabicNumbers(String(index + 1))}: ${toArabicNumbers(amount)} ${currencySymbol} ${typeLabel} ${descLabel} - تاريخ: ${toArabicNumbers(dateFormatted)}`
+            .replace(/\s+/g, ' ')
+            .trim()
+        )
+      );
     });
+
+    // 2) باقي الدفعات مختصرة (تجميع المتكرر)
+    if (tail.length > 0) {
+      const tailGroups = groupRepeatingPayments(tail);
+      tailGroups.forEach((g) => {
+        if (g.isGrouped) {
+          const total = (Number(g.amount.replace(/,/g, '')) * g.count).toLocaleString('ar-LY');
+          lines.push(
+            rtlSafe(
+              `باقي الدفعات: ${toArabicNumbers(String(g.count))} دفعات × ${toArabicNumbers(g.amount)} ${currencySymbol} = ${toArabicNumbers(total)} ${currencySymbol} (من ${toArabicNumbers(formatDateForPrint(g.startDate))} إلى ${toArabicNumbers(formatDateForPrint(g.endDate))})`
+            )
+          );
+        } else {
+          const inst = g.originalInstallments[0];
+          lines.push(
+            rtlSafe(
+              `باقي الدفعات: ${toArabicNumbers(Number(inst.amount).toLocaleString('ar-LY'))} ${currencySymbol} ${inst.paymentType ? `(${inst.paymentType})` : ''} - تاريخ: ${toArabicNumbers(formatDateForPrint(inst.dueDate))}`
+            )
+          );
+        }
+      });
+    }
+
+    return lines;
   } catch (e) {
     console.error('Error parsing installments for print:', e);
     return ['دفعة واحدة عند التوقيع'];
@@ -108,10 +176,10 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
         'يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو',
         'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'
       ];
-      const day = date.getDate();
+      const day = toArabicNumbers(String(date.getDate()));
       const month = arabicMonths[date.getMonth()];
-      const year = date.getFullYear();
-      return `${day} ${month} ${year}`;
+      const year = toArabicNumbers(String(date.getFullYear()));
+      return rtlSafe(`${day} ${month} ${year}`);
     };
     const formattedStartDate = startDate ? formatArabicDate(startDate) : formatArabicDate(new Date().toISOString());
     const formattedEndDate = endDate ? formatArabicDate(endDate) : '';
@@ -203,9 +271,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       };
 
       const normalizedRows = billboards.map(normalizeBillboard);
-      const ROWS_PER_PAGE = 12; // fits with image thumbnails comfortably
 
-      // Build installments table HTML
+      // Build installments table HTML - flow-based for auto pagination
       const installmentsData = (contract as any).installments_data || null;
       let installmentsTableHtml = '';
       if (installmentsData) {
@@ -213,38 +280,35 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           const installments: Installment[] = JSON.parse(installmentsData);
           if (installments && installments.length > 0) {
             installmentsTableHtml = `
-              <div class="template-container">
-                <img src="/bgc2.jpg" alt="خلفية جدول الدفعات" class="template-image" />
-                <div class="table-area payments-table-area">
-                  <h2 style="text-align: center; font-size: 32px; margin-bottom: 20px; color: #004aad;">جدول الدفعات</h2>
-                  <table class="btable payments-table" dir="rtl">
-                    <thead>
-                      <tr style="background: #004aad; color: white;">
-                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">رقم الدفعة</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">المبلغ</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">تاريخ الاستحقاق</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 20%;">نوع الدفعة</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">الوصف</th>
+              <div class="flow-table-section">
+                <h2 class="table-title">جدول الدفعات</h2>
+                <table class="flow-table payments-table" dir="rtl">
+                  <thead>
+                    <tr>
+                      <th style="width: 15%;">رقم الدفعة</th>
+                      <th style="width: 25%;">المبلغ</th>
+                      <th style="width: 25%;">تاريخ الاستحقاق</th>
+                      <th style="width: 20%;">نوع الدفعة</th>
+                      <th style="width: 15%;">الوصف</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${installments.map((inst, idx) => `
+                      <tr>
+                        <td>${idx + 1}</td>
+                        <td>${Number(inst.amount).toLocaleString('ar-LY')} د.ل</td>
+                        <td>${formatDateForPrint(inst.dueDate)}</td>
+                        <td>${inst.paymentType || ''}</td>
+                        <td>${inst.description || ''}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      ${installments.map((inst, idx) => `
-                        <tr>
-                          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
-                          <td style="text-align: center;">${Number(inst.amount).toLocaleString('ar-LY')} د.ل</td>
-                          <td style="text-align: center;">${formatDateForPrint(inst.dueDate)}</td>
-                          <td style="text-align: center;">${inst.paymentType || ''}</td>
-                          <td style="text-align: center;">${inst.description || ''}</td>
-                        </tr>
-                      `).join('')}
-                      <tr style="background: #f0f0f0; font-weight: bold;">
-                        <td style="text-align: center;">الإجمالي</td>
-                        <td style="text-align: center;">${installments.reduce((sum, i) => sum + Number(i.amount), 0).toLocaleString('ar-LY')} د.ل</td>
-                        <td colspan="3" style="text-align: center;">عدد الدفعات: ${installments.length}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                    `).join('')}
+                    <tr class="total-row">
+                      <td>الإجمالي</td>
+                      <td>${installments.reduce((sum, i) => sum + Number(i.amount), 0).toLocaleString('ar-LY')} د.ل</td>
+                      <td colspan="3">عدد الدفعات: ${installments.length}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             `;
           }
@@ -253,61 +317,51 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
         }
       }
 
-      const tablePagesHtml = normalizedRows.length
-        ? normalizedRows
-            .reduce((pages: any[][], row, idx) => {
-              const p = Math.floor(idx / ROWS_PER_PAGE);
-              if (!pages[p]) pages[p] = [];
-              pages[p].push(row);
-              return pages;
-            }, [])
-            .map((rows) => `
-              <div class="template-container">
-                <img src="/bgc2.jpg" alt="خلفية جدول اللوحات" class="template-image" />
-                <div class="table-area">
-                  <table class="btable" dir="rtl">
-                    <colgroup>
-                      <col style="width:6%" />
-                      <col style="width:12%" />
-                      <col style="width:10%" />
-                      <col style="width:10%" />
-                      <col style="width:14%" />
-                      <col style="width:8%" />
-                      <col style="width:6%" />
-                      <col style="width:10%" />
-                      <col style="width:10%" />
-                      <col style="width:6%" />
-                      <col style="width:8%" />
-                    </colgroup>
-                    <tbody>
-                      ${rows
-                        .map(
-                          (r) => `
-                          <tr>
-                            <td class="c-num">${r.id}</td>
-                            <td class="c-img">${r.image ? `<img src="${r.image}" alt="صورة اللوحة" />` : ''}</td>
-                            <td>${r.municipality}</td>
-                            <td>${r.district}</td>
-                            <td>${r.landmark}</td>
-                            <td>${r.size}</td>
-                            <td>${r.faces}</td>
-                            <td>${r.price}</td>
-                            <td>${r.endDate}</td>
-                            <td>${r.daysCount}</td>
-                            <td>${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">اضغط هنا</a>` : ''}</td>
-                          </tr>`
-                        )
-                        .join('')}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            `)
-            .join('')
+      // Build billboards table - single flow-based table for auto pagination by Chrome
+      const billboardsTableHtml = normalizedRows.length
+        ? `
+          <div class="flow-table-section">
+            <h2 class="table-title">جدول اللوحات الإعلانية</h2>
+            <table class="flow-table billboards-table" dir="rtl">
+              <thead>
+                <tr>
+                  <th style="width: 5%;">رقم</th>
+                  <th style="width: 10%;">صورة</th>
+                  <th style="width: 10%;">البلدية</th>
+                  <th style="width: 10%;">المنطقة</th>
+                  <th style="width: 15%;">المعلم</th>
+                  <th style="width: 8%;">المقاس</th>
+                  <th style="width: 6%;">الوجوه</th>
+                  <th style="width: 12%;">السعر</th>
+                  <th style="width: 10%;">تاريخ الانتهاء</th>
+                  <th style="width: 6%;">الأيام</th>
+                  <th style="width: 8%;">الموقع</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${normalizedRows.map((r) => `
+                  <tr>
+                    <td class="cell-center">${r.id}</td>
+                    <td class="cell-img">${r.image ? `<img src="${r.image}" alt="صورة اللوحة" />` : ''}</td>
+                    <td>${r.municipality}</td>
+                    <td>${r.district}</td>
+                    <td class="cell-wrap">${r.landmark}</td>
+                    <td class="cell-center">${r.size}</td>
+                    <td class="cell-center">${r.faces}</td>
+                    <td class="cell-center">${r.price}</td>
+                    <td class="cell-center">${r.endDate}</td>
+                    <td class="cell-center">${r.daysCount}</td>
+                    <td class="cell-center">${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">خريطة</a>` : ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `
         : '';
 
       // Combine billboards table + installments table
-      const allTablesHtml = tablePagesHtml + installmentsTableHtml;
+      const allTablesHtml = billboardsTableHtml + installmentsTableHtml;
 
       // Create HTML content for printing using the main6 design
       const installationEnabled = (contract as any).installation_enabled !== false && (contract as any).installation_enabled !== 0 && (contract as any).installation_enabled !== 'false';
@@ -332,8 +386,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               margin: 0;
               padding: 0;
               box-sizing: border-box;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
 
             body {
@@ -342,18 +396,14 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               text-align: right;
               background: white;
               color: #000;
-              overflow-x: hidden;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
 
-            .template-container {
+            /* ========== صفحة العقد الأولى (خلفية + SVG) ========== */
+            .contract-page {
               position: relative;
-              width: 100%;
-              aspect-ratio: 1191 / 1684;
-              display: inline-block;
+              width: 210mm;
+              height: 297mm;
               overflow: hidden;
-              margin: 20px auto;
               page-break-after: always;
             }
 
@@ -361,7 +411,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
             .overlay-svg {
               position: absolute;
               top: 0;
-              left: 60px;
+              left: 0;
               width: 100%;
               height: 100%;
               object-fit: contain;
@@ -373,77 +423,214 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               pointer-events: none;
             }
 
-            /* Table overlay area for bgc2 pages */
-            .table-area {
-              position: absolute;
-              right: 140px;
-              left: 140px;
-              top: 500px;
-              bottom: 310px;
-              z-index: 20;
+            /* ========== قسم الجداول - Flow-based للتجزئة التلقائية ========== */
+            .flow-table-section {
+              width: 100%;
+              padding: 15mm 10mm;
+              page-break-before: always;
             }
-            .btable { width: 100%; border-collapse: collapse; font-size: 26px; }
-            .btable td { border: 1px solid #000; padding: 10px 8px; vertical-align: middle; }
-            .c-img img { width: 120px; height: 70px; object-fit: cover; display: block; margin: 0 auto; }
-            .c-num { text-align: center; font-weight: 700; }
-            .btable a { color: #004aad; text-decoration: none; }
 
+            .table-title {
+              text-align: center;
+              font-size: 24px;
+              font-weight: bold;
+              color: #004aad;
+              margin-bottom: 15px;
+              padding: 10px;
+              background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%);
+              border-radius: 8px;
+            }
+
+            /* ========== الجدول - Flow Layout ========== */
+            .flow-table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+              font-size: 11px;
+            }
+
+            .flow-table thead {
+              display: table-header-group;
+            }
+
+            .flow-table tbody {
+              display: table-row-group;
+            }
+
+            .flow-table tr {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .flow-table th {
+              background: #004aad !important;
+              color: white !important;
+              padding: 8px 4px;
+              border: 1px solid #003388;
+              text-align: center;
+              font-weight: bold;
+              white-space: nowrap;
+            }
+
+            .flow-table td {
+              border: 1px solid #ddd;
+              padding: 6px 4px;
+              vertical-align: middle;
+              text-align: center;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+            }
+
+            .flow-table tbody tr:nth-child(even) {
+              background: #f9f9f9;
+            }
+
+            .flow-table tbody tr:hover {
+              background: #f0f7ff;
+            }
+
+            .flow-table .cell-center {
+              text-align: center;
+            }
+
+            .flow-table .cell-wrap {
+              text-align: right;
+              word-wrap: break-word;
+              max-width: 100px;
+            }
+
+            .flow-table .cell-img img {
+              width: 60px;
+              height: 40px;
+              object-fit: cover;
+              border-radius: 4px;
+              display: block;
+              margin: 0 auto;
+            }
+
+            .flow-table .total-row {
+              background: #e8f4fd !important;
+              font-weight: bold;
+            }
+
+            .flow-table a {
+              color: #004aad;
+              text-decoration: none;
+              font-size: 10px;
+            }
+
+            /* ========== أنماط الطباعة ========== */
             @media print {
               * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                color-adjust: exact !important;
               }
               
               @page {
                 size: A4;
-                margin: 0;
+                margin: 10mm;
               }
-              
-              body {
-                padding: 0;
-                margin: 0;
+
+              html, body {
                 width: 210mm;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
+                margin: 0;
+                padding: 0;
               }
-              
-              .template-container {
-                width: 210mm !important;
-                height: 297mm !important;
-                margin: 0 !important;
+
+              /* صفحة العقد الأولى */
+              .contract-page {
+                width: 210mm;
+                height: 297mm;
+                margin: 0;
+                padding: 0;
                 page-break-after: always;
                 page-break-inside: avoid;
               }
-              
-              .template-image, .overlay-svg {
+
+              /* قسم الجداول */
+              .flow-table-section {
+                display: block;
+                position: static;
+                width: 100%;
+                padding: 5mm;
+                page-break-before: always;
+              }
+
+              /* الجدول - Chrome auto pagination */
+              .flow-table {
+                width: 100%;
+                table-layout: fixed;
+                border-collapse: collapse;
+              }
+
+              .flow-table thead {
+                display: table-header-group;
+              }
+
+              .flow-table tr {
+                break-inside: avoid;
+                page-break-inside: avoid;
+              }
+
+              .flow-table th {
+                background: #004aad !important;
+                color: white !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
               }
-              
+
               .controls {
                 display: none !important;
               }
             }
 
-            .controls {
-              margin-top: 20px;
-              text-align: center;
-            }
+            /* ========== شاشة العرض ========== */
+            @media screen {
+              body {
+                padding: 20px;
+                background: #f5f5f5;
+              }
 
-            button {
-              padding: 10px 20px;
-              font-size: 16px;
-              background-color: #0066cc;
-              color: white;
-              border: none;
-              border-radius: 5px;
-              cursor: pointer;
+              .contract-page {
+                margin: 0 auto 30px;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                background: white;
+              }
+
+              .flow-table-section {
+                max-width: 210mm;
+                margin: 0 auto 30px;
+                background: white;
+                box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+                border-radius: 8px;
+              }
+
+              .controls {
+                text-align: center;
+                margin: 20px 0;
+              }
+
+              .controls button {
+                padding: 12px 30px;
+                font-size: 16px;
+                background: #004aad;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                cursor: pointer;
+                font-family: inherit;
+              }
+
+              .controls button:hover {
+                background: #003388;
+              }
             }
           </style>
         </head>
         <body>
           ${flagsHtml}
-          <div class="template-container">
+          <div class="contract-page">
             <!-- Background image -->
             <img src="/contract-template.png" alt="الإشعار الأصلي" class="template-image" />
 
@@ -782,9 +969,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
+                style="direction: rtl; unicode-bidi: plaintext; text-align: center"
               >
-                قيمة العقد ${contractData.price} دينار ليبي. جدول الدفعات:
+                ${rtlSafe(`قيمة العقد ${toArabicNumbers(contractData.price)} دينار ليبي. جدول الدفعات:`)}
               </text>
               ${contractData.paymentsLines.map((line: string, idx: number) => `
               <text
@@ -795,9 +982,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
+                style="direction: rtl; unicode-bidi: plaintext; text-align: center"
               >
-                ${line}
+                ${rtlSafe(line)}
               </text>
               `).join('')}
               <text
@@ -808,9 +995,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
+                style="direction: rtl; unicode-bidi: bidi-override; text-align: center"
               >
-                وإذا تأخر السداد عن 30 يومًا يحق للطرف الأول إعادة تأجير المساحات.
+                وإذا تأخر السداد عن ${toArabicNumbers('30')} يومًا يحق للطرف الأول إعادة تأجير المساحات.
               </text>
 
               <!-- البند السادس – duration -->
@@ -835,9 +1022,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
+              style="direction: rtl; unicode-bidi: bidi-override; text-align: center"
               >
-                مدة العقد ${contractData.duration} يومًا تبدأ من ${contractData.startDate} وتنتهي في ${contractData.endDate}، ويجوز تجديده برضى الطرفين قبل
+                مدة العقد ${toArabicNumbers(contractData.duration)} يومًا تبدأ من ${contractData.startDate} وتنتهي في ${contractData.endDate}، ويجوز تجديده برضى الطرفين قبل
               </text>
               <text
                 x="1800"
@@ -847,9 +1034,9 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
+                style="direction: rtl; unicode-bidi: bidi-override; text-align: center"
               >
-                انتهائه بمدة لا تقل عن 15 يومًا وفق شروط يتم الاتفاق عليها .
+                انتهائه بمدة لا تقل عن ${toArabicNumbers('15')} يومًا وفق شروط يتم الاتفاق عليها .
               </text>
 
               <!-- البند السابع -->
@@ -862,7 +1049,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 fill="#000"
                 text-anchor="middle"
                 dominant-baseline="middle"
-                style="direction: rtl; text-align: center"
+                style="direction: rtl; unicode-bidi: bidi-override; text-align: center"
               >
                 البند السابع:
               </text>
@@ -892,11 +1079,13 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               </text>
             </svg>
 
-            <!-- Print button -->
-            <div class="controls">
+            <!-- Print button - hidden in print -->
+            <div class="controls print-hide">
               <button onclick="window.print()">طباعة</button>
             </div>
           </div>
+          
+          <!-- Tables section - flow-based for Chrome auto-pagination -->
 
           ${allTablesHtml}
         </body>
@@ -993,9 +1182,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       };
 
       const normalizedRows = billboards.map(normalizeBillboard);
-      const ROWS_PER_PAGE = 12;
 
-      // Build installments table HTML
+      // Build installments table HTML - flow-based
       const installmentsData = (contract as any).installments_data || null;
       let installmentsTableHtml = '';
       if (installmentsData) {
@@ -1003,38 +1191,35 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           const installments: Installment[] = JSON.parse(installmentsData);
           if (installments && installments.length > 0) {
             installmentsTableHtml = `
-              <div class="template-container">
-                <img src="/bgc2.jpg" alt="خلفية جدول الدفعات" class="template-image" />
-                <div class="table-area payments-table-area">
-                  <h2 style="text-align: center; font-size: 32px; margin-bottom: 20px; color: #004aad;">جدول الدفعات</h2>
-                  <table class="btable payments-table" dir="rtl">
-                    <thead>
-                      <tr style="background: #004aad; color: white;">
-                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">رقم الدفعة</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">المبلغ</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 25%;">تاريخ الاستحقاق</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 20%;">نوع الدفعة</th>
-                        <th style="padding: 12px; border: 1px solid #000; width: 15%;">الوصف</th>
+              <div class="flow-table-section">
+                <h2 class="table-title">جدول الدفعات</h2>
+                <table class="flow-table payments-table" dir="rtl">
+                  <thead>
+                    <tr>
+                      <th style="width: 15%;">رقم الدفعة</th>
+                      <th style="width: 25%;">المبلغ</th>
+                      <th style="width: 25%;">تاريخ الاستحقاق</th>
+                      <th style="width: 20%;">نوع الدفعة</th>
+                      <th style="width: 15%;">الوصف</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${installments.map((inst, idx) => `
+                      <tr>
+                        <td>${idx + 1}</td>
+                        <td>${Number(inst.amount).toLocaleString('ar-LY')} د.ل</td>
+                        <td>${formatDateForPrint(inst.dueDate)}</td>
+                        <td>${inst.paymentType || ''}</td>
+                        <td>${inst.description || ''}</td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      ${installments.map((inst, idx) => `
-                        <tr>
-                          <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
-                          <td style="text-align: center;">${Number(inst.amount).toLocaleString('ar-LY')} د.ل</td>
-                          <td style="text-align: center;">${formatDateForPrint(inst.dueDate)}</td>
-                          <td style="text-align: center;">${inst.paymentType || ''}</td>
-                          <td style="text-align: center;">${inst.description || ''}</td>
-                        </tr>
-                      `).join('')}
-                      <tr style="background: #f0f0f0; font-weight: bold;">
-                        <td style="text-align: center;">الإجمالي</td>
-                        <td style="text-align: center;">${installments.reduce((sum, i) => sum + Number(i.amount), 0).toLocaleString('ar-LY')} د.ل</td>
-                        <td colspan="3" style="text-align: center;">عدد الدفعات: ${installments.length}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
+                    `).join('')}
+                    <tr class="total-row">
+                      <td>الإجمالي</td>
+                      <td>${installments.reduce((sum, i) => sum + Number(i.amount), 0).toLocaleString('ar-LY')} د.ل</td>
+                      <td colspan="3">عدد الدفعات: ${installments.length}</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             `;
           }
@@ -1043,61 +1228,51 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
         }
       }
 
-      const tablePagesHtml = normalizedRows.length
-        ? normalizedRows
-            .reduce((pages: any[][], row, idx) => {
-              const p = Math.floor(idx / ROWS_PER_PAGE);
-              if (!pages[p]) pages[p] = [];
-              pages[p].push(row);
-              return pages;
-            }, [])
-            .map((rows) => `
-              <div class="template-container">
-                <img src="/bgc2.jpg" alt="خلفية جدول اللوحات" class="template-image" />
-                <div class="table-area">
-                  <table class="btable" dir="rtl">
-                    <colgroup>
-                      <col style="width:6%" />
-                      <col style="width:12%" />
-                      <col style="width:10%" />
-                      <col style="width:10%" />
-                      <col style="width:14%" />
-                      <col style="width:8%" />
-                      <col style="width:6%" />
-                      <col style="width:10%" />
-                      <col style="width:10%" />
-                      <col style="width:6%" />
-                      <col style="width:8%" />
-                    </colgroup>
-                    <tbody>
-                      ${rows
-                        .map(
-                          (r) => `
-                          <tr>
-                            <td class="c-num">${r.id}</td>
-                            <td class="c-img">${r.image ? `<img src="${r.image}" alt="صورة اللوحة" />` : ''}</td>
-                            <td>${r.municipality}</td>
-                            <td>${r.district}</td>
-                            <td>${r.landmark}</td>
-                            <td>${r.size}</td>
-                            <td>${r.faces}</td>
-                            <td>${r.price}</td>
-                            <td>${r.endDate}</td>
-                            <td>${r.daysCount}</td>
-                            <td>${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">اضغط هنا</a>` : ''}</td>
-                          </tr>`
-                        )
-                        .join('')}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            `)
-            .join('')
+      // Build billboards table - single flow-based table
+      const billboardsTableHtml = normalizedRows.length
+        ? `
+          <div class="flow-table-section">
+            <h2 class="table-title">جدول اللوحات الإعلانية</h2>
+            <table class="flow-table billboards-table" dir="rtl">
+              <thead>
+                <tr>
+                  <th style="width: 5%;">رقم</th>
+                  <th style="width: 10%;">صورة</th>
+                  <th style="width: 10%;">البلدية</th>
+                  <th style="width: 10%;">المنطقة</th>
+                  <th style="width: 15%;">المعلم</th>
+                  <th style="width: 8%;">المقاس</th>
+                  <th style="width: 6%;">الوجوه</th>
+                  <th style="width: 12%;">السعر</th>
+                  <th style="width: 10%;">تاريخ الانتهاء</th>
+                  <th style="width: 6%;">الأيام</th>
+                  <th style="width: 8%;">الموقع</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${normalizedRows.map((r) => `
+                  <tr>
+                    <td class="cell-center">${r.id}</td>
+                    <td class="cell-img">${r.image ? `<img src="${r.image}" alt="صورة اللوحة" />` : ''}</td>
+                    <td>${r.municipality}</td>
+                    <td>${r.district}</td>
+                    <td class="cell-wrap">${r.landmark}</td>
+                    <td class="cell-center">${r.size}</td>
+                    <td class="cell-center">${r.faces}</td>
+                    <td class="cell-center">${r.price}</td>
+                    <td class="cell-center">${r.endDate}</td>
+                    <td class="cell-center">${r.daysCount}</td>
+                    <td class="cell-center">${r.mapLink !== '#' ? `<a href="${r.mapLink}" target="_blank" rel="noopener">خريطة</a>` : ''}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        `
         : '';
 
       // Combine billboards table + installments table
-      const allTablesHtml = tablePagesHtml + installmentsTableHtml;
+      const allTablesHtml = billboardsTableHtml + installmentsTableHtml;
 
       // نفس الـflags من handlePrintContract
       const installationEnabled = (contract as any).installation_enabled !== false && (contract as any).installation_enabled !== 0 && (contract as any).installation_enabled !== 'false';
@@ -1108,7 +1283,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
           <span style="display:inline-block; padding:6px 12px; border-radius:8px; background:#f5f5f5; color:#444;">${printEnabled ? 'شاملة الطباعة' : 'غير شاملة الطباعة'}</span>
         </div>`;
 
-      // ✅ نفس HTML من handlePrintContract تماماً
+      // ✅ نفس HTML من handlePrintContract تماماً - flow-based للتجزئة التلقائية
       const htmlContent = `
         <!DOCTYPE html>
         <html dir="rtl" lang="ar">
@@ -1123,8 +1298,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               margin: 0;
               padding: 0;
               box-sizing: border-box;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
             }
 
             body {
@@ -1133,18 +1308,14 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               text-align: right;
               background: white;
               color: #000;
-              overflow-x: hidden;
-              -webkit-print-color-adjust: exact;
-              print-color-adjust: exact;
             }
 
-            .template-container {
+            /* صفحة العقد الأولى */
+            .contract-page {
               position: relative;
-              width: 100%;
-              aspect-ratio: 1191 / 1684;
-              display: inline-block;
+              width: 210mm;
+              height: 297mm;
               overflow: hidden;
-              margin: 20px auto;
               page-break-after: always;
             }
 
@@ -1152,7 +1323,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
             .overlay-svg {
               position: absolute;
               top: 0;
-              left: 60px;
+              left: 0;
               width: 100%;
               height: 100%;
               object-fit: contain;
@@ -1164,55 +1335,82 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
               pointer-events: none;
             }
 
-            .table-area {
-              position: absolute;
-              right: 140px;
-              left: 140px;
-              top: 500px;
-              bottom: 310px;
-              z-index: 20;
+            /* قسم الجداول - Flow-based */
+            .flow-table-section {
+              width: 100%;
+              padding: 15mm 10mm;
+              page-break-before: always;
             }
-            .btable { width: 100%; border-collapse: collapse; font-size: 26px; }
-            .btable td { border: 1px solid #000; padding: 10px 8px; vertical-align: middle; }
-            .c-img img { width: 120px; height: 70px; object-fit: cover; display: block; margin: 0 auto; }
-            .c-num { text-align: center; font-weight: 700; }
-            .btable a { color: #004aad; text-decoration: none; }
-            
+
+            .table-title {
+              text-align: center;
+              font-size: 24px;
+              font-weight: bold;
+              color: #004aad;
+              margin-bottom: 15px;
+              padding: 10px;
+              background: linear-gradient(135deg, #f0f7ff 0%, #e8f4fd 100%);
+              border-radius: 8px;
+            }
+
+            .flow-table {
+              width: 100%;
+              border-collapse: collapse;
+              table-layout: fixed;
+              font-size: 11px;
+            }
+
+            .flow-table thead {
+              display: table-header-group;
+            }
+
+            .flow-table tr {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+
+            .flow-table th {
+              background: #004aad !important;
+              color: white !important;
+              padding: 8px 4px;
+              border: 1px solid #003388;
+              text-align: center;
+              font-weight: bold;
+            }
+
+            .flow-table td {
+              border: 1px solid #ddd;
+              padding: 6px 4px;
+              vertical-align: middle;
+              text-align: center;
+              word-wrap: break-word;
+            }
+
+            .flow-table tbody tr:nth-child(even) {
+              background: #f9f9f9;
+            }
+
+            .flow-table .cell-center { text-align: center; }
+            .flow-table .cell-wrap { text-align: right; word-wrap: break-word; max-width: 100px; }
+            .flow-table .cell-img img { width: 60px; height: 40px; object-fit: cover; border-radius: 4px; display: block; margin: 0 auto; }
+            .flow-table .total-row { background: #e8f4fd !important; font-weight: bold; }
+            .flow-table a { color: #004aad; text-decoration: none; font-size: 10px; }
+
             @media print {
-              * {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
-              
-              @page {
-                size: A4;
-                margin: 0;
-              }
-              
-              body {
-                padding: 0;
-                margin: 0;
-                width: 210mm;
-              }
-              
-              .template-container {
-                width: 210mm !important;
-                height: 297mm !important;
-                margin: 0 !important;
-                page-break-after: always;
-                page-break-inside: avoid;
-              }
-              
-              .template-image, .overlay-svg {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
-              }
+              @page { size: A4; margin: 10mm; }
+              html, body { width: 210mm; margin: 0; padding: 0; }
+              .contract-page { width: 210mm; height: 297mm; page-break-after: always; page-break-inside: avoid; }
+              .flow-table-section { display: block; position: static; width: 100%; padding: 5mm; page-break-before: always; }
+              .flow-table { width: 100%; table-layout: fixed; }
+              .flow-table thead { display: table-header-group; }
+              .flow-table tr { break-inside: avoid; page-break-inside: avoid; }
+              .flow-table th { background: #004aad !important; color: white !important; }
             }
           </style>
         </head>
         <body>
           ${flagsHtml}
-          <div class="template-container">
+          <div class="contract-page">
             <img src="/contract-template.png" alt="الإشعار الأصلي" class="template-image" />
             <svg
               class="overlay-svg"

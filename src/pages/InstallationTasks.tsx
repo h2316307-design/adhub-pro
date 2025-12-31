@@ -10,12 +10,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from 'sonner';
-import { 
-  Plus, 
-  ChevronDown, 
-  CheckCircle2, 
-  Clock, 
-  Users, 
+import {
+  Plus,
+  ChevronDown,
+  CheckCircle2,
+  Clock,
+  Users,
   Package,
   Printer,
   PaintBucket,
@@ -43,6 +43,7 @@ import { TransferBillboardsDialog } from '@/components/tasks/TransferBillboardsD
 import { PrintAllContractBillboardsDialog } from '@/components/tasks/PrintAllContractBillboardsDialog';
 import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
 import { TaskCardWrapper } from '@/components/tasks/TaskCardWrapper';
+import { AddInstallationTaskDialog } from '@/components/installation/AddInstallationTaskDialog';
 
 interface InstallationTask {
   id: string;
@@ -661,146 +662,145 @@ export default function InstallationTasks() {
 
   // Create manual task or re-trigger auto-creation
   const createTaskMutation = useMutation({
-    mutationFn: async () => {
-      if (selectedContractIds.length === 0) {
-        throw new Error('يرجى اختيار عقد واحد على الأقل');
-      }
+    mutationFn: async (vars: {
+      contractId: number;
+      billboardIds: number[];
+      teamId: string | null;
+      taskType: 'installation' | 'reinstallation';
+    }) => {
+      const { contractId, billboardIds, teamId, taskType } = vars;
 
-      if (selectedBillboardIds.length === 0) {
-        throw new Error('يرجى اختيار لوحة واحدة على الأقل');
-      }
+      if (!contractId) throw new Error('يرجى اختيار عقد');
+      if (!billboardIds || billboardIds.length === 0) throw new Error('يرجى اختيار لوحة واحدة على الأقل');
 
       // If team is selected, create manual task for specific team
-      if (selectedTeamId) {
-        for (const contractId of selectedContractIds) {
-          // Check if task already exists
-          const { data: existingTask } = await supabase
+      if (teamId) {
+        const { data: existingTask } = await supabase
+          .from('installation_tasks')
+          .select('id')
+          .eq('contract_id', contractId)
+          .eq('team_id', teamId)
+          .maybeSingle();
+
+        let taskId = existingTask?.id;
+
+        if (!taskId) {
+          const { data: newTask, error: taskError } = await supabase
             .from('installation_tasks')
+            .insert({
+              contract_id: contractId,
+              team_id: teamId,
+              status: 'pending',
+              task_type: taskType === 'reinstallation' ? 'reinstallation' : 'installation',
+            })
+            .select()
+            .single();
+
+          if (taskError) throw taskError;
+          taskId = newTask.id;
+        }
+
+        // Add task items for selected billboards only
+        for (const billboardId of billboardIds) {
+          const { data: existing } = await supabase
+            .from('installation_task_items')
             .select('id')
-            .eq('contract_id', contractId)
-            .eq('team_id', selectedTeamId)
+            .eq('task_id', taskId)
+            .eq('billboard_id', billboardId)
             .maybeSingle();
 
-          let taskId = existingTask?.id;
-
-          if (!taskId) {
-            // Create new task
-            const { data: newTask, error: taskError } = await supabase
-              .from('installation_tasks')
-              .insert({
-                contract_id: contractId,
-                team_id: selectedTeamId,
-                status: 'pending',
-                task_type: taskType === 'reinstallation' ? 'reinstallation' : 'installation'
-              })
-              .select()
-              .single();
-
-            if (taskError) throw taskError;
-            taskId = newTask.id;
-          }
-
-          // Add task items for selected billboards only
-          for (const billboardId of selectedBillboardIds) {
-            // Check if already exists
-            const { data: existing } = await supabase
+          if (!existing) {
+            const { error: itemError } = await supabase
               .from('installation_task_items')
-              .select('id')
-              .eq('task_id', taskId)
-              .eq('billboard_id', billboardId)
-              .maybeSingle();
-
-            if (!existing) {
-              await supabase
-                .from('installation_task_items')
-                .insert({
-                  task_id: taskId,
-                  billboard_id: billboardId,
-                  status: 'pending'
-                });
-            }
+              .insert({
+                task_id: taskId,
+                billboard_id: billboardId,
+                status: 'pending',
+              });
+            if (itemError) throw itemError;
           }
         }
-      } else {
-        // No team selected = auto-distribute selected billboards to teams based on sizes
-        for (const contractId of selectedContractIds) {
-          // Get teams and their sizes
-          const { data: teamsData } = await supabase
-            .from('installation_teams')
-            .select('*');
-          
-          if (!teamsData || teamsData.length === 0) {
-            throw new Error('لا توجد فرق تركيب متاحة');
-          }
 
-          // Group billboards by team based on size
-          const billboardsByTeam: Record<string, number[]> = {};
-          
-          for (const billboardId of selectedBillboardIds) {
-            const billboard = contractBillboards.find(b => b.ID === billboardId);
-            if (!billboard) continue;
+        return;
+      }
 
-            // Find team that handles this size
-            const team = teamsData.find(t => t.sizes && t.sizes.includes(billboard.Size));
-            
-            if (team) {
-              if (!billboardsByTeam[team.id]) billboardsByTeam[team.id] = [];
-              billboardsByTeam[team.id].push(billboardId);
-            }
-          }
+      // No team selected = auto-distribute selected billboards to teams based on sizes
+      const { data: teamsData, error: teamsError } = await supabase
+        .from('installation_teams')
+        .select('*');
+      if (teamsError) throw teamsError;
+      if (!teamsData || teamsData.length === 0) throw new Error('لا توجد فرق تركيب متاحة');
 
-          // Create tasks for each team
-          for (const [teamId, billboardIds] of Object.entries(billboardsByTeam)) {
-            const { data: existingTask } = await supabase
-              .from('installation_tasks')
-              .select('id')
-              .eq('contract_id', contractId)
-              .eq('team_id', teamId)
-              .maybeSingle();
+      const { data: billboardsData, error: bbError } = await supabase
+        .from('billboards')
+        .select('ID, Size')
+        .in('ID', billboardIds);
+      if (bbError) throw bbError;
 
-            let taskId = existingTask?.id;
+      // Group billboards by team based on size
+      const billboardsByTeam: Record<string, number[]> = {};
+      for (const bb of billboardsData || []) {
+        const size = (bb as any).Size as string | null;
+        const id = (bb as any).ID as number;
+        if (!size) continue;
 
-            if (!taskId) {
-              const { data: newTask, error: taskError } = await supabase
-                .from('installation_tasks')
-                .insert({
-                  contract_id: contractId,
-                  team_id: teamId,
-                  status: 'pending',
-                  task_type: taskType === 'reinstallation' ? 'reinstallation' : 'installation'
-                })
-                .select()
-                .single();
+        const team = teamsData.find((t: any) => Array.isArray(t.sizes) && t.sizes.includes(size));
+        if (!team) continue;
 
-              if (taskError) throw taskError;
-              taskId = newTask.id;
-            }
+        if (!billboardsByTeam[team.id]) billboardsByTeam[team.id] = [];
+        billboardsByTeam[team.id].push(id);
+      }
 
-            // Add task items
-            for (const billboardId of billboardIds) {
-              const { data: existing } = await supabase
-                .from('installation_task_items')
-                .select('id')
-                .eq('task_id', taskId)
-                .eq('billboard_id', billboardId)
-                .maybeSingle();
+      // Create tasks for each team
+      for (const [autoTeamId, autoBillboardIds] of Object.entries(billboardsByTeam)) {
+        const { data: existingTask } = await supabase
+          .from('installation_tasks')
+          .select('id')
+          .eq('contract_id', contractId)
+          .eq('team_id', autoTeamId)
+          .maybeSingle();
 
-              if (!existing) {
-                await supabase
-                  .from('installation_task_items')
-                  .insert({
-                    task_id: taskId,
-                    billboard_id: billboardId,
-                    status: 'pending'
-                  });
-              }
-            }
+        let taskId = existingTask?.id;
+
+        if (!taskId) {
+          const { data: newTask, error: taskError } = await supabase
+            .from('installation_tasks')
+            .insert({
+              contract_id: contractId,
+              team_id: autoTeamId,
+              status: 'pending',
+              task_type: taskType === 'reinstallation' ? 'reinstallation' : 'installation',
+            })
+            .select()
+            .single();
+
+          if (taskError) throw taskError;
+          taskId = newTask.id;
+        }
+
+        for (const billboardId of autoBillboardIds) {
+          const { data: existing } = await supabase
+            .from('installation_task_items')
+            .select('id')
+            .eq('task_id', taskId)
+            .eq('billboard_id', billboardId)
+            .maybeSingle();
+
+          if (!existing) {
+            const { error: itemError } = await supabase
+              .from('installation_task_items')
+              .insert({
+                task_id: taskId,
+                billboard_id: billboardId,
+                status: 'pending',
+              });
+            if (itemError) throw itemError;
           }
         }
       }
     },
-    onSuccess: () => {
-      toast.success(selectedTeamId ? 'تم إضافة المهمة بنجاح' : 'تم توزيع المهام على الفرق تلقائياً');
+    onSuccess: (_data, vars) => {
+      toast.success(vars.teamId ? 'تم إضافة المهمة بنجاح' : 'تم توزيع المهام على الفرق تلقائياً');
       setAddTaskDialogOpen(false);
       setSelectedContractIds([]);
       setSelectedTeamId('');
@@ -1948,199 +1948,25 @@ export default function InstallationTasks() {
       </div>
 
       {/* Add Task Dialog */}
-      <Dialog open={addTaskDialogOpen} onOpenChange={setAddTaskDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl">إضافة مهمة تركيب</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              اختر العقد واللوحات والفريق لإنشاء مهمة تركيب جديدة
-            </p>
-          </DialogHeader>
-          <div className="space-y-6">
-            {/* نوع المهمة */}
-            <div className="space-y-2">
-              <Label className="text-base font-semibold">نوع المهمة</Label>
-              <Select value={taskType} onValueChange={(v: any) => setTaskType(v)}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="installation">تركيب جديد</SelectItem>
-                  <SelectItem value="reinstallation">إعادة تركيب</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* البحث والعقد */}
-            <div className="space-y-3">
-              <Label className="text-base font-semibold">اختيار العقد</Label>
-              <div className="relative">
-                <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="ابحث برقم العقد أو اسم العميل..."
-                  value={contractSearchTerm}
-                  onChange={(e) => setContractSearchTerm(e.target.value)}
-                  className="pr-10 h-11"
-                />
-              </div>
-              <Select
-                value={selectedContractIds[0]?.toString() || ''}
-                onValueChange={(v) => setSelectedContractIds([parseInt(v)])}
-              >
-                <SelectTrigger className="h-11">
-                  <SelectValue placeholder="اختر عقداً..." />
-                </SelectTrigger>
-                <SelectContent className="max-h-[300px]">
-                  {filteredContracts.length === 0 ? (
-                    <div className="p-4 text-center text-sm text-muted-foreground">
-                      {contractSearchTerm ? 'لا توجد نتائج للبحث' : 'لا توجد عقود متاحة'}
-                    </div>
-                  ) : (
-                    filteredContracts.map(contract => (
-                      <SelectItem key={contract.Contract_Number} value={contract.Contract_Number.toString()}>
-                        <div className="flex flex-col items-start py-1">
-                          <span className="font-bold text-base">#{contract.Contract_Number} - {contract['Customer Name']}</span>
-                          <div className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5">
-                            {contract['Ad Type'] && <span>{contract['Ad Type']}</span>}
-                            {contract['Contract Date'] && (
-                              <>
-                                <span>•</span>
-                                <span>تاريخ العقد: {new Date(contract['Contract Date']).toLocaleDateString('ar-LY')}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              {selectedContract && (
-                <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-                  عدد اللوحات في العقد: {contractBillboards.length} لوحة
-                </div>
-              )}
-            </div>
-
-            {/* اختيار اللوحات */}
-            {selectedContract && contractBillboards.length > 0 && (
-              <div className="space-y-3 border border-border rounded-lg p-4 bg-muted/20">
-                <div className="flex items-center justify-between">
-                  <Label className="text-base font-semibold">اللوحات المتاحة ({contractBillboards.length})</Label>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedBillboardIds(contractBillboards.map(b => b.ID))}
-                      className="h-8 text-xs"
-                    >
-                      اختيار الكل
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setSelectedBillboardIds([])}
-                      className="h-8 text-xs"
-                    >
-                      إلغاء الكل
-                    </Button>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto">
-                  {contractBillboards.map(billboard => (
-                    <label
-                      key={billboard.ID}
-                      className={`flex items-center gap-2 p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                        selectedBillboardIds.includes(billboard.ID)
-                          ? 'border-primary bg-primary/5'
-                          : 'border-border hover:border-primary/50 hover:bg-muted/50'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedBillboardIds.includes(billboard.ID)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedBillboardIds([...selectedBillboardIds, billboard.ID]);
-                          } else {
-                            setSelectedBillboardIds(selectedBillboardIds.filter(id => id !== billboard.ID));
-                          }
-                        }}
-                        className="w-4 h-4 accent-primary"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-sm truncate">{billboard.Billboard_Name}</div>
-                        <div className="text-xs text-muted-foreground truncate">
-                          {billboard.Size} • {billboard.Municipality || billboard.District}
-                        </div>
-                      </div>
-                    </label>
-                  ))}
-                </div>
-                <div className="text-xs text-center text-muted-foreground">
-                  محدد: {selectedBillboardIds.length} من {contractBillboards.length}
-                </div>
-              </div>
-            )}
-
-            {/* اختيار الفريق */}
-            <div className="space-y-2">
-              <Label className="text-base font-semibold">الفريق</Label>
-              <Select value={selectedTeamId || 'auto'} onValueChange={(v) => setSelectedTeamId(v === 'auto' ? '' : v)}>
-                <SelectTrigger className="h-11">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="auto">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold">توزيع تلقائي</span>
-                      <span className="text-xs text-muted-foreground">(حسب المقاسات)</span>
-                    </div>
-                  </SelectItem>
-                  {teams.map(team => (
-                    <SelectItem key={team.id} value={team.id}>
-                      <div className="flex flex-col items-start">
-                        <span className="font-semibold">{team.team_name}</span>
-                        <span className="text-xs text-muted-foreground">
-                          المقاسات: {team.sizes?.join(', ') || 'جميع المقاسات'}
-                        </span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {!selectedTeamId && (
-                <p className="text-xs text-muted-foreground bg-blue-50 dark:bg-blue-950/30 p-2 rounded border border-blue-200 dark:border-blue-900">
-                  ℹ️ سيتم توزيع اللوحات على الفرق المناسبة حسب المقاسات تلقائياً
-                </p>
-              )}
-            </div>
-
-            {/* الأزرار */}
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setAddTaskDialogOpen(false);
-                  setContractSearchTerm('');
-                  setSelectedBillboardIds([]);
-                }}
-              >
-                إلغاء
-              </Button>
-              <Button 
-                onClick={() => createTaskMutation.mutate()}
-                disabled={createTaskMutation.isPending || selectedContractIds.length === 0 || selectedBillboardIds.length === 0}
-                className="min-w-[120px]"
-              >
-                {createTaskMutation.isPending ? 'جاري الإضافة...' : `إضافة المهمة (${selectedBillboardIds.length} لوحة)`}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AddInstallationTaskDialog
+        open={addTaskDialogOpen}
+        onOpenChange={setAddTaskDialogOpen}
+        taskType={taskType}
+        onTaskTypeChange={setTaskType}
+        teams={teams as any}
+        isSubmitting={createTaskMutation.isPending}
+        onSubmit={({ contractId, billboardIds, teamId }) => {
+          setSelectedContractIds([contractId]);
+          setSelectedTeamId(teamId || '');
+          setSelectedBillboardIds(billboardIds);
+          createTaskMutation.mutate({
+            contractId,
+            billboardIds,
+            teamId,
+            taskType,
+          });
+        }}
+      />
 
       {/* Design Manager Dialog */}
       {selectedTaskForDesign && (

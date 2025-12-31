@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import QRCode from 'qrcode';
-import { groupRepeatingPayments, Installment } from "@/utils/paymentGrouping";
+import { Installment, generatePaymentsClauseText } from "@/utils/paymentGrouping";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -134,46 +134,28 @@ const formatDateForDisplay = (dateStr: string): string => {
   }
 };
 
-// دالة تنسيق ملخص الدفعات مع دمج المتكررة وإظهار التواريخ
+// دالة تنسيق ملخص الدفعات (صيغة البند الخامس) - نفس منطق الطباعة تمامًا
 const formatPaymentsSummary = (installmentsData: string | null): string => {
-  if (!installmentsData) return '';
-  
+  if (!installmentsData) return 'دفعة واحدة عند التوقيع';
+
   try {
-    const installments: Installment[] = JSON.parse(installmentsData);
-    if (!installments || installments.length === 0) return '';
-    
-    const groups = groupRepeatingPayments(installments);
-    const currencySymbol = 'د.ل';
-    
-    const parts: string[] = [];
-    
-    groups.forEach((group, index) => {
-      const startDateFormatted = formatDateForDisplay(group.startDate);
-      const endDateFormatted = formatDateForDisplay(group.endDate);
-      
-      if (group.isGrouped) {
-        // دفعات متكررة - عرض التواريخ من/إلى
-        const total = (Number(group.amount.replace(/,/g, '')) * group.count).toLocaleString('ar-LY');
-        if (index === 0) {
-          parts.push(`${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
-        } else {
-          parts.push(`ثم ${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
-        }
-      } else {
-        // دفعة منفردة - عرض التاريخ
-        const inst = group.originalInstallments[0];
-        if (index === 0) {
-          parts.push(`دفعة أولى ${group.amount} ${currencySymbol} ${inst.paymentType} بتاريخ ${startDateFormatted}`);
-        } else {
-          parts.push(`ودفعة ${group.amount} ${currencySymbol} بتاريخ ${startDateFormatted}`);
-        }
-      }
-    });
-    
-    return parts.join(' ');
+    const raw: any[] = typeof installmentsData === 'string' ? JSON.parse(installmentsData) : (installmentsData as any);
+    const installments: Installment[] = Array.isArray(raw)
+      ? raw.map((inst: any, idx: number) => ({
+          amount: Number(inst?.amount ?? 0) || 0,
+          description: String(inst?.description ?? inst?.desc ?? `الدفعة ${idx + 1}`).trim(),
+          paymentType: String(inst?.paymentType ?? inst?.type ?? inst?.payment_type ?? '').trim(),
+          dueDate: String(inst?.dueDate ?? inst?.due_date ?? '').trim(),
+        }))
+      : [];
+
+    if (installments.length === 0) return 'دفعة واحدة عند التوقيع';
+
+    // نفس الصيغة التي تُستخدم في الطباعة: "دفعة أولى ... ثم ..."
+    return generatePaymentsClauseText(installments, 'د.ل', 'دينار ليبي');
   } catch (e) {
     console.error('Error parsing installments:', e);
-    return '';
+    return 'دفعة واحدة عند التوقيع';
   }
 };
 
@@ -1114,7 +1096,7 @@ export default function ContractTermsSettings() {
             />
             <span className="text-xs font-mono w-8">{Math.round(previewScale * 100)}%</span>
           </div>
-          <Button 
+          <Button
             onClick={async () => {
               // مقاس التصميم الداخلي (نفس viewBox)
               const DESIGN_W = 2480;
@@ -1124,25 +1106,103 @@ export default function ContractTermsSettings() {
               const a4WidthPx = (210 / 25.4) * 96;
               const printScale = a4WidthPx / DESIGN_W;
 
-              // نأخذ نسخة من المعاينة كـ HTML (كما هي) بدون تغيير أي state
-              const previewEl = document.querySelector(
+              // نأخذ نسخة من المعاينة الأولى (البنود)
+              const page1El = document.querySelector(
                 '.contract-preview-container'
               ) as HTMLElement | null;
 
-              if (!previewEl) {
+              if (!page1El) {
                 toast.error('لم يتم العثور على المعاينة للطباعة');
                 return;
               }
 
-              // نستنسخ العنصر ونضبط أبعاده للتصميم الكامل + نزيل transform المعاينة
-              const clonedEl = previewEl.cloneNode(true) as HTMLElement;
-              clonedEl.style.width = `${DESIGN_W}px`;
-              clonedEl.style.height = `${DESIGN_H}px`;
-              // إزالة transform المعاينة بالكامل (CSS الطباعة سيضع واحدًا جديدًا)
-              clonedEl.style.removeProperty('transform');
-              clonedEl.style.removeProperty('transform-origin');
+              // استنساخ الصفحة الأولى
+              const clonedPage1 = page1El.cloneNode(true) as HTMLElement;
+              clonedPage1.style.width = `${DESIGN_W}px`;
+              clonedPage1.style.height = `${DESIGN_H}px`;
+              clonedPage1.style.removeProperty('transform');
+              clonedPage1.style.removeProperty('transform-origin');
 
-              // الأهم: نافذة الطباعة يجب أن تحمل نفس CSS (Tailwind/shadcn) وإلا ستختفي الطبقات/التموضع
+              // بيانات اللوحات للطباعة
+              const billboardsData = previewBillboards.length > 0 ? previewBillboards : sampleBillboards;
+              const maxRowsPerPage = sectionSettings.tableSettings.maxRows || 8;
+              
+              // تقسيم اللوحات إلى صفحات
+              const billboardPages: any[][] = [];
+              for (let i = 0; i < billboardsData.length; i += maxRowsPerPage) {
+                billboardPages.push(billboardsData.slice(i, i + maxRowsPerPage));
+              }
+
+              // إنشاء HTML للجداول
+              const generateTablePageHtml = (billboards: any[], pageIndex: number) => {
+                const visibleColumns = sectionSettings.tableSettings.columns.filter(col => col.visible);
+                
+                const getCellValue = (billboard: any, col: any, idx: number) => {
+                  switch (col.key) {
+                    case 'index': return idx + 1 + (pageIndex * maxRowsPerPage);
+                    case 'id': return billboard.id;
+                    case 'code': return billboard.code || '';
+                    case 'billboardName': return billboard.billboardName || '';
+                    case 'name': return billboard.name || '';
+                    case 'size': return billboard.size || '';
+                    case 'faces': return billboard.faces || '';
+                    case 'municipality': return billboard.municipality || '';
+                    case 'district': return billboard.district || '';
+                    case 'price': 
+                      if (billboard.hasDiscount && billboard.originalPrice) {
+                        return `<span style="text-decoration: line-through; color: #999; font-size: 0.8em;">${billboard.originalPrice.toLocaleString()}</span><br/>${billboard.price.toLocaleString()}`;
+                      }
+                      return billboard.price ? billboard.price.toLocaleString() : '';
+                    case 'image': return billboard.image ? `<img src="${billboard.image}" style="width: 100%; height: 100%; object-fit: cover;" />` : '';
+                    case 'location': return billboard.gps ? `<a href="${billboard.gps}" target="_blank" style="color: #004aad;">خريطة</a>` : '';
+                    default: return '';
+                  }
+                };
+
+                return `
+                  <div class="print-page">
+                    <div class="contract-preview-container" style="width: ${DESIGN_W}px; height: ${DESIGN_H}px;">
+                      <img src="${tableBackgroundUrl}" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;" />
+                      <div style="position: absolute; top: ${sectionSettings.tableSettings.topPosition * 3.779}px; left: ${(100 - (sectionSettings.tableSettings.tableWidth || 90)) / 2}%; width: ${sectionSettings.tableSettings.tableWidth || 90}%; z-index: 20;">
+                        ${pageIndex === 0 && sectionSettings.tableTerm?.visible !== false ? `
+                          <div style="text-align: center; margin-bottom: ${sectionSettings.tableTerm?.marginBottom || 8}px; font-family: Doran, sans-serif; direction: rtl;">
+                            <h2 style="font-size: ${sectionSettings.tableTerm?.fontSize || 14}px; color: ${sectionSettings.tableTerm?.color || '#1a1a2e'}; margin: 0; display: inline-block;">
+                              <span style="font-weight: ${sectionSettings.tableTerm?.titleFontWeight || 'bold'};">${sectionSettings.tableTerm?.termTitle || 'البند الثامن:'}</span>
+                              <span style="font-weight: ${sectionSettings.tableTerm?.contentFontWeight || 'normal'};">${sectionSettings.tableTerm?.termContent || 'المواقع المتفق عليها بين الطرفين'}</span>
+                            </h2>
+                          </div>
+                        ` : ''}
+                        <table style="width: 100%; border-collapse: collapse; table-layout: fixed; font-size: ${sectionSettings.tableSettings.fontSize || 8}px; font-family: Doran, sans-serif; direction: rtl;" dir="rtl">
+                          <thead>
+                            <tr style="height: ${(sectionSettings.tableSettings.headerRowHeight || 14) * 3.779}px;">
+                              ${visibleColumns.map(col => {
+                                const isHighlighted = (sectionSettings.tableSettings.highlightedColumns || ['index']).includes(col.key);
+                                const headerBg = isHighlighted ? (sectionSettings.tableSettings.highlightedColumnBgColor || '#1a1a2e') : sectionSettings.tableSettings.headerBgColor;
+                                const headerFg = isHighlighted ? (sectionSettings.tableSettings.highlightedColumnTextColor || '#ffffff') : sectionSettings.tableSettings.headerTextColor;
+                                return `<th style="width: ${col.width}%; background-color: ${headerBg}; color: ${headerFg}; padding: ${col.padding ?? sectionSettings.tableSettings.cellPadding ?? 2}px; border: ${sectionSettings.tableSettings.borderWidth ?? 1}px solid ${sectionSettings.tableSettings.borderColor}; font-size: ${col.headerFontSize ?? sectionSettings.tableSettings.headerFontSize ?? 11}px; font-weight: ${sectionSettings.tableSettings.headerFontWeight || 'bold'}; text-align: ${sectionSettings.tableSettings.headerTextAlign || 'center'}; vertical-align: middle;">${col.label}</th>`;
+                              }).join('')}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            ${billboards.map((billboard, idx) => `
+                              <tr style="height: ${(sectionSettings.tableSettings.rowHeight || 12) * 3.779}px; background-color: ${idx % 2 === 1 ? sectionSettings.tableSettings.alternateRowColor : 'white'};">
+                                ${visibleColumns.map(col => {
+                                  const isHighlighted = (sectionSettings.tableSettings.highlightedColumns || ['index']).includes(col.key);
+                                  const cellBg = isHighlighted ? (sectionSettings.tableSettings.highlightedColumnBgColor || '#1a1a2e') : '';
+                                  const cellColor = isHighlighted ? (sectionSettings.tableSettings.highlightedColumnTextColor || '#ffffff') : (sectionSettings.tableSettings.cellTextColor || '#000000');
+                                  return `<td style="border: ${sectionSettings.tableSettings.borderWidth ?? 1}px solid ${sectionSettings.tableSettings.borderColor}; padding: ${col.key === 'image' || col.key === 'location' ? 0 : (col.padding ?? sectionSettings.tableSettings.cellPadding ?? 2)}px; text-align: ${col.textAlign ?? (sectionSettings.tableSettings.cellTextAlign || 'center')}; font-size: ${col.fontSize ?? sectionSettings.tableSettings.fontSize ?? 10}px; background-color: ${cellBg}; color: ${cellColor}; vertical-align: middle;">${getCellValue(billboard, col, idx)}</td>`;
+                                }).join('')}
+                              </tr>
+                            `).join('')}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                `;
+              };
+
+              // CSS للطباعة
               const stylesHtml = Array.from(
                 document.querySelectorAll('style, link[rel="stylesheet"]')
               )
@@ -1158,11 +1218,11 @@ export default function ContractTermsSettings() {
                   <meta charset="utf-8" />
                   <meta name="viewport" content="width=device-width, initial-scale=1" />
                   <base href="${origin}/" />
-                  <title>طباعة قالب العقد</title>
+                  <title>طباعة العقد الكامل</title>
                   ${stylesHtml}
                   <style>
                     @page { size: A4; margin: 0; }
-                    html, body { width: 210mm; height: 297mm; margin: 0; padding: 0; background: white; }
+                    html, body { width: 210mm; margin: 0; padding: 0; background: white; }
                     * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
 
                     @font-face {
@@ -1182,16 +1242,19 @@ export default function ContractTermsSettings() {
 
                     body { font-family: 'Doran', 'Tajawal', sans-serif; direction: ltr; }
 
-                    /* صفحة طباعة A4 فعلية، لتفادي تجزئة العنصر إلى أكثر من صفحة */
                     .print-page {
                       width: 210mm;
                       height: 297mm;
                       position: relative;
                       overflow: hidden;
                       direction: ltr;
+                      page-break-after: always;
                     }
 
-                    /* نطبع نفس تصميم المعاينة (2480×3508) لكن نُصغّره ليلائم A4 */
+                    .print-page:last-child {
+                      page-break-after: avoid;
+                    }
+
                     .print-page .contract-preview-container {
                       position: absolute !important;
                       left: 0 !important;
@@ -1207,10 +1270,8 @@ export default function ContractTermsSettings() {
                       direction: ltr;
                     }
 
-                    /* منع تحجيم الصور بشكل غير متوقع */
                     .contract-preview-container img { max-width: none !important; }
 
-                    /* ضمان ظهور الألوان والخلفيات في الطباعة */
                     .contract-preview-container,
                     .contract-preview-container * {
                       -webkit-print-color-adjust: exact !important;
@@ -1218,7 +1279,6 @@ export default function ContractTermsSettings() {
                       color-adjust: exact !important;
                     }
 
-                    /* ضمان ظهور خلفيات الجدول */
                     table, thead, tbody, tr, th, td {
                       -webkit-print-color-adjust: exact !important;
                       print-color-adjust: exact !important;
@@ -1229,13 +1289,24 @@ export default function ContractTermsSettings() {
                       background-color: inherit !important;
                     }
 
+                    @media print {
+                      .print-page {
+                        page-break-inside: avoid;
+                      }
+                    }
+
                   </style>
                   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
                 </head>
                 <body>
+                  <!-- الصفحة الأولى: البنود -->
                   <div class="print-page">
-                    ${clonedEl.outerHTML}
+                    ${clonedPage1.outerHTML}
                   </div>
+                  
+                  <!-- صفحات الجداول -->
+                  ${billboardPages.map((pageBillboards, pageIdx) => generateTablePageHtml(pageBillboards, pageIdx)).join('')}
+                  
                   <script>
                     window.addEventListener('load', function () {
                       function waitForCss() {
@@ -1263,7 +1334,7 @@ export default function ContractTermsSettings() {
                         : Promise.resolve();
 
                       Promise.all([waitForCss(), waitImgs, waitFonts]).then(function () {
-                        setTimeout(function () { window.print(); }, 200);
+                        setTimeout(function () { window.print(); }, 300);
                       });
                     });
                   </script>
@@ -1286,7 +1357,7 @@ export default function ContractTermsSettings() {
             className="gap-2"
           >
             <Printer className="h-4 w-4" />
-            طباعة
+            طباعة العقد كاملاً
           </Button>
           <Button 
             onClick={() => saveSettingsMutation.mutate()} 

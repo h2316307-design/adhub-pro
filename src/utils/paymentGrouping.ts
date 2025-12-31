@@ -143,3 +143,154 @@ export function formatPaymentsList(
 
   return lines;
 }
+
+/**
+ * Format ISO date (YYYY-MM-DD or ISO string) into DD/MM/YYYY for Arabic contract text.
+ */
+export function formatArabicContractDate(dateStr: string): string {
+  if (!dateStr) return '';
+  try {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = String(d.getFullYear());
+    return `${day}/${month}/${year}`;
+  } catch {
+    return dateStr;
+  }
+}
+
+/**
+ * Gets ordinal name for payment number in Arabic
+ */
+function getOrdinalName(index: number): string {
+  const ordinals = [
+    'الأولى', 'الثانية', 'الثالثة', 'الرابعة', 'الخامسة',
+    'السادسة', 'السابعة', 'الثامنة', 'التاسعة', 'العاشرة'
+  ];
+  return ordinals[index] || `رقم ${index + 1}`;
+}
+
+/**
+ * Builds the exact clause-friendly payments text expected in "البند الخامس".
+ *
+ * Rules:
+ * - If installments ≤ 3: Detail each payment individually (no grouping)
+ * - If installments > 3: First payment detailed, then summarize remaining payments
+ * - Never start the clause with a number (fixes RTL "jump to end" issues).
+ */
+export function generatePaymentsClauseText(
+  installments: Installment[],
+  currencySymbol: string,
+  currencyWrittenName: string
+): string {
+  if (!installments || installments.length === 0) {
+    return `دفعة واحدة عند التوقيع`;
+  }
+
+  const normalized: Installment[] = installments.map((inst, idx) => ({
+    amount: Number((inst as any)?.amount ?? 0) || 0,
+    paymentType: String((inst as any)?.paymentType ?? '').trim(),
+    description: String((inst as any)?.description ?? `الدفعة ${idx + 1}`).trim(),
+    dueDate: String((inst as any)?.dueDate ?? '').trim(),
+  }));
+
+  // Single payment
+  if (normalized.length === 1) {
+    const one = normalized[0];
+    const amount = Number(one.amount).toLocaleString('ar-LY');
+    const date = formatArabicContractDate(one.dueDate);
+    const type = one.paymentType ? ` ${one.paymentType}` : '';
+    return `دفعة واحدة ${amount} ${currencySymbol}${type}${date ? ` بتاريخ ${date}` : ''}`.trim();
+  }
+
+  const totalInstallments = normalized.length;
+
+  // ============================================
+  // CASE 1: 3 installments or less → Detail each one
+  // ============================================
+  if (totalInstallments <= 3) {
+    const lines: string[] = [];
+    
+    normalized.forEach((inst, idx) => {
+      const amount = Number(inst.amount).toLocaleString('ar-LY');
+      const date = formatArabicContractDate(inst.dueDate);
+      const ordinal = getOrdinalName(idx);
+      
+      let line = `الدفعة ${ordinal}: (${amount}) ${currencySymbol}`;
+      if (date) {
+        line += ` بتاريخ ${date}`;
+      }
+      lines.push(line);
+    });
+
+    return `يتم السداد على ${totalInstallments === 2 ? 'دفعتين' : 'ثلاث دفعات'} وفقاً للجدول التالي: ${lines.join('. ')}.`;
+  }
+
+  // ============================================
+  // CASE 2: More than 3 installments → Summarize
+  // ============================================
+  const first = normalized[0];
+  const firstAmount = Number(first.amount).toLocaleString('ar-LY');
+  const firstDate = formatArabicContractDate(first.dueDate);
+  
+  // Check if remaining payments are all equal
+  const rest = normalized.slice(1);
+  const restAmounts = rest.map(i => Number(i.amount));
+  const allRestEqual = restAmounts.every(a => Math.abs(a - restAmounts[0]) < 0.01);
+
+  let text = `دفعة أولى: (${firstAmount}) ${currencySymbol}`;
+  if (firstDate) {
+    text += ` بتاريخ ${firstDate}`;
+  }
+  text += '. ';
+
+  if (allRestEqual && rest.length >= 2) {
+    // All remaining payments are equal - summarize them
+    const restAmount = Number(rest[0].amount).toLocaleString('ar-LY');
+    const restCount = rest.length;
+    const startDate = formatArabicContractDate(rest[0].dueDate);
+    const endDate = formatArabicContractDate(rest[rest.length - 1].dueDate);
+    
+    // Detect payment frequency
+    let frequency = 'متتالياً';
+    if (rest[0].paymentType) {
+      frequency = rest[0].paymentType;
+    } else if (rest.length >= 2 && rest[0].dueDate && rest[1].dueDate) {
+      const d1 = new Date(rest[0].dueDate);
+      const d2 = new Date(rest[1].dueDate);
+      const diffMonths = (d2.getFullYear() - d1.getFullYear()) * 12 + (d2.getMonth() - d1.getMonth());
+      if (diffMonths === 1) frequency = 'شهرياً';
+      else if (diffMonths === 3) frequency = 'ربع سنوي';
+      else if (diffMonths === 6) frequency = 'نصف سنوي';
+      else if (diffMonths === 12) frequency = 'سنوياً';
+    }
+
+    text += `الأقساط المتبقية: عدد (${restCount}) قسطاً ${frequency}، قيمة كل قسط (${restAmount}) ${currencySymbol}`;
+    if (startDate && endDate) {
+      text += `، تبدأ من ${startDate} وتنتهي في ${endDate}`;
+    }
+    text += '.';
+  } else {
+    // Remaining payments vary - group them using existing logic
+    const groups = groupRepeatingPayments(rest);
+    
+    groups.forEach((g, idx) => {
+      if (g.isGrouped) {
+        text += `ثم ${g.count} دفعات × ${g.amount} ${currencySymbol} من ${formatArabicContractDate(g.startDate)} إلى ${formatArabicContractDate(g.endDate)}`;
+      } else {
+        const inst = g.originalInstallments[0];
+        const amount = Number(inst.amount).toLocaleString('ar-LY');
+        const date = formatArabicContractDate(inst.dueDate);
+        const type = inst.paymentType ? ` ${inst.paymentType}` : '';
+        text += `ثم دفعة ${amount} ${currencySymbol}${type}${date ? ` بتاريخ ${date}` : ''}`;
+      }
+      if (idx < groups.length - 1) text += '، ';
+      else text += '.';
+    });
+  }
+
+  return text;
+}
+

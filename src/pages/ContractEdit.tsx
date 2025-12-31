@@ -158,9 +158,10 @@ export default function ContractEdit() {
   const [installmentDistributionType, setInstallmentDistributionType] = useState<'single' | 'multiple'>('multiple');
   const [installmentFirstPaymentAmount, setInstallmentFirstPaymentAmount] = useState<number>(0);
   const [installmentFirstPaymentType, setInstallmentFirstPaymentType] = useState<'amount' | 'percent'>('amount');
-  const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months'>('month');
+  const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>('month');
   const [installmentCount, setInstallmentCount] = useState<number>(2);
   const [installmentAutoCalculate, setInstallmentAutoCalculate] = useState<boolean>(false);
+  const [installmentFirstAtSigning, setInstallmentFirstAtSigning] = useState<boolean>(true);
   const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = useState<boolean>(false);
 
   // ✅ NEW: Friend billboard costs
@@ -469,10 +470,10 @@ export default function ContractEdit() {
         
         // ✅ FIXED: Properly handle installments_data from database
         let loadedInstallments: any[] = [];
-        
+
         if (c.installments_data) {
           console.log('installments_data exists:', typeof c.installments_data, c.installments_data);
-          
+
           // Handle JSON string format (from database)
           if (typeof c.installments_data === 'string') {
             try {
@@ -491,33 +492,48 @@ export default function ContractEdit() {
             console.log('Using installments array directly:', loadedInstallments);
           }
         }
-        
+
+        const normalizeInstallment = (inst: any, idx: number) => {
+          const amount = Number(inst?.amount ?? 0) || 0;
+          const paymentType = String(inst?.paymentType ?? inst?.type ?? inst?.payment_type ?? '').trim() || (idx === 0 ? 'عند التوقيع' : 'شهري');
+          const description = String(inst?.description ?? inst?.desc ?? '').trim() || `الدفعة ${idx + 1}`;
+          const dueDate = String(inst?.dueDate ?? inst?.due_date ?? '').trim() || calculateDueDate(paymentType, idx, s);
+          return { amount, paymentType, description, dueDate };
+        };
+
         // If we have valid installments data, use it
         if (loadedInstallments.length > 0) {
-          setInstallments(loadedInstallments);
-          console.log('Set installments from installments_data:', loadedInstallments);
+          const normalized = loadedInstallments.map(normalizeInstallment);
+          setInstallments(normalized);
+          console.log('Set installments from installments_data (normalized):', normalized);
         } else {
           // Fallback to old Payment 1, 2, 3 format
           console.log('No installments_data found, using old Payment format');
           const payments = [];
-          if (c['Payment 1']) payments.push({ 
-            amount: c['Payment 1'], 
-            paymentType: 'شهري', 
-            description: 'الدفعة الأولى',
-            dueDate: calculateDueDate('شهري', 0, s)
-          });
-          if (c['Payment 2']) payments.push({ 
-            amount: c['Payment 2'], 
-            paymentType: 'شهري', 
-            description: 'الدفعة الثانية',
-            dueDate: calculateDueDate('شهري', 1, s)
-          });
-          if (c['Payment 3']) payments.push({ 
-            amount: c['Payment 3'], 
-            paymentType: 'شهري', 
-            description: 'الدفعة الثالثة',
-            dueDate: calculateDueDate('شهري', 2, s)
-          });
+          if (c['Payment 1'])
+            payments.push({
+              amount: typeof c['Payment 1'] === 'object' ? Number((c['Payment 1'] as any).amount || 0) : Number(c['Payment 1'] || 0),
+              paymentType:
+                typeof c['Payment 1'] === 'object'
+                  ? String((c['Payment 1'] as any).type || (c['Payment 1'] as any).paymentType || 'شهري')
+                  : 'شهري',
+              description: 'الدفعة الأولى',
+              dueDate: calculateDueDate('شهري', 0, s)
+            });
+          if (c['Payment 2'])
+            payments.push({
+              amount: Number(c['Payment 2'] || 0),
+              paymentType: 'شهري',
+              description: 'الدفعة الثانية',
+              dueDate: calculateDueDate('شهري', 1, s)
+            });
+          if (c['Payment 3'])
+            payments.push({
+              amount: Number(c['Payment 3'] || 0),
+              paymentType: 'شهري',
+              description: 'الدفعة الثالثة',
+              dueDate: calculateDueDate('شهري', 2, s)
+            });
           setInstallments(payments);
           console.log('Set installments from old Payment format:', payments);
         }
@@ -529,13 +545,15 @@ export default function ContractEdit() {
         const savedInterval = c.installment_interval || 'month';
         const savedCount = Number(c.installment_count || 2);
         const savedAutoCalculate = c.installment_auto_calculate === true;
+        const savedFirstAtSigning = c.installment_first_at_signing !== false; // default true
         
         setInstallmentDistributionType(savedDistributionType as 'single' | 'multiple');
         setInstallmentFirstPaymentAmount(savedFirstPaymentAmount);
         setInstallmentFirstPaymentType(savedFirstPaymentType as 'amount' | 'percent');
-        setInstallmentInterval(savedInterval as 'month' | '2months' | '3months' | '4months');
+        setInstallmentInterval(savedInterval as 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months');
         setInstallmentCount(savedCount);
         setInstallmentAutoCalculate(savedAutoCalculate);
+        setInstallmentFirstAtSigning(savedFirstAtSigning);
         setHasDifferentFirstPayment(savedFirstPaymentAmount > 0);
         
         console.log('✅ Loaded installment distribution settings:', {
@@ -1638,12 +1656,13 @@ export default function ContractEdit() {
   const distributeWithInterval = React.useCallback((config: {
     firstPayment: number;
     firstPaymentType: 'amount' | 'percent';
-    interval: 'month' | '2months' | '3months' | '4months';
+    interval: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months';
     numPayments?: number;
     lastPaymentDate?: string;
     firstPaymentDate?: string;
+    firstAtSigning?: boolean;
   }) => {
-    const { firstPayment, firstPaymentType, interval, numPayments, lastPaymentDate, firstPaymentDate } = config;
+    const { firstPayment, firstPaymentType, interval, numPayments, lastPaymentDate, firstPaymentDate, firstAtSigning = true } = config;
     
     if (finalTotal <= 0) {
       toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
@@ -1665,9 +1684,10 @@ export default function ContractEdit() {
       return;
     }
 
-    const monthsMap = { month: 1, '2months': 2, '3months': 3, '4months': 4 };
-    const intervalMonths = monthsMap[interval];
-    const intervalLabel = interval === 'month' ? 'شهري' : interval === '2months' ? 'شهرين' : interval === '3months' ? 'ثلاثة أشهر' : '4 أشهر';
+    const monthsMap: Record<string, number> = { month: 1, '2months': 2, '3months': 3, '4months': 4, '5months': 5, '6months': 6, '7months': 7 };
+    const intervalMonths = monthsMap[interval] || 1;
+    const intervalLabels: Record<string, string> = { month: 'شهري', '2months': 'شهرين', '3months': 'ثلاثة أشهر', '4months': '4 أشهر', '5months': '5 أشهر', '6months': '6 أشهر', '7months': '7 أشهر' };
+    const intervalLabel = intervalLabels[interval] || 'شهري';
     
     const newInstallments: Array<{amount: number; paymentType: string; description: string; dueDate: string}> = [];
     const firstDate = firstPaymentDate || startDate || new Date().toISOString().split('T')[0];
@@ -1678,7 +1698,7 @@ export default function ContractEdit() {
     if (hasFirstPayment) {
       newInstallments.push({
         amount: actualFirstPayment,
-        paymentType: 'عند التوقيع',
+        paymentType: firstAtSigning ? 'عند التوقيع' : '',
         description: 'الدفعة الأولى',
         dueDate: firstDate
       });
@@ -1843,6 +1863,17 @@ export default function ContractEdit() {
         }));
 
       // ✅ CORRECTED: Fixed calculation structure for database storage
+      // ✅ Installments: احفظ نوع/وصف/تاريخ كل دفعة لضمان ظهورها في الطباعة
+      const installmentsForSaving = (installments || []).map((inst, idx) => {
+        const paymentType = String(inst?.paymentType || '').trim() || (idx === 0 ? 'عند التوقيع' : 'شهري');
+        return {
+          amount: Number(inst?.amount ?? 0) || 0,
+          paymentType,
+          description: String(inst?.description || '').trim() || `الدفعة ${idx + 1}`,
+          dueDate: String(inst?.dueDate || '').trim() || calculateDueDate(paymentType, idx)
+        };
+      });
+
       const updates: any = {
         'Customer Name': customerName,
         'Ad Type': adType,
@@ -1977,13 +2008,14 @@ export default function ContractEdit() {
         design_data: JSON.stringify(billboardDesigns),
 
         // ✅ Installments + distribution settings
-        installments_data: installments,
+        installments_data: installmentsForSaving,
         installment_distribution_type: installmentDistributionType,
         installment_first_payment_amount: hasDifferentFirstPayment ? installmentFirstPaymentAmount : 0,
         installment_first_payment_type: installmentFirstPaymentType,
         installment_interval: installmentInterval,
         installment_count: installmentCount,
         installment_auto_calculate: installmentAutoCalculate,
+        installment_first_at_signing: installmentFirstAtSigning,
       };
 
       // ✅ Save friend rentals
@@ -1994,9 +2026,9 @@ export default function ContractEdit() {
       (updates as any).friend_rental_operating_fee_rate = friendRentalOperatingFeeRate;
 
       // Also save individual payments for backward compatibility
-      if (installments.length > 0) updates['Payment 1'] = { amount: installments[0]?.amount || 0, type: installments[0]?.paymentType || 'عند التوقيع' };
-      if (installments.length > 1) updates['Payment 2'] = String(installments[1]?.amount || 0);
-      if (installments.length > 2) updates['Payment 3'] = String(installments[2]?.amount || 0);
+      if (installmentsForSaving.length > 0) updates['Payment 1'] = { amount: installmentsForSaving[0]?.amount || 0, type: installmentsForSaving[0]?.paymentType || 'عند التوقيع' };
+      if (installmentsForSaving.length > 1) updates['Payment 2'] = String(installmentsForSaving[1]?.amount || 0);
+      if (installmentsForSaving.length > 2) updates['Payment 3'] = String(installmentsForSaving[2]?.amount || 0);
 
       // ✅ Remaining should match what the customer pays
       const totalPaid = Number(currentContract?.['Total Paid']) || 0;
@@ -2882,6 +2914,7 @@ export default function ContractEdit() {
               savedInterval={installmentInterval}
               savedCount={installmentCount}
               savedHasDifferentFirstPayment={hasDifferentFirstPayment}
+              savedFirstAtSigning={installmentFirstAtSigning}
               // ✅ NEW: Sync callbacks
               onDistributionTypeChange={setInstallmentDistributionType}
               onFirstPaymentAmountChange={setInstallmentFirstPaymentAmount}
@@ -2889,6 +2922,7 @@ export default function ContractEdit() {
               onIntervalChange={setInstallmentInterval}
               onCountChange={setInstallmentCount}
               onHasDifferentFirstPaymentChange={setHasDifferentFirstPayment}
+              onFirstAtSigningChange={setInstallmentFirstAtSigning}
             />
 
             {/* مكون تخفيض حسب المستوى */}

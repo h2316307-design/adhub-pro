@@ -1,17 +1,17 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Wrench, Search, Plus, Calendar, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Clock, Settings, FileText, Printer, Download, Filter } from 'lucide-react';
+import { Wrench, Search, Plus, Calendar, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Clock, Settings, FileText, Printer, Download, Filter, LayoutGrid, List } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { MaintenanceBillboardCard } from '@/components/maintenance/MaintenanceBillboardCard';
 
 interface Billboard {
   ID: number;
@@ -57,6 +57,7 @@ export default function BillboardMaintenance() {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [selectedBillboard, setSelectedBillboard] = useState<Billboard | null>(null);
   const [isMaintenanceDialogOpen, setIsMaintenanceDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
   const [maintenanceForm, setMaintenanceForm] = useState({
     type: '',
     description: '',
@@ -646,94 +647,115 @@ export default function BillboardMaintenance() {
         </CardContent>
       </Card>
 
-      {/* جدول اللوح  ت */}
+      {/* اللوحات */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>اللوحات التي تحتاج صيانة ({filteredBillboards.length})</CardTitle>
+          <div className="flex items-center gap-2">
+            <Button
+              variant={viewMode === 'cards' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('cards')}
+              className="h-8 gap-1"
+            >
+              <LayoutGrid className="h-4 w-4" />
+              كروت
+            </Button>
+            <Button
+              variant={viewMode === 'table' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('table')}
+              className="h-8 gap-1"
+            >
+              <List className="h-4 w-4" />
+              جدول
+            </Button>
+          </div>
         </CardHeader>
-        <CardContent className="p-0">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="text-right">اسم اللوحة</TableHead>
-                <TableHead className="text-right">الموقع</TableHead>
-                <TableHead className="text-right">الحجم</TableHead>
-                <TableHead className="text-right">الحالة</TableHead>
-                <TableHead className="text-right">الأولوية</TableHead>
-                <TableHead className="text-right">آخر صيانة</TableHead>
-                <TableHead className="text-right">التكلفة</TableHead>
-                <TableHead className="text-right">الإجراءات</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+        <CardContent>
+          {viewMode === 'cards' ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {filteredBillboards.map((billboard) => (
-                <TableRow key={billboard.ID}>
-                  <TableCell className="font-medium">
-                    {billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`}
-                  </TableCell>
-                  <TableCell>{billboard.Nearest_Landmark || billboard.District || 'غير محدد'}</TableCell>
-                  <TableCell>{billboard.Size || 'غير محدد'}</TableCell>
-                  <TableCell>{getStatusBadge(billboard.maintenance_status)}</TableCell>
-                  <TableCell>{getPriorityBadge(billboard.maintenance_priority)}</TableCell>
-                  <TableCell>
-                    {billboard.maintenance_date 
-                      ? new Date(billboard.maintenance_date).toLocaleDateString('ar-LY')
-                      : 'لا يوجد'
-                    }
-                  </TableCell>
-                  <TableCell>
-                    {billboard.maintenance_cost 
-                      ? `${billboard.maintenance_cost.toLocaleString()} د.ل`
-                      : 'غير محدد'
-                    }
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Dialog open={isMaintenanceDialogOpen} onOpenChange={setIsMaintenanceDialogOpen}>
-                        <DialogTrigger asChild>
+                <MaintenanceBillboardCard
+                  key={billboard.ID}
+                  billboard={billboard}
+                  onMaintenanceClick={(b) => {
+                    setSelectedBillboard(b);
+                    setIsMaintenanceDialogOpen(true);
+                  }}
+                  onCompleteClick={handleCompleteMaintenanceAndRemove}
+                  onStatusChange={handleStatusChange}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b">
+                    <th className="text-right p-3 font-medium">اسم اللوحة</th>
+                    <th className="text-right p-3 font-medium">الموقع</th>
+                    <th className="text-right p-3 font-medium">الحجم</th>
+                    <th className="text-right p-3 font-medium">الحالة</th>
+                    <th className="text-right p-3 font-medium">الأولوية</th>
+                    <th className="text-right p-3 font-medium">آخر صيانة</th>
+                    <th className="text-right p-3 font-medium">التكلفة</th>
+                    <th className="text-right p-3 font-medium">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredBillboards.map((billboard) => (
+                    <tr key={billboard.ID} className="border-b hover:bg-muted/50">
+                      <td className="p-3 font-medium">
+                        {billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`}
+                      </td>
+                      <td className="p-3">{billboard.Nearest_Landmark || billboard.District || 'غير محدد'}</td>
+                      <td className="p-3">{billboard.Size || 'غير محدد'}</td>
+                      <td className="p-3">{getStatusBadge(billboard.maintenance_status)}</td>
+                      <td className="p-3">{getPriorityBadge(billboard.maintenance_priority)}</td>
+                      <td className="p-3">
+                        {billboard.maintenance_date 
+                          ? new Date(billboard.maintenance_date).toLocaleDateString('ar-LY')
+                          : 'لا يوجد'
+                        }
+                      </td>
+                      <td className="p-3">
+                        {billboard.maintenance_cost 
+                          ? `${billboard.maintenance_cost.toLocaleString()} د.ل`
+                          : 'غير محدد'
+                        }
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-2">
                           <Button
                             size="sm"
                             variant="outline"
-                            className="h-8 gap-1"
-                            onClick={() => setSelectedBillboard(billboard)}
+                            className="h-7 gap-1 text-xs"
+                            onClick={() => {
+                              setSelectedBillboard(billboard);
+                              setIsMaintenanceDialogOpen(true);
+                            }}
                           >
                             <Wrench className="h-3 w-3" />
                             صيانة
                           </Button>
-                        </DialogTrigger>
-                      </Dialog>
-
-                      <Button
-                        size="sm"
-                        variant="default"
-                        className="h-8 gap-1"
-                        onClick={() => handleCompleteMaintenanceAndRemove(billboard.ID)}
-                      >
-                        <CheckCircle className="h-3 w-3" />
-                        إكمال
-                      </Button>
-
-                      <Select
-                        value={billboard.maintenance_status}
-                        onValueChange={(value) => handleStatusChange(billboard.ID, value)}
-                      >
-                        <SelectTrigger className="h-8 w-24">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="operational">طبيعي</SelectItem>
-                          <SelectItem value="maintenance">صيانة</SelectItem>
-                          <SelectItem value="repair_needed">إصلاح</SelectItem>
-                          <SelectItem value="out_of_service">خارج الخدمة</SelectItem>
-                          <SelectItem value="removed">تمت الإزالة</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+                          <Button
+                            size="sm"
+                            variant="default"
+                            className="h-7 gap-1 text-xs"
+                            onClick={() => handleCompleteMaintenanceAndRemove(billboard.ID)}
+                          >
+                            <CheckCircle className="h-3 w-3" />
+                            إكمال
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {filteredBillboards.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
               لا توجد لوحات تحتاج صيانة حالياً

@@ -10,14 +10,19 @@ import { useContractTemplateSettings, DEFAULT_SECTION_SETTINGS } from '@/hooks/u
 import { ContractPDFPreview } from '@/components/contracts/ContractPDFPreview';
 import { ContractPDFSummary } from '@/components/contracts/ContractPDFSummary';
 import { ContractPDFActions } from '@/components/contracts/ContractPDFActions';
-import { renderAllBillboardsTablePages, BillboardRowData, solidFillDataUri } from '@/lib/contractTableRenderer';
+import { 
+  renderAllBillboardsTablePages,
+  renderBillboardsTablePage,
+  BillboardRowData,
+  solidFillDataUri,
+} from '@/lib/contractTableRenderer';
 import { 
   generateUnifiedPrintHTML, 
   openUnifiedPrintWindow, 
   BillboardPrintData as UnifiedBillboardData,
   ContractTerm as UnifiedContractTerm
 } from '@/lib/unifiedContractPrint';
-import { groupRepeatingPayments, Installment } from '@/utils/paymentGrouping';
+import { Installment, generatePaymentsClauseText } from '@/utils/paymentGrouping';
 
 interface ContractPDFDialogProps {
   open: boolean;
@@ -25,9 +30,9 @@ interface ContractPDFDialogProps {
   contract: any;
 }
 
-// دالة تنسيق التاريخ للعرض
+// ✅ تنسيق تاريخ DD/MM/YYYY للعرض داخل نص البند الخامس
 const formatDateForDisplay = (dateStr: string): string => {
-  if (!dateStr) return 'غير محدد';
+  if (!dateStr) return '';
   try {
     const date = new Date(dateStr);
     if (isNaN(date.getTime())) return dateStr;
@@ -36,96 +41,50 @@ const formatDateForDisplay = (dateStr: string): string => {
     const year = date.getFullYear();
     return `${day}/${month}/${year}`;
   } catch {
-    return dateStr || 'غير محدد';
+    return dateStr;
   }
 };
 
-// ✅ دالة تنسيق ملخص الدفعات - نفس المنطق المستخدم في المعاينة
-const formatPaymentsSummary = (installmentsData: string | null): string => {
+/**
+ * ✅ البند الخامس: صيغة الدفعات المطلوبة
+ * - لا نبدأ السطر برقم (لمنع مشكلة RTL)
+ * - نفصل "دفعة أولى" دائماً ثم نجمع المتكرر بعد ذلك فقط
+ */
+const formatPaymentsClauseText = (
+  installmentsData: string | null,
+  currencySymbol: string,
+  currencyWrittenName: string
+): string => {
   if (!installmentsData) return 'دفعة واحدة عند التوقيع';
-  
+
   try {
-    const installments: Installment[] = typeof installmentsData === 'string' 
-      ? JSON.parse(installmentsData) 
-      : installmentsData;
-    if (!installments || installments.length === 0) return 'دفعة واحدة عند التوقيع';
-    
-    const groups = groupRepeatingPayments(installments);
-    const currencySymbol = 'د.ل';
-    
-    const parts: string[] = [];
-    
-    groups.forEach((group, index) => {
-      const startDateFormatted = formatDateForDisplay(group.startDate);
-      const endDateFormatted = formatDateForDisplay(group.endDate);
-      
-      if (group.isGrouped) {
-        // دفعات متكررة - عرض التواريخ من/إلى
-        if (index === 0) {
-          parts.push(`${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
-        } else {
-          parts.push(`ثم ${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
-        }
-      } else {
-        // دفعة منفردة - عرض التاريخ
-        const inst = group.originalInstallments[0];
-        if (index === 0) {
-          parts.push(`دفعة أولى ${group.amount} ${currencySymbol} ${inst.paymentType} بتاريخ ${startDateFormatted}`);
-        } else {
-          parts.push(`ودفعة ${group.amount} ${currencySymbol} بتاريخ ${startDateFormatted}`);
-        }
-      }
-    });
-    
-    // ✅ FIX: فصل الدفعات بفاصل سطر لتجنب تداخل النص
-    return parts.join('<br>- ');
+    const raw: any[] = typeof installmentsData === 'string' ? JSON.parse(installmentsData) : (installmentsData as any);
+    const installments: Installment[] = Array.isArray(raw)
+      ? raw.map((inst: any, idx: number) => ({
+          amount: Number(inst?.amount ?? 0) || 0,
+          description: String(inst?.description ?? inst?.desc ?? `الدفعة ${idx + 1}`).trim(),
+          paymentType: String(inst?.paymentType ?? inst?.type ?? inst?.payment_type ?? '').trim(),
+          dueDate: String(inst?.dueDate ?? inst?.due_date ?? '').trim(),
+        }))
+      : [];
+
+    if (installments.length === 0) return 'دفعة واحدة عند التوقيع';
+
+    return generatePaymentsClauseText(installments, currencySymbol, currencyWrittenName);
   } catch (e) {
     console.error('Error parsing installments:', e);
     return 'دفعة واحدة عند التوقيع';
   }
 };
 
-// ✅ نسخة نظيفة بدون HTML للطباعة SVG
-const formatPaymentsSummaryPlain = (installmentsData: string | null): string => {
-  if (!installmentsData) return 'دفعة واحدة عند التوقيع';
-  
-  try {
-    const installments: Installment[] = typeof installmentsData === 'string' 
-      ? JSON.parse(installmentsData) 
-      : installmentsData;
-    if (!installments || installments.length === 0) return 'دفعة واحدة عند التوقيع';
-    
-    const groups = groupRepeatingPayments(installments);
-    const currencySymbol = 'د.ل';
-    
-    const parts: string[] = [];
-    
-    groups.forEach((group, index) => {
-      const startDateFormatted = formatDateForDisplay(group.startDate);
-      const endDateFormatted = formatDateForDisplay(group.endDate);
-      
-      if (group.isGrouped) {
-        if (index === 0) {
-          parts.push(`${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
-        } else {
-          parts.push(`ثم ${group.count} دفعات × ${group.amount} ${currencySymbol} من ${startDateFormatted} إلى ${endDateFormatted}`);
-        }
-      } else {
-        const inst = group.originalInstallments[0];
-        if (index === 0) {
-          parts.push(`دفعة أولى ${group.amount} ${currencySymbol} ${inst.paymentType} بتاريخ ${startDateFormatted}`);
-        } else {
-          parts.push(`ودفعة ${group.amount} ${currencySymbol} بتاريخ ${startDateFormatted}`);
-        }
-      }
-    });
-    
-    // ✅ فصل الدفعات بفاصل نصي للطباعة
-    return parts.join(' | ');
-  } catch (e) {
-    console.error('Error parsing installments:', e);
-    return 'دفعة واحدة عند التوقيع';
-  }
+// ✅ HTML للمعاينة فقط
+const formatPaymentsSummary = (installmentsData: string | null, currencySymbol: string, currencyWrittenName: string): string => {
+  return formatPaymentsClauseText(installmentsData, currencySymbol, currencyWrittenName);
+};
+
+// ✅ نسخة للطباعة SVG (بدون HTML)
+const formatPaymentsSummaryPlain = (installmentsData: string | null, currencySymbol: string, currencyWrittenName: string): string => {
+  return formatPaymentsClauseText(installmentsData, currencySymbol, currencyWrittenName);
 };
 
 // ✅ NEW: Currency options with written names in Arabic
@@ -1267,7 +1226,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
     }
   };
 
-  // ✅ REFACTORED: Invoice printing function with discount support (NO INSTALLATION COST)
+  // ✅ REFACTORED: Invoice printing function using SizesInvoicePrintDialog style
   const handlePrintInvoice = async () => {
     if (!contract || !customerData) {
       toast.error('لا توجد بيانات عقد أو عميل للطباعة');
@@ -1277,7 +1236,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
     setIsGenerating(true);
     
     try {
-      // Check if popup blocker might interfere
       const testWindow = window.open('', '_blank', 'width=1,height=1');
       if (!testWindow || testWindow.closed || typeof testWindow.closed === 'undefined') {
         toast.error('يرجى السماح بالنوافذ المنبثقة في المتصفح لتمكين الطباعة');
@@ -1295,42 +1253,139 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const billboardPrices = getBillboardPrices();
       const { groupedBillboards, subtotal: billboardSubtotal } = calculateBillboardPricing(billboardsToShow, billboardPrices);
 
-      // ✅ FIX: استخدام الإجمالي المخزن + رسوم التشغيل
-      const contractTotal = Number(contract?.Total ?? contract?.total_cost ?? 0);
-      const operatingFee = Number(contract?.fee ?? 0);
-      const rentCost = Number(contract?.['Total Rent'] ?? contract?.rent_cost ?? billboardSubtotal);
-      const installationCost = Number(contract?.installation_cost ?? 0);
-      const printCost = Number(contract?.print_cost ?? 0);
+      // ✅ Load unified invoice settings (same as SizesInvoicePrintDialog)
+      let shared: any = {
+        fontFamily: 'Doran',
+        pageMarginTop: 15,
+        pageMarginBottom: 15,
+        pageMarginLeft: 15,
+        pageMarginRight: 15,
+        showLogo: true,
+        logoPath: '/logofares.svg',
+        logoSize: 60,
+        logoPosition: 'right',
+        showInvoiceTitle: true,
+        invoiceTitleFontSize: 28,
+        invoiceTitleAlignment: 'left',
+        showContactInfo: true,
+        contactInfoFontSize: 10,
+        contactInfoAlignment: 'center',
+        companyAddress: 'طرابلس – طريق المطار، حي الزهور',
+        companyPhone: '0912612255',
+        showCompanyInfo: true,
+        showCompanyName: true,
+        companyName: 'فارس ميديا',
+        showCompanySubtitle: false,
+        companySubtitle: '',
+        headerMarginBottom: 20,
+        contentBottomSpacing: 25,
+        showFooter: true,
+        footerText: 'شكراً لتعاملكم معنا | Thank you for your business',
+        footerPosition: 15,
+        footerBgColor: 'transparent',
+        footerTextColor: '#666666',
+        footerAlignment: 'center',
+        showPageNumber: false,
+        backgroundImage: '',
+        backgroundOpacity: 100,
+        backgroundScale: 100,
+        backgroundPosX: 50,
+        backgroundPosY: 50,
+      };
 
-      // ✅ المجموع الفرعي = Total (الإيجار + التركيب + الطباعة بعد الخصم)
-      const subtotal = contractTotal > 0 ? contractTotal : rentCost + installationCost + printCost;
+      let individual: any = {
+        primaryColor: '#D4AF37',
+        secondaryColor: '#1a1a2e',
+        accentColor: '#f5f5f5',
+        tableHeaderBgColor: '#D4AF37',
+        tableHeaderTextColor: '#ffffff',
+        tableBorderColor: '#D4AF37',
+        tableRowEvenColor: '#f8f9fa',
+        tableRowOddColor: '#ffffff',
+        tableTextColor: '#333333',
+        tableRowOpacity: 100,
+        customerSectionBgColor: '#f8f9fa',
+        customerSectionBorderColor: '#D4AF37',
+        customerSectionTitleColor: '#D4AF37',
+        customerSectionTextColor: '#333333',
+        subtotalBgColor: '#f0f0f0',
+        subtotalTextColor: '#333333',
+        totalBgColor: '#D4AF37',
+        totalTextColor: '#ffffff',
+        notesBgColor: '#fffbeb',
+        notesTextColor: '#92400e',
+        notesBorderColor: '#fbbf24',
+        titleFontSize: 24,
+        headerFontSize: 14,
+        bodyFontSize: 12,
+        showHeader: true,
+        showCustomerSection: true,
+        showTotalsSection: true,
+      };
 
-      // ✅ الإجمالي للعميل = المجموع الفرعي + رسوم التشغيل
-      const grandTotal = subtotal + operatingFee;
+      // Try to load settings from database
+      try {
+        const { data: unifiedData } = await supabase
+          .from('system_settings')
+          .select('setting_value')
+          .eq('setting_key', 'unified_invoice_templates_settings')
+          .maybeSingle();
 
-      // ✅ FIXED: Prepare display items for table (NO discount in table, NO installation cost)
-      const FIXED_ROWS = 10;
-      const displayItems = [...groupedBillboards];
-      
-      // Fill remaining rows with empty data
-      while (displayItems.length < FIXED_ROWS) {
-        displayItems.push({
-          size: '',
-          faces: '',
-          billboardCount: '',
-          unitPrice: '',
-          totalPrice: ''
-        });
+        if (unifiedData?.setting_value) {
+          const allSettings = JSON.parse(unifiedData.setting_value);
+          if (allSettings.shared) {
+            shared = { ...shared, ...allSettings.shared };
+          }
+          if (allSettings.individual?.['contract_invoice']) {
+            individual = { ...individual, ...allSettings.individual['contract_invoice'] };
+          } else if (allSettings.individual?.['sizes_invoice']) {
+            individual = { ...individual, ...allSettings.individual['sizes_invoice'] };
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to load invoice settings, using defaults:', e);
       }
 
+      // Extract colors
+      const primaryColor = individual.primaryColor || '#D4AF37';
+      const secondaryColor = individual.secondaryColor || '#1a1a2e';
+      const tableHeaderBg = individual.tableHeaderBgColor || '#D4AF37';
+      const tableHeaderText = individual.tableHeaderTextColor || '#ffffff';
+      const tableBorder = individual.tableBorderColor || '#D4AF37';
+      const tableRowEven = individual.tableRowEvenColor || '#f8f9fa';
+      const tableRowOdd = individual.tableRowOddColor || '#ffffff';
+      const tableText = individual.tableTextColor || '#333333';
+      const customerBg = individual.customerSectionBgColor || '#f8f9fa';
+      const customerBorder = individual.customerSectionBorderColor || '#D4AF37';
+      const customerTitle = individual.customerSectionTitleColor || '#D4AF37';
+      const customerText = individual.customerSectionTextColor || '#333333';
+      const subtotalBg = individual.subtotalBgColor || '#f0f0f0';
+      const subtotalText = individual.subtotalTextColor || '#333333';
+      const totalBg = individual.totalBgColor || '#D4AF37';
+      const totalText = individual.totalTextColor || '#ffffff';
+      const notesBg = individual.notesBgColor || '#fffbeb';
+      const notesText = individual.notesTextColor || '#92400e';
+      const notesBorder = individual.notesBorderColor || '#fbbf24';
+      const titleFontSize = individual.titleFontSize || 24;
+      const headerFontSize = individual.headerFontSize || 14;
+      const bodyFontSize = individual.bodyFontSize || 12;
+
+      // ✅ Calculate final values correctly - use contract Total directly
+      const contractTotal = Number(contract?.Total ?? contract?.total_cost ?? 0);
+      const rentCost = Number(contract?.['Total Rent'] ?? contract?.rent_cost ?? billboardSubtotal);
+      
+      // ✅ Use contract total directly as grand total (no operating fee shown)
+      const grandTotal = contractTotal > 0 ? contractTotal : rentCost;
+
+      // Prepare display items
+      const displayItems: any[] = groupedBillboards.map((item: any, idx: number) => ({
+        ...item,
+        index: idx + 1,
+      }));
+
+      const totalBillboards = displayItems.reduce((sum, item) => sum + (item.billboardCount || 0), 0);
       const invoiceDate = new Date().toLocaleDateString('ar-LY');
       const invoiceNumber = `INV-${contract?.id || Date.now()}`;
-      const printCostEnabled = Boolean(
-        contract?.print_cost_enabled === true || 
-        contract?.print_cost_enabled === 1 || 
-        contract?.print_cost_enabled === "true" ||
-        contract?.print_cost_enabled === "1"
-      );
 
       const htmlContent = `
         <!DOCTYPE html>
@@ -1340,346 +1395,350 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <title>فاتورة العقد ${contract?.id}</title>
           <style>
-            @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&display=swap');
-            @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap');
+            @font-face { font-family: 'Doran'; src: url('/Doran-Regular.otf') format('opentype'); font-weight: 400; }
+            @font-face { font-family: 'Doran'; src: url('/Doran-Bold.otf') format('opentype'); font-weight: 700; }
+            @font-face { font-family: 'Manrope'; src: url('/Manrope-Regular.otf') format('opentype'); font-weight: 400; }
+            @font-face { font-family: 'Manrope'; src: url('/Manrope-Bold.otf') format('opentype'); font-weight: 700; }
             
-            * {
-              margin: 0;
-              padding: 0;
-              box-sizing: border-box;
+            * { 
+              margin: 0; 
+              padding: 0; 
+              box-sizing: border-box; 
+              -webkit-print-color-adjust: exact !important; 
+              print-color-adjust: exact !important; 
+              color-adjust: exact !important; 
             }
             
-            html, body {
-              width: 210mm;
-              height: 297mm;
-              font-family: 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
+            html, body { 
+              font-family: '${shared.fontFamily || 'Doran'}', 'Noto Sans Arabic', Arial, sans-serif;
               direction: rtl;
-              text-align: right;
-              background: white;
-              color: #000;
-              font-size: 12px;
+              background: #ffffff !important;
+              color: ${tableText};
+              font-size: ${bodyFontSize}px;
               line-height: 1.4;
-              overflow: hidden;
             }
             
-            .invoice-container {
+            .print-container {
               width: 210mm;
-              height: 297mm;
-              padding: 15mm;
-              display: flex;
-              flex-direction: column;
+              min-height: 297mm;
+              padding: ${shared.pageMarginTop || 15}mm ${shared.pageMarginRight || 15}mm ${shared.pageMarginBottom || 15}mm ${shared.pageMarginLeft || 15}mm;
+              background: #ffffff;
+              position: relative;
             }
             
             .header {
               display: flex;
               justify-content: space-between;
               align-items: flex-start;
-              margin-bottom: 30px;
-              border-bottom: 2px solid #000;
-              padding-bottom: 20px;
+              margin-bottom: ${shared.headerMarginBottom || 20}px;
+              padding-bottom: 15px;
+              border-bottom: 2px solid ${primaryColor};
             }
             
-            .invoice-info {
-              text-align: left;
-              direction: ltr;
-              order: 2;
+            .header-title {
+              flex: 1;
+              text-align: right;
+              direction: rtl;
             }
             
-            .invoice-title {
-              font-size: 28px;
+            .title {
+              font-size: ${shared.invoiceTitleFontSize || 28}px;
               font-weight: bold;
-              color: #000;
-              margin-bottom: 10px;
+              font-family: 'Manrope', sans-serif;
+              letter-spacing: 2px;
+              color: ${secondaryColor};
+              margin: 0;
             }
             
-            .invoice-details {
-              font-size: 12px;
-              color: #666;
+            .title-info {
+              font-size: 11px;
+              color: ${customerText};
+              margin-top: 8px;
               line-height: 1.6;
+              direction: rtl;
+              text-align: right;
             }
             
-            .company-info {
+            .header-company {
+              flex: 1;
               display: flex;
               flex-direction: column;
               align-items: flex-end;
-              text-align: right;
-              order: 1;
+              gap: 8px;
             }
             
-            .company-logo {
-              max-width: 400px;
-              height: auto;
+            .logo {
+              height: ${shared.logoSize || 60}px;
               object-fit: contain;
-              margin-bottom: 5px;
-              display: block;
-              margin-right: 0;
+              flex-shrink: 0;
             }
             
-            .company-details {
-              font-size: 12px;
-              color: #666;
+            .company-info {
+              font-size: ${shared.contactInfoFontSize || 10}px;
+              color: ${customerText};
               line-height: 1.6;
-              font-weight: 400;
-              text-align: right;
+              text-align: center;
             }
             
-            .customer-info {
-              background: #f8f9fa;
+            .customer-section {
+              background: linear-gradient(135deg, ${customerBg}, #ffffff);
               padding: 20px;
-              border-radius: 0;
-              margin-bottom: 25px;
-              border-right: 4px solid #000;
+              margin-bottom: 28px;
+              border-radius: 12px;
+              border-right: 5px solid ${customerBorder};
+              box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
             }
             
-            .customer-title {
-              font-size: 16px;
+            .customer-label {
+              font-size: ${bodyFontSize}px;
+              color: ${customerText};
+              opacity: 0.7;
+              margin-bottom: 4px;
+            }
+            
+            .customer-name {
+              font-size: ${titleFontSize - 4}px;
               font-weight: bold;
-              margin-bottom: 10px;
-              color: #000;
+              color: ${customerTitle};
             }
             
-            .customer-details {
-              font-size: 13px;
-              line-height: 1.6;
+            .stats-cards {
+              display: flex;
+              gap: 24px;
+            }
+            
+            .stat-card {
+              text-align: center;
+            }
+            
+            .stat-value {
+              font-size: ${titleFontSize + 4}px;
+              font-weight: bold;
+              color: ${primaryColor};
+              font-family: 'Manrope', sans-serif;
+            }
+            
+            .stat-label {
+              font-size: ${bodyFontSize}px;
+              color: ${customerText};
+              opacity: 0.7;
             }
             
             .items-table {
               width: 100%;
               border-collapse: collapse;
-              margin-bottom: 25px;
-              table-layout: fixed;
+              font-size: ${bodyFontSize}px;
+              margin-bottom: 20px;
             }
             
             .items-table th {
-              background: #000;
-              color: white;
+              background-color: ${tableHeaderBg} !important;
               padding: 12px 8px;
+              color: ${tableHeaderText};
+              border: 1px solid ${tableBorder};
               text-align: center;
               font-weight: bold;
-              border: 1px solid #000;
-              font-size: 12px;
-              height: 40px;
             }
             
             .items-table td {
               padding: 10px 8px;
+              border: 1px solid ${tableBorder};
               text-align: center;
-              border: 1px solid #ddd;
-              font-size: 11px;
-              vertical-align: middle;
-              height: 35px;
+              color: ${tableText};
             }
             
-            .items-table tbody tr:nth-child(even) {
-              background: #f8f9fa;
+            .items-table .even-row { background-color: ${tableRowEven}; }
+            .items-table .odd-row { background-color: ${tableRowOdd}; }
+            
+            .subtotal-row {
+              background-color: ${subtotalBg} !important;
             }
             
-            .items-table tbody tr:hover {
-              background: #e9ecef;
+            .subtotal-row td {
+              font-weight: bold;
+              color: ${subtotalText};
             }
             
-            .items-table tbody tr.empty-row {
-              background: white;
+            .grand-total-row {
+              background-color: ${totalBg} !important;
             }
             
-            .items-table tbody tr.empty-row:nth-child(even) {
-              background: #f8f9fa;
+            .grand-total-row td {
+              color: ${totalText};
+              font-weight: bold;
+              padding: 14px 12px;
             }
             
-            .total-section {
-              margin-top: auto;
-              border-top: 2px solid #000;
-              padding-top: 20px;
-            }
-            
-            .total-row {
-              display: flex;
-              justify-content: space-between;
-              align-items: center;
-              padding: 8px 0;
-              font-size: 14px;
-            }
-            
-            /* Use Manrope for numeric monetary values and make currency symbol plain black on the right */
-            .num {
-              font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial;
-              font-variant-numeric: tabular-nums;
-              font-weight: 700;
-              direction: ltr;
-              display: inline-block;
+            .grand-total-row .totals-label {
               text-align: left;
-            }
-
-            .currency {
-              font-family: 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
-              color: #000;
-              font-style: normal;
-              font-weight: 700;
-              display: inline-block;
-              margin-left: 6px;
-            }
-
-            /* Gold styling for the grand total number */
-            .grand-num {
-              color: #FFD700;
-              text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
-              font-weight: 800;
-            }
-
-            /* Ensure currency symbol is visible on dark grand-total background */
-            .total-row.grand-total .currency {
-              color: #fff !important;
-              margin-left: 6px;
-              font-weight: 700;
+              font-size: ${headerFontSize}px;
             }
             
-            .total-row.subtotal {
-              font-size: 16px;
-              font-weight: bold;
-              border-bottom: 1px solid #ddd;
-              margin-bottom: 10px;
-            }
-
-            .total-row.discount {
-              font-size: 16px;
-              font-weight: bold;
-              color: #28a745;
-              margin-bottom: 10px;
+            .grand-total-row .totals-value {
+              text-align: center;
+              font-size: ${headerFontSize + 2}px;
+              font-family: 'Manrope', sans-serif;
             }
             
-            .total-row.grand-total {
-              font-size: 20px;
-              font-weight: bold;
-              background: #000;
-              color: white;
-              padding: 20px 25px;
-              border-radius: 0;
+            .notes-section {
               margin-top: 15px;
-              border: none;
-            }
-            
-            .currency {
-              font-weight: bold;
-              color: #030303ff;
+              padding: 12px 16px;
+              background-color: ${notesBg};
+              border: 1px solid ${notesBorder};
+              border-radius: 8px;
+              color: ${notesText};
+              font-size: ${bodyFontSize - 1}px;
             }
             
             .footer {
               margin-top: 25px;
-              text-align: center;
-              font-size: 11px;
-              color: #666;
-              border-top: 1px solid #ddd;
-              padding-top: 15px;
+              padding-top: 10px;
+              border-top: 1px solid ${tableBorder};
+              text-align: ${shared.footerAlignment || 'center'};
+              font-size: 10px;
+              color: ${shared.footerTextColor || '#666666'};
+            }
+            
+            .num {
+              font-family: 'Manrope', sans-serif;
+              font-variant-numeric: tabular-nums;
+              font-weight: 700;
             }
             
             @media print {
-              html, body {
-                width: 210mm !important;
-                height: 297mm !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                overflow: visible !important;
-                -webkit-print-color-adjust: exact;
-                print-color-adjust: exact;
-                color-adjust: exact;
+              @page { 
+                size: A4; 
+                margin: ${shared.pageMarginTop || 15}mm ${shared.pageMarginRight || 15}mm ${shared.pageMarginBottom || 15}mm ${shared.pageMarginLeft || 15}mm;
               }
               
-              .invoice-container {
-                width: 210mm !important;
-                height: 297mm !important;
-                padding: 15mm !important;
+              * { 
+                -webkit-print-color-adjust: exact !important; 
+                print-color-adjust: exact !important; 
+                color-adjust: exact !important; 
               }
               
-              @page {
-                size: A4 portrait;
-                margin: 0 !important;
-                padding: 0 !important;
+              html, body { 
+                background: #ffffff !important; 
+                width: 100%;
+                height: 100%;
+              }
+              
+              .print-container {
+                width: 100%;
+                min-height: auto;
+                padding: 0;
+              }
+              
+              .items-table th {
+                background-color: ${tableHeaderBg} !important;
+              }
+              
+              .grand-total-row {
+                background-color: ${totalBg} !important;
               }
             }
           </style>
         </head>
         <body>
-          <div class="invoice-container">
+          <div class="print-container">
+            <!-- Header -->
             <div class="header">
-              <div class="company-info">
-                <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
-                <div class="company-details">
-                  طرابلس – طريق المطار، حي الزهور<br>
-                  هاتف: 0912612255
+              <div class="header-title">
+                <h1 class="title">INVOICE</h1>
+                <div class="title-info">
+                  رقم الفاتورة: <span style="font-family: 'Manrope', sans-serif;">${invoiceNumber}</span><br/>
+                  التاريخ: <span style="font-family: 'Manrope', sans-serif;">${invoiceDate}</span><br/>
+                  رقم العقد: <span style="font-family: 'Manrope', sans-serif;">${contract?.id || 'غير محدد'}</span>
                 </div>
               </div>
               
-              <div class="invoice-info">
-                <div class="invoice-title">INVOICE</div>
-                <div class="invoice-details">
-                  رقم الفاتورة: ${invoiceNumber}<br>
-                  التاريخ: ${invoiceDate}<br>
-                  رقم العقد: ${contract?.id || 'غير محدد'}
+              <div class="header-company">
+                ${shared.showLogo && shared.logoPath ? `
+                  <img src="${shared.logoPath}" alt="Logo" class="logo" onerror="this.style.display='none'" />
+                ` : ''}
+                
+                ${shared.showContactInfo ? `
+                  <div class="company-info">
+                    ${shared.companyAddress ? `<div>${shared.companyAddress}</div>` : ''}
+                    ${shared.companyPhone ? `<div>هاتف: <span style="font-family: 'Manrope', sans-serif; direction: ltr; display: inline-block;">${shared.companyPhone}</span></div>` : ''}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+            
+            <!-- Customer Section -->
+            <div class="customer-section">
+              <div>
+                <div class="customer-label">العميل</div>
+                <div class="customer-name">${customerData.name}</div>
+                ${customerData.company ? `<div style="font-size: ${bodyFontSize - 1}px; color: ${customerText}; opacity: 0.8;">${customerData.company}</div>` : ''}
+              </div>
+              <div class="stats-cards">
+                <div class="stat-card">
+                  <div class="stat-value">${totalBillboards}</div>
+                  <div class="stat-label">لوحة</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-value">${contractDetails.duration || '-'}</div>
+                  <div class="stat-label">يوم</div>
                 </div>
               </div>
             </div>
             
-            <div class="customer-info">
-              <div class="customer-title">بيانات العميل</div>
-              <div class="customer-details">
-                <strong>الاسم:</strong> ${customerData.name}<br>
-                ${customerData.company ? `<strong>الشركة:</strong> ${customerData.company}<br>` : ''}
-                ${customerData.phone ? `<strong>الهاتف:</strong> ${customerData.phone}<br>` : ''}
-                <strong>مدة العقد:</strong> ${contractDetails.startDate} إلى ${contractDetails.endDate}
-              </div>
-            </div>
-            
+            <!-- Items Table -->
             <table class="items-table">
               <thead>
                 <tr>
-                  <th style="width: 8%">#</th>
-                  <th style="width: 42%">الوصف / المقاس</th>
-                  <th style="width: 12%">الكمية</th>
+                  <th style="width: 6%">#</th>
+                  <th style="width: 30%">المقاس</th>
                   <th style="width: 12%">عدد الأوجه</th>
-                  <th style="width: 13%">السعر الوحدة</th>
-                  <th style="width: 13%">المجموع</th>
+                  <th style="width: 12%">الكمية</th>
+                  <th style="width: 20%">سعر اللوحة</th>
+                  <th style="width: 20%">الإجمالي</th>
                 </tr>
               </thead>
               <tbody>
-                ${displayItems.map((itemRaw, index) => {
-                  const item: any = itemRaw;
-                  const isEmpty = !item.size;
-                  
-                  return `
-                    <tr class="${isEmpty ? 'empty-row' : ''}">
-                      <td>${isEmpty ? '' : index + 1}</td>
-                      <td style="text-align: right; padding-right: 8px;">
-                        ${isEmpty ? '' : `لوحة إعلانية مقاس ${item.size}`}
-                      </td>
-                      <td>${isEmpty ? '' : (typeof item.billboardCount === 'number' ? `<span class="num">${formatArabicNumber(item.billboardCount)}</span>` : item.billboardCount)}</td>
-                      <td>${isEmpty ? '' : (typeof item.faces === 'number' ? `<span class="num">${item.faces}</span>` : item.faces)}</td>
-                      <td>${isEmpty ? '' : (typeof item.unitPrice === 'number' ? `<span style="direction:ltr;display:inline-block;"><span class=\"num\">${formatArabicNumber(item.unitPrice)}</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>` : item.unitPrice)}</td>
-                      <td>${isEmpty ? '' : (typeof item.totalPrice === 'number' ? `<span style="direction:ltr;display:inline-block;"><span class=\"num\">${formatArabicNumber(item.totalPrice)}</span> <span class=\"currency\">${currencyInfo.symbol}</span></span>` : item.totalPrice)}</td>
-                    </tr>
-                  `;
-                }).join('')}
+                ${displayItems.map((item: any, idx: number) => `
+                  <tr class="${idx % 2 === 0 ? 'even-row' : 'odd-row'}">
+                    <td>${idx + 1}</td>
+                    <td style="font-weight: 600;">${item.size}</td>
+                    <td>
+                      <span style="display: inline-block; padding: 3px 10px; border-radius: 20px; background-color: ${item.faces === 1 ? '#e0f2fe' : primaryColor + '20'}; color: ${item.faces === 1 ? '#0369a1' : primaryColor}; font-family: 'Manrope', sans-serif; font-weight: bold; font-size: ${bodyFontSize - 1}px;">
+                        ${item.faces}
+                      </span>
+                    </td>
+                    <td style="font-family: 'Manrope', sans-serif; font-weight: bold;">${item.billboardCount}</td>
+                    <td><span class="num">${formatArabicNumber(item.unitPrice)}</span> ${currencyInfo.symbol}</td>
+                    <td style="color: ${primaryColor}; font-weight: bold;"><span class="num">${formatArabicNumber(item.totalPrice)}</span> ${currencyInfo.symbol}</td>
+                  </tr>
+                `).join('')}
+                
+                
+
+                ${discountInfo ? `
+                  <tr class="subtotal-row" style="color: #28a745;">
+                    <td colspan="5" style="text-align: left;">الخصم (${discountInfo.display})</td>
+                    <td style="font-family: 'Manrope', sans-serif; color: #28a745;">- <span class="num">${formatArabicNumber(discountInfo.type === 'percentage' ? (rentCost * discountInfo.value / 100) : discountInfo.value)}</span> ${currencyInfo.symbol}</td>
+                  </tr>
+                ` : ''}
+                
+                <!-- Grand Total Row -->
+                <tr class="grand-total-row">
+                  <td colspan="5" class="totals-label">الإجمالي للعميل (${totalBillboards} لوحة)</td>
+                  <td class="totals-value"><span class="num">${formatArabicNumber(grandTotal)}</span> ${currencyInfo.symbol}</td>
+                </tr>
               </tbody>
             </table>
             
-            <div class="total-section">
-              <div class="total-row subtotal">
-                <span>المجموع الفرعي:</span>
-                <span style="direction:ltr;display:inline-block;"> <span class="num">${formatArabicNumber(subtotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
+            <!-- Footer -->
+            ${shared.showFooter ? `
+              <div class="footer">
+                ${shared.footerText || 'شكراً لتعاملكم معنا | Thank you for your business'}
               </div>
-              <div class="total-row grand-total">
-                <span>الإجمالي للعميل:</span>
-                <span style="direction:ltr;display:inline-block;"> <span class="grand-num">${formatArabicNumber(grandTotal)}</span> <span class="currency">${currencyInfo.symbol}</span></span>
-              </div>
-              <div style="margin-top: 15px; font-size: 13px; color: #666; text-align: center;">
-                المبلغ بالكلمات: ${formatArabicNumber(grandTotal)} ${currencyInfo.writtenName}
-                ${printCostEnabled ? '<br><small style="color: #28a745;">* الأسعار شاملة تكلفة الطباعة حسب عدد الأوجه</small>' : '<br><small style="color: #6c757d;">* الأسعار غير شاملة تكلفة الطباعة</small>'}
-              </div>
-            </div>
-            
-            <div class="footer">
-              شكراً لتعاملكم معنا | Thank you for your business<br>
-              هذه فاتورة إلكترونية ولا تحتاج إلى ختم أو توقيع
-            </div>
+            ` : ''}
           </div>
           
           <script>
@@ -1687,7 +1746,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
               setTimeout(function() {
                 window.focus();
                 window.print();
-              }, 500);
+              }, 800);
             });
           </script>
         </body>
@@ -1706,7 +1765,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       printWindow.document.write(htmlContent);
       printWindow.document.close();
 
-      toast.success(`تم فتح فاتورة العقد للطباعة بنجاح بعملة ${currencyInfo.name}!`);
+      toast.success(`تم فتح فاتورة العقد للطباعة بنجاح!`);
       
       if (printMode === 'auto') {
         onOpenChange(false);
@@ -1915,14 +1974,22 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         mapLink: b.mapLink,
       }));
       
-      // استخدام المُعالج المشترك لإنشاء جدول اللوحات بنفس أسلوب إعدادات الطباعة
+      // ✅ Native Chrome Pagination: Let the table flow naturally across pages.
+      // No JS pagination - Chrome's print engine handles page breaks better than any JS measurement.
       const tablePagesHtml = sortedBillboards.length
-        ? renderAllBillboardsTablePages(
-            billboardRowData,
-            templateSettings,
-            tableBgUrl,
-            ROWS_PER_PAGE
-          ).join('')
+        ? (() => {
+            // Generate a SINGLE page container with ALL rows - Chrome will auto-paginate
+            const allRowsHtml = renderBillboardsTablePage({
+              settings: templateSettings,
+              billboards: billboardRowData,
+              tableBgUrl,
+              pageIndex: 0,
+              rowsPerPage: billboardRowData.length, // ALL rows in one table
+              showTableTerm: true,
+            });
+
+            return allRowsHtml;
+          })()
         : '';
 
       // ✅ FIXED: Check if print cost is enabled correctly - read from database
@@ -1940,7 +2007,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       });
 
       // ✅ استخدام النسخة النظيفة للطباعة SVG
-      const paymentsHtml = formatPaymentsSummaryPlain(contract?.installments_data);
+      const paymentsHtml = formatPaymentsSummaryPlain(contract?.installments_data, currencyInfo.symbol, currencyInfo.writtenName);
 
       // ✅ UPDATED: Generate enhanced PDF title with contract number, ad type, customer, billboards count and currency
       const billboardsCount = contract?.billboards_count || (contract?.billboard_ids ? contract.billboard_ids.split(',').length : 1);
@@ -1991,7 +2058,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
             
             html, body { 
               width: 210mm !important; 
-              min-height: 297mm !important; 
+              margin: 0 !important;
+              padding: 0 !important;
               font-family: 'Doran', 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif; 
               direction: ltr; 
               background: white; 
@@ -1999,18 +2067,38 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
               font-size: 14px;
               line-height: 1.6;
               -webkit-font-smoothing: antialiased;
-              -moz-osx-font-smoothing: grayscale;
               text-rendering: optimizeLegibility;
-              overflow-x: hidden;
+            }
+
+            /* ✅ Native Chrome Print Pagination - NO scaling, NO JS pagination */
+            @media print {
+              html, body {
+                width: 210mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+              }
             }
             
             .template-container { 
               position: relative; 
               width: 210mm !important; 
-              height: 297mm !important; 
-              overflow: hidden; 
+              min-height: 297mm; /* min-height allows natural flow for tables */
               display: block; 
               page-break-inside: avoid;
+            }
+
+            /* ✅ For the FIRST page (contract terms) - fixed height */
+            .template-container.first-page {
+              height: 297mm !important;
+              overflow: hidden;
+            }
+
+            /* ✅ For TABLE pages - allow natural height flow for Chrome pagination */
+            .template-container.table-page {
+              min-height: auto;
+              height: auto;
+              overflow: visible;
+              page-break-after: auto;
             }
             
             .template-image { 
@@ -2036,22 +2124,66 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
             }
             
             .page { 
-              page-break-after: always; 
-              page-break-inside: avoid;
+              position: relative;
+              width: 210mm !important;
+              min-height: 297mm;
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
             }
 
-            /* Enhanced table styling - using !important to allow inline overrides */
+            /* ✅ NATIVE CHROME PRINT PAGINATION for tables */
             .table-area { 
-              position: absolute; 
+              position: relative; /* NOT absolute - allow natural flow */
+              width: 100%;
               z-index: 20; 
             }
             
             .btable { 
-              width: 100%; 
+              width: 100% !important; 
               border-collapse: collapse; 
               border-spacing: 0; 
               font-family: 'Doran', 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif; 
-              table-layout: fixed; 
+              table-layout: fixed !important;
+            }
+
+            /* ✅ Chrome native table pagination */
+            .btable thead {
+              display: table-header-group !important; /* Repeat header on each page */
+            }
+
+            .btable tbody {
+              display: table-row-group !important;
+            }
+
+            .btable tr {
+              break-inside: avoid !important;
+              page-break-inside: avoid !important;
+            }
+            
+            .btable th {
+              vertical-align: middle;
+            }
+            
+            .btable td { 
+              vertical-align: middle; 
+              white-space: normal; 
+              word-break: break-word; 
+              overflow: hidden; 
+              font-family: 'Doran', 'Noto Sans Arabic', 'Arial Unicode MS', Arial, sans-serif; 
+            }
+
+            @media print {
+              .btable thead {
+                display: table-header-group !important;
+              }
+              .btable tr {
+                break-inside: avoid !important;
+                page-break-inside: avoid !important;
+              }
+              .table-area {
+                position: relative !important;
+              }
             }
             
             .btable tr { 
@@ -2246,9 +2378,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         <body>
           <div id="loadingMessage" class="loading-message">جاري تحميل ${contractData.isOffer ? 'العرض' : 'العقد'}...</div>
           
-          <div class="template-container page">
+          <div class="template-container first-page page">
             <img src="${templateBgUrl}" alt="${contractData.isOffer ? 'عرض سعر' : 'عقد إيجار لوحات إعلانية'}" class="template-image" 
                  onerror="console.warn('Failed to load contract template image')" />
+                   onerror="console.warn('Failed to load contract template image')" />
             <svg class="overlay-svg" viewBox="0 0 2480 3508" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
               ${templateSettings.header.visible ? `
               <text x="${templateSettings.header.x}" y="${templateSettings.header.y}" font-family="Doran, sans-serif" font-weight="bold" font-size="${templateSettings.header.fontSize}" fill="#000" text-anchor="${templateSettings.header.textAlign || 'end'}" dominant-baseline="middle" style="direction: rtl; text-align: right">${contractData.isOffer ? `عرض سعر رقم: ${contractData.contractNumber} - صالح لمدة 24 ساعة` : `عقد إيجار مواقع إعلانية رقم: ${contractData.contractNumber} سنة ${contractData.year}`}</text>
@@ -2270,13 +2403,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                 const charsPerLine = Math.floor(termsWidth / 28);
                 const lineHeight = 55;
                 const goldLineSettings = templateSettings.termsGoldLine || { visible: true, heightPercent: 30, color: '#D4AF37' };
-                const textAnchor = (templateSettings.termsTextAlign || 'end') as 'start' | 'middle' | 'end';
 
-                const calcRectX = (x: number, width: number) => {
-                  if (textAnchor === 'start') return x;
-                  if (textAnchor === 'middle') return x - width / 2;
-                  return x - width;
-                };
+                // ✅ IMPORTANT: لمطابقة صفحة الإعدادات (ContractTermsSettings) البنود دائماً text-anchor="end"
+                // حتى لو تم تغيير termsTextAlign بالخطأ في الإعدادات.
+                const textAnchor: 'end' = 'end';
+
+                const calcRectX = (x: number, width: number) => x - width;
 
                 // دالة لتقسيم النص إلى أسطر (نفس منطق المعاينة)
                 const wrapText = (text: string, maxChars: number): string[] => {
@@ -2348,16 +2480,16 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                           svgContent += '<rect x="' + rectX + '" y="' + rectY + '" width="' + titleWidth + '" height="' + goldLineHeight + '" fill="' + goldLineSettings.color + '" rx="2" />';
                         }
 
-                        svgContent += '<text x="' + termsX + '" y="' + y + '" font-family="Doran, sans-serif" font-size="' + fontSize + '" fill="#000" text-anchor="' + textAnchor + '" dominant-baseline="middle">';
+                        svgContent += '<text x="' + termsX + '" y="' + y + '" font-family="Doran, sans-serif" font-size="' + fontSize + '" fill="#000" text-anchor="' + textAnchor + '" dominant-baseline="middle" style="unicode-bidi: plaintext;">';
+                        svgContent += '<tspan>' + '\u061C' + '</tspan>'; // ALM to stabilize RTL when line begins with numbers
                         svgContent += '<tspan font-weight="' + (templateSettings.termsTitleWeight || 'bold') + '">' + titlePart + '</tspan>';
                         svgContent += '<tspan font-weight="' + (templateSettings.termsContentWeight || 'normal') + '">' + contentPart + '</tspan>';
-                        svgContent += '</text>';
                         return;
                       }
                     }
 
                     // بقية الأسطر
-                    svgContent += '<text x="' + termsX + '" y="' + y + '" font-family="Doran, sans-serif" font-weight="' + (templateSettings.termsContentWeight || 'normal') + '" font-size="' + fontSize + '" fill="#000" text-anchor="' + textAnchor + '" dominant-baseline="middle">' + line + '</text>';
+                    svgContent += '<text x="' + termsX + '" y="' + y + '" font-family="Doran, sans-serif" font-weight="' + (templateSettings.termsContentWeight || 'normal') + '" font-size="' + fontSize + '" fill="#000" text-anchor="' + textAnchor + '" dominant-baseline="middle" style="unicode-bidi: plaintext;">' + line + '</text>';
                   });
 
                   return svgContent;
@@ -2374,17 +2506,14 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           ${tablePagesHtml}
 
           <script>
-            // Enhanced JavaScript with better error handling
             let printAttempts = 0;
             const maxPrintAttempts = 3;
-            
+
             function hideLoadingMessage() {
               const loading = document.getElementById('loadingMessage');
-              if (loading) {
-                loading.style.display = 'none';
-              }
+              if (loading) loading.style.display = 'none';
             }
-            
+
             function attemptPrint() {
               try {
                 if (printAttempts < maxPrintAttempts) {
@@ -2394,28 +2523,39 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                 }
               } catch (error) {
                 console.error('Print error:', error);
-                if (printAttempts < maxPrintAttempts) {
-                  setTimeout(attemptPrint, 1000);
-                }
+                if (printAttempts < maxPrintAttempts) setTimeout(attemptPrint, 1000);
               }
             }
-            
-            // Wait for all resources to load
+
             window.addEventListener('load', function() {
               hideLoadingMessage();
-              setTimeout(attemptPrint, 1200);
+
+              const imgs = Array.from(document.images || []);
+              const waitImgs = Promise.all(imgs.map((img) => img.complete ? Promise.resolve() : new Promise((res) => {
+                img.onload = () => res();
+                img.onerror = () => res();
+                setTimeout(() => res(), 2000);
+              })));
+
+              const waitFonts = (document.fonts && document.fonts.ready)
+                ? document.fonts.ready.catch(function () { return; })
+                : Promise.resolve();
+
+              Promise.all([waitImgs, waitFonts]).then(function () {
+                // ✅ No JS pagination - let Chrome handle it natively
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    setTimeout(attemptPrint, 100);
+                  });
+                });
+              });
             });
-            
-            // Fallback if load event doesn't fire
+
             setTimeout(function() {
               hideLoadingMessage();
-              if (printAttempts === 0) {
-                attemptPrint();
-              }
-            }, 3000);
-            
-            // Handle image load errors
-            document.addEventListener('DOMContentLoaded', function() {
+              if (printAttempts === 0) attemptPrint();
+            }, 3500);
+          </script>
               const images = document.querySelectorAll('img');
               images.forEach(img => {
                 img.addEventListener('error', function() {
@@ -2782,7 +2922,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
             }, [])
             .map((pageRows, pageIdx) => `
               <div class="template-container page">
-                <img src="${tableBgUrl}" alt="خلفية جدول اللوحات" class="template-image" onerror="console.warn('Failed to load table background')" />
+                <div class="scale-wrapper">
+                  <img src="${tableBgUrl}" alt="خلفية جدول اللوحات" class="template-image" onerror="console.warn('Failed to load table background')" />
                 <div class="table-area" style="top: ${tblSettings.topPosition || 63.53}mm;">
                   ${pageIdx === 0 ? tableTermHtml : ''}
                   <table class="btable" dir="rtl" style="
@@ -2852,6 +2993,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                   </table>
                 </div>
               </div>
+              </div>
             `)
             .join('')
         : '';
@@ -2864,7 +3006,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       );
 
       // ✅ استخدام النسخة النظيفة للطباعة SVG
-      const paymentsHtml = formatPaymentsSummaryPlain(contract?.installments_data);
+      const paymentsHtml = formatPaymentsSummaryPlain(contract?.installments_data, currencyInfo.symbol, currencyInfo.writtenName);
 
       // ✅ نفس HTML الذي يستخدمه handlePrintContract (كامل مع كل البنود والخلفية الصحيحة)
       const billboardsCount = contract?.billboards_count || (contract?.billboard_ids ? contract.billboard_ids.split(',').length : 1);
@@ -3426,12 +3568,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const printCostText = printCostEnabled ? 'شاملة تكاليف الطباعة' : 'غير شاملة تكاليف الطباعة';
       const discountText = discountInfo ? ` بعد خصم ${discountInfo.text}` : '';
       
-      // ✅ استخدام نفس منطق المعاينة لتوليد ملخص الدفعات مع التفاصيل الكاملة
-      const paymentsSummary = formatPaymentsSummary(contract?.installments_data);
-      // ✅ FIX: نسخة نظيفة بدون HTML tags للطباعة الموحدة (SVG) + إضافة نص التخفيض
-      const paymentsText = `إجمالي تكلفة الإيجار لعدد (${sortedBillboards.length}) لوحة إعلانية هو (${formatArabicNumber(finalTotalAmount)}) ${currencyInfo.writtenName}${discountText} (${installationText}، ${printCostText}). يتم السداد وفقاً للدفعات المتفق عليها: ${paymentsSummary}`;
+      // ✅ صيغة البند الخامس للدفعات (دفعة أولى ... ثم ...)
+      const paymentsSummary = formatPaymentsSummary(contract?.installments_data, currencyInfo.symbol, currencyInfo.writtenName);
+      // ✅ نص يُحقن في {payments} - متصل بدون فراغات
+      const paymentsText = `${paymentsSummary.replace(/<br>/g, ' ')}`;
       // ✅ نسخة HTML للمعاينة فقط
-      const paymentsHtml = `إجمالي تكلفة الإيجار لعدد (<strong>${sortedBillboards.length}</strong>) لوحة إعلانية هو (<strong>${formatArabicNumber(finalTotalAmount)}</strong>) ${currencyInfo.writtenName} (${installationText}، ${printCostText}).<br><br><strong>يتم السداد وفقاً للدفعات المتفق عليها:</strong><br>- ${paymentsSummary}`;
+      const paymentsHtml = paymentsSummary;
 
       // Convert contract terms
       const unifiedTerms: UnifiedContractTerm[] = contractTerms.map(t => ({

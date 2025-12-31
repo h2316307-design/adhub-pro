@@ -20,7 +20,7 @@ import {
   DollarSign, List, Map as MapIcon, Printer, FileText, Calendar, Eye, Edit, Trash2, 
   Search, Filter, Plus, Copy, RefreshCw, Wrench, Settings, ArrowRight, CheckCircle2, 
   XCircle, AlertTriangle, Clock, TrendingUp, Building2, LayoutGrid, Table as TableIcon,
-  FileOutput, Sparkles, Receipt, User2, Hash
+  FileOutput, Sparkles, Receipt, User2, Hash, MapPin
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -449,15 +449,24 @@ export default function OffersPage() {
 
   // Apply search and other filters
   const displayedBillboards = useMemo(() => {
+    const searchLower = bbSearchQuery.toLowerCase().trim();
     return filteredBillboards.filter((b: any) => {
       const name = String(b.Billboard_Name || '').toLowerCase();
       const landmark = String(b.Nearest_Landmark || '').toLowerCase();
       const city = String(b.City || '');
       const size = String(b.Size || '');
+      const municipality = String(b.Municipality || '').toLowerCase();
+      const district = String(b.District || '').toLowerCase();
+      const level = String(b.Level || '').toLowerCase();
+      const id = String(b.ID || '');
       
-      const matchesSearch = !bbSearchQuery || 
-        name.includes(bbSearchQuery.toLowerCase()) || 
-        landmark.includes(bbSearchQuery.toLowerCase());
+      const matchesSearch = !searchLower || 
+        name.includes(searchLower) || 
+        landmark.includes(searchLower) ||
+        municipality.includes(searchLower) ||
+        district.includes(searchLower) ||
+        level.includes(searchLower) ||
+        id.includes(searchLower);
       const matchesCity = cityFilter === 'all' || city === cityFilter;
       const matchesSize = sizeFilter === 'all' || size === sizeFilter;
       
@@ -2039,20 +2048,26 @@ export default function OffersPage() {
                             return (
                               <Card
                                 key={b.ID}
-                                className={`overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md ${
+                                className={`overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-md group ${
                                   isSelected ? 'ring-2 ring-primary shadow-primary/20' : ''
                                 } ${isRented ? 'border-orange-300 bg-orange-50/50 dark:bg-orange-950/20' : ''}`}
                                 onClick={() => toggleSelect(b)}
                               >
                                 <CardContent className="p-0">
-                                  <div className="relative h-32 overflow-hidden">
+                                  <div className="relative h-36 overflow-hidden">
                                     <BillboardImage 
                                       billboard={b} 
                                       className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
                                       alt={b.Billboard_Name}
                                     />
+                                    {/* Level Badge */}
+                                    {b.Level && (
+                                      <Badge className="absolute top-2 left-2 bg-primary/90 text-primary-foreground text-xs">
+                                        {b.Level}
+                                      </Badge>
+                                    )}
                                     {isRented && (
-                                      <Badge className="absolute top-2 right-2 bg-orange-500 text-white">
+                                      <Badge className="absolute top-2 right-2 bg-orange-500 text-white text-xs">
                                         متاحة من {b.Rent_End_Date}
                                       </Badge>
                                     )}
@@ -2061,12 +2076,44 @@ export default function OffersPage() {
                                         <CheckCircle2 className="h-10 w-10 text-primary drop-shadow-lg" />
                                       </div>
                                     )}
+                                    {/* Faces Count Badge */}
+                                    {b.Faces_Count && (
+                                      <Badge variant="secondary" className="absolute bottom-2 left-2 text-xs">
+                                        {b.Faces_Count} وجه
+                                      </Badge>
+                                    )}
                                   </div>
                                   <div className="p-3 space-y-2">
-                                    <div className="font-semibold truncate">{b.Billboard_Name}</div>
-                                    <div className="text-xs text-muted-foreground">{b.City} • {b.Size}</div>
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-sm font-medium text-primary">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="font-semibold truncate text-sm">{b.Billboard_Name}</div>
+                                      <Badge variant="outline" className="text-xs shrink-0">
+                                        #{b.ID}
+                                      </Badge>
+                                    </div>
+                                    
+                                    {/* Location Info */}
+                                    <div className="text-xs text-muted-foreground space-y-1">
+                                      <div className="flex items-center gap-1">
+                                        <Building2 className="h-3 w-3 shrink-0" />
+                                        <span className="truncate">{[b.City, b.Municipality, b.District].filter(Boolean).join(' • ')}</span>
+                                      </div>
+                                      {b.Nearest_Landmark && (
+                                        <div className="flex items-center gap-1 text-primary/80">
+                                          <MapPin className="h-3 w-3 shrink-0" />
+                                          <span className="truncate">{b.Nearest_Landmark}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                    
+                                    {/* Size & Faces */}
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <Badge variant="secondary" className="text-xs">
+                                        {b.Size}
+                                      </Badge>
+                                    </div>
+                                    
+                                    <div className="flex items-center justify-between pt-1 border-t">
+                                      <span className="text-sm font-bold text-primary">
                                         {calculateBillboardPrice(b).toLocaleString('ar-LY')} {currentCurrency.symbol}
                                       </span>
                                       <Button
@@ -2076,6 +2123,7 @@ export default function OffersPage() {
                                           e.stopPropagation();
                                           toggleSelect(b);
                                         }}
+                                        className="h-7 text-xs"
                                       >
                                         {isSelected ? 'إزالة' : 'إضافة'}
                                       </Button>

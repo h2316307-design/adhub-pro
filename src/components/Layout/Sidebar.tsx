@@ -190,60 +190,63 @@ export function Sidebar({ className }: SidebarProps) {
 
   return (
     <div className={cn('flex flex-col bg-sidebar text-sidebar-foreground overflow-hidden', className)}>
-      <div className="p-6 border-b border-sidebar-border">
+      {/* Header with gradient */}
+      <div className="p-5 border-b border-sidebar-border/50 bg-gradient-to-br from-sidebar via-sidebar to-sidebar-accent/20">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gradient-primary rounded-xl flex items-center justify-center shadow-gold">
-            <MapPin className="h-6 w-6 text-white" />
+          <div className="w-11 h-11 bg-gradient-to-br from-primary to-primary/80 rounded-xl flex items-center justify-center shadow-lg shadow-primary/25">
+            <MapPin className="h-6 w-6 text-primary-foreground" />
           </div>
           <div>
-            <h1 className="text-xl font-bold text-sidebar-foreground">لوحة التحكم</h1>
-            <p className="text-sm text-sidebar-foreground/70">إدارة شاملة للوحات الإعلانية</p>
+            <h1 className="text-lg font-bold text-sidebar-foreground">لوحة التحكم</h1>
+            <p className="text-xs text-sidebar-foreground/60">إدارة اللوحات الإعلانية</p>
           </div>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
-        <div className="space-y-2">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4">
+        {/* Core items with better styling */}
+        <div className="space-y-1">
           {filteredCoreItems.map((item) => {
             const Icon = item.icon;
             const active = isActive(item.path);
             return (
               <Button
                 key={item.id}
-                variant={active ? 'default' : 'ghost'}
+                variant="ghost"
                 size="default"
                 onClick={() => handleNavigate(item.path)}
                 className={cn(
-                  'w-full flex-row-reverse justify-start gap-3 h-11 px-4 rounded-xl transition-colors',
+                  'w-full flex-row-reverse justify-start gap-3 h-10 px-3 rounded-lg transition-all duration-200',
                   active
-                    ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg hover:bg-sidebar-primary'
-                    : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
+                    ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90'
+                    : 'text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground',
                 )}
               >
                 <span className="flex-1 text-right font-medium text-sm">{item.label}</span>
-                <Icon className="h-5 w-5" />
+                <Icon className={cn("h-4 w-4", active && "text-primary-foreground")} />
               </Button>
             );
           })}
         </div>
 
+        {/* Sections with improved accordion */}
         <Accordion
           type="multiple"
           value={openSections}
           onValueChange={(value) => setOpenSections(value)}
-          className="space-y-3"
+          className="space-y-2"
         >
           {filteredSections.map((section) => (
             <AccordionItem
               key={section.id}
               value={section.id}
-              className="border-none rounded-xl bg-sidebar-accent/30 backdrop-blur-sm"
+              className="border-none rounded-lg bg-sidebar-accent/20 overflow-hidden"
             >
-              <AccordionTrigger className="flex-row-reverse justify-between px-3 text-sm font-semibold text-sidebar-foreground/80">
+              <AccordionTrigger className="flex-row-reverse justify-between px-3 py-2.5 text-xs font-semibold text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/30 hover:no-underline transition-colors">
                 <span>{section.title}</span>
               </AccordionTrigger>
-              <AccordionContent className="px-1 pt-0">
-                <div className="space-y-2 py-2">
+              <AccordionContent className="px-1 pt-0 pb-1">
+                <div className="space-y-0.5">
                   {section.items.map((item) => {
                     const Icon = item.icon;
                     const active = isActive(item.path);
@@ -252,17 +255,17 @@ export function Sidebar({ className }: SidebarProps) {
                       <Button
                         key={item.id}
                         variant="ghost"
-                        size="default"
+                        size="sm"
                         onClick={() => handleNavigate(item.path)}
                         className={cn(
-                          'w-full flex-row-reverse justify-start gap-3 h-11 px-4 rounded-xl transition-colors',
+                          'w-full flex-row-reverse justify-start gap-2.5 h-9 px-3 rounded-md transition-all duration-200',
                           active
-                            ? 'bg-sidebar-primary text-sidebar-primary-foreground shadow-lg'
-                            : 'text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground',
+                            ? 'bg-primary/90 text-primary-foreground shadow-sm'
+                            : 'text-sidebar-foreground/65 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground',
                         )}
                       >
-                        <span className="flex-1 text-right font-medium text-sm">{item.label}</span>
-                        <Icon className="h-5 w-5" />
+                        <span className="flex-1 text-right font-normal text-xs">{item.label}</span>
+                        <Icon className={cn("h-3.5 w-3.5", active ? "text-primary-foreground" : "text-sidebar-foreground/50")} />
                       </Button>
                     );
                   })}
@@ -273,35 +276,36 @@ export function Sidebar({ className }: SidebarProps) {
         </Accordion>
       </nav>
 
-      <div className="p-4 border-t border-sidebar-border space-y-3">
+      {/* Footer section */}
+      <div className="p-3 border-t border-sidebar-border/50 space-y-2 bg-sidebar-accent/10">
         <Button
-          variant="outline"
+          variant="ghost"
           size="sm"
           onClick={toggleTheme}
-          className="w-full justify-start gap-2"
+          className="w-full justify-start gap-2 h-9 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
         >
           {theme === 'dark' ? (
             <>
               <Sun className="h-4 w-4" />
-              <span>الوضع الفاتح</span>
+              <span className="text-xs">الوضع الفاتح</span>
             </>
           ) : (
             <>
               <Moon className="h-4 w-4" />
-              <span>الوضع الداكن</span>
+              <span className="text-xs">الوضع الداكن</span>
             </>
           )}
         </Button>
 
-        <div className="flex items-center gap-3 p-3 rounded-xl bg-sidebar-accent/50">
-          <div className="w-10 h-10 bg-gradient-primary rounded-full flex items-center justify-center text-white font-bold">
+        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-sidebar-accent/30">
+          <div className="w-9 h-9 bg-gradient-to-br from-primary to-primary/70 rounded-full flex items-center justify-center text-primary-foreground font-bold text-sm shadow-md">
             {profile?.name ? profile.name.charAt(0) : 'م'}
           </div>
-          <div className="flex-1">
-            <p className="font-medium text-sidebar-foreground">
-              {profile?.name ? `مرحباً ${profile.name}` : 'مرحباً'}
+          <div className="flex-1 min-w-0">
+            <p className="font-medium text-sm text-sidebar-foreground truncate">
+              {profile?.name ? `${profile.name}` : 'مستخدم'}
             </p>
-            <p className="text-sm text-sidebar-foreground/70">{user?.email || 'مستخدم'}</p>
+            <p className="text-xs text-sidebar-foreground/50 truncate">{user?.email || ''}</p>
           </div>
         </div>
 
@@ -312,10 +316,10 @@ export function Sidebar({ className }: SidebarProps) {
             await signOut();
             navigate('/auth');
           }}
-          className="w-full justify-start gap-2 text-sidebar-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent"
+          className="w-full justify-start gap-2 h-8 text-sidebar-foreground/60 hover:text-destructive hover:bg-destructive/10"
         >
-          <span className="flex-1 text-right">تسجيل الخروج</span>
-          <LogOut className="h-4 w-4" />
+          <span className="flex-1 text-right text-xs">تسجيل الخروج</span>
+          <LogOut className="h-3.5 w-3.5" />
         </Button>
       </div>
     </div>

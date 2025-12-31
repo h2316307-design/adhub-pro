@@ -161,10 +161,11 @@ export function useContractPrint() {
               const measuredA4WidthPx = probe.getBoundingClientRect().width || probe.offsetWidth;
               document.body.removeChild(probe);
 
-              if (measuredA4WidthPx && measuredA4WidthPx > 0) {
-                const dynamicScale = measuredA4WidthPx / ${designWidth};
-                document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
-              }
+               if (measuredA4WidthPx && measuredA4WidthPx > 0) {
+                 // Keep the same 150% multiplier used in the fallback scale
+                 const dynamicScale = (measuredA4WidthPx / ${designWidth}) * 1.5;
+                 document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
+               }
             } catch (e) {
               // ignore
             }
@@ -366,10 +367,11 @@ export function useContractPrint() {
               const measuredA4WidthPx = probe.getBoundingClientRect().width || probe.offsetWidth;
               document.body.removeChild(probe);
 
-              if (measuredA4WidthPx && measuredA4WidthPx > 0) {
-                const dynamicScale = measuredA4WidthPx / ${designWidth};
-                document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
-              }
+               if (measuredA4WidthPx && measuredA4WidthPx > 0) {
+                 // Keep the same 150% multiplier used in the fallback scale
+                 const dynamicScale = (measuredA4WidthPx / ${designWidth}) * 1.5;
+                 document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
+               }
             } catch (e) {
               // ignore
             }

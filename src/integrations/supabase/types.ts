@@ -1181,6 +1181,7 @@ export type Database = {
           installment_auto_calculate: boolean | null
           installment_count: number | null
           installment_distribution_type: string | null
+          installment_first_at_signing: boolean | null
           installment_first_payment_amount: number | null
           installment_first_payment_type: string | null
           installment_interval: string | null
@@ -1240,6 +1241,7 @@ export type Database = {
           installment_auto_calculate?: boolean | null
           installment_count?: number | null
           installment_distribution_type?: string | null
+          installment_first_at_signing?: boolean | null
           installment_first_payment_amount?: number | null
           installment_first_payment_type?: string | null
           installment_interval?: string | null
@@ -1299,6 +1301,7 @@ export type Database = {
           installment_auto_calculate?: boolean | null
           installment_count?: number | null
           installment_distribution_type?: string | null
+          installment_first_at_signing?: boolean | null
           installment_first_payment_amount?: number | null
           installment_first_payment_type?: string | null
           installment_interval?: string | null
@@ -2958,6 +2961,7 @@ export type Database = {
       }
       installation_teams: {
         Row: {
+          cities: string[] | null
           created_at: string
           id: string
           sizes: string[]
@@ -2965,6 +2969,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          cities?: string[] | null
           created_at?: string
           id?: string
           sizes?: string[]
@@ -2972,6 +2977,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          cities?: string[] | null
           created_at?: string
           id?: string
           sizes?: string[]

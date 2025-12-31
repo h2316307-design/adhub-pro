@@ -3,11 +3,36 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DollarSign, Calculator, Plus as PlusIcon, Trash2, Info, Pen, CheckCircle2, AlertCircle, Sparkles } from 'lucide-react';
+import { DollarSign, Calculator, Plus as PlusIcon, Trash2, Info, Pen, CheckCircle2, AlertCircle, Sparkles, Check, ChevronsUpDown } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { UnequalDistributionManager } from './UnequalDistributionManager';
 import { cn } from '@/lib/utils';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+
+// أنواع مواعيد الدفع الافتراضية
+const DEFAULT_PAYMENT_TYPES = [
+  '', // خيار فارغ افتراضي
+  'عند التوقيع',
+  'عند التركيب',
+  'شهري',
+  'مقدم',
+  'ربع سنوي',
+  'نصف سنوي',
+  'نهاية العقد',
+];
 
 interface Installment {
   amount: number;
@@ -31,10 +56,11 @@ interface InstallmentsManagerProps {
   onDistributeWithInterval?: (config: {
     firstPayment: number;
     firstPaymentType: 'amount' | 'percent';
-    interval: 'month' | '2months' | '3months' | '4months';
+    interval: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months';
     numPayments?: number;
     lastPaymentDate?: string;
     firstPaymentDate?: string;
+    firstAtSigning?: boolean;
   }) => void;
   onCreateManualInstallments?: (count: number) => void;
   onApplyUnequalDistribution?: (payments: UnequalPayment[]) => void;
@@ -46,15 +72,17 @@ interface InstallmentsManagerProps {
   savedDistributionType?: 'single' | 'multiple';
   savedFirstPaymentAmount?: number;
   savedFirstPaymentType?: 'amount' | 'percent';
-  savedInterval?: 'month' | '2months' | '3months' | '4months';
+  savedInterval?: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months';
   savedCount?: number;
   savedHasDifferentFirstPayment?: boolean;
+  savedFirstAtSigning?: boolean;
   onDistributionTypeChange?: (type: 'single' | 'multiple') => void;
   onFirstPaymentAmountChange?: (amount: number) => void;
   onFirstPaymentTypeChange?: (type: 'amount' | 'percent') => void;
-  onIntervalChange?: (interval: 'month' | '2months' | '3months' | '4months') => void;
+  onIntervalChange?: (interval: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months') => void;
   onCountChange?: (count: number) => void;
   onHasDifferentFirstPaymentChange?: (has: boolean) => void;
+  onFirstAtSigningChange?: (value: boolean) => void;
 }
 
 export function InstallmentsManager({
@@ -76,12 +104,14 @@ export function InstallmentsManager({
   savedInterval,
   savedCount,
   savedHasDifferentFirstPayment,
+  savedFirstAtSigning,
   onDistributionTypeChange,
   onFirstPaymentAmountChange,
   onFirstPaymentTypeChange,
   onIntervalChange,
   onCountChange,
-  onHasDifferentFirstPaymentChange
+  onHasDifferentFirstPaymentChange,
+  onFirstAtSigningChange
 }: InstallmentsManagerProps) {
   const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = React.useState<boolean>(savedHasDifferentFirstPayment ?? false);
   const [firstPayment, setFirstPayment] = React.useState<number>(savedFirstPaymentAmount ?? 0);
@@ -90,13 +120,25 @@ export function InstallmentsManager({
   const [useCustomFirstDate, setUseCustomFirstDate] = React.useState(false);
 
   const [paymentMode, setPaymentMode] = React.useState<'single' | 'multiple'>(savedDistributionType ?? 'multiple');
-  const [interval, setInterval] = React.useState<'month' | '2months' | '3months' | '4months'>(savedInterval ?? 'month');
+  const [interval, setInterval] = React.useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>(savedInterval ?? 'month');
   const [numPayments, setNumPayments] = React.useState<number>(savedCount ?? 2);
   const [useCustomLastDate, setUseCustomLastDate] = React.useState(false);
+  const [firstAtSigning, setFirstAtSigning] = React.useState<boolean>(savedFirstAtSigning ?? true);
   const [lastPaymentDate, setLastPaymentDate] = React.useState<string>('');
 
   const [unequalDistributionOpen, setUnequalDistributionOpen] = React.useState(false);
   const [unequalCount, setUnequalCount] = React.useState<number>(2);
+  
+  // أنواع مواعيد الدفع المخصصة (يتم جمعها من الدفعات الحالية)
+  const [customPaymentTypes, setCustomPaymentTypes] = React.useState<string[]>([]);
+  const [openPaymentTypeIndex, setOpenPaymentTypeIndex] = React.useState<number | null>(null);
+  
+  // جمع كل أنواع مواعيد الدفع المتاحة
+  const allPaymentTypes = React.useMemo(() => {
+    const fromInstallments = installments.map(i => i.paymentType).filter(Boolean);
+    const combined = [...DEFAULT_PAYMENT_TYPES, ...customPaymentTypes, ...fromInstallments];
+    return [...new Set(combined)];
+  }, [installments, customPaymentTypes]);
 
   const prevFinalTotalRef = React.useRef<number>(finalTotal);
   const isInitialMount = React.useRef(true);
@@ -172,7 +214,7 @@ export function InstallmentsManager({
     onDistributionTypeChange?.(value);
   };
 
-  const handleIntervalChange = (value: 'month' | '2months' | '3months' | '4months') => {
+  const handleIntervalChange = (value: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months') => {
     setInterval(value);
     onIntervalChange?.(value);
   };
@@ -180,6 +222,11 @@ export function InstallmentsManager({
   const handleNumPaymentsChange = (value: number) => {
     setNumPayments(value);
     onCountChange?.(value);
+  };
+
+  const handleFirstAtSigningChange = (value: boolean) => {
+    setFirstAtSigning(value);
+    onFirstAtSigningChange?.(value);
   };
 
   // إعادة توزيع الدفعات المتبقية بعد حذف دفعة
@@ -234,6 +281,9 @@ export function InstallmentsManager({
       case '2months': return 2;
       case '3months': return 3;
       case '4months': return 4;
+      case '5months': return 5;
+      case '6months': return 6;
+      case '7months': return 7;
       default: return 1;
     }
   }, [interval]);
@@ -244,6 +294,9 @@ export function InstallmentsManager({
       case '2months': return 'شهرين';
       case '3months': return '3 أشهر';
       case '4months': return '4 أشهر';
+      case '5months': return '5 أشهر';
+      case '6months': return '6 أشهر';
+      case '7months': return '7 أشهر';
       default: return 'شهر';
     }
   }, [interval]);
@@ -257,7 +310,8 @@ export function InstallmentsManager({
       interval,
       numPayments: useCustomLastDate ? undefined : numPayments,
       lastPaymentDate: useCustomLastDate && lastPaymentDate ? lastPaymentDate : undefined,
-      firstPaymentDate: useCustomFirstDate && firstPaymentDate ? firstPaymentDate : undefined
+      firstPaymentDate: useCustomFirstDate && firstPaymentDate ? firstPaymentDate : undefined,
+      firstAtSigning
     });
   };
 
@@ -270,7 +324,8 @@ export function InstallmentsManager({
       firstPaymentType,
       interval: 'month',
       numPayments: 1, // Only 1 remaining payment
-      firstPaymentDate: useCustomFirstDate && firstPaymentDate ? firstPaymentDate : undefined
+      firstPaymentDate: useCustomFirstDate && firstPaymentDate ? firstPaymentDate : undefined,
+      firstAtSigning
     });
   };
 
@@ -412,6 +467,18 @@ export function InstallmentsManager({
             {/* إعدادات الدفعات المتعددة */}
             {paymentMode === 'multiple' && (
               <div className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border">
+                {/* دفعة عند التوقيع */}
+                <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-medium">دفعة عند التوقيع</Label>
+                  </div>
+                  <Switch
+                    checked={firstAtSigning}
+                    onCheckedChange={handleFirstAtSigningChange}
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <Label className="text-xs text-muted-foreground">الفترة بين الدفعات</Label>
@@ -424,6 +491,9 @@ export function InstallmentsManager({
                         <SelectItem value="2months">كل شهرين</SelectItem>
                         <SelectItem value="3months">كل 3 أشهر</SelectItem>
                         <SelectItem value="4months">كل 4 أشهر</SelectItem>
+                        <SelectItem value="5months">كل 5 أشهر</SelectItem>
+                        <SelectItem value="6months">كل 6 أشهر</SelectItem>
+                        <SelectItem value="7months">كل 7 أشهر</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -541,70 +611,129 @@ export function InstallmentsManager({
                       : "bg-card border-border hover:border-primary/20"
                   )}
                 >
-                  <div className="flex flex-col gap-2">
-                    {/* الصف الأول: الرقم والوصف والمبلغ */}
+                  <div className="flex flex-col gap-3">
+                    {/* الصف الأول: رقم الدفعة والمبلغ وزر الحذف */}
                     <div className="flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-3">
                         <div className={cn(
-                          "w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0",
+                          "w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0",
                           index === 0 ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
                         )}>
                           {index + 1}
                         </div>
-                        <div className="min-w-0">
-                          <Input
-                            type="text"
-                            value={installment.description}
-                            onChange={(e) => onUpdateInstallment(index, 'description', e.target.value)}
-                            placeholder={index === 0 ? 'الدفعة الأولى' : `الدفعة ${index + 1}`}
-                            className="h-7 text-xs w-32"
-                          />
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground">المبلغ</span>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min={0}
+                              value={installment.amount}
+                              onChange={(e) => onUpdateInstallment(index, 'amount', parseFloat(e.target.value) || 0)}
+                              className="w-32 h-8 text-sm font-bold"
+                            />
+                            <span className="text-xs text-muted-foreground">د.ل</span>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Input
-                          type="number"
-                          min={0}
-                          value={installment.amount}
-                          onChange={(e) => onUpdateInstallment(index, 'amount', parseFloat(e.target.value) || 0)}
-                          className="w-28 h-8 text-sm font-bold text-left"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveAndRedistribute(index)}
-                          className="h-8 w-8 p-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
-                          title="حذف الدفعة وإعادة توزيع المبلغ"
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveAndRedistribute(index)}
+                        className="h-8 w-8 p-0 text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                        title="حذف الدفعة وإعادة توزيع المبلغ"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                    
+                    {/* الصف الثاني: نوع الدفعة وتاريخ الاستحقاق */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">موعد الدفع</span>
+                        <Popover 
+                          open={openPaymentTypeIndex === index} 
+                          onOpenChange={(open) => setOpenPaymentTypeIndex(open ? index : null)}
                         >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={openPaymentTypeIndex === index}
+                              className="h-9 justify-between font-normal"
+                            >
+                              {installment.paymentType || "غير محدد"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-[200px] p-0 z-[10000]" align="start">
+                            <Command>
+                              <CommandInput 
+                                placeholder="ابحث أو اكتب موعد جديد..." 
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    const input = (e.target as HTMLInputElement).value.trim();
+                                    if (input && !allPaymentTypes.includes(input)) {
+                                      setCustomPaymentTypes(prev => [...prev, input]);
+                                    }
+                                    if (input) {
+                                      onUpdateInstallment(index, 'paymentType', input);
+                                      setOpenPaymentTypeIndex(null);
+                                    }
+                                  }
+                                }}
+                              />
+                              <CommandList>
+                                <CommandEmpty>
+                                  <div className="text-sm text-muted-foreground p-2">
+                                    اضغط Enter لإضافة موعد جديد
+                                  </div>
+                                </CommandEmpty>
+                                <CommandGroup>
+                                  {allPaymentTypes.map((type) => (
+                                    <CommandItem
+                                      key={type || 'empty'}
+                                      value={type || 'غير محدد'}
+                                      onSelect={() => {
+                                        onUpdateInstallment(index, 'paymentType', type);
+                                        setOpenPaymentTypeIndex(null);
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          installment.paymentType === type ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      {type || 'غير محدد'}
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-xs text-muted-foreground">تاريخ الاستحقاق</span>
+                        <Input
+                          type="date"
+                          value={installment.dueDate}
+                          onChange={(e) => onUpdateInstallment(index, 'dueDate', e.target.value)}
+                          className="h-9"
+                        />
                       </div>
                     </div>
                     
-                    {/* الصف الثاني: نوع الدفعة والتاريخ */}
-                    <div className="flex items-center gap-2 mr-9">
-                      <Select
-                        value={installment.paymentType}
-                        onValueChange={(v) => onUpdateInstallment(index, 'paymentType', v)}
-                      >
-                        <SelectTrigger className="h-7 text-xs w-32">
-                          <SelectValue placeholder="نوع الدفعة" />
-                        </SelectTrigger>
-                        <SelectContent className="z-[10000]">
-                          <SelectItem value="عند التوقيع">عند التوقيع</SelectItem>
-                          <SelectItem value="عند التركيب">عند التركيب</SelectItem>
-                          <SelectItem value="شهري">شهري</SelectItem>
-                          <SelectItem value="مقدم">مقدم</SelectItem>
-                          <SelectItem value="ربع سنوي">ربع سنوي</SelectItem>
-                          <SelectItem value="نصف سنوي">نصف سنوي</SelectItem>
-                        </SelectContent>
-                      </Select>
+                    {/* الصف الثالث: الوصف */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs text-muted-foreground">وصف الدفعة (اختياري)</span>
                       <Input
-                        type="date"
-                        value={installment.dueDate}
-                        onChange={(e) => onUpdateInstallment(index, 'dueDate', e.target.value)}
-                        className="h-7 text-xs flex-1"
+                        type="text"
+                        value={installment.description}
+                        onChange={(e) => onUpdateInstallment(index, 'description', e.target.value)}
+                        placeholder={index === 0 ? 'مثال: دفعة مقدمة' : `مثال: القسط ${index + 1}`}
+                        className="h-9"
                       />
                     </div>
                   </div>

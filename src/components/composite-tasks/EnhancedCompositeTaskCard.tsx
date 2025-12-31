@@ -10,6 +10,7 @@ import { CompositeProfitCard } from './CompositeProfitCard';
 import { PrintTaskInvoice } from '../tasks/PrintTaskInvoice';
 import { CutoutTaskInvoice } from '../tasks/CutoutTaskInvoice';
 import { CompositeTaskInvoicePrint } from './CompositeTaskInvoicePrint';
+import { TaskCardWrapper } from '../tasks/TaskCardWrapper';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -46,11 +47,14 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [contractInfo, setContractInfo] = useState<{ adTypes?: { contractId: number; adType: string }[]; contractIds?: number[] } | null>(null);
+  const [designImages, setDesignImages] = useState<Array<{ url: string; face: 'a' | 'b' }>>([]);
 
-  // جلب معلومات العقود وأنواع الإعلان
+  // جلب معلومات العقود وأنواع الإعلان وصور التصميم
   useEffect(() => {
     const fetchContractInfo = async () => {
       try {
+        let contractIds: number[] = [];
+        
         // جلب contract_ids من مهمة التركيب إذا كانت مدمجة
         if (task.installation_task_id) {
           const { data: installTask } = await supabase
@@ -59,7 +63,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
             .eq('id', task.installation_task_id)
             .single();
           
-          const contractIds = installTask?.contract_ids && installTask.contract_ids.length > 0 
+          contractIds = installTask?.contract_ids && installTask.contract_ids.length > 0 
             ? installTask.contract_ids 
             : [installTask?.contract_id || task.contract_id];
           
@@ -78,6 +82,8 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           });
         } else {
           // جلب نوع الإعلان من العقد مباشرة
+          contractIds = [task.contract_id];
+          
           const { data: contract } = await supabase
             .from('Contract')
             .select('"Ad Type"')
@@ -89,13 +95,108 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
             contractIds: [task.contract_id]
           });
         }
+
+        // جلب صور التصميم من مصادر مختلفة
+        const images: Array<{ url: string; face: 'a' | 'b' }> = [];
+        const seen = new Set<string>();
+        
+        // أولاً: حاول جلب من print_task_items إذا كانت مهمة الطباعة موجودة
+        if (task.print_task_id) {
+          const { data: printItems } = await supabase
+            .from('print_task_items')
+            .select('design_face_a, design_face_b')
+            .eq('task_id', task.print_task_id);
+          
+          if (printItems) {
+            printItems.forEach((item: any) => {
+              if (item.design_face_a && !seen.has(item.design_face_a)) {
+                seen.add(item.design_face_a);
+                images.push({ url: item.design_face_a, face: 'a' });
+              }
+              if (item.design_face_b && !seen.has(item.design_face_b)) {
+                seen.add(item.design_face_b);
+                images.push({ url: item.design_face_b, face: 'b' });
+              }
+            });
+          }
+        }
+        
+        // ثانياً: جلب صور التصميم من مهمة التركيب (installation_task_items)
+        if (images.length === 0 && task.installation_task_id) {
+          const { data: taskItems } = await supabase
+            .from('installation_task_items')
+            .select('billboard_id, design_face_a, design_face_b')
+            .eq('task_id', task.installation_task_id);
+
+          if (taskItems && taskItems.length > 0) {
+            // 1) أولاً: استخدام التصميمات المحفوظة في عناصر مهمة التركيب
+            taskItems.forEach((item: any) => {
+              if (item.design_face_a && !seen.has(item.design_face_a)) {
+                seen.add(item.design_face_a);
+                images.push({ url: item.design_face_a, face: 'a' });
+              }
+              if (item.design_face_b && !seen.has(item.design_face_b)) {
+                seen.add(item.design_face_b);
+                images.push({ url: item.design_face_b, face: 'b' });
+              }
+            });
+
+            // 2) إذا لا تزال لا توجد صور، فولباك: جلب من جدول اللوحات باستخدام billboard_id
+            if (images.length === 0) {
+              const billboardIds = taskItems.map((item: any) => item.billboard_id).filter(Boolean);
+
+              if (billboardIds.length > 0) {
+                const { data: billboards } = await supabase
+                  .from('billboards')
+                  .select('design_face_a, design_face_b')
+                  .in('ID', billboardIds);
+
+                if (billboards) {
+                  billboards.forEach((b: any) => {
+                    if (b.design_face_a && !seen.has(b.design_face_a)) {
+                      seen.add(b.design_face_a);
+                      images.push({ url: b.design_face_a, face: 'a' });
+                    }
+                    if (b.design_face_b && !seen.has(b.design_face_b)) {
+                      seen.add(b.design_face_b);
+                      images.push({ url: b.design_face_b, face: 'b' });
+                    }
+                  });
+                }
+              }
+            }
+          }
+        }
+        
+        // ثالثاً: فولباك من العقد مباشرة إذا لم توجد صور
+        if (images.length === 0 && contractIds.length > 0) {
+          const { data: billboards } = await supabase
+            .from('billboards')
+            .select('design_face_a, design_face_b')
+            .in('Contract_Number', contractIds);
+          
+          if (billboards) {
+            billboards.forEach((b: any) => {
+              if (b.design_face_a && !seen.has(b.design_face_a)) {
+                seen.add(b.design_face_a);
+                images.push({ url: b.design_face_a, face: 'a' });
+              }
+              if (b.design_face_b && !seen.has(b.design_face_b)) {
+                seen.add(b.design_face_b);
+                images.push({ url: b.design_face_b, face: 'b' });
+              }
+            });
+          }
+        }
+        
+        setDesignImages(images.slice(0, 4)); // حد أقصى 4 صور
       } catch (error) {
         console.error('Error fetching contract info:', error);
       }
     };
     
     fetchContractInfo();
-  }, [task.installation_task_id, task.contract_id]);
+  }, [task.installation_task_id, task.contract_id, task.print_task_id]);
 
   const handlePrintPrintInvoice = async () => {
     if (!task.print_task_id) return;
@@ -432,8 +533,21 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   // Check if task has cutouts
   const hasCutouts = task.customer_cutout_cost > 0 || task.company_cutout_cost > 0;
 
+  // استخراج أول صورة تصميم لعرضها على الكارت المطوي
+  const firstDesignImage = designImages.length > 0 ? designImages[0].url : null;
+  
+  // تحديد حالة الإكمال بناءً على حالة المهمة
+  const isCompleted = task.status === 'completed';
+  const isPartiallyCompleted = task.status === 'in_progress';
+
   return (
-    <Card className="border-border/50 hover:shadow-md transition-all bg-card">
+    <TaskCardWrapper
+      designImage={firstDesignImage}
+      isCompleted={isCompleted}
+      isPartiallyCompleted={isPartiallyCompleted}
+      completionPercentage={isPartiallyCompleted ? 50 : isCompleted ? 100 : 0}
+    >
+      <Card className="border-0 shadow-none bg-transparent">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
           <div className="space-y-2">
@@ -471,6 +585,42 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
             {format(new Date(task.created_at), 'dd MMM yyyy', { locale: ar })}
           </div>
         </div>
+
+        {/* صور التصميم (مثل كروت مهام التركيب) */}
+        {designImages.length > 0 && (
+          <div className="space-y-3 pt-3 border-t border-border/50">
+            <div className="flex items-center gap-2">
+              <div className="h-2 w-2 rounded-full bg-primary" />
+              <span className="text-sm font-semibold text-foreground">تصاميم اللوحات</span>
+              <span className="text-xs text-muted-foreground">({designImages.length})</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              {designImages.map((img, idx) => (
+                <button
+                  key={idx}
+                  type="button"
+                  onClick={() => window.open(img.url, '_blank')}
+                  className="group relative aspect-video rounded-xl overflow-hidden border border-border/60 bg-muted/20 text-left"
+                >
+                  <img
+                    src={img.url}
+                    alt={`تصميم اللوحة ${img.face === 'a' ? 'الوجه الأمامي' : 'الوجه الخلفي'}`}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-background/70 via-transparent to-transparent opacity-60" />
+                  <Badge
+                    variant="secondary"
+                    className="absolute top-2 right-2 bg-background/80 backdrop-blur"
+                  >
+                    {img.face === 'a' ? 'الوجه أ' : 'الوجه ب'}
+                  </Badge>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </CardHeader>
       <CardContent className="space-y-4">
         {/* المهام المرتبطة - تكلفة الزبون */}
@@ -719,6 +869,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           </AlertDialogContent>
         </AlertDialog>
       </CardContent>
-    </Card>
+      </Card>
+    </TaskCardWrapper>
   );
 };

@@ -22,6 +22,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { EnhancedCompositeTaskCard } from './EnhancedCompositeTaskCard';
+import { CollapsibleGroupCard } from './CollapsibleGroupCard';
 import { EnhancedEditCompositeTaskCostsDialog } from './EnhancedEditCompositeTaskCostsDialog';
 import { CompositeTaskWithDetails, UpdateCompositeTaskCostsInput } from '@/types/composite-task';
 import {
@@ -152,7 +153,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
     });
   };
 
-  // Update costs mutation
+  // Update costs mutation - with sync to related tables
   const updateCostsMutation = useMutation({
     mutationFn: async (data: UpdateCompositeTaskCostsInput) => {
       const customerInstall = data.customer_installation_cost ?? 0;
@@ -169,7 +170,8 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       const netProfit = customerTotal - companyTotal;
       const profitPercentage = customerTotal > 0 ? (netProfit / customerTotal) * 100 : 0;
 
-      const { error } = await supabase
+      // 1. تحديث composite_tasks
+      const { error: compositeError } = await supabase
         .from('composite_tasks')
         .update({
           customer_installation_cost: customerInstall,
@@ -189,11 +191,57 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         })
         .eq('id', data.id);
 
-      if (error) throw error;
+      if (compositeError) throw compositeError;
+
+      // جلب المهمة للحصول على المعرفات المرتبطة
+      const { data: taskData } = await supabase
+        .from('composite_tasks')
+        .select('print_task_id, cutout_task_id, combined_invoice_id, customer_name')
+        .eq('id', data.id)
+        .single();
+
+      // 2. تحديث print_tasks إذا وجدت
+      if (taskData?.print_task_id) {
+        await supabase
+          .from('print_tasks')
+          .update({
+            total_cost: companyPrint,
+            customer_total_amount: customerPrint,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', taskData.print_task_id);
+      }
+
+      // 3. تحديث cutout_tasks إذا وجدت
+      if (taskData?.cutout_task_id) {
+        await supabase
+          .from('cutout_tasks')
+          .update({
+            total_cost: companyCutout,
+            customer_total_amount: customerCutout,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', taskData.cutout_task_id);
+      }
+
+      // 4. تحديث الفاتورة الموحدة إذا وجدت
+      if (taskData?.combined_invoice_id) {
+        await supabase
+          .from('printed_invoices')
+          .update({
+            print_cost: companyPrint + companyCutout,
+            total_amount: customerTotal,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', taskData.combined_invoice_id);
+      }
     },
     onSuccess: () => {
-      toast.success('تم تحديث التكاليف بنجاح');
+      toast.success('تم تحديث التكاليف ومزامنة جميع البيانات المرتبطة');
       queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['cutout-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['printed-invoices'] });
       setEditDialogOpen(false);
       setEditingTask(null);
     },
@@ -366,74 +414,22 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       ) : (
         <div className="space-y-4">
           {filteredGroups.map((group) => (
-            <Card key={group.contractId} className="overflow-hidden border-border/50 hover:shadow-md transition-all">
-              <Collapsible 
-                open={expandedContracts.has(group.contractId)}
-                onOpenChange={() => toggleContract(group.contractId)}
-              >
-                <CollapsibleTrigger asChild>
-                  <CardHeader className="cursor-pointer hover:bg-muted/30 transition-colors p-4">
-                    <div className="flex items-center justify-between flex-wrap gap-3">
-                      <div className="flex items-center gap-3">
-                        <div className="p-1.5 rounded-lg bg-primary/10">
-                          {expandedContracts.has(group.contractId) ? (
-                            <ChevronUp className="h-4 w-4 text-primary" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4 text-primary" />
-                          )}
-                        </div>
-                        <div>
-                          <CardTitle className="text-base flex items-center gap-2 flex-wrap">
-                            <span className="text-foreground">{group.customerName}</span>
-                            <Badge variant="outline" className="border-primary/30 text-primary">عقد #{group.contractId}</Badge>
-                            <Badge className="bg-primary/10 text-primary hover:bg-primary/20">{group.tasks.length} مهمة</Badge>
-                          </CardTitle>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm flex-wrap">
-                        <div className="px-3 py-1.5 rounded-lg bg-primary/5 border border-primary/20">
-                          <span className="text-muted-foreground text-xs">إيراد: </span>
-                          <span className="font-semibold text-primary">{group.totalCustomer.toLocaleString('ar-LY')}</span>
-                        </div>
-                        <div className="px-3 py-1.5 rounded-lg bg-orange-500/5 border border-orange-500/20">
-                          <span className="text-muted-foreground text-xs">تكلفة: </span>
-                          <span className="font-semibold text-orange-600 dark:text-orange-400">{group.totalCompany.toLocaleString('ar-LY')}</span>
-                        </div>
-                        <div className={`px-3 py-1.5 rounded-lg border ${group.totalProfit >= 0 ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
-                          <span className="text-muted-foreground text-xs">ربح: </span>
-                          <span className={`font-semibold ${group.totalProfit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {group.totalProfit.toLocaleString('ar-LY')}
-                          </span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setDeleteContractId(group.contractId);
-                          }}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </CardHeader>
-                </CollapsibleTrigger>
-                <CollapsibleContent>
-                  <CardContent className="p-4 pt-0 space-y-3 bg-muted/10">
-                    {group.tasks.map((task) => (
-                      <EnhancedCompositeTaskCard
-                        key={task.id}
-                        task={task}
-                        onEditCosts={handleEditCosts}
-                        onDelete={() => refetch()}
-                      />
-                    ))}
-                  </CardContent>
-                </CollapsibleContent>
-              </Collapsible>
-            </Card>
+            <CollapsibleGroupCard
+              key={group.contractId}
+              group={group}
+              isExpanded={expandedContracts.has(group.contractId)}
+              onToggle={() => toggleContract(group.contractId)}
+              onDelete={() => setDeleteContractId(group.contractId)}
+            >
+              {group.tasks.map((task) => (
+                <EnhancedCompositeTaskCard
+                  key={task.id}
+                  task={task}
+                  onEditCosts={handleEditCosts}
+                  onDelete={() => refetch()}
+                />
+              ))}
+            </CollapsibleGroupCard>
           ))}
         </div>
       )}

@@ -2,16 +2,22 @@ import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 
 // Input validation schemas - تدعم البريد الإلكتروني أو اسم المستخدم
+// Password validation helper
+const passwordSchema = z.string()
+  .min(8, 'كلمة المرور يجب أن تكون 8 أحرف على الأقل')
+  .max(100, 'كلمة المرور طويلة جداً')
+  .regex(/[A-Z]/, 'كلمة المرور يجب أن تحتوي على حرف كبير')
+  .regex(/[a-z]/, 'كلمة المرور يجب أن تحتوي على حرف صغير')
+  .regex(/[0-9]/, 'كلمة المرور يجب أن تحتوي على رقم');
+
 const loginSchema = z.object({
   emailOrUsername: z.string().trim().min(1, 'يرجى إدخال البريد الإلكتروني أو اسم المستخدم').max(255, 'القيمة طويلة جداً'),
-  password: z.string().min(6, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل').max(100, 'كلمة المرور طويلة جداً'),
+  password: z.string().min(1, 'كلمة المرور مطلوبة').max(100, 'كلمة المرور طويلة جداً'),
 });
 
 const registerSchema = z.object({
   email: z.string().trim().email('صيغة البريد الإلكتروني غير صحيحة').max(255, 'البريد الإلكتروني طويل جداً'),
-  password: z.string()
-    .min(6, 'كلمة المرور يجب أن تكون 6 أحرف على الأقل')
-    .max(100, 'كلمة المرور طويلة جداً'),
+  password: passwordSchema,
   name: z.string().trim().min(1, 'الاسم مطلوب').max(100, 'الاسم طويل جداً'),
   username: z.string().trim().min(3, 'اسم المستخدم يجب أن يكون 3 أحرف على الأقل').max(50, 'اسم المستخدم طويل جداً').optional(),
   phone: z.string().trim().max(20, 'رقم الهاتف طويل جداً').optional(),

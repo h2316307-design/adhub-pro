@@ -148,23 +148,40 @@ async function generateQRDataUrl(url: string, fgColor: string, bgColor: string, 
   }
 }
 
-// Wrap text into lines
+// Wrap text into lines (supports explicit line breaks via \n)
 function wrapText(text: string, maxCharsPerLine: number): string[] {
-  const words = text.split(' ');
-  const lines: string[] = [];
-  let currentLine = '';
-  
-  words.forEach(word => {
-    if ((currentLine + ' ' + word).length > maxCharsPerLine) {
-      if (currentLine) lines.push(currentLine.trim());
-      currentLine = word;
-    } else {
-      currentLine += ' ' + word;
+  const normalized = (text ?? '').toString().replace(/\r\n/g, '\n');
+  const blocks = normalized.split('\n');
+  const out: string[] = [];
+
+  blocks.forEach((block) => {
+    const safeBlock = block.replace(/\s+/g, ' ').trim();
+    if (!safeBlock) {
+      out.push('');
+      return;
     }
+
+    const words = safeBlock.split(' ');
+    let currentLine = '';
+
+    words.forEach((word) => {
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (candidate.length > maxCharsPerLine) {
+        if (currentLine) out.push(currentLine.trim());
+        currentLine = word;
+      } else {
+        currentLine = candidate;
+      }
+    });
+
+    if (currentLine) out.push(currentLine.trim());
   });
-  if (currentLine) lines.push(currentLine.trim());
-  
-  return lines;
+
+  // Remove leading/trailing empty lines (keep internal empties)
+  while (out.length && !out[0]) out.shift();
+  while (out.length && !out[out.length - 1]) out.pop();
+
+  return out;
 }
 
 // IMPORTANT: We generate raw SVG markup as a string.
@@ -179,6 +196,11 @@ function escapeSvgText(input: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#39;');
 }
+
+// Arabic Letter Mark helps keep numbers/dates at the start of an RTL line from jumping to the end.
+const ALM = '\u061C';
+const rtlSafe = (text: string) => `${ALM}${text ?? ''}`;
+
 
 // Replace variables in term content
 function replaceVariables(
@@ -257,15 +279,17 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
             termsSvg += `<rect x="${rectX}" y="${rectY}" width="${titleWidth}" height="${goldLineHeight}" fill="${goldLineSettings.color}" rx="2" />`;
           }
 
-          termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">`;
-          termsSvg += `<tspan font-weight="${settings.termsTitleWeight || 'bold'}">${titlePart}</tspan>`;
-          termsSvg += `<tspan font-weight="${settings.termsContentWeight || 'normal'}">${contentPart}</tspan>`;
-          termsSvg += `</text>`;
-          return;
-        }
-      }
+           termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle" style="unicode-bidi: plaintext;">`;
+           // ALM first to stabilize RTL when line begins with numbers/dates
+           termsSvg += `<tspan>${ALM}</tspan>`;
+           termsSvg += `<tspan font-weight="${settings.termsTitleWeight || 'bold'}">${escapeSvgText(titlePartRaw)}</tspan>`;
+           termsSvg += `<tspan font-weight="${settings.termsContentWeight || 'normal'}">${escapeSvgText(contentPartRaw)}</tspan>`;
+           termsSvg += `</text>`;
+           return;
+         }
+       }
 
-      termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-weight="${settings.termsContentWeight || 'normal'}" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle">${escapeSvgText(line)}</text>`;
+       termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-weight="${settings.termsContentWeight || 'normal'}" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle" style="unicode-bidi: plaintext;">${escapeSvgText(rtlSafe(line))}</text>`;
     });
   });
   
@@ -759,16 +783,20 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
     </div>
   `;
   
-  // Split billboards into pages
+  // Split billboards into pages - only create pages if there are billboards
   const billboardPages: BillboardPrintData[][] = [];
-  for (let i = 0; i < billboards.length; i += rowsPerPage) {
-    billboardPages.push(billboards.slice(i, i + rowsPerPage));
+  if (billboards.length > 0) {
+    for (let i = 0; i < billboards.length; i += rowsPerPage) {
+      billboardPages.push(billboards.slice(i, i + rowsPerPage));
+    }
   }
   
-  // Build table pages
-  const tablePages = billboardPages.map((pageBillboards, pageIndex) => 
-    buildTablePageHTML(pageBillboards, settings, tableBgUrl, pageIndex, qrDataUrls)
-  );
+  // Build table pages - filter out empty pages
+  const tablePages = billboardPages
+    .filter(pageBillboards => pageBillboards.length > 0)
+    .map((pageBillboards, pageIndex) => 
+      buildTablePageHTML(pageBillboards, settings, tableBgUrl, pageIndex, qrDataUrls)
+    );
   
   // Collect styles from page
   const stylesHtml = typeof document !== 'undefined' 
@@ -779,8 +807,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   
-  // تحويل A4 إلى px (Fallback) - سنستخدم قياس ديناميكي أدق داخل نافذة الطباعة
-  // المستخدم أكد أن 150% تملأ الصفحة بشكل صحيح، لذا نضرب في 1.5
+  // تحويل A4 إلى px - استخدام قيمة ثابتة مضروبة في 1.5 كما طلب المستخدم
   const a4WidthPx = (210 / 25.4) * 96;
   const printScale = (a4WidthPx / DESIGN_W) * 1.5;
   
@@ -796,15 +823,29 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
       <style>
         :root { --print-scale: ${printScale}; }
 
-        @page { size: A4; margin: 0; }
-        html, body { 
-          width: 210mm; 
-          height: 297mm; 
-          margin: 0; 
-          padding: 0; 
-          background: white; 
+        /* ===== منع Chrome من إضافة --print-scale داخلي ===== */
+        @page { 
+          size: A4 portrait; 
+          margin: 0 !important; 
         }
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; color-adjust: exact !important; }
+        
+        html, body { 
+          width: 210mm !important; 
+          max-width: 210mm !important;
+          height: auto !important; 
+          margin: 0 !important; 
+          padding: 0 !important; 
+          background: white !important;
+          overflow-x: hidden !important;
+        }
+        
+        /* قفل صارم لجميع العناصر */
+        *, *::before, *::after { 
+          box-sizing: border-box !important;
+          -webkit-print-color-adjust: exact !important; 
+          print-color-adjust: exact !important; 
+          color-adjust: exact !important; 
+        }
 
         @font-face {
           font-family: 'Doran';
@@ -825,19 +866,29 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
 
         /* صفحة طباعة A4 فعلية، لتفادي تجزئة العنصر إلى أكثر من صفحة */
         .print-page {
-          width: 210mm;
-          height: 297mm;
+          width: 210mm !important;
+          max-width: 210mm !important;
+          min-width: 210mm !important;
+          height: 297mm !important;
+          max-height: 297mm !important;
+          min-height: 297mm !important;
           position: relative;
-          overflow: hidden;
+          overflow: hidden !important;
           direction: ltr;
           page-break-after: always;
           page-break-inside: avoid;
-          box-sizing: border-box;
+          box-sizing: border-box !important;
           background: white;
         }
 
         .print-page:last-child {
-          page-break-after: auto;
+          page-break-after: avoid !important;
+        }
+        
+        /* منع أي overflow يسبب صفحة بيضاء إضافية */
+        body::after {
+          content: none !important;
+          display: none !important;
         }
 
         /* نطبع نفس تصميم المعاينة (2480×3508) لكن نُصغّره ليلائم A4 */
@@ -848,16 +899,37 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
           right: auto !important;
           width: ${DESIGN_W}px !important;
           height: ${DESIGN_H}px !important;
+          max-width: ${DESIGN_W}px !important;
+          max-height: ${DESIGN_H}px !important;
+          /* للشاشة نستخدم transform فقط */
           transform: scale(var(--print-scale)) !important;
           transform-origin: top left !important;
           margin: 0 !important;
           border-radius: 0 !important;
           box-shadow: none !important;
           direction: ltr;
+          overflow: visible !important;
         }
 
         /* منع تحجيم الصور بشكل غير متوقع */
-        .contract-preview-container img { max-width: none !important; }
+        .contract-preview-container img { 
+          max-width: none !important; 
+          max-height: 100% !important;
+        }
+        
+        /* قفل الجدول داخل contract-preview-container */
+        .contract-preview-container table {
+          width: 100% !important;
+          max-width: 100% !important;
+          table-layout: fixed !important;
+          border-collapse: collapse !important;
+        }
+        
+        .contract-preview-container td,
+        .contract-preview-container th {
+          overflow: hidden !important;
+          word-break: break-word !important;
+        }
         
         /* للشاشة فقط */
         @media screen {
@@ -900,28 +972,95 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
         }
 
         @media print {
+          /* ===== قواعد الطباعة الأساسية ===== */
           html, body { 
             width: 210mm !important; 
-            height: 297mm !important; 
+            max-width: 210mm !important;
+            min-width: 210mm !important;
+            height: auto !important; 
             margin: 0 !important; 
             padding: 0 !important;
             background: white !important;
+            overflow: visible !important;
           }
           
           .print-page {
             width: 210mm !important;
+            max-width: 210mm !important;
+            min-width: 210mm !important;
             height: 297mm !important;
+            max-height: 297mm !important;
+            min-height: 297mm !important;
             margin: 0 !important;
             padding: 0 !important;
             box-shadow: none !important;
-            overflow: hidden !important;
+            overflow: visible !important;
+            page-break-after: always !important;
+            page-break-inside: avoid !important;
+          }
+          
+          .print-page:last-child {
+            page-break-after: avoid !important;
+            margin-bottom: 0 !important;
+            padding-bottom: 0 !important;
+          }
+          
+          /* منع صفحة فارغة بعد آخر صفحة */
+          body {
+            height: auto !important;
+          }
+          
+          body::after,
+          html::after {
+            content: none !important;
+            display: none !important;
           }
           
           .print-page .contract-preview-container {
+            position: absolute !important;
+            left: 0 !important;
+            top: 0 !important;
             width: ${DESIGN_W}px !important;
             height: ${DESIGN_H}px !important;
-            transform: scale(var(--print-scale)) !important;
+            max-width: none !important;
+            max-height: none !important;
+            /* مهم: zoom يغيّر حجم الـ layout ويمنع Chrome من عمل تصغير إضافي عند تعدد الصفحات */
+            zoom: var(--print-scale) !important;
+            transform: none !important;
             transform-origin: top left !important;
+            overflow: visible !important;
+          }
+          
+          /* ===== قفل الجدول لمنع overflow وهمي ===== */
+          .contract-preview-container table {
+            width: 100% !important;
+            max-width: 100% !important;
+            table-layout: fixed !important;
+            border-collapse: collapse !important;
+          }
+          
+          .contract-preview-container col, 
+          .contract-preview-container colgroup {
+            max-width: 100% !important;
+          }
+          
+          .contract-preview-container td,
+          .contract-preview-container th {
+            max-width: 100% !important;
+            overflow: hidden !important;
+            text-overflow: clip !important;
+            word-break: break-word !important;
+            overflow-wrap: anywhere !important;
+          }
+          
+          /* ===== منع الصور من كسر الحدود ===== */
+          .contract-preview-container td img, 
+          .contract-preview-container td svg, 
+          .contract-preview-container th img, 
+          .contract-preview-container th svg {
+            max-width: 100% !important;
+            max-height: 100% !important;
+            display: block !important;
           }
         }
       </style>
@@ -931,7 +1070,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
       <div class="print-page">
         ${firstPageHTML}
       </div>
-      ${tablePages.map(page => `<div class="print-page">${page}</div>`).join('')}
+      ${tablePages.length > 0 ? tablePages.map((page, idx) => `<div class="print-page${idx === tablePages.length - 1 ? ' last-table-page' : ''}">${page}</div>`).join('') : ''}
       <script>
         function setDynamicPrintScale() {
           try {
@@ -948,7 +1087,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
             document.body.removeChild(probe);
 
             if (measuredA4WidthPx && measuredA4WidthPx > 0) {
-              const dynamicScale = measuredA4WidthPx / ${DESIGN_W};
+              const dynamicScale = (measuredA4WidthPx / ${DESIGN_W}) * 1.5;
               document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
             }
           } catch (e) {

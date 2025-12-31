@@ -77,9 +77,30 @@ Deno.serve(async (req) => {
       )
     }
 
-    if (password.length < 6) {
+    if (password.length < 8) {
       return new Response(
-        JSON.stringify({ error: 'Password must be at least 6 characters' }),
+        JSON.stringify({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!/[A-Z]/.test(password)) {
+      return new Response(
+        JSON.stringify({ error: 'كلمة المرور يجب أن تحتوي على حرف كبير' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!/[a-z]/.test(password)) {
+      return new Response(
+        JSON.stringify({ error: 'كلمة المرور يجب أن تحتوي على حرف صغير' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    if (!/[0-9]/.test(password)) {
+      return new Response(
+        JSON.stringify({ error: 'كلمة المرور يجب أن تحتوي على رقم' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
