@@ -3,15 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CompositeTaskWithDetails } from '@/types/composite-task';
-import { Wrench, Printer, Scissors, FileText, Edit, Eye, TrendingUp, FileOutput, Loader2, Trash2 } from 'lucide-react';
+import { Wrench, Printer, Scissors, FileText, Edit, Eye, TrendingUp, FileOutput, Loader2, Trash2, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { CompositeProfitCard } from './CompositeProfitCard';
-import { PrintTaskInvoice } from '../tasks/PrintTaskInvoice';
-import { CutoutTaskInvoice } from '../tasks/CutoutTaskInvoice';
 import { CompositeTaskInvoicePrint } from './CompositeTaskInvoicePrint';
+import { UnifiedTaskInvoice, InvoiceType } from './UnifiedTaskInvoice';
 import { TaskCardWrapper } from '../tasks/TaskCardWrapper';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -38,16 +36,17 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   onViewInvoice,
   onDelete
 }) => {
-  const [loadingPrint, setLoadingPrint] = useState(false);
-  const [loadingCutout, setLoadingCutout] = useState(false);
-  const [printTaskData, setPrintTaskData] = useState<any>(null);
-  const [cutoutTaskData, setCutoutTaskData] = useState<any>(null);
-  const [showPrintDialog, setShowPrintDialog] = useState(false);
-  const [showCutoutDialog, setShowCutoutDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [contractInfo, setContractInfo] = useState<{ adTypes?: { contractId: number; adType: string }[]; contractIds?: number[] } | null>(null);
   const [designImages, setDesignImages] = useState<Array<{ url: string; face: 'a' | 'b' }>>([]);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [currentInvoiceType, setCurrentInvoiceType] = useState<InvoiceType>('customer');
+
+  const openInvoice = (type: InvoiceType) => {
+    setCurrentInvoiceType(type);
+    setInvoiceDialogOpen(true);
+  };
 
   // جلب معلومات العقود وأنواع الإعلان وصور التصميم
   useEffect(() => {
@@ -198,202 +197,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
     fetchContractInfo();
   }, [task.installation_task_id, task.contract_id, task.print_task_id]);
 
-  const handlePrintPrintInvoice = async () => {
-    if (!task.print_task_id) return;
-    
-    setLoadingPrint(true);
-    try {
-      // Load print task with printer info and items in parallel
-      const [printTaskResult, itemsResult] = await Promise.all([
-        supabase
-          .from('print_tasks')
-          .select(`*, printer:printers!print_tasks_printer_id_fkey(name)`)
-          .eq('id', task.print_task_id)
-          .single(),
-        supabase
-          .from('print_task_items')
-          .select('*')
-          .eq('task_id', task.print_task_id)
-      ]);
-
-      if (printTaskResult.error) throw printTaskResult.error;
-      if (itemsResult.error) throw itemsResult.error;
-
-      const printTask = printTaskResult.data;
-      const items = itemsResult.data || [];
-
-      // Group items by design
-      const designGroups = items.reduce((acc: any[], item: any) => {
-        const faceA = item.design_face_a;
-        const faceB = item.design_face_b;
-
-        if (faceA) {
-          acc.push({
-            design: faceA,
-            face: 'a',
-            size: `${item.width}×${item.height}`,
-            quantity: item.quantity,
-            area: item.area,
-            width: item.width,
-            height: item.height,
-            billboards: [item.billboard_id],
-            hasCutout: item.has_cutout,
-            cutoutCount: item.cutout_count || 0,
-            cutoutImageUrl: item.cutout_image_url
-          });
-        }
-
-        if (faceB) {
-          acc.push({
-            design: faceB,
-            face: 'b',
-            size: `${item.width}×${item.height}`,
-            quantity: item.quantity,
-            area: item.area,
-            width: item.width,
-            height: item.height,
-            billboards: [item.billboard_id],
-            hasCutout: item.has_cutout,
-            cutoutCount: item.cutout_count || 0,
-            cutoutImageUrl: item.cutout_image_url
-          });
-        }
-
-        return acc;
-      }, []);
-
-      const totalArea = items.reduce((sum: number, item: any) => sum + (item.area * item.quantity), 0);
-      
-      // Load cutout task items to get accurate cutout count (not duplicated per billboard)
-      let totalCutouts = 0;
-      if (task.cutout_task_id) {
-        const { data: cutoutItems } = await supabase
-          .from('cutout_task_items')
-          .select('quantity')
-          .eq('task_id', task.cutout_task_id);
-        
-        if (cutoutItems) {
-          totalCutouts = cutoutItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
-        }
-      }
-
-      setPrintTaskData({
-        designGroups,
-        pricePerMeter: totalArea > 0 ? task.company_print_cost / totalArea : 0,
-        totalArea,
-        totalCutouts,
-        printerName: (printTask as any).printer?.name || 'غير محدد',
-        cutoutPricePerUnit: totalCutouts > 0 ? task.company_cutout_cost / totalCutouts : 0,
-        cutoutPrinterName: (printTask as any).cutout_printer?.name || 'غير محدد'
-      });
-
-      setShowPrintDialog(true);
-    } catch (error) {
-      console.error('Error loading print task:', error);
-      toast.error('فشل في تحميل بيانات مهمة الطباعة');
-    } finally {
-      setLoadingPrint(false);
-    }
-  };
-
-  const handlePrintCutoutInvoice = async () => {
-    // Load cutout data from cutout_task_items table
-    if (!task.cutout_task_id) {
-      toast.error('لا توجد مهمة قص مرتبطة');
-      return;
-    }
-    
-    setLoadingCutout(true);
-    try {
-      // Load cutout task with items and printer info
-      const [cutoutTaskResult, cutoutItemsResult] = await Promise.all([
-        supabase
-          .from('cutout_tasks')
-          .select(`*, printer:printers!cutout_tasks_printer_id_fkey(name)`)
-          .eq('id', task.cutout_task_id)
-          .single(),
-        supabase
-          .from('cutout_task_items')
-          .select('*')
-          .eq('task_id', task.cutout_task_id)
-      ]);
-
-      if (cutoutTaskResult.error) throw cutoutTaskResult.error;
-      if (cutoutItemsResult.error) throw cutoutItemsResult.error;
-
-      const cutoutTask = cutoutTaskResult.data;
-      const cutoutItems = cutoutItemsResult.data || [];
-
-      if (cutoutItems.length === 0) {
-        toast.error('لا توجد مجسمات في هذه المهمة');
-        setLoadingCutout(false);
-        return;
-      }
-
-      // Get design images from print_task_items if available
-      let designImages: Record<number, { face_a?: string; face_b?: string }> = {};
-      if (task.print_task_id) {
-        const { data: printItems } = await supabase
-          .from('print_task_items')
-          .select('billboard_id, design_face_a, design_face_b')
-          .eq('task_id', task.print_task_id);
-        
-        if (printItems) {
-          printItems.forEach((item: any) => {
-            designImages[item.billboard_id] = {
-              face_a: item.design_face_a,
-              face_b: item.design_face_b
-            };
-          });
-        }
-      }
-
-      // Map cutout items with their design images
-      const designGroups = cutoutItems.map((item: any) => {
-        const designs = designImages[item.billboard_id] || {};
-        // Extract size from description like "مجسم 10x4 - وجه أمامي"
-        const sizeMatch = item.description?.match(/(\d+)x(\d+)/i);
-        const width = sizeMatch ? parseInt(sizeMatch[1]) : 0;
-        const height = sizeMatch ? parseInt(sizeMatch[2]) : 0;
-        const isFaceA = item.description?.includes('أمامي');
-        
-        return {
-          design: isFaceA ? designs.face_a : designs.face_b || '',
-          face: isFaceA ? 'a' : 'b',
-          size: `${width}×${height}`,
-          quantity: item.quantity,
-          area: width * height,
-          width,
-          height,
-          billboards: [item.billboard_id],
-          hasCutout: true,
-          cutoutCount: item.quantity,
-          cutoutImageUrl: item.cutout_image_url,
-          description: item.description,
-          unitCost: item.unit_cost,
-          totalCost: item.total_cost
-        };
-      });
-
-      const totalCutouts = cutoutTask.total_quantity || cutoutItems.reduce((sum: number, item: any) => 
-        sum + item.quantity, 0);
-
-      setCutoutTaskData({
-        designGroups,
-        cutoutPricePerUnit: cutoutTask.unit_cost || (totalCutouts > 0 ? task.company_cutout_cost / totalCutouts : 0),
-        totalCutouts,
-        totalCost: cutoutTask.total_cost || task.company_cutout_cost,
-        cutoutPrinterName: (cutoutTask as any).printer?.name || 'غير محدد'
-      });
-
-      setShowCutoutDialog(true);
-    } catch (error) {
-      console.error('Error loading cutout task:', error);
-      toast.error('فشل في تحميل بيانات مهمة القص');
-    } finally {
-      setLoadingCutout(false);
-    }
-  };
+  // Using UnifiedTaskInvoice now - old handlers removed
 
   const getStatusBadge = (status: string) => {
     const variants: Record<string, { label: string; variant: 'default' | 'secondary' | 'destructive' | 'outline' }> = {
@@ -726,47 +530,53 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
               طباعة الفواتير
             </h4>
             
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {/* فاتورة الزبون */}
               <CompositeTaskInvoicePrint task={task} />
               
+              {/* فاتورة المطبعة */}
               {task.print_task_id && (
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={handlePrintPrintInvoice}
-                  disabled={loadingPrint}
-                  className="bg-primary hover:bg-primary/90"
+                  onClick={() => openInvoice('print_vendor')}
+                  className="bg-blue-600 hover:bg-blue-700"
                 >
-                  {loadingPrint ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Printer className="h-4 w-4 mr-2" />
-                  )}
-                  {loadingPrint ? 'جاري التحميل...' : 'فاتورة المطبعة'}
+                  <Printer className="h-4 w-4 mr-2" />
+                  فاتورة المطبعة
                 </Button>
               )}
 
+              {/* فاتورة القص */}
               {hasCutouts && (
                 <Button
                   variant="default"
                   size="sm"
-                  onClick={handlePrintCutoutInvoice}
-                  disabled={loadingCutout}
+                  onClick={() => openInvoice('cutout_vendor')}
                   className="bg-purple-600 hover:bg-purple-700"
                 >
-                  {loadingCutout ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                  ) : (
-                    <Scissors className="h-4 w-4 mr-2" />
-                  )}
-                  {loadingCutout ? 'جاري التحميل...' : 'فاتورة القص'}
+                  <Scissors className="h-4 w-4 mr-2" />
+                  فاتورة القص
+                </Button>
+              )}
+
+              {/* فاتورة التركيب */}
+              {task.installation_task_id && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => openInvoice('installation_team')}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  <Users className="h-4 w-4 mr-2" />
+                  فاتورة الفرقة
                 </Button>
               )}
             </div>
           </div>
 
           {/* أزرار الإدارة */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
             {onEditCosts && (
               <Button
                 variant="outline"
@@ -789,7 +599,6 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
               </Button>
             )}
 
-
             <Button
               variant="destructive"
               size="sm"
@@ -801,44 +610,13 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           </div>
         </div>
 
-        {/* Print Invoice Dialog */}
-        <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>فاتورة الطباعة للمطبعة</DialogTitle>
-            </DialogHeader>
-            {printTaskData && (
-              <PrintTaskInvoice
-                designGroups={printTaskData.designGroups}
-                pricePerMeter={printTaskData.pricePerMeter}
-                cutoutPricePerUnit={printTaskData.cutoutPricePerUnit}
-                printerName={printTaskData.printerName}
-                cutoutPrinterName={printTaskData.cutoutPrinterName}
-                totalArea={printTaskData.totalArea}
-                totalCutouts={printTaskData.totalCutouts}
-                showPrices={true}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Cutout Invoice Dialog */}
-        <Dialog open={showCutoutDialog} onOpenChange={setShowCutoutDialog}>
-          <DialogContent className="max-w-4xl">
-            <DialogHeader>
-              <DialogTitle>فاتورة القص للمطبعة</DialogTitle>
-            </DialogHeader>
-            {cutoutTaskData && (
-              <CutoutTaskInvoice
-                designGroups={cutoutTaskData.designGroups}
-                cutoutPricePerUnit={cutoutTaskData.cutoutPricePerUnit}
-                totalCutouts={cutoutTaskData.totalCutouts}
-                cutoutPrinterName={cutoutTaskData.cutoutPrinterName}
-                showPrices={true}
-              />
-            )}
-          </DialogContent>
-        </Dialog>
+        {/* Unified Invoice Dialog */}
+        <UnifiedTaskInvoice
+          open={invoiceDialogOpen}
+          onOpenChange={setInvoiceDialogOpen}
+          task={task}
+          invoiceType={currentInvoiceType}
+        />
 
         {/* Delete Confirmation Dialog */}
         <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>

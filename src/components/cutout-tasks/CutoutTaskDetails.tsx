@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Scissors, User, Calendar, Package, Edit2, Save, X, Trash2, Printer } from 'lucide-react';
+import { Scissors, User, Calendar, Package, Edit2, Save, X, Trash2, Printer, Building2 } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { toast } from 'sonner';
 
@@ -62,11 +62,30 @@ const priorityLabels: Record<string, string> = {
 export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
   const queryClient = useQueryClient();
   const [editingPrices, setEditingPrices] = useState(false);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(task?.printer_id || null);
   
   // Update local state when task changes
   const [customerTotalAmount, setCustomerTotalAmount] = useState(0);
   const [unitCost, setUnitCost] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
+
+  // جلب قائمة المطابع
+  const { data: printers = [] } = useQuery({
+    queryKey: ['printers'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('printers')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // تحديث المطبعة المختارة عند تغيير المهمة
+  React.useEffect(() => {
+    setSelectedPrinterId(task?.printer_id || null);
+  }, [task?.printer_id]);
 
   // Sync state with task and load from composite_tasks if values are 0
   React.useEffect(() => {
@@ -203,6 +222,27 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
     },
     onError: (error: any) => {
       toast.error('فشل في تحديث الأسعار: ' + error.message);
+    }
+  });
+
+  // تحديث المطبعة
+  const updatePrinterMutation = useMutation({
+    mutationFn: async (printerId: string) => {
+      if (!task?.id) return;
+      const { error } = await supabase
+        .from('cutout_tasks')
+        .update({ printer_id: printerId })
+        .eq('id', task.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('تم تحديد المطبعة بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['cutout-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['printer-accounts'] });
+    },
+    onError: (error: any) => {
+      toast.error('فشل في تحديد المطبعة: ' + error.message);
     }
   });
 
@@ -439,6 +479,49 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
         </div>
       </div>
 
+      {/* Printer Selection Card - يظهر عندما لا يوجد مطبعة محددة */}
+      {!task.printer_id && (
+        <Card className="border-2 border-purple-200 dark:border-purple-800 bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 shadow-lg">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2 text-purple-700 dark:text-purple-400">
+              <Building2 className="h-5 w-5" />
+              اختر المطبعة لهذه المهمة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <Select
+                value={selectedPrinterId || ''}
+                onValueChange={(value) => setSelectedPrinterId(value)}
+              >
+                <SelectTrigger className="flex-1 bg-white dark:bg-slate-800">
+                  <SelectValue placeholder="اختر المطبعة..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {printers.map((printer) => (
+                    <SelectItem key={printer.id} value={printer.id}>
+                      {printer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => {
+                  if (selectedPrinterId) {
+                    updatePrinterMutation.mutate(selectedPrinterId);
+                  }
+                }}
+                disabled={!selectedPrinterId || updatePrinterMutation.isPending}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                تأكيد
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
@@ -459,7 +542,29 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
               <Scissors className="h-5 w-5 text-muted-foreground" />
               <div>
                 <p className="text-sm text-muted-foreground">المطبعة</p>
-                <p className="font-medium">{task.printers?.name || 'لم يتم التحديد'}</p>
+                {task.printer_id ? (
+                  <p className="font-medium">{task.printers?.name || 'غير محدد'}</p>
+                ) : (
+                  <Select
+                    value={selectedPrinterId || ''}
+                    onValueChange={(value) => {
+                      setSelectedPrinterId(value);
+                      updatePrinterMutation.mutate(value);
+                    }}
+                    disabled={updatePrinterMutation.isPending}
+                  >
+                    <SelectTrigger className="h-8 text-xs w-32">
+                      <SelectValue placeholder="اختر..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {printers.map((printer) => (
+                        <SelectItem key={printer.id} value={printer.id}>
+                          {printer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
             </div>
           </CardContent>

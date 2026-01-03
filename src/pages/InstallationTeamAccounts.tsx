@@ -42,7 +42,13 @@ interface BillboardDetails {
   customer_name: string;
   size: string;
   image_url?: string;
+  installation_image_url?: string;
 }
+
+// Helper function to create a unique key for billboard + contract combination
+const getBillboardContractKey = (billboardId: number, contractId: number): string => {
+  return `${billboardId}_${contractId}`;
+};
 
 interface SizePricing {
   name: string;
@@ -53,7 +59,7 @@ export default function InstallationTeamAccounts() {
   const [summaries, setSummaries] = useState<TeamSummary[]>([]);
   const [selectedTeamId, setSelectedTeamId] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<TeamAccount[]>([]);
-  const [billboardDetails, setBillboardDetails] = useState<Record<number, BillboardDetails>>({});
+  const [billboardDetails, setBillboardDetails] = useState<Record<string, BillboardDetails>>({});
   const [sizePricing, setSizePricing] = useState<SizePricing[]>([]);
   const [loading, setLoading] = useState(true);
   
@@ -127,34 +133,82 @@ export default function InstallationTeamAccounts() {
       // Load billboard details with size and image
       if (data && data.length > 0) {
         const billboardIds = [...new Set(data.map(a => a.billboard_id))];
-        const { data: billboards, error: billboardError } = await supabase
-          .from('billboards')
-          .select('ID, Billboard_Name, Size, Image_URL')
-          .in('ID', billboardIds);
+        const contractIds = [...new Set(data.map(a => a.contract_id))];
+        const taskItemIds = [...new Set(data.map(a => a.task_item_id).filter(Boolean))];
 
-        if (!billboardError && billboards) {
-          const contractIds = [...new Set(data.map(a => a.contract_id))];
-          const { data: contracts, error: contractError } = await supabase
-            .from('Contract')
-            .select('Contract_Number, "Customer Name"')
-            .in('Contract_Number', contractIds);
+        const emptyRes = { data: [], error: null } as any;
 
-          if (!contractError && contracts) {
-            const detailsMap: Record<number, BillboardDetails> = {};
-            data.forEach(account => {
-              const billboard = billboards.find(b => b.ID === account.billboard_id);
-              const contract = contracts.find(c => c.Contract_Number === account.contract_id);
-              if (billboard) {
-                detailsMap[account.billboard_id] = {
-                  billboard_name: billboard.Billboard_Name || `لوحة ${account.billboard_id}`,
-                  customer_name: contract?.['Customer Name'] || '',
-                  size: billboard.Size || '',
-                  image_url: billboard.Image_URL || undefined
-                };
-              }
-            });
-            setBillboardDetails(detailsMap);
-          }
+        const [
+          billboardsRes,
+          contractsRes,
+          taskItemsRes,
+          historyRes,
+        ] = await Promise.all([
+          billboardIds.length
+            ? supabase.from('billboards').select('ID, Billboard_Name, Size, Image_URL').in('ID', billboardIds)
+            : Promise.resolve(emptyRes),
+          contractIds.length
+            ? supabase.from('Contract').select('Contract_Number, "Customer Name"').in('Contract_Number', contractIds)
+            : Promise.resolve(emptyRes),
+          taskItemIds.length
+            ? supabase
+                .from('installation_task_items')
+                .select('id, installed_image_face_a_url, installed_image_face_b_url, installed_image_url')
+                .in('id', taskItemIds)
+            : Promise.resolve(emptyRes),
+          billboardIds.length && contractIds.length
+            ? supabase
+                .from('billboard_history')
+                .select('billboard_id, contract_number, installed_image_face_a_url, installed_image_face_b_url')
+                .in('billboard_id', billboardIds)
+                .in('contract_number', contractIds)
+            : Promise.resolve(emptyRes),
+        ]);
+
+        const { data: billboards, error: billboardError } = billboardsRes;
+        const { data: contracts } = contractsRes;
+        const { data: taskItems } = taskItemsRes;
+        const { data: historyData } = historyRes;
+
+        if (billboardError) throw billboardError;
+
+        const pickImageUrl = (...urls: Array<string | null | undefined>): string | undefined =>
+          urls.find((u) => typeof u === 'string' && u.trim().length > 0) as string | undefined;
+
+        const taskItemById = new Map((taskItems || []).map((ti: any) => [ti.id, ti]));
+
+        if (billboards) {
+          const detailsMap: Record<string, BillboardDetails> = {};
+
+          data.forEach(account => {
+            const billboard = billboards.find(b => b.ID === account.billboard_id);
+            const contract = contracts?.find(c => c.Contract_Number === account.contract_id);
+            const taskItem = taskItemById.get(account.task_item_id) as any;
+            const history = historyData?.find((h: any) =>
+              h.billboard_id === account.billboard_id &&
+              h.contract_number === account.contract_id
+            );
+
+            if (billboard) {
+              const key = getBillboardContractKey(account.billboard_id, account.contract_id);
+              detailsMap[key] = {
+                billboard_name: billboard.Billboard_Name || `لوحة ${account.billboard_id}`,
+                customer_name: contract?.['Customer Name'] || '',
+                size: billboard.Size || '',
+                image_url: billboard.Image_URL || undefined,
+                // Prefer installation task item images (face A/front), then fallback to any available source
+                installation_image_url: pickImageUrl(
+                  taskItem?.installed_image_face_a_url,
+                  taskItem?.installed_image_url,
+                  taskItem?.installed_image_face_b_url,
+                  history?.installed_image_face_a_url,
+                  history?.installed_image_face_b_url
+                )
+              };
+            }
+          });
+
+          setBillboardDetails(detailsMap);
         }
       }
     } catch (error: any) {
@@ -183,6 +237,16 @@ export default function InstallationTeamAccounts() {
     return sizeInfo?.installation_price || 0;
   };
 
+  const getEffectiveAccountAmount = (a: TeamAccount): number => {
+    const stored = Number(a.amount || 0);
+    if (stored > 0) return stored;
+
+    const key = getBillboardContractKey(a.billboard_id, a.contract_id);
+    const details = billboardDetails[key];
+    const base = details?.size ? getInstallationPrice(details.size) : 0;
+    return Number(base || 0);
+  };
+
   // Group accounts by contract
   const groupedAccounts = accounts.reduce((groups, account) => {
     const contractId = account.contract_id;
@@ -195,11 +259,7 @@ export default function InstallationTeamAccounts() {
 
   // Calculate selected amounts
   const selectedAccounts = accounts.filter(a => selectedIds.has(a.id));
-  const selectedAmount = selectedAccounts.reduce((sum, a) => {
-    const details = billboardDetails[a.billboard_id];
-    const priceFromSizes = details?.size ? getInstallationPrice(details.size) : 0;
-    return sum + (priceFromSizes || a.amount);
-  }, 0);
+  const selectedAmount = selectedAccounts.reduce((sum, a) => sum + getEffectiveAccountAmount(a), 0);
 
   // Handle bulk payment
   const handleBulkPayment = async () => {
@@ -215,12 +275,12 @@ export default function InstallationTeamAccounts() {
       setProcessingPayment(true);
 
       const billboardsForReceipt = selectedAccounts.map(a => {
-        const details = billboardDetails[a.billboard_id];
-        const priceFromSizes = details?.size ? getInstallationPrice(details.size) : 0;
+        const key = getBillboardContractKey(a.billboard_id, a.contract_id);
+        const details = billboardDetails[key];
         return {
           billboard_name: details?.billboard_name || `لوحة ${a.billboard_id}`,
           size: details?.size || '-',
-          amount: priceFromSizes || a.amount,
+          amount: getEffectiveAccountAmount(a),
           contract_id: a.contract_id
         };
       });
@@ -228,14 +288,11 @@ export default function InstallationTeamAccounts() {
       const totalAmount = billboardsForReceipt.reduce((sum, b) => sum + b.amount, 0);
 
       for (const account of selectedAccounts) {
-        const details = billboardDetails[account.billboard_id];
-        const priceFromSizes = details?.size ? getInstallationPrice(details.size) : 0;
-        
         const { error } = await supabase
           .from('installation_team_accounts')
-          .update({ 
+          .update({
             status: 'paid',
-            amount: priceFromSizes || account.amount,
+            amount: getEffectiveAccountAmount(account),
             notes: paymentNotes || null
           })
           .eq('id', account.id);
@@ -244,7 +301,7 @@ export default function InstallationTeamAccounts() {
       }
 
       toast.success(`تم سداد ${selectedIds.size} لوحة بمبلغ ${totalAmount.toLocaleString('ar-LY')} د.ل`);
-      
+
       setReceiptData({
         amount: totalAmount,
         paid_at: new Date().toISOString(),
@@ -252,10 +309,10 @@ export default function InstallationTeamAccounts() {
         notes: paymentNotes,
         billboards: billboardsForReceipt
       });
-      
+
       setPaymentDialogOpen(false);
       setReceiptDialogOpen(true);
-      
+
       if (selectedTeamId) {
         await loadTeamAccounts(selectedTeamId);
       }
@@ -269,6 +326,37 @@ export default function InstallationTeamAccounts() {
       toast.error('فشل في معالجة السداد');
     } finally {
       setProcessingPayment(false);
+    }
+  };
+
+  // Handle updating individual account amount
+  const handleUpdateAmount = async (id: string, newAmount: number, reason: string) => {
+    try {
+      const existingAccount = accounts.find(a => a.id === id);
+      const newNotes = reason 
+        ? `${existingAccount?.notes ? existingAccount.notes + ' | ' : ''}تعديل السعر: ${reason}`
+        : existingAccount?.notes;
+
+      const { error } = await supabase
+        .from('installation_team_accounts')
+        .update({ 
+          amount: newAmount,
+          notes: newNotes
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      toast.success('تم تحديث السعر بنجاح');
+      
+      // Reload accounts
+      if (selectedTeamId) {
+        await loadTeamAccounts(selectedTeamId);
+      }
+      await loadSummaries();
+    } catch (error: any) {
+      console.error('Error updating amount:', error);
+      toast.error('فشل في تحديث السعر');
     }
   };
 
@@ -474,7 +562,9 @@ export default function InstallationTeamAccounts() {
               </div>
             ) : (
               Object.entries(groupedAccounts).map(([contractId, contractAccounts]) => {
-                const customerName = billboardDetails[contractAccounts[0]?.billboard_id]?.customer_name || '';
+                const firstAccount = contractAccounts[0];
+                const firstKey = firstAccount ? getBillboardContractKey(firstAccount.billboard_id, firstAccount.contract_id) : '';
+                const customerName = billboardDetails[firstKey]?.customer_name || '';
                 return (
                   <ContractBillboardsGroup
                     key={contractId}
@@ -482,8 +572,11 @@ export default function InstallationTeamAccounts() {
                     customerName={customerName}
                     accounts={contractAccounts}
                     billboardDetails={billboardDetails}
+                    sizePricing={sizePricing}
                     selectedIds={selectedIds}
                     onSelectionChange={setSelectedIds}
+                    onUpdateAmount={handleUpdateAmount}
+                    getBillboardContractKey={getBillboardContractKey}
                   />
                 );
               })

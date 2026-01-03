@@ -635,13 +635,13 @@ export default function Billboards() {
 
   // ✅ FIXED: Simple pagination
   const PaginationControls = () => (
-    <div className="flex items-center justify-center gap-2">
+    <div className="flex items-center justify-center gap-1.5">
       <Button
         variant="outline"
         size="sm"
         onClick={handlePreviousPage}
         disabled={currentPage === 1}
-        className="px-3 py-1"
+        className="px-4 py-2 h-10 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 border-slate-300 dark:border-slate-700 hover:from-primary/10 hover:to-primary/5 hover:border-primary/50 disabled:opacity-50 transition-all duration-200 font-medium"
       >
         السابق
       </Button>
@@ -660,7 +660,11 @@ export default function Billboards() {
             variant={currentPage === p ? "default" : "outline"}
             size="sm"
             onClick={() => handlePageChange(p)}
-            className="w-8 h-8 p-0"
+            className={`w-10 h-10 p-0 font-bold transition-all duration-200 ${
+              currentPage === p 
+                ? 'bg-gradient-to-r from-primary to-primary/80 text-primary-foreground shadow-lg shadow-primary/30 scale-105' 
+                : 'bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 border-slate-300 dark:border-slate-700 hover:from-primary/10 hover:to-primary/5 hover:border-primary/50'
+            }`}
           >
             {p}
           </Button>
@@ -672,7 +676,7 @@ export default function Billboards() {
         size="sm"
         onClick={handleNextPage}
         disabled={currentPage === totalPages}
-        className="px-3 py-1"
+        className="px-4 py-2 h-10 bg-gradient-to-r from-slate-100 to-slate-50 dark:from-slate-800 dark:to-slate-900 border-slate-300 dark:border-slate-700 hover:from-primary/10 hover:to-primary/5 hover:border-primary/50 disabled:opacity-50 transition-all duration-200 font-medium"
       >
         التالي
       </Button>

@@ -18,6 +18,8 @@ export interface MeasurementsHTMLOptions {
   notes?: string;
   statisticsCards?: { label: string; value: string | number; unit?: string }[];
   paymentDetailsTable?: { label: string; value: string }[];
+  customHeaderHtml?: string; // Custom HTML to show at the top before table
+  additionalContent?: string; // Custom HTML to append after table
 }
 
 /**
@@ -522,7 +524,7 @@ const generatePaymentDetailsTable = (
  * Generate complete HTML document for measurements-style print
  */
 export const generateMeasurementsHTML = (options: MeasurementsHTMLOptions): string => {
-  const { config, documentData, partyData, columns, rows, totals, totalsTitle, notes, statisticsCards, paymentDetailsTable } = options;
+  const { config, documentData, partyData, columns, rows, totals, totalsTitle, notes, statisticsCards, paymentDetailsTable, customHeaderHtml, additionalContent } = options;
 
   const css = generateMeasurementsCSS(config);
   const headerHTML = generateHeader(config, documentData);
@@ -544,8 +546,10 @@ export const generateMeasurementsHTML = (options: MeasurementsHTMLOptions): stri
       <div class="measurements-container">
         ${headerHTML}
         ${partyHTML}
+        ${customHeaderHtml || ''}
         ${paymentDetailsHTML}
         ${tableHTML}
+        ${additionalContent || ''}
         ${notesHTML}
         ${footerHTML}
       </div>

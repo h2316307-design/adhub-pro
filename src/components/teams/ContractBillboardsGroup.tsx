@@ -21,15 +21,24 @@ interface BillboardDetails {
   customer_name: string;
   size: string;
   image_url?: string;
+  installation_image_url?: string;
+}
+
+interface SizePricing {
+  name: string;
+  installation_price: number;
 }
 
 interface ContractBillboardsGroupProps {
   contractId: number;
   customerName: string;
   accounts: Account[];
-  billboardDetails: Record<number, BillboardDetails>;
+  billboardDetails: Record<string, BillboardDetails>;
+  sizePricing: SizePricing[];
   selectedIds: Set<string>;
   onSelectionChange: (ids: Set<string>) => void;
+  onUpdateAmount?: (id: string, newAmount: number, reason: string) => void;
+  getBillboardContractKey: (billboardId: number, contractId: number) => string;
 }
 
 export default function ContractBillboardsGroup({
@@ -37,16 +46,44 @@ export default function ContractBillboardsGroup({
   customerName,
   accounts,
   billboardDetails,
+  sizePricing,
   selectedIds,
-  onSelectionChange
+  onSelectionChange,
+  onUpdateAmount,
+  getBillboardContractKey
 }: ContractBillboardsGroupProps) {
   const [isOpen, setIsOpen] = useState(true);
   
+  // Get installation price from sizes table
+  const getInstallationPrice = (size: string): number | undefined => {
+    const sizeInfo = sizePricing.find(s => s.name === size);
+    return sizeInfo?.installation_price;
+  };
+
   const pendingAccounts = accounts.filter(a => a.status === 'pending');
   const paidAccounts = accounts.filter(a => a.status === 'paid');
-  const totalAmount = accounts.reduce((sum, a) => sum + a.amount, 0);
-  const pendingAmount = pendingAccounts.reduce((sum, a) => sum + a.amount, 0);
-  const paidAmount = paidAccounts.reduce((sum, a) => sum + a.amount, 0);
+  
+  // Calculate amounts using base prices from sizes table ALWAYS
+  const totalAmount = accounts.reduce((sum, a) => {
+    const key = getBillboardContractKey(a.billboard_id, a.contract_id);
+    const details = billboardDetails[key];
+    const baseFromTable = details?.size ? getInstallationPrice(details.size) : 0;
+    return sum + Number(baseFromTable || 0);
+  }, 0);
+  
+  const pendingAmount = pendingAccounts.reduce((sum, a) => {
+    const key = getBillboardContractKey(a.billboard_id, a.contract_id);
+    const details = billboardDetails[key];
+    const baseFromTable = details?.size ? getInstallationPrice(details.size) : 0;
+    return sum + Number(baseFromTable || 0);
+  }, 0);
+  
+  const paidAmount = paidAccounts.reduce((sum, a) => {
+    const key = getBillboardContractKey(a.billboard_id, a.contract_id);
+    const details = billboardDetails[key];
+    const baseFromTable = details?.size ? getInstallationPrice(details.size) : 0;
+    return sum + Number(baseFromTable || 0);
+  }, 0);
 
   const allPendingSelected = pendingAccounts.length > 0 && 
     pendingAccounts.every(a => selectedIds.has(a.id));
@@ -136,16 +173,24 @@ export default function ContractBillboardsGroup({
         <CollapsibleContent>
           <CardContent className="p-4 bg-muted/20">
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
-              {accounts.map(account => (
-                <TeamBillboardCard
-                  key={account.id}
-                  account={account}
-                  billboardDetails={billboardDetails[account.billboard_id]}
-                  isSelected={selectedIds.has(account.id)}
-                  onSelectChange={(checked) => handleSelectOne(account.id, checked)}
-                  disabled={account.status !== 'pending'}
-                />
-              ))}
+              {accounts.map(account => {
+                const key = getBillboardContractKey(account.billboard_id, account.contract_id);
+                const details = billboardDetails[key];
+                const baseFromTable = details?.size ? getInstallationPrice(details.size) : undefined;
+                
+                return (
+                  <TeamBillboardCard
+                    key={account.id}
+                    account={account}
+                    billboardDetails={details}
+                    sizePriceFromTable={baseFromTable}
+                    isSelected={selectedIds.has(account.id)}
+                    onSelectChange={(checked) => handleSelectOne(account.id, checked)}
+                    onUpdateAmount={onUpdateAmount}
+                    disabled={account.status !== 'pending'}
+                  />
+                );
+              })}
             </div>
           </CardContent>
         </CollapsibleContent>

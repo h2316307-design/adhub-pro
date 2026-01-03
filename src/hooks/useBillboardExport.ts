@@ -596,6 +596,12 @@ export const useBillboardExport = () => {
         const hasContract = !!(billboard.Contract_Number ?? billboard.contractNumber);
         const contractExpired = isContractExpired(billboard.Rent_End_Date ?? billboard.rent_end_date);
         
+        // ✅ استبعاد اللوحات المخفية من المتاح
+        const isVisibleInAvailable = billboard.is_visible_in_available !== false;
+        if (!isVisibleInAvailable) {
+          return false;
+        }
+        
         // Exclude removed billboards
         if (statusValue === 'إزالة' || statusValue === 'ازالة' || statusLower === 'removed') {
           return false;
@@ -950,6 +956,10 @@ export const useBillboardExport = () => {
         const maintenanceType = String(billboard.maintenance_type ?? '').trim();
         const hasContract = !!(billboard.Contract_Number ?? billboard.contractNumber);
         const contractExpired = isContractExpired(billboard.Rent_End_Date ?? billboard.rent_end_date);
+        
+        // ✅ استبعاد اللوحات المخفية من المتاح
+        const isVisibleInAvailable = billboard.is_visible_in_available !== false;
+        if (!isVisibleInAvailable) return false;
         
         // Exclude removed billboards
         if (statusValue === 'إزالة' || statusValue === 'ازالة' || statusLower === 'removed') return false;

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
@@ -76,6 +76,83 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   });
   const [savingQuickEdit, setSavingQuickEdit] = useState(false);
   const [levels, setLevels] = useState<string[]>([]);
+  
+  // ✅ NEW: حالة تكبير التصاميم والصور
+  const [designPreviewOpen, setDesignPreviewOpen] = useState(false);
+  const [designPreviewUrl, setDesignPreviewUrl] = useState<string>('');
+  const [designPreviewTitle, setDesignPreviewTitle] = useState<string>('');
+  
+  // ✅ NEW: اللون الغالب من التصميم
+  const [dominantColor, setDominantColor] = useState<string | null>(null);
+
+  // ✅ استخراج اللون الغالب من تصميم الوجه الأمامي (من latestTask أو billboard)
+  useEffect(() => {
+    // جلب التصميم من أماكن متعددة بالأولوية
+    const billboardAny = billboard as any;
+    let designImage: string | null = null;
+    
+    // 1. من task_designs (selected_design)
+    if (latestTask?.selected_design?.design_face_a_url) {
+      designImage = latestTask.selected_design.design_face_a_url;
+    }
+    // 2. من installation_task_items
+    else if (latestTask?.design_face_a) {
+      designImage = latestTask.design_face_a;
+    }
+    // 3. من billboards مباشرة
+    else if (billboardAny.design_face_a) {
+      designImage = billboardAny.design_face_a;
+    }
+    
+    if (!designImage) {
+      setDominantColor(null);
+      return;
+    }
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        
+        canvas.width = 50;
+        canvas.height = 50;
+        ctx.drawImage(img, 0, 0, 50, 50);
+        
+        const imageData = ctx.getImageData(0, 0, 50, 50).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        
+        for (let i = 0; i < imageData.length; i += 4) {
+          const brightness = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
+          if (brightness > 30 && brightness < 225) {
+            r += imageData[i];
+            g += imageData[i + 1];
+            b += imageData[i + 2];
+            count++;
+          }
+        }
+        
+        if (count > 0) {
+          r = Math.round(r / count);
+          g = Math.round(g / count);
+          b = Math.round(b / count);
+          setDominantColor(`${r}, ${g}, ${b}`);
+        } else {
+          setDominantColor(null);
+        }
+      } catch (e) {
+        console.log('Could not extract color from design - CORS issue likely');
+        setDominantColor(null);
+      }
+    };
+    img.onerror = () => {
+      console.log('Failed to load design image for color extraction');
+      setDominantColor(null);
+    };
+    img.src = designImage;
+  }, [latestTask, (billboard as any).design_face_a]);
 
   useEffect(() => {
     const loadTaskData = async () => {
@@ -472,46 +549,74 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
     (billboard as any).isShared
   );
 
+  // الحصول على صورة التصميم الأمامي
+  const getFrontDesignUrl = () => {
+    if (latestTask?.design_face_a || latestTask?.selected_design?.design_face_a_url) {
+      return latestTask.design_face_a || latestTask.selected_design?.design_face_a_url;
+    }
+    return null;
+  };
+
+  const frontDesignUrl = getFrontDesignUrl();
+
+  // دالة فتح تكبير التصميم/الصورة
+  const openDesignPreview = (url: string, title: string) => {
+    setDesignPreviewUrl(url);
+    setDesignPreviewTitle(title);
+    setDesignPreviewOpen(true);
+  };
+
+  // حساب ستايل الكرت بناءً على اللون الغالب
+  const getCardStyle = (): React.CSSProperties => {
+    if (dominantColor) {
+      return {
+        borderColor: `rgba(${dominantColor}, 0.8)`,
+        background: `linear-gradient(145deg, rgba(${dominantColor}, 0.35) 0%, rgba(${dominantColor}, 0.2) 30%, rgba(15, 15, 15, 0.98) 100%)`,
+        boxShadow: `0 8px 32px rgba(${dominantColor}, 0.4), inset 0 1px 0 rgba(${dominantColor}, 0.3), inset 0 0 20px rgba(${dominantColor}, 0.1)`
+      };
+    }
+    // اللون الأسود الفخم الافتراضي
+    return {
+      borderColor: 'rgba(80, 80, 80, 0.6)',
+      background: 'linear-gradient(145deg, #252525 0%, #1a1a1a 30%, #0a0a0a 100%)',
+      boxShadow: '0 8px 24px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.08)'
+    };
+  };
+
   return (
     <>
       <Card 
-        className={`group relative overflow-hidden rounded-3xl bg-gradient-to-br from-card via-card to-muted/20 border shadow-xl hover:shadow-2xl transition-all duration-500 hover:-translate-y-2 cursor-pointer ${
-          isSelected 
-            ? 'border-primary border-2 ring-2 ring-primary/30' 
-            : 'border-border/50 hover:border-primary/30'
+        className={`group relative overflow-hidden rounded-2xl border-2 shadow-md transition-all duration-300 hover:shadow-xl ${
+          isSelected ? 'ring-2 ring-primary/50' : ''
         }`}
-        onClick={isSelectable ? onToggleSelect : undefined}
+        style={getCardStyle()}
       >
         {/* Selection checkbox overlay */}
         {isSelectable && (
           <div 
-            className={`absolute top-3 right-3 z-50 transition-all duration-200 ${
-              isSelected ? 'opacity-100 scale-100' : 'opacity-0 group-hover:opacity-100 scale-90 group-hover:scale-100'
-            }`}
+            className={`absolute top-3 right-3 z-50 ${
+              isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+            } transition-opacity duration-200`}
             onClick={(e) => {
               e.stopPropagation();
               onToggleSelect?.();
             }}
           >
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center shadow-lg backdrop-blur-sm transition-all ${
+            <div className={`w-7 h-7 rounded-md flex items-center justify-center shadow-md backdrop-blur-sm ${
               isSelected 
                 ? 'bg-primary text-primary-foreground' 
                 : 'bg-white/90 dark:bg-slate-900/90 text-muted-foreground hover:bg-primary hover:text-primary-foreground'
             }`}>
-              <Check className="h-5 w-5" />
+              <Check className="h-4 w-4" />
             </div>
           </div>
         )}
 
-        {/* Decorative gradient border effect */}
-        <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br from-primary/20 via-transparent to-transparent transition-opacity duration-500 pointer-events-none ${
-          isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
-        }`} />
         
         <div className="relative">
-          {/* صورة اللوحة مع تأثيرات متقدمة */}
+          {/* صورة اللوحة */}
           <div 
-            className="aspect-[4/3] bg-gradient-to-br from-slate-200 to-slate-300 dark:from-slate-800 dark:to-slate-900 relative overflow-hidden cursor-pointer"
+            className="aspect-[4/3] bg-muted relative overflow-hidden cursor-pointer"
             onClick={(e) => {
               e.stopPropagation();
               setPreviewOpen(true);
@@ -520,17 +625,16 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             <BillboardImage
               billboard={billboard}
               alt={billboard.Billboard_Name}
-              className="w-full h-full object-cover transition-all duration-700 group-hover:scale-110"
+              className="w-full h-full object-cover"
             />
             
-            {/* Multi-layer gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+            {/* Gradient overlay */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
             
             {/* أيقونة التكبير */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
-              <div className="bg-black/50 rounded-full p-3 backdrop-blur-sm">
-                <ZoomIn className="h-8 w-8 text-white" />
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+              <div className="bg-black/50 rounded-full p-2 backdrop-blur-sm">
+                <ZoomIn className="h-6 w-6 text-white" />
               </div>
             </div>
 
@@ -595,6 +699,33 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             )}
           </div>
 
+          {/* ✅ عرض التصميم الأمامي تحت صورة اللوحة */}
+          {isAdmin && frontDesignUrl && (
+            <div 
+              className="relative h-20 bg-gradient-to-r from-pink-500/10 to-rose-500/10 border-t border-pink-500/20 cursor-pointer group/design"
+              onClick={(e) => {
+                e.stopPropagation();
+                openDesignPreview(frontDesignUrl, 'التصميم الأمامي');
+              }}
+            >
+              <img 
+                src={frontDesignUrl} 
+                alt="التصميم الأمامي"
+                className="w-full h-full object-cover transition-transform duration-300 group-hover/design:scale-105"
+                onError={(e) => {
+                  const target = e.target as HTMLImageElement;
+                  target.style.display = 'none';
+                }}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover/design:opacity-100 transition-opacity flex items-end justify-center pb-2">
+                <Badge className="bg-pink-500/90 text-white border-0 text-xs">
+                  <ZoomIn className="h-3 w-3 ml-1" />
+                  التصميم الأمامي
+                </Badge>
+              </div>
+            </div>
+          )}
+
           <CardContent className="p-5 space-y-4">
             {/* Quick info grid */}
             <div className="grid grid-cols-3 gap-2">
@@ -634,12 +765,12 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               <div className="flex flex-wrap gap-1.5">
                 {billboard.Municipality && (
                   <Badge variant="secondary" className="text-xs bg-muted/60 hover:bg-muted transition-colors">
-                    🏛️ {billboard.Municipality}
+                    البلدية: {billboard.Municipality}
                   </Badge>
                 )}
                 {billboard.District && (
                   <Badge variant="secondary" className="text-xs bg-muted/60 hover:bg-muted transition-colors">
-                    📍 {billboard.District}
+                    المنطقة: {billboard.District}
                   </Badge>
                 )}
               </div>
@@ -927,7 +1058,16 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                               {(latestTask.design_face_a || latestTask.selected_design?.design_face_a_url) && (
                                 <div className="space-y-2">
                                   <p className="text-xs text-muted-foreground font-medium">الوجه الأمامي</p>
-                                  <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-pink-500/30 shadow-lg shadow-pink-500/10 group/img">
+                                  <div 
+                                    className="relative aspect-video rounded-xl overflow-hidden border-2 border-pink-500/30 shadow-lg shadow-pink-500/10 group/img cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDesignPreview(
+                                        latestTask.design_face_a || latestTask.selected_design?.design_face_a_url,
+                                        'التصميم الأمامي'
+                                      );
+                                    }}
+                                  >
                                     <img 
                                       src={latestTask.design_face_a || latestTask.selected_design?.design_face_a_url} 
                                       alt="التصميم الأمامي" 
@@ -937,14 +1077,25 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                                         target.src = "/placeholder.svg";
                                       }}
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                      <ZoomIn className="h-8 w-8 text-white" />
+                                    </div>
                                   </div>
                                 </div>
                               )}
                               {(latestTask.design_face_b || latestTask.selected_design?.design_face_b_url) && (
                                 <div className="space-y-2">
                                   <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
-                                  <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-pink-500/30 shadow-lg shadow-pink-500/10 group/img">
+                                  <div 
+                                    className="relative aspect-video rounded-xl overflow-hidden border-2 border-pink-500/30 shadow-lg shadow-pink-500/10 group/img cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDesignPreview(
+                                        latestTask.design_face_b || latestTask.selected_design?.design_face_b_url,
+                                        'التصميم الخلفي'
+                                      );
+                                    }}
+                                  >
                                     <img 
                                       src={latestTask.design_face_b || latestTask.selected_design?.design_face_b_url} 
                                       alt="التصميم الخلفي" 
@@ -954,14 +1105,15 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                                         target.src = "/placeholder.svg";
                                       }}
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                      <ZoomIn className="h-8 w-8 text-white" />
+                                    </div>
                                   </div>
                                 </div>
                               )}
                             </div>
                           </div>
                         )}
-
                         {/* صور التركيب الفعلية */}
                         {(latestTask.installed_image_face_a_url || latestTask.installed_image_face_b_url) && (
                           <div className="space-y-3 pt-3 border-t border-border/50">
@@ -975,7 +1127,13 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                               {latestTask.installed_image_face_a_url && (
                                 <div className="space-y-2">
                                   <p className="text-xs text-muted-foreground font-medium">الوجه الأمامي</p>
-                                  <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-emerald-500/30 shadow-lg shadow-emerald-500/10 group/img">
+                                  <div 
+                                    className="relative aspect-video rounded-xl overflow-hidden border-2 border-emerald-500/30 shadow-lg shadow-emerald-500/10 group/img cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDesignPreview(latestTask.installed_image_face_a_url, 'صورة التركيب - الوجه الأمامي');
+                                    }}
+                                  >
                                     <img 
                                       src={latestTask.installed_image_face_a_url} 
                                       alt="صورة التركيب الأمامي" 
@@ -985,14 +1143,22 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                                         target.src = "/placeholder.svg";
                                       }}
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                      <ZoomIn className="h-8 w-8 text-white" />
+                                    </div>
                                   </div>
                                 </div>
                               )}
                               {latestTask.installed_image_face_b_url && (
                                 <div className="space-y-2">
                                   <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
-                                  <div className="relative aspect-video rounded-xl overflow-hidden border-2 border-emerald-500/30 shadow-lg shadow-emerald-500/10 group/img">
+                                  <div 
+                                    className="relative aspect-video rounded-xl overflow-hidden border-2 border-emerald-500/30 shadow-lg shadow-emerald-500/10 group/img cursor-pointer"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      openDesignPreview(latestTask.installed_image_face_b_url, 'صورة التركيب - الوجه الخلفي');
+                                    }}
+                                  >
                                     <img 
                                       src={latestTask.installed_image_face_b_url} 
                                       alt="صورة التركيب الخلفي" 
@@ -1002,7 +1168,9 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                                         target.src = "/placeholder.svg";
                                       }}
                                     />
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity" />
+                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center">
+                                      <ZoomIn className="h-8 w-8 text-white" />
+                                    </div>
                                   </div>
                                 </div>
                               )}
@@ -1221,6 +1389,40 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             {savingQuickEdit ? 'جاري الحفظ...' : 'حفظ'}
           </Button>
         </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Dialog تكبير التصاميم وصور التركيب */}
+    <Dialog open={designPreviewOpen} onOpenChange={setDesignPreviewOpen}>
+      <DialogContent className="max-w-[95vw] max-h-[95vh] p-0 bg-black/95 border-0">
+        <div className="relative w-full h-full flex items-center justify-center min-h-[60vh]">
+          {/* زر الإغلاق */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setDesignPreviewOpen(false)}
+            className="absolute top-4 right-4 z-50 bg-black/50 hover:bg-black/70 text-white rounded-full"
+          >
+            <X className="h-6 w-6" />
+          </Button>
+          
+          {/* عنوان الصورة */}
+          <div className="absolute top-4 left-4 z-50 bg-black/50 rounded-lg px-4 py-2 backdrop-blur-sm">
+            <h3 className="text-white font-bold text-lg">{designPreviewTitle}</h3>
+            <p className="text-white/70 text-sm">{billboard.Billboard_Name || `لوحة ${billboard.ID}`}</p>
+          </div>
+          
+          {/* الصورة المكبرة */}
+          <img 
+            src={designPreviewUrl} 
+            alt={designPreviewTitle}
+            className="max-w-full max-h-[85vh] object-contain" 
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              target.src = "/placeholder.svg";
+            }}
+          />
+        </div>
       </DialogContent>
     </Dialog>
   </>

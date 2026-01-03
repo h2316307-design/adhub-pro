@@ -13,6 +13,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2, DollarSign, Plus, Calculator, TrendingUp, TrendingDown, Lock, Calendar, Hash, Printer, Edit, Trash2, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import ExpenseReceiptPrintDialog from '@/components/billing/ExpenseReceiptPrintDialog';
+import { OperatingDuesPrintDialog } from '@/components/billing/OperatingDuesPrintDialog';
 
 interface Contract {
   id: string;
@@ -141,6 +142,7 @@ export default function OperatingExpenses() {
   const [showWithdrawalReceiptDialog, setShowWithdrawalReceiptDialog] = useState(false);
   const [selectedWithdrawalForReceipt, setSelectedWithdrawalForReceipt] = useState<Withdrawal | null>(null);
   const [editingWithdrawal, setEditingWithdrawal] = useState<Withdrawal | null>(null);
+  const [showPrintDialog, setShowPrintDialog] = useState(false);
   
   // Form states
   const [withdrawalAmount, setWithdrawalAmount] = useState<string>('');
@@ -743,6 +745,10 @@ export default function OperatingExpenses() {
           <Lock className="h-4 w-4" />
           تسكير حساب
         </Button>
+        <Button onClick={() => setShowPrintDialog(true)} variant="outline" className="expenses-action-btn">
+          <Printer className="h-4 w-4" />
+          طباعة كشف
+        </Button>
       </div>
 
       {/* Preview */}
@@ -1336,6 +1342,17 @@ export default function OperatingExpenses() {
           }}
         />
       )}
+
+      {/* Operating Dues Print Dialog */}
+      <OperatingDuesPrintDialog
+        open={showPrintDialog}
+        onClose={() => setShowPrintDialog(false)}
+        contracts={contracts}
+        withdrawals={withdrawals}
+        closures={closures}
+        excludedIds={excludedIds}
+        totals={totals}
+      />
     </div>
   );
 }

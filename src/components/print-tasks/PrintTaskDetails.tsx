@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Clock, CheckCircle2, Printer, AlertCircle, Package, Edit2, Save, X, Trash2 } from 'lucide-react';
+import { Clock, CheckCircle2, Printer, AlertCircle, Package, Edit2, Save, X, Trash2, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { CustomerInvoice } from './CustomerInvoice';
@@ -52,6 +52,25 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
   const [editingPrices, setEditingPrices] = useState(false);
   const [customerPricePerMeter, setCustomerPricePerMeter] = useState(0);
   const [printerPricePerMeter, setPrinterPricePerMeter] = useState(0);
+  const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(task?.printer_id || null);
+
+  // جلب قائمة المطابع
+  const { data: printers = [] } = useQuery({
+    queryKey: ['printers'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('printers')
+        .select('id, name')
+        .order('name');
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  // تحديث المطبعة المختارة عند تغيير المهمة
+  useEffect(() => {
+    setSelectedPrinterId(task?.printer_id || null);
+  }, [task?.printer_id]);
 
   // مزامنة قيم الأسعار مع بيانات المهمة عند تغيير المهمة
   useEffect(() => {
@@ -315,6 +334,27 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
     }
   });
 
+  // تحديث المطبعة
+  const updatePrinterMutation = useMutation({
+    mutationFn: async (printerId: string) => {
+      if (!task?.id) return;
+      const { error } = await supabase
+        .from('print_tasks')
+        .update({ printer_id: printerId })
+        .eq('id', task.id);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success('تم تحديد المطبعة بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['printer-accounts'] });
+    },
+    onError: (error: any) => {
+      toast.error('فشل في تحديد المطبعة: ' + error.message);
+    }
+  });
+
   const deleteTaskMutation = useMutation({
     mutationFn: async () => {
       if (!task?.id) return;
@@ -439,6 +479,49 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
         </div>
       </div>
 
+      {/* Printer Selection Card - يظهر عندما لا يوجد مطبعة محددة */}
+      {!task.printer_id && (
+        <Card className="border-2 border-amber-200 dark:border-amber-800 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 shadow-lg">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg flex items-center gap-2 text-amber-700 dark:text-amber-400">
+              <Building2 className="h-5 w-5" />
+              اختر المطبعة لهذه المهمة
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center gap-3">
+              <Select
+                value={selectedPrinterId || ''}
+                onValueChange={(value) => setSelectedPrinterId(value)}
+              >
+                <SelectTrigger className="flex-1 bg-white dark:bg-slate-800">
+                  <SelectValue placeholder="اختر المطبعة..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {printers.map((printer) => (
+                    <SelectItem key={printer.id} value={printer.id}>
+                      {printer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                onClick={() => {
+                  if (selectedPrinterId) {
+                    updatePrinterMutation.mutate(selectedPrinterId);
+                  }
+                }}
+                disabled={!selectedPrinterId || updatePrinterMutation.isPending}
+                className="bg-amber-600 hover:bg-amber-700"
+              >
+                <Save className="h-4 w-4 mr-2" />
+                تأكيد
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Basic Info Card */}
       <Card className="border-0 shadow-md bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm overflow-hidden">
         <div className="p-4 bg-gradient-to-r from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-700 border-b">
@@ -448,7 +531,31 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
             <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50">
               <span className="text-xs text-muted-foreground block mb-1">المطبعة</span>
-              <span className="font-semibold text-slate-700 dark:text-slate-200">{task.printers?.name || '-'}</span>
+              {task.printer_id ? (
+                <span className="font-semibold text-slate-700 dark:text-slate-200">{task.printers?.name || '-'}</span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={selectedPrinterId || ''}
+                    onValueChange={(value) => {
+                      setSelectedPrinterId(value);
+                      updatePrinterMutation.mutate(value);
+                    }}
+                    disabled={updatePrinterMutation.isPending}
+                  >
+                    <SelectTrigger className="h-8 text-xs">
+                      <SelectValue placeholder="اختر..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {printers.map((printer) => (
+                        <SelectItem key={printer.id} value={printer.id}>
+                          {printer.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
             <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-700/50">
               <span className="text-xs text-muted-foreground block mb-1">المساحة الإجمالية</span>

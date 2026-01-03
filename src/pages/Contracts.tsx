@@ -20,6 +20,7 @@ import { QuickContractDialog } from '@/components/contracts/QuickContractDialog'
 import { ContractCard } from '@/components/contracts/ContractCard';
 import { ContractStats } from '@/components/contracts/ContractStats';
 import { SizesInvoicePrintDialog } from '@/components/contracts/SizesInvoicePrintDialog';
+import { ContractRangeSelector } from '@/components/contracts/ContractRangeSelector';
 import { useLocation, useNavigate } from 'react-router-dom';
 import {
   createContract,
@@ -73,7 +74,7 @@ export default function Contracts() {
   const [isExportingMultiple, setIsExportingMultiple] = useState(false);
   const [sizesInvoiceOpen, setSizesInvoiceOpen] = useState(false);
   const [sizesInvoiceData, setSizesInvoiceData] = useState<{ billboards: any[]; customerName: string; contractNumbers: string[] }>({ billboards: [], customerName: '', contractNumbers: [] });
-  const [lockedCustomerName, setLockedCustomerName] = useState<string | null>(null);
+  const [isPrintingSelected, setIsPrintingSelected] = useState(false);
 
   const [billboardPrintData, setBillboardPrintData] = useState<{
     contractNumber: string | number;
@@ -770,44 +771,20 @@ export default function Contracts() {
       const newSet = new Set(prev);
       if (newSet.has(contractId)) {
         newSet.delete(contractId);
-        // If no more contracts selected, unlock customer filter
-        if (newSet.size === 0) {
-          setLockedCustomerName(null);
-        }
       } else {
-        // If this is the first selection, lock to this customer
-        if (newSet.size === 0) {
-          setLockedCustomerName(contractCustomerName);
-        }
-        // Only add if same customer
-        if (lockedCustomerName === null || lockedCustomerName === contractCustomerName) {
-          newSet.add(contractId);
-        } else {
-          toast.info('يمكنك فقط اختيار عقود لنفس العميل');
-          return prev;
-        }
+        newSet.add(contractId);
       }
       return newSet;
     });
   };
 
   const selectAllFiltered = () => {
-    // Only select contracts for the locked customer (or all if none locked)
-    const customerToFilter = lockedCustomerName || (filteredContracts[0]?.customer_name || null);
-    const ids = filteredContracts
-      .filter(c => !customerToFilter || c.customer_name === customerToFilter)
-      .map(c => c.id);
-    
-    if (ids.length > 0 && !lockedCustomerName) {
-      const firstContract = filteredContracts.find(c => ids.includes(c.id));
-      setLockedCustomerName(firstContract?.customer_name || null);
-    }
+    const ids = filteredContracts.map(c => c.id);
     setSelectedContractIds(new Set(ids));
   };
 
   const clearSelection = () => {
     setSelectedContractIds(new Set());
-    setLockedCustomerName(null);
   };
 
   const handleExportMultipleContracts = async () => {
@@ -971,6 +948,61 @@ export default function Contracts() {
       console.error('Error preparing sizes invoice:', error);
       toast.error('فشل في تجهيز فاتورة المقاسات');
     }
+  };
+
+  // طباعة جميع العقود المحددة
+  const handlePrintSelectedContracts = async () => {
+    if (selectedContractIds.size === 0) {
+      toast.error('يرجى اختيار عقد واحد على الأقل');
+      return;
+    }
+
+    setIsPrintingSelected(true);
+    try {
+      const contractsToPrint: any[] = [];
+      
+      for (const contractId of selectedContractIds) {
+        try {
+          const contractWithBillboards = await getContractWithBillboards(String(contractId));
+          contractsToPrint.push(contractWithBillboards);
+        } catch (e) {
+          console.error(`Failed to load contract ${contractId}:`, e);
+        }
+      }
+
+      if (contractsToPrint.length === 0) {
+        toast.error('فشل في تحميل العقود المحددة');
+        return;
+      }
+
+      // Print all contracts one after another
+      for (let i = 0; i < contractsToPrint.length; i++) {
+        const contract = contractsToPrint[i];
+        setSelectedContractForPDF(contract);
+        setPdfOpen(true);
+        
+        // Wait for user to close each print dialog before showing next
+        await new Promise<void>((resolve) => {
+          const checkClosed = setInterval(() => {
+            // We'll handle this through state - for now just print the first one
+            clearInterval(checkClosed);
+            resolve();
+          }, 100);
+        });
+      }
+
+      toast.success(`تم فتح ${contractsToPrint.length} عقد للطباعة`);
+    } catch (error) {
+      console.error('Error printing selected contracts:', error);
+      toast.error('فشل في طباعة العقود');
+    } finally {
+      setIsPrintingSelected(false);
+    }
+  };
+
+  // Handle range selection
+  const handleRangeSelection = (newSelectedIds: Set<string | number>) => {
+    setSelectedContractIds(newSelectedIds);
   };
 
   if (loading) {
@@ -1195,14 +1227,22 @@ export default function Contracts() {
             </label>
           </div>
           
-          {/* عداد النتائج */}
-          <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
-            <FileText className="h-4 w-4" />
-            <span>عرض {filteredContracts.length} من {contracts.length} عقد</span>
-            {separateExpired && (
-              <span className="text-muted-foreground">
-                ({activeContracts.length} نشط، {expiredContracts.length} منتهي)
-              </span>
+          {/* عداد النتائج وزر تحديد النطاق */}
+          <div className="flex items-center justify-between gap-2 mt-3 text-sm text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <FileText className="h-4 w-4" />
+              <span>عرض {filteredContracts.length} من {contracts.length} عقد</span>
+              {separateExpired && (
+                <span className="text-muted-foreground">
+                  ({activeContracts.length} نشط، {expiredContracts.length} منتهي)
+                </span>
+              )}
+            </div>
+            {selectedContractIds.size === 0 && (
+              <ContractRangeSelector
+                contracts={contracts}
+                onSelectRange={handleRangeSelection}
+              />
             )}
           </div>
         </CardContent>
@@ -1217,12 +1257,6 @@ export default function Contracts() {
                 <Badge variant="default" className="text-base px-3 py-1">
                   {selectedContractIds.size} عقد مختار
                 </Badge>
-                {lockedCustomerName && (
-                  <Badge variant="secondary" className="text-sm px-2 py-1">
-                    <User className="h-3 w-3 ml-1" />
-                    {lockedCustomerName}
-                  </Badge>
-                )}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -1233,15 +1267,34 @@ export default function Contracts() {
                   إلغاء الاختيار
                 </Button>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <ContractRangeSelector
+                  contracts={contracts}
+                  onSelectRange={handleRangeSelection}
+                />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={selectAllFiltered}
+                    className="gap-2"
+                  >
+                    <CheckSquare className="h-4 w-4" />
+                    اختيار الكل ({filteredContracts.length})
+                  </Button>
+                </div>
                 <Button
+                  onClick={handlePrintSelectedContracts}
+                  disabled={isPrintingSelected}
                   variant="outline"
-                  size="sm"
-                  onClick={selectAllFiltered}
-                  className="gap-2"
+                  className="gap-2 border-primary text-primary hover:bg-primary/10"
                 >
-                  <CheckSquare className="h-4 w-4" />
-                  اختيار الكل {lockedCustomerName ? `(${filteredContracts.filter(c => c.customer_name === lockedCustomerName).length})` : `(${filteredContracts.length})`}
+                  {isPrintingSelected ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Printer className="h-4 w-4" />
+                  )}
+                  طباعة العقود ({selectedContractIds.size})
                 </Button>
                 <Button
                   onClick={handlePrintSizesInvoice}

@@ -186,6 +186,7 @@ export default function PricingList() {
   const [printCategory, setPrintCategory] = useState<string>('عادي'); // Default to first primary customer
   const [printLevel, setPrintLevel] = useState<string>('all'); // 'all' or specific level code
   const [showLevelColumn, setShowLevelColumn] = useState(true); // Show/hide level column in print
+  const [priceMarkupPercent, setPriceMarkupPercent] = useState<number>(0); // نسبة زيادة الأسعار
 
   // حالات التعديل والحذف
   const [editCatOpen, setEditCatOpen] = useState(false);
@@ -1504,7 +1505,7 @@ export default function PricingList() {
   };
 
   // تصدير الأسعار لفئة معينة إلى Excel - يشمل جميع المستويات
-  const exportCategoryToExcel = (cat: string) => {
+  const exportCategoryToExcel = (cat: string, markupPercent: number = 0) => {
     try {
       toast.info('جاري تحضير ملف Excel...');
       const cats = cat === PRIMARY_SENTINEL ? PRIMARY_CUSTOMERS : [cat];
@@ -1514,10 +1515,19 @@ export default function PricingList() {
       pricingData.forEach(p => allSizesSet.add(p.size));
       const allSizesArray = Array.from(allSizesSet).sort();
       
+      // دالة لحساب السعر مع الزيادة
+      const applyMarkup = (price: number | null): number => {
+        if (price === null || price === 0) return 0;
+        return Math.round(price * (1 + markupPercent / 100));
+      };
+      
       // إنشاء بيانات لكل مستوى وفترة
       const allData: any[] = [];
       
-      allLevels.forEach(level => {
+      // تحديد المستويات المطلوبة
+      const targetLevels = printLevel === 'all' ? allLevels : [printLevel];
+      
+      targetLevels.forEach(level => {
         // الحصول على المقاسات المتوفرة لهذا المستوى
         const levelSizes = Array.from(new Set(
           pricingData
@@ -1534,7 +1544,7 @@ export default function PricingList() {
             const sizeId = sizeInfo?.id || '';
             
             const row: any = {
-              'billboard_level': level, // استخدام كود المستوى بالحرف كما في قاعدة البيانات
+              'billboard_level': level,
               'الفترة': monthOpt.label,
               'size_id': sizeId,
               'المقاس': size
@@ -1549,7 +1559,8 @@ export default function PricingList() {
               
               if (dbRow) {
                 const value = (dbRow as any)[monthOpt.dbColumn];
-                row[c] = normalize(value) ?? 0;
+                const originalPrice = normalize(value) ?? 0;
+                row[c] = applyMarkup(originalPrice);
               } else {
                 row[c] = 0;
               }
@@ -1572,15 +1583,67 @@ export default function PricingList() {
       const now = new Date();
       const dateStr = now.toISOString().split('T')[0];
       const catName = cat === PRIMARY_SENTINEL ? 'الأساسية' : cat;
-      const filename = `أسعار_${catName}_جميع_المستويات_${dateStr}.xlsx`;
+      const markupSuffix = markupPercent > 0 ? `_زيادة${markupPercent}%` : '';
+      const levelSuffix = printLevel === 'all' ? 'جميع_المستويات' : printLevel;
+      const filename = `أسعار_${catName}_${levelSuffix}${markupSuffix}_${dateStr}.xlsx`;
 
       XLSX.writeFile(wb, filename);
-      toast.success(`تم تنزيل ملف Excel: ${filename}`);
+      toast.success(`تم تنزيل ملف Excel: ${filename}${markupPercent > 0 ? ` (مع زيادة ${markupPercent}%)` : ''}`);
     } catch (error) {
       console.error('Error exporting to Excel:', error);
       toast.error('فشل في تصدير ملف Excel');
     }
   };
+  
+  // حساب معاينة الأسعار مع الزيادة للمستوى المحدد
+  const previewPricesWithMarkup = useMemo(() => {
+    if (priceMarkupPercent <= 0) return [];
+    
+    const targetLevels = printLevel === 'all' ? allLevels : [printLevel];
+    const preview: Array<{
+      level: string;
+      size: string;
+      period: string;
+      originalPrice: number;
+      newPrice: number;
+      increase: number;
+    }> = [];
+    
+    targetLevels.slice(0, 2).forEach(level => {
+      const levelSizes = Array.from(new Set(
+        pricingData
+          .filter(p => p.billboard_level === level)
+          .map(p => p.size)
+      )).slice(0, 3); // أول 3 مقاسات فقط للمعاينة
+      
+      levelSizes.forEach(size => {
+        // نستخدم الفترة المحددة حالياً
+        const dbRow = pricingData.find(p => 
+          p.size === size && 
+          p.billboard_level === level && 
+          p.customer_category === printCategory
+        );
+        
+        if (dbRow) {
+          const monthOpt = MONTH_OPTIONS.find(m => m.key === selectedMonthKey) || MONTH_OPTIONS[0];
+          const originalPrice = normalize((dbRow as any)[monthOpt.dbColumn]) ?? 0;
+          if (originalPrice > 0) {
+            const newPrice = Math.round(originalPrice * (1 + priceMarkupPercent / 100));
+            preview.push({
+              level,
+              size,
+              period: monthOpt.label,
+              originalPrice,
+              newPrice,
+              increase: newPrice - originalPrice
+            });
+          }
+        }
+      });
+    });
+    
+    return preview;
+  }, [priceMarkupPercent, printLevel, printCategory, pricingData, allLevels, selectedMonthKey, MONTH_OPTIONS]);
 
   if (loading) {
     return (
@@ -2118,12 +2181,66 @@ export default function PricingList() {
                 </label>
               </div>
             </div>
+            
+            {/* زيادة الأسعار */}
+            <div className="border-t pt-4">
+              <label className="text-sm font-medium mb-2 block">زيادة الأسعار (%)</label>
+              <div className="flex items-center gap-3">
+                <Input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={priceMarkupPercent}
+                  onChange={(e) => setPriceMarkupPercent(Number(e.target.value) || 0)}
+                  className="w-24"
+                  placeholder="0"
+                />
+                <span className="text-sm text-muted-foreground">النسبة المئوية للزيادة على الأسعار الأصلية</span>
+              </div>
+              
+              {/* معاينة الأسعار مع الزيادة */}
+              {priceMarkupPercent > 0 && previewPricesWithMarkup.length > 0 && (
+                <div className="mt-3 bg-muted/30 rounded-lg p-3 border border-border/50">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-xs font-medium text-primary">معاينة الأسعار بعد الزيادة ({priceMarkupPercent}%)</span>
+                    <span className="text-xs text-muted-foreground">عينة من الأسعار</span>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead>
+                        <tr className="border-b border-border/30">
+                          <th className="text-right py-1 px-2">المستوى</th>
+                          <th className="text-right py-1 px-2">المقاس</th>
+                          <th className="text-right py-1 px-2">الفترة</th>
+                          <th className="text-right py-1 px-2">السعر الأصلي</th>
+                          <th className="text-right py-1 px-2">السعر الجديد</th>
+                          <th className="text-right py-1 px-2 text-green-600">الزيادة</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {previewPricesWithMarkup.map((item, idx) => (
+                          <tr key={idx} className="border-b border-border/20">
+                            <td className="py-1 px-2">{item.level}</td>
+                            <td className="py-1 px-2">{item.size}</td>
+                            <td className="py-1 px-2">{item.period}</td>
+                            <td className="py-1 px-2 text-muted-foreground">{item.originalPrice.toLocaleString()}</td>
+                            <td className="py-1 px-2 font-semibold text-primary">{item.newPrice.toLocaleString()}</td>
+                            <td className="py-1 px-2 text-green-600 font-medium">+{item.increase.toLocaleString()}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
           <UIDialog.DialogFooter className="flex gap-2">
-            <Button variant="outline" onClick={()=>setPrintOpen(false)}>إلغاء</Button>
-            <Button variant="outline" onClick={() => exportCategoryToExcel(printCategory)}>
+            <Button variant="outline" onClick={() => { setPrintOpen(false); setPriceMarkupPercent(0); }}>إلغاء</Button>
+            <Button variant="outline" onClick={() => exportCategoryToExcel(printCategory, priceMarkupPercent)}>
               <Download className="h-4 w-4 ml-2" />
-              تحميل Excel
+              تحميل Excel {priceMarkupPercent > 0 && `(+${priceMarkupPercent}%)`}
             </Button>
             <Button onClick={handlePrint}>
               <Printer className="h-4 w-4 ml-2" />
