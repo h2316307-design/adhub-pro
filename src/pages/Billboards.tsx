@@ -49,7 +49,7 @@ export default function Billboards() {
   
   // Collapsible states
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [mapOpen, setMapOpen] = useState(false);
+  const [mapOpen, setMapOpen] = useState(true); // Default to open for background map mode
 
   // Print filters
   const [printFiltersOpen, setPrintFiltersOpen] = useState(false);

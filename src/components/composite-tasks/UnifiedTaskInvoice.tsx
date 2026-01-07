@@ -128,6 +128,35 @@ export function UnifiedTaskInvoice({
         sizesMap[s.name] = { width: s.width || 0, height: s.height || 0, installationPrice: s.installation_price || 0 };
       });
 
+      // جلب صور التصميم من مصادر مختلفة
+      let designImages: Record<number, { face_a?: string; face_b?: string }> = {};
+      
+      // من print_task_items
+      if (task.print_task_id) {
+        const { data: printItems } = await supabase
+          .from('print_task_items')
+          .select('billboard_id, design_face_a, design_face_b')
+          .eq('task_id', task.print_task_id);
+        printItems?.forEach((item: any) => {
+          if (item.billboard_id) {
+            designImages[item.billboard_id] = { face_a: item.design_face_a, face_b: item.design_face_b };
+          }
+        });
+      }
+      
+      // من installation_task_items
+      if (task.installation_task_id) {
+        const { data: installItems } = await supabase
+          .from('installation_task_items')
+          .select('billboard_id, design_face_a, design_face_b')
+          .eq('task_id', task.installation_task_id);
+        installItems?.forEach((item: any) => {
+          if (item.billboard_id && !designImages[item.billboard_id]) {
+            designImages[item.billboard_id] = { face_a: item.design_face_a, face_b: item.design_face_b };
+          }
+        });
+      }
+
       if (invoiceType === 'print_vendor' && task.print_task_id) {
         // Load print task data
         const [printTaskResult, itemsResult] = await Promise.all([
@@ -174,7 +203,7 @@ export function UnifiedTaskInvoice({
         // Load cutout task data
         const [cutoutTaskResult, cutoutItemsResult] = await Promise.all([
           supabase.from('cutout_tasks').select('*, printer:printers!cutout_tasks_printer_id_fkey(name)').eq('id', task.cutout_task_id).single(),
-          supabase.from('cutout_task_items').select('*').eq('task_id', task.cutout_task_id),
+          supabase.from('cutout_task_items').select('*, billboard:billboards(Billboard_Name, Size)').eq('task_id', task.cutout_task_id),
         ]);
 
         const cutoutTask = cutoutTaskResult.data;
@@ -184,53 +213,50 @@ export function UnifiedTaskInvoice({
         totalCost = task.company_cutout_cost || 0;
         cutoutPricePerUnit = totalCutouts > 0 ? totalCost / totalCutouts : 0;
 
-        // Get design images from print task items
-        let designImages: Record<number, { face_a?: string; face_b?: string }> = {};
-        if (task.print_task_id) {
-          const { data: printItems } = await supabase
-            .from('print_task_items')
-            .select('billboard_id, design_face_a, design_face_b')
-            .eq('task_id', task.print_task_id);
-          printItems?.forEach((item: any) => {
-            designImages[item.billboard_id] = { face_a: item.design_face_a, face_b: item.design_face_b };
-          });
-        }
-
         cutoutItems.forEach((item: any) => {
-          const designs = designImages[item.billboard_id] || {};
-          const isFaceA = item.description?.includes('أمامي');
+          const billboardId = item.billboard_id;
+          const designs = designImages[billboardId] || {};
+          // الحصول على صورة التصميم من cutout_task_items نفسه أو من designImages
+          const cutoutImage = item.cutout_image_url || designs.face_a || designs.face_b;
+          
           items.push({
-            designImage: isFaceA ? designs.face_a : designs.face_b,
-            face: isFaceA ? 'a' : 'b',
-            sizeName: item.description || 'مجسم',
+            designImage: cutoutImage,
+            face: 'a',
+            sizeName: item.description || item.billboard?.Size || 'مجسم',
             width: 0,
             height: 0,
             quantity: item.quantity,
             area: 0,
             unitCost: cutoutPricePerUnit,
             totalCost: item.quantity * cutoutPricePerUnit,
+            billboardName: item.billboard?.Billboard_Name,
           });
         });
       } else if (invoiceType === 'installation_team' && task.installation_task_id) {
         // Load installation task data
         const [installTaskResult, installItemsResult] = await Promise.all([
           supabase.from('installation_tasks').select('*, team:installation_teams(team_name)').eq('id', task.installation_task_id).single(),
-          supabase.from('installation_task_items').select('*, billboard:billboards(Billboard_Name, Size)').eq('task_id', task.installation_task_id),
+          supabase.from('installation_task_items').select('*, billboard:billboards(ID, Billboard_Name, Size, design_face_a, design_face_b)').eq('task_id', task.installation_task_id),
         ]);
 
         const installTask = installTaskResult.data;
         const installItems = installItemsResult.data || [];
         teamName = (installTask as any)?.team?.team_name || 'غير محدد';
-        totalCost = task.company_installation_cost || 0;
-
+        
         installItems.forEach((item: any) => {
           const billboardSize = item.billboard?.Size;
           const sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
-          const designImage = item.design_face_a || item.design_face_b;
+          
+          // جلب صورة التصميم من مصادر متعددة
+          const billboardId = item.billboard?.ID || item.billboard_id;
+          const designs = designImages[billboardId] || {};
+          const designImage = item.design_face_a || item.design_face_b || 
+                             designs.face_a || designs.face_b ||
+                             item.billboard?.design_face_a || item.billboard?.design_face_b;
 
           items.push({
             designImage,
-            face: item.design_face_b && !item.design_face_a ? 'b' : 'a',
+            face: 'a',
             sizeName: billboardSize || 'غير محدد',
             width: sizeInfo.width,
             height: sizeInfo.height,
@@ -244,9 +270,71 @@ export function UnifiedTaskInvoice({
 
         totalCost = items.reduce((sum, item) => sum + item.totalCost, 0);
       } else if (invoiceType === 'customer') {
-        // Customer invoice - combine all
-        // Load print items
-        if (task.print_task_id) {
+        // Customer invoice - جلب بيانات من installation_task_items للحصول على اللوحات
+        if (task.installation_task_id) {
+          const { data: installItems } = await supabase
+            .from('installation_task_items')
+            .select('*, billboard:billboards(ID, Billboard_Name, Size, design_face_a, design_face_b)')
+            .eq('task_id', task.installation_task_id);
+
+          if (installItems && installItems.length > 0) {
+            // حساب سعر المتر للطباعة
+            totalArea = 0;
+            installItems.forEach((item: any) => {
+              const billboardSize = item.billboard?.Size;
+              const sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0 };
+              const facesCount = item.faces_count || 1;
+              totalArea += sizeInfo.width * sizeInfo.height * facesCount;
+            });
+            
+            pricePerMeter = totalArea > 0 ? (task.customer_print_cost || 0) / totalArea : 0;
+
+            installItems.forEach((item: any) => {
+              const billboardSize = item.billboard?.Size;
+              const sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0 };
+              const billboardId = item.billboard?.ID || item.billboard_id;
+              const designs = designImages[billboardId] || {};
+              
+              const faceAImage = item.design_face_a || designs.face_a || item.billboard?.design_face_a;
+              const faceBImage = item.design_face_b || designs.face_b || item.billboard?.design_face_b;
+              const facesCount = item.faces_count || 1;
+              const areaPerFace = sizeInfo.width * sizeInfo.height;
+
+              // إضافة الوجه الأول
+              if (faceAImage || facesCount >= 1) {
+                items.push({
+                  designImage: faceAImage,
+                  face: 'a',
+                  sizeName: billboardSize || `${sizeInfo.width}×${sizeInfo.height}`,
+                  width: sizeInfo.width,
+                  height: sizeInfo.height,
+                  quantity: 1,
+                  area: areaPerFace,
+                  unitCost: pricePerMeter,
+                  totalCost: areaPerFace * pricePerMeter,
+                  billboardName: item.billboard?.Billboard_Name,
+                });
+              }
+
+              // إضافة الوجه الثاني إذا كان موجوداً
+              if (faceBImage || facesCount >= 2) {
+                items.push({
+                  designImage: faceBImage,
+                  face: 'b',
+                  sizeName: billboardSize || `${sizeInfo.width}×${sizeInfo.height}`,
+                  width: sizeInfo.width,
+                  height: sizeInfo.height,
+                  quantity: 1,
+                  area: areaPerFace,
+                  unitCost: pricePerMeter,
+                  totalCost: areaPerFace * pricePerMeter,
+                  billboardName: item.billboard?.Billboard_Name,
+                });
+              }
+            });
+          }
+        } else if (task.print_task_id) {
+          // فولباك: من print_task_items
           const { data: printItems } = await supabase
             .from('print_task_items')
             .select('*')
@@ -267,7 +355,6 @@ export function UnifiedTaskInvoice({
                 area: item.area * item.quantity,
                 unitCost: pricePerMeter,
                 totalCost: item.area * item.quantity * pricePerMeter,
-                cutoutQuantity: item.cutout_quantity || 0,
               });
             }
             if (item.design_face_b) {
@@ -281,7 +368,6 @@ export function UnifiedTaskInvoice({
                 area: item.area * item.quantity,
                 unitCost: pricePerMeter,
                 totalCost: item.area * item.quantity * pricePerMeter,
-                cutoutQuantity: item.cutout_quantity || 0,
               });
             }
           });

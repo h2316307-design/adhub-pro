@@ -13,6 +13,8 @@ import { Billboard } from '@/types';
 import { formatGregorianDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { BillboardImage } from './BillboardImage';
+import { BillboardImageWithBlur } from './BillboardImageWithBlur';
+import { DesignImageWithBlur } from './DesignImageWithBlur';
 import { BillboardHistoryDialog } from './billboards/BillboardHistoryDialog';
 import { BillboardExtendRentalDialog } from './billboards/BillboardExtendRentalDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -622,24 +624,27 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               setPreviewOpen(true);
             }}
           >
-            <BillboardImage
-              billboard={billboard}
-              alt={billboard.Billboard_Name}
-              className="w-full h-full object-cover"
-            />
+            {/* طبقة الصورة - z-index منخفض */}
+            <div className="absolute inset-0 z-0">
+              <BillboardImageWithBlur
+                billboard={billboard}
+                alt={billboard.Billboard_Name}
+                className="w-full h-full"
+              />
+            </div>
             
-            {/* Gradient overlay */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+            {/* Gradient overlay - z-index متوسط */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent z-10" />
             
             {/* أيقونة التكبير */}
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none z-20">
               <div className="bg-black/50 rounded-full p-2 backdrop-blur-sm">
                 <ZoomIn className="h-6 w-6 text-white" />
               </div>
             </div>
 
-            {/* Top badges row */}
-            <div className="absolute top-4 left-4 right-4 flex justify-between items-start">
+            {/* Top badges row - z-index عالي */}
+            <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-30">
               {/* حجم اللوحة */}
               <Badge className="bg-white/95 dark:bg-slate-900/95 text-foreground shadow-xl border-0 font-bold px-4 py-1.5 text-sm backdrop-blur-sm">
                 {billboard.Size}
@@ -665,8 +670,8 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               </Badge>
             </div>
 
-            {/* Bottom info overlay */}
-            <div className="absolute bottom-0 left-0 right-0 p-4">
+            {/* Bottom info overlay - z-index عالي */}
+            <div className="absolute bottom-0 left-0 right-0 p-4 z-30">
               <h3 className="font-bold text-xl md:text-2xl text-white drop-shadow-lg leading-tight mb-2">
                 {billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`}
               </h3>
@@ -679,9 +684,9 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               )}
             </div>
 
-            {/* Corner badges */}
+            {/* Corner badges - z-index عالي */}
             {isNearExpiry && !contractExpired && (
-              <div className="absolute top-14 right-4">
+              <div className="absolute top-14 right-4 z-30">
                 <Badge className="bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0 shadow-lg animate-pulse">
                   <Calendar className="h-3 w-3 mr-1" />
                   {daysRemaining} يوم
@@ -690,7 +695,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             )}
 
             {contractExpired && (contractId || endDate) && (
-              <div className="absolute top-14 right-4">
+              <div className="absolute top-14 right-4 z-30">
                 <Badge className="bg-gradient-to-r from-rose-600 to-red-600 text-white border-0 shadow-lg">
                   <Calendar className="h-3 w-3 mr-1" />
                   منتهي
@@ -699,25 +704,23 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             )}
           </div>
 
-          {/* ✅ عرض التصميم الأمامي تحت صورة اللوحة */}
+          {/* ✅ عرض التصميم الأمامي تحت صورة اللوحة - مع خلفية blur */}
           {isAdmin && frontDesignUrl && (
             <div 
-              className="relative h-20 bg-gradient-to-r from-pink-500/10 to-rose-500/10 border-t border-pink-500/20 cursor-pointer group/design"
+              className="relative h-24 cursor-pointer group/design overflow-hidden"
               onClick={(e) => {
                 e.stopPropagation();
                 openDesignPreview(frontDesignUrl, 'التصميم الأمامي');
               }}
             >
-              <img 
-                src={frontDesignUrl} 
+              <DesignImageWithBlur
+                src={frontDesignUrl}
                 alt="التصميم الأمامي"
-                className="w-full h-full object-cover transition-transform duration-300 group-hover/design:scale-105"
-                onError={(e) => {
-                  const target = e.target as HTMLImageElement;
-                  target.style.display = 'none';
-                }}
+                className="w-full h-full"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover/design:opacity-100 transition-opacity flex items-end justify-center pb-2">
+              
+              {/* Hover overlay with label */}
+              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover/design:opacity-100 transition-opacity flex items-end justify-center pb-2 z-20">
                 <Badge className="bg-pink-500/90 text-white border-0 text-xs">
                   <ZoomIn className="h-3 w-3 ml-1" />
                   التصميم الأمامي

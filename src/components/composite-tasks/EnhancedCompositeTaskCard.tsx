@@ -7,7 +7,6 @@ import { Wrench, Printer, Scissors, FileText, Edit, Eye, TrendingUp, FileOutput,
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { CompositeProfitCard } from './CompositeProfitCard';
-import { CompositeTaskInvoicePrint } from './CompositeTaskInvoicePrint';
 import { UnifiedTaskInvoice, InvoiceType } from './UnifiedTaskInvoice';
 import { TaskCardWrapper } from '../tasks/TaskCardWrapper';
 import {
@@ -390,39 +389,12 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           </div>
         </div>
 
-        {/* صور التصميم (مثل كروت مهام التركيب) */}
-        {designImages.length > 0 && (
-          <div className="space-y-3 pt-3 border-t border-border/50">
-            <div className="flex items-center gap-2">
-              <div className="h-2 w-2 rounded-full bg-primary" />
-              <span className="text-sm font-semibold text-foreground">تصاميم اللوحات</span>
-              <span className="text-xs text-muted-foreground">({designImages.length})</span>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              {designImages.map((img, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => window.open(img.url, '_blank')}
-                  className="group relative aspect-video rounded-xl overflow-hidden border border-border/60 bg-muted/20 text-left"
-                >
-                  <img
-                    src={img.url}
-                    alt={`تصميم اللوحة ${img.face === 'a' ? 'الوجه الأمامي' : 'الوجه الخلفي'}`}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-background/70 via-transparent to-transparent opacity-60" />
-                  <Badge
-                    variant="secondary"
-                    className="absolute top-2 right-2 bg-background/80 backdrop-blur"
-                  >
-                    {img.face === 'a' ? 'الوجه أ' : 'الوجه ب'}
-                  </Badge>
-                </button>
-              ))}
-            </div>
+        {/* عدد صور التصميم فقط - الصور تظهر في الجانب */}
+        {designImages.length > 1 && (
+          <div className="pt-2">
+            <Badge variant="outline" className="text-xs">
+              {designImages.length} تصميم
+            </Badge>
           </div>
         )}
       </CardHeader>
@@ -532,7 +504,15 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
             
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
               {/* فاتورة الزبون */}
-              <CompositeTaskInvoicePrint task={task} />
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => openInvoice('customer')}
+                className="bg-primary hover:bg-primary/90"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                فاتورة الزبون
+              </Button>
               
               {/* فاتورة المطبعة */}
               {task.print_task_id && (

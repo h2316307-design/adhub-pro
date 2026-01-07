@@ -43,7 +43,7 @@ import { TransferBillboardsDialog } from '@/components/tasks/TransferBillboardsD
 import { PrintAllContractBillboardsDialog } from '@/components/tasks/PrintAllContractBillboardsDialog';
 import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
 import { TaskCardWrapper } from '@/components/tasks/TaskCardWrapper';
-import { AddInstallationTaskDialog } from '@/components/installation/AddInstallationTaskDialog';
+import { EnhancedAddInstallationTaskDialog } from '@/components/installation/EnhancedAddInstallationTaskDialog';
 
 interface InstallationTask {
   id: string;
@@ -1947,24 +1947,34 @@ export default function InstallationTasks() {
         )}
       </div>
 
-      {/* Add Task Dialog */}
-      <AddInstallationTaskDialog
+      {/* Add Task Dialog - Enhanced Version */}
+      <EnhancedAddInstallationTaskDialog
         open={addTaskDialogOpen}
         onOpenChange={setAddTaskDialogOpen}
         taskType={taskType}
         onTaskTypeChange={setTaskType}
         teams={teams as any}
         isSubmitting={createTaskMutation.isPending}
-        onSubmit={({ contractId, billboardIds, teamId }) => {
-          setSelectedContractIds([contractId]);
-          setSelectedTeamId(teamId || '');
-          setSelectedBillboardIds(billboardIds);
-          createTaskMutation.mutate({
-            contractId,
-            billboardIds,
-            teamId,
-            taskType,
-          });
+        onSubmit={({ contractIds, customerId, billboardIds, teamAssignments }) => {
+          // إذا كان هناك تعيينات للفرق، ننشئ مهمة لكل فرقة
+          if (teamAssignments.length > 0) {
+            teamAssignments.forEach(assignment => {
+              createTaskMutation.mutate({
+                contractId: contractIds[0],
+                billboardIds: assignment.billboardIds,
+                teamId: assignment.teamId,
+                taskType,
+              });
+            });
+          } else {
+            // بدون تعيينات - توزيع تلقائي
+            createTaskMutation.mutate({
+              contractId: contractIds[0],
+              billboardIds,
+              teamId: null,
+              taskType,
+            });
+          }
         }}
       />
 

@@ -212,7 +212,7 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
   const drawingPolygonRef = useRef<any>(null)
   const drawingPathRef = useRef<{ lat: number; lng: number }[]>([])
   const [mapLoaded, setMapLoaded] = useState(false)
-  const [mapStyle, setMapStyle] = useState<'roadmap' | 'satellite' | 'hybrid'>('roadmap')
+  const [mapStyle, setMapStyle] = useState<'roadmap' | 'satellite' | 'hybrid'>('satellite')
   const [isDrawingMode, setIsDrawingMode] = useState(false)
   const [drawingPoints, setDrawingPoints] = useState<{ lat: number; lng: number }[]>([])
 
@@ -282,6 +282,7 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
           center: { lat: 32.7, lng: 13.2 },
           zoom: isMobile ? 7 : 8,
           styles: darkMapStyles,
+          mapTypeId: 'hybrid', // Default to satellite view
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
@@ -344,9 +345,10 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
     loadGoogleMaps()
   }, [])
 
-  const addBillboardMarkers = (map: any) => {
+  const addBillboardMarkers = useCallback((map: any) => {
     if (!map || !window.google?.maps) return
 
+    // Clear existing markers
     markersRef.current.forEach(marker => marker.setMap(null))
     markersRef.current = []
 
@@ -625,7 +627,7 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
 
     // Always draw selected markers above clusters
     selectedMarkers.forEach((marker) => marker.setMap(map))
-  }
+  }, [billboards, selectedBillboards])
 
   useEffect(() => {
     if (mapInstanceRef.current && mapLoaded) {
