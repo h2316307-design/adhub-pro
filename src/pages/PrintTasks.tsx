@@ -69,15 +69,54 @@ export default function PrintTasks() {
           printed_invoices!print_tasks_invoice_id_fkey(invoice_number)
         `)
         .order('created_at', { ascending: false });
-      
+
       if (filterStatus !== 'all') {
         query = query.eq('status', filterStatus);
       }
 
       const { data, error } = await query;
-      
+
       if (error) throw error;
-      return (data || []) as any as PrintTask[];
+
+      const list = (data || []) as any[];
+
+      // ✅ استنتاج العقود الفعلية من عناصر الطباعة (لوحات من عقود متعددة)
+      const taskIds = list.map(t => t.id).filter(Boolean);
+      if (taskIds.length > 0) {
+        const { data: itemContracts, error: itemContractsError } = await supabase
+          .from('print_task_items')
+          .select('task_id, billboard:billboards!print_task_items_billboard_id_fkey(Contract_Number)')
+          .in('task_id', taskIds);
+
+        if (!itemContractsError) {
+          const map = new Map<string, Set<number>>();
+          (itemContracts || []).forEach((row: any) => {
+            const id = row.task_id as string;
+            const n = row.billboard?.Contract_Number;
+            if (!id || !n) return;
+            if (!map.has(id)) map.set(id, new Set());
+            map.get(id)!.add(Number(n));
+          });
+
+          list.forEach((t: any) => {
+            const set = map.get(t.id);
+            const derived = set ? Array.from(set).sort((a, b) => a - b) : [];
+            t._contractIds = derived.length > 0 ? derived : [t.contract_id].filter(Boolean);
+          });
+        } else {
+          list.forEach((t: any) => {
+            t._contractIds = [t.contract_id].filter(Boolean);
+          });
+        }
+      }
+
+      list.forEach((t: any) => {
+        if (!t._contractIds || !Array.isArray(t._contractIds) || t._contractIds.length === 0) {
+          t._contractIds = [t.contract_id].filter(Boolean);
+        }
+      });
+
+      return list as any as PrintTask[];
     },
   });
 

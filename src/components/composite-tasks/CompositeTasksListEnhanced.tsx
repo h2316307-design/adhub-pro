@@ -43,6 +43,8 @@ interface CompositeTasksListEnhancedProps {
 
 interface GroupedTasks {
   contractId: number;
+  /** عقود فعلية من اللوحات (قد تكون متعددة) */
+  contractIds: number[];
   customerName: string;
   tasks: CompositeTaskWithDetails[];
   totalCustomer: number;
@@ -85,20 +87,69 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         console.error('Error fetching composite tasks:', error);
         throw error;
       }
-      return (data || []) as CompositeTaskWithDetails[];
+
+      const tasks = (data || []) as CompositeTaskWithDetails[];
+
+      // ✅ استخراج أرقام العقود الفعلية من اللوحات (لحل مشكلة مهام مدموجة بين عقدين)
+      const installationTaskIds = Array.from(
+        new Set(tasks.map(t => t.installation_task_id).filter((id): id is string => Boolean(id)))
+      );
+
+      if (installationTaskIds.length > 0) {
+        const { data: installItems, error: installItemsError } = await supabase
+          .from('installation_task_items')
+          .select('task_id, billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
+          .in('task_id', installationTaskIds);
+
+        if (installItemsError) {
+          console.error('Error fetching installation_task_items for contract grouping:', installItemsError);
+        } else {
+          const map = new Map<string, Set<number>>();
+          (installItems || []).forEach((row: any) => {
+            const taskId = row.task_id as string;
+            const contractNo = row.billboard?.Contract_Number;
+            if (!taskId || !contractNo) return;
+            if (!map.has(taskId)) map.set(taskId, new Set());
+            map.get(taskId)!.add(Number(contractNo));
+          });
+
+          tasks.forEach((t: any) => {
+            const set = t.installation_task_id ? map.get(t.installation_task_id) : undefined;
+            const derived = set ? Array.from(set) : [];
+            t._contractIds = derived.length > 0 ? derived : [t.contract_id].filter(Boolean);
+          });
+        }
+      }
+
+      // fallback إذا لا توجد مهمة تركيب
+      tasks.forEach((t: any) => {
+        if (!t._contractIds || !Array.isArray(t._contractIds) || t._contractIds.length === 0) {
+          t._contractIds = [t.contract_id].filter(Boolean);
+        }
+      });
+
+      return tasks;
     },
   });
 
-  // Group tasks by contract
+  /**
+   * Group tasks by contract and sort them by created_at ASC within each group.
+   * Tasks within a group should appear in the order they were created/added.
+   */
   const groupedTasks = useMemo(() => {
     const groups = new Map<number, GroupedTasks>();
-    
-    compositeTasks.forEach(task => {
+
+    compositeTasks.forEach((task: any) => {
       if (!task.contract_id) return;
-      
+
+      const taskContractIds: number[] = Array.isArray(task._contractIds) && task._contractIds.length > 0
+        ? (task._contractIds as number[])
+        : [task.contract_id];
+
       if (!groups.has(task.contract_id)) {
         groups.set(task.contract_id, {
           contractId: task.contract_id,
+          contractIds: [],
           customerName: task.customer_name || 'غير معروف',
           tasks: [],
           totalCustomer: 0,
@@ -106,15 +157,32 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           totalProfit: 0
         });
       }
-      
+
       const group = groups.get(task.contract_id)!;
       group.tasks.push(task);
       group.totalCustomer += task.customer_total || 0;
       group.totalCompany += task.company_total || 0;
       group.totalProfit += task.net_profit || 0;
+
+      // دمج العقود الفعلية ضمن المجموعة
+      const merged = new Set<number>(group.contractIds);
+      taskContractIds.forEach((id) => merged.add(Number(id)));
+      group.contractIds = Array.from(merged).filter(Boolean).sort((a, b) => a - b);
     });
-    
-    return Array.from(groups.values()).sort((a, b) => b.contractId - a.contractId);
+
+    // Sort tasks within each group by created_at ASC (earliest first)
+    groups.forEach(group => {
+      group.tasks.sort((a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+      );
+    });
+
+    // Sort groups by most recent task creation date (newest first)
+    return Array.from(groups.values()).sort((a, b) => {
+      const latestA = Math.max(...a.tasks.map(t => new Date(t.created_at).getTime()));
+      const latestB = Math.max(...b.tasks.map(t => new Date(t.created_at).getTime()));
+      return latestB - latestA;
+    });
   }, [compositeTasks]);
 
   // Filter by search term

@@ -120,6 +120,10 @@ export default function RemovalTasks() {
   // Collapsible teams
   const [collapsedTeams, setCollapsedTeams] = useState<Set<string>>(new Set());
   
+  // Multi-task selection for bulk printing
+  const [selectedTasksForPrint, setSelectedTasksForPrint] = useState<Set<string>>(new Set());
+  const [multiTaskPrintDialogOpen, setMultiTaskPrintDialogOpen] = useState(false);
+  
   const queryClient = useQueryClient();
 
   const { data: tasks = [], isLoading } = useQuery({
@@ -1778,6 +1782,87 @@ export default function RemovalTasks() {
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
+                          {/* زر تحديد الكل للطباعة */}
+                          {(() => {
+                            const pendingTeamTasks = teamTasks.filter(task => {
+                              const taskItems = itemsByTask[task.id] || [];
+                              return taskItems.some(i => i.status === 'pending');
+                            });
+                            const allTeamTaskIds = pendingTeamTasks.map(t => t.id);
+                            const allSelected = allTeamTaskIds.every(id => selectedTasksForPrint.has(id));
+                            const someSelected = allTeamTaskIds.some(id => selectedTasksForPrint.has(id));
+                            return (
+                              <Button
+                                size="sm"
+                                variant={allSelected ? "default" : "outline"}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setSelectedTasksForPrint(prev => {
+                                    const newSet = new Set(prev);
+                                    if (allSelected) {
+                                      allTeamTaskIds.forEach(id => newSet.delete(id));
+                                    } else {
+                                      allTeamTaskIds.forEach(id => newSet.add(id));
+                                    }
+                                    return newSet;
+                                  });
+                                }}
+                                className="gap-1"
+                              >
+                                {allSelected ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                                {allSelected ? 'إلغاء الكل' : someSelected ? `تحديد الكل (${allTeamTaskIds.length})` : `تحديد الكل (${allTeamTaskIds.length})`}
+                              </Button>
+                            );
+                          })()}
+                          {/* زر طباعة المحدد للفريق */}
+                          {(() => {
+                            const selectedInTeam = teamTasks.filter(t => selectedTasksForPrint.has(t.id));
+                            if (selectedInTeam.length === 0) return null;
+                            
+                            const selectedTeamItems = allTaskItems.filter(item => 
+                              selectedInTeam.some(t => t.id === item.task_id) && item.status === 'pending'
+                            );
+                            
+                            return (
+                              <Button
+                                size="sm"
+                                variant="default"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  
+                                  const items: BillboardPrintItem[] = selectedTeamItems.map(item => {
+                                    const task = taskById[item.task_id];
+                                    const contractId = task?.contract_id;
+                                    const contract = contractId ? contractByNumber[contractId] : null;
+                                    
+                                    return {
+                                      id: item.id,
+                                      billboard_id: item.billboard_id,
+                                      design_face_a: item.design_face_a || null,
+                                      design_face_b: item.design_face_b || null,
+                                      installed_image_face_a_url: item.installed_image_url || null,
+                                      team_id: teamId,
+                                      contract_number: contract?.Contract_Number || contractId,
+                                      ad_type: contract?.['Ad Type'] || null,
+                                    };
+                                  });
+                                  
+                                  setUnifiedPrintData({
+                                    teamId,
+                                    teamName: team.team_name,
+                                    items,
+                                    billboards: billboardById,
+                                    teams: teamById,
+                                  });
+                                  setUnifiedPrintDialogOpen(true);
+                                }}
+                                className="gap-1 bg-primary"
+                              >
+                                <Printer className="h-4 w-4" />
+                                طباعة المحدد ({selectedTeamItems.length})
+                              </Button>
+                            );
+                          })()}
                           {/* زر طباعة جميع لوحات الفريق */}
                           {pendingItemsCount > 0 && (
                             <Button
@@ -1874,6 +1959,33 @@ export default function RemovalTasks() {
                           <AccordionTrigger className="px-4 hover:no-underline">
                             <div className="flex items-center justify-between w-full">
                               <div className="flex items-center gap-3">
+                                {/* Checkbox للطباعة */}
+                                {pendingCount > 0 && (
+                                  <div 
+                                    className="flex items-center gap-1 bg-primary/10 px-2 py-1 rounded"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedTasksForPrint.has(task.id)}
+                                      onChange={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedTasksForPrint(prev => {
+                                          const newSet = new Set(prev);
+                                          if (newSet.has(task.id)) {
+                                            newSet.delete(task.id);
+                                          } else {
+                                            newSet.add(task.id);
+                                          }
+                                          return newSet;
+                                        });
+                                      }}
+                                      className="w-4 h-4 accent-primary"
+                                    />
+                                    <Printer className="h-3 w-3 text-primary" />
+                                  </div>
+                                )}
+                                {/* Checkbox للدمج */}
                                 <Checkbox
                                   checked={selectedTasks.has(task.id)}
                                   onCheckedChange={() => toggleTaskSelection(task.id)}

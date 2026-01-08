@@ -103,7 +103,15 @@ export function PrintTaskList({ tasks, selectedTaskId, onSelectTask, isLoading }
                     </h3>
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                    {task.contract_id ? `عقد #${task.contract_id}` : task.printed_invoices?.invoice_number || `#${task.id.slice(0, 8)}`}
+                    {(() => {
+                      const ids: number[] = Array.isArray(task._contractIds) && task._contractIds.length > 0
+                        ? task._contractIds
+                        : (task.contract_id ? [task.contract_id] : []);
+
+                      if (ids.length > 1) return `عقود #${ids.join(', #')}`;
+                      if (ids.length === 1) return `عقد #${ids[0]}`;
+                      return task.printed_invoices?.invoice_number || `#${task.id.slice(0, 8)}`;
+                    })()}
                   </p>
                 </div>
                 <Badge className={cn("text-[10px] px-1.5 py-0.5 font-medium", priority.color)}>

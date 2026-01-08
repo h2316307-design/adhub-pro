@@ -6373,6 +6373,10 @@ export type Database = {
           is_primary: boolean
         }[]
       }
+      has_permission: {
+        Args: { _permission: string; _user_id: string }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

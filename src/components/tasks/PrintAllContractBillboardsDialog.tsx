@@ -41,22 +41,32 @@ export function PrintAllContractBillboardsDialog({
   const [loading, setLoading] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [adType, setAdType] = useState('');
+  const [contractAdTypes, setContractAdTypes] = useState<Record<number, string>>({});
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
   const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
   
   // جلب إعدادات التخصيص من قاعدة البيانات
   const { settings: customSettings, loading: settingsLoading } = usePrintCustomization();
 
-  // جمع كل اللوحات من جميع الفرق للعقد المحدد
-  const contractTasks = useMemo(() => 
-    tasks.filter(t => t.contract_id === contractNumber || (t.contract_ids && t.contract_ids.includes(contractNumber))),
-    [tasks, contractNumber]
-  );
+  // جمع كل اللوحات من جميع الفرق للعقد المحدد أو جميع المهام الممررة مباشرة
+  const contractTasks = useMemo(() => {
+    // إذا كانت المهام ممررة مباشرة (من تحديد متعدد)، استخدمها مباشرة
+    if (tasks.length > 0 && allTaskItems.length > 0) {
+      // تحقق مما إذا كانت allTaskItems تنتمي لهذه المهام
+      const taskIds = new Set(tasks.map(t => t.id));
+      const hasMatchingItems = allTaskItems.some(item => taskIds.has(item.task_id));
+      if (hasMatchingItems) {
+        return tasks;
+      }
+    }
+    // الفلترة التقليدية حسب رقم العقد
+    return tasks.filter(t => t.contract_id === contractNumber || (t.contract_ids && t.contract_ids.includes(contractNumber)));
+  }, [tasks, contractNumber, allTaskItems]);
 
-  const allContractItems = useMemo(() => 
-    allTaskItems.filter(item => contractTasks.some(t => t.id === item.task_id)),
-    [allTaskItems, contractTasks]
-  );
+  const allContractItems = useMemo(() => {
+    const taskIds = new Set(contractTasks.map(t => t.id));
+    return allTaskItems.filter(item => taskIds.has(item.task_id));
+  }, [allTaskItems, contractTasks]);
 
   // تجميع اللوحات حسب الفريق
   const itemsByTeam = useMemo(() => {
@@ -70,11 +80,48 @@ export function PrintAllContractBillboardsDialog({
     return groups;
   }, [allContractItems, contractTasks]);
 
-  // اختيار كل الفرق عند الفتح
+  // اختيار كل الفرق عند الفتح وجلب رقم العقد ونوع الإعلان لكل لوحة
   useEffect(() => {
     if (open) {
       setSelectedTeamIds(new Set(Object.keys(itemsByTeam)));
-      // جلب نوع الإعلان
+      
+      // جلب رقم العقد ونوع الإعلان لكل لوحة من جدول billboards
+      const billboardIds = allContractItems.map(item => item.billboard_id);
+      if (billboardIds.length > 0) {
+        supabase
+          .from('billboards')
+          .select('ID, Contract_Number')
+          .in('ID', billboardIds)
+          .then(async ({ data: billboardsData }) => {
+            // جمع أرقام العقود الفريدة
+            const uniqueContractNumbers = [...new Set(
+              (billboardsData || [])
+                .map(b => b.Contract_Number)
+                .filter((c): c is number => c !== null)
+            )];
+            
+            if (uniqueContractNumbers.length > 0) {
+              // جلب نوع الإعلان لكل عقد
+              const { data: contractsData } = await supabase
+                .from('Contract')
+                .select('Contract_Number, "Ad Type"')
+                .in('Contract_Number', uniqueContractNumbers);
+              
+              const adTypesMap: Record<number, string> = {};
+              (contractsData || []).forEach(c => {
+                adTypesMap[c.Contract_Number] = c['Ad Type'] || '';
+              });
+              setContractAdTypes(adTypesMap);
+              
+              // تعيين نوع الإعلان الأول كقيمة افتراضية
+              if (contractsData && contractsData.length > 0) {
+                setAdType(contractsData[0]['Ad Type'] || '');
+              }
+            }
+          });
+      }
+      
+      // جلب نوع الإعلان للعقد الرئيسي
       supabase
         .from('Contract')
         .select('"Ad Type"')
@@ -84,7 +131,7 @@ export function PrintAllContractBillboardsDialog({
           setAdType(data?.['Ad Type'] || '');
         });
     }
-  }, [open, itemsByTeam, contractNumber]);
+  }, [open, itemsByTeam, contractNumber, allContractItems]);
 
   // اللوحات المفلترة حسب الفرق المختارة
   const contractItems = useMemo(() => {
@@ -231,13 +278,17 @@ export function PrintAllContractBillboardsDialog({
       // استخدام الإعدادات المخصصة من قاعدة البيانات
       const s = customSettings;
       
+      // جلب رقم العقد ونوع الإعلان الخاص بكل لوحة
+      const itemContractNumber = billboard.Contract_Number || contractNumber;
+      const itemAdType = contractAdTypes[itemContractNumber] || adType;
+      
       pages.push(`
         <div class="page">
           <div class="background"></div>
 
-          <!-- رقم العقد ونوع الإعلان معاً -->
+          <!-- رقم العقد ونوع الإعلان معاً - خاص بكل لوحة -->
           <div class="absolute-field contract-number" style="top: ${s.contract_number_top}; right: ${s.contract_number_right}; font-size: ${s.contract_number_font_size}; font-weight: ${s.contract_number_font_weight};">
-            عقد رقم: ${contractNumber}${adType ? ' - نوع الإعلان: ' + adType : ''}
+            عقد رقم: ${itemContractNumber}${itemAdType ? ' - نوع الإعلان: ' + itemAdType : ''}
           </div>
 
           <!-- تاريخ التركيب -->

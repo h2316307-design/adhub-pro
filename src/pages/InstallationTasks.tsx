@@ -143,6 +143,10 @@ export default function InstallationTasks() {
   const [bulkInstallationDate, setBulkInstallationDate] = useState<string>('');
   const [selectedTaskIdForBulk, setSelectedTaskIdForBulk] = useState<string | null>(null);
   
+  // Multi-task selection for bulk printing
+  const [selectedTasksForPrint, setSelectedTasksForPrint] = useState<Set<string>>(new Set());
+  const [multiTaskPrintDialogOpen, setMultiTaskPrintDialogOpen] = useState(false);
+  
   // Handle completion of multiple billboards
   const handleCompleteMultiple = async (result: 'completed' | 'not_completed', notes: string, reason?: string, installationDate?: string) => {
     if (selectedItemsForCompletion.length === 0) {
@@ -407,6 +411,26 @@ export default function InstallationTasks() {
     return map;
   }, [billboards]);
 
+  // ✅ استخراج العقود الفعلية لكل مهمة من لوحاتها (لحل مشكلة ظهور عقد واحد فقط)
+  const derivedContractIdsByTaskId = useMemo(() => {
+    const map = new Map<string, number[]>();
+    const sets = new Map<string, Set<number>>();
+
+    allTaskItems.forEach((item: any) => {
+      const taskId = item.task_id as string;
+      const contractNo = billboardById[item.billboard_id]?.Contract_Number;
+      if (!taskId || !contractNo) return;
+      if (!sets.has(taskId)) sets.set(taskId, new Set());
+      sets.get(taskId)!.add(Number(contractNo));
+    });
+
+    sets.forEach((set, taskId) => {
+      map.set(taskId, Array.from(set).filter(Boolean).sort((a, b) => a - b));
+    });
+
+    return map;
+  }, [allTaskItems, billboardById]);
+
   // Fetch teams
   const { data: teams = [] } = useQuery({
     queryKey: ['installation-teams'],
@@ -426,17 +450,21 @@ export default function InstallationTasks() {
     return map;
   }, [teams]);
 
-  // Fetch contracts - include all contract_ids from merged tasks
+  // Fetch contracts - include derived contract ids from billboards
   const contractIds = useMemo(() => {
     const ids = new Set<number>();
-    tasks.forEach(t => {
+
+    tasks.forEach((t: any) => {
       if (t.contract_id) ids.add(t.contract_id);
       if (t.contract_ids && Array.isArray(t.contract_ids)) {
         t.contract_ids.forEach((id: number) => ids.add(id));
       }
+      const derived = derivedContractIdsByTaskId.get(t.id);
+      derived?.forEach((id) => ids.add(id));
     });
+
     return [...ids];
-  }, [tasks]);
+  }, [tasks, derivedContractIdsByTaskId]);
   const { data: contracts = [] } = useQuery({
     queryKey: ['contracts-for-tasks', ...contractIds],
     enabled: contractIds.length > 0,
@@ -1283,55 +1311,102 @@ export default function InstallationTasks() {
                              </div>
                            </div>
                          </div>
-                         <div className="flex items-center gap-2">
-                           {/* زر دمج المهام */}
-                           <Button
-                             variant="outline"
-                             size="sm"
-                             onClick={(e) => {
-                               e.stopPropagation();
-                               // Group tasks by customer
-                               const customerGroups: Record<string, any[]> = {};
-                               teamTasks.forEach(task => {
-                                 const contract = contractById[task.contract_id];
-                                 const customerId = contract?.customer_id || 'unknown';
-                                 if (!customerGroups[customerId]) {
-                                   customerGroups[customerId] = [];
-                                 }
-                                 const taskItems = allTaskItems.filter(i => i.task_id === task.id);
-                                  customerGroups[customerId].push({
-                                    id: task.id,
-                                    contract_id: task.contract_id,
-                                    customer_name: contract?.['Customer Name'] || 'غير محدد',
-                                    billboard_count: taskItems.length,
-                                    task_type: task.task_type,
-                                    ad_type: contract?.['Ad Type'] || ''
-                                  });
-                               });
-                               
-                               // Find customers with multiple tasks
-                               const customersWithMultipleTasks = Object.entries(customerGroups)
-                                 .filter(([_, tasks]) => tasks.length > 1);
-                               
-                               if (customersWithMultipleTasks.length === 0) {
-                                 toast.error('لا يوجد زبائن لديهم أكثر من مهمة في هذا الفريق');
-                                 return;
-                               }
-                               
-                               // For simplicity, take the first customer with multiple tasks
-                               const [customerId, tasks] = customersWithMultipleTasks[0];
-                               setSelectedTeamForMerge({ id: teamId, name: team?.team_name || 'فريق غير محدد' });
-                               setSelectedCustomerForMerge(customerId);
-                               setTasksToMerge(tasks);
-                               setMergeDialogOpen(true);
-                             }}
-                             className="text-xs"
-                           >
-                             <Merge className="h-3 w-3 mr-1" />
-                             دمج المهام
-                           </Button>
-                           <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200" />
-                         </div>
+                          <div className="flex items-center gap-2">
+                            {/* زر تحديد/إلغاء تحديد جميع المهام */}
+                            {(() => {
+                              const allTeamTaskIds = teamTasks.map(t => t.id);
+                              const allSelected = allTeamTaskIds.every(id => selectedTasksForPrint.has(id));
+                              const someSelected = allTeamTaskIds.some(id => selectedTasksForPrint.has(id));
+                              return (
+                                <Button
+                                  variant={allSelected ? "default" : "outline"}
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedTasksForPrint(prev => {
+                                      const newSet = new Set(prev);
+                                      if (allSelected) {
+                                        allTeamTaskIds.forEach(id => newSet.delete(id));
+                                      } else {
+                                        allTeamTaskIds.forEach(id => newSet.add(id));
+                                      }
+                                      return newSet;
+                                    });
+                                  }}
+                                  className="text-xs"
+                                >
+                                  <CheckCircle2 className={`h-3 w-3 mr-1 ${allSelected ? 'text-white' : ''}`} />
+                                  {allSelected ? 'إلغاء التحديد' : someSelected ? `تحديد الكل (${allTeamTaskIds.length})` : `تحديد الكل (${allTeamTaskIds.length})`}
+                                </Button>
+                              );
+                            })()}
+                            {/* زر طباعة المحدد للفريق */}
+                            {(() => {
+                              const selectedInTeam = teamTasks.filter(t => selectedTasksForPrint.has(t.id));
+                              if (selectedInTeam.length === 0) return null;
+                              return (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setMultiTaskPrintDialogOpen(true);
+                                  }}
+                                  className="text-xs bg-blue-600 hover:bg-blue-700"
+                                >
+                                  <Printer className="h-3 w-3 mr-1" />
+                                  طباعة المحدد ({selectedInTeam.length})
+                                </Button>
+                              );
+                            })()}
+                            {/* زر دمج المهام */}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                // Group tasks by customer
+                                const customerGroups: Record<string, any[]> = {};
+                                teamTasks.forEach(task => {
+                                  const contract = contractById[task.contract_id];
+                                  const customerId = contract?.customer_id || 'unknown';
+                                  if (!customerGroups[customerId]) {
+                                    customerGroups[customerId] = [];
+                                  }
+                                  const taskItems = allTaskItems.filter(i => i.task_id === task.id);
+                                   customerGroups[customerId].push({
+                                     id: task.id,
+                                     contract_id: task.contract_id,
+                                     customer_name: contract?.['Customer Name'] || 'غير محدد',
+                                     billboard_count: taskItems.length,
+                                     task_type: task.task_type,
+                                     ad_type: contract?.['Ad Type'] || ''
+                                   });
+                                });
+                                
+                                // Find customers with multiple tasks
+                                const customersWithMultipleTasks = Object.entries(customerGroups)
+                                  .filter(([_, tasks]) => tasks.length > 1);
+                                
+                                if (customersWithMultipleTasks.length === 0) {
+                                  toast.error('لا يوجد زبائن لديهم أكثر من مهمة في هذا الفريق');
+                                  return;
+                                }
+                                
+                                // For simplicity, take the first customer with multiple tasks
+                                const [customerId, tasks] = customersWithMultipleTasks[0];
+                                setSelectedTeamForMerge({ id: teamId, name: team?.team_name || 'فريق غير محدد' });
+                                setSelectedCustomerForMerge(customerId);
+                                setTasksToMerge(tasks);
+                                setMergeDialogOpen(true);
+                              }}
+                              className="text-xs"
+                            >
+                              <Merge className="h-3 w-3 mr-1" />
+                              دمج المهام
+                            </Button>
+                            <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200" />
+                          </div>
                        </div>
                      </CardHeader>
                   </CollapsibleTrigger>
@@ -1348,9 +1423,12 @@ export default function InstallationTasks() {
                           const price = installationPricingByBillboard[item.billboard_id] || 0;
                           return sum + price;
                         }, 0);
+                        // ✅ العقود الفعلية لهذه المهمة (من اللوحات) مع fallback على الحقل المخزن
+                        const derivedContractIds = derivedContractIdsByTaskId.get(task.id) || (task.contract_ids || []);
+                        const taskContractIds = (derivedContractIds.length > 0 ? derivedContractIds : [task.contract_id]).filter(Boolean) as number[];
 
                         // Check if this is a merged task
-                        const isMergedTask = task.contract_ids && task.contract_ids.length > 1;
+                        const isMergedTask = taskContractIds.length > 1;
                         
                         // حساب نسبة الإكمال
                         const completionPercentage = taskItems.length > 0 
@@ -1374,55 +1452,78 @@ export default function InstallationTasks() {
                               <CardHeader className="space-y-0 relative z-10 py-3">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-3">
+                                    {/* Checkbox لتحديد المهمة */}
+                                    <div 
+                                      onClick={(e) => e.stopPropagation()}
+                                      className="flex items-center"
+                                    >
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedTasksForPrint.has(task.id)}
+                                        onChange={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedTasksForPrint(prev => {
+                                            const newSet = new Set(prev);
+                                            if (newSet.has(task.id)) {
+                                              newSet.delete(task.id);
+                                            } else {
+                                              newSet.add(task.id);
+                                            }
+                                            return newSet;
+                                          });
+                                        }}
+                                        className="h-5 w-5 rounded border-2 border-primary text-primary focus:ring-primary cursor-pointer"
+                                      />
+                                    </div>
                                     <div className="text-right space-y-1">
                        <div className="flex items-center gap-2 flex-wrap">
-                        {/* عرض جميع العقود للمهام المدمجة */}
-                        {isMergedTask && task.contract_ids ? (
-                          <>
-                            {task.contract_ids.map((contractId: number, index: number) => {
-                              const mergedContract = contractById[contractId];
-                              return (
-                                <div key={contractId} className="flex items-center gap-1">
-                                  <Badge variant="outline" className="font-bold bg-primary/10">
-                                    #{contractId}
-                                  </Badge>
-                                  {mergedContract?.['Ad Type'] && (
-                                    <Badge variant="secondary" className="text-xs">
-                                      {mergedContract['Ad Type']}
-                                    </Badge>
-                                  )}
-                                  {index < task.contract_ids.length - 1 && (
-                                    <span className="text-muted-foreground mx-1">+</span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                            <Badge className="bg-orange-500 text-white text-xs">مدمجة</Badge>
-                            {task.task_type === 'reinstallation' ? (
-                              <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
-                            ) : (
-                              <Badge className="bg-green-600 text-white text-xs">تركيب جديد</Badge>
-                            )}
-                          </>
-                        ) : (
-                          <>
-                            <Badge variant="outline" className="font-bold">
-                              #{task.contract_id}
-                            </Badge>
-                            {contract?.['Ad Type'] && (
-                              <Badge variant="secondary">
-                                {contract['Ad Type']}
-                              </Badge>
-                            )}
-                            {task.task_type === 'reinstallation' && (
-                              <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
-                            )}
-                          </>
-                        )}
-                        <span className="font-bold">
-                          {contract?.['Customer Name'] || 'غير محدد'}
-                        </span>
-                      </div>
+                         {/* عرض جميع العقود للمهام المدمجة */}
+                         {isMergedTask ? (
+                           <>
+                             {taskContractIds.map((contractId: number, index: number) => {
+                               const mergedContract = contractById[contractId];
+                               return (
+                                 <div key={contractId} className="flex items-center gap-1">
+                                   <Badge variant="outline" className="font-bold bg-primary/10">
+                                     #{contractId}
+                                   </Badge>
+                                   {mergedContract?.['Ad Type'] && (
+                                     <Badge variant="secondary" className="text-xs">
+                                       {mergedContract['Ad Type']}
+                                     </Badge>
+                                   )}
+                                   {index < taskContractIds.length - 1 && (
+                                     <span className="text-muted-foreground mx-1">+</span>
+                                   )}
+                                 </div>
+                               );
+                             })}
+                             <Badge className="bg-orange-500 text-white text-xs">مدمجة</Badge>
+                             {task.task_type === 'reinstallation' ? (
+                               <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
+                             ) : (
+                               <Badge className="bg-green-600 text-white text-xs">تركيب جديد</Badge>
+                             )}
+                           </>
+                         ) : (
+                           <>
+                             <Badge variant="outline" className="font-bold">
+                               #{task.contract_id}
+                             </Badge>
+                             {contract?.['Ad Type'] && (
+                               <Badge variant="secondary">
+                                 {contract['Ad Type']}
+                               </Badge>
+                             )}
+                             {task.task_type === 'reinstallation' && (
+                               <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
+                             )}
+                           </>
+                         )}
+                         <span className="font-bold">
+                           {contract?.['Customer Name'] || 'غير محدد'}
+                         </span>
+                       </div>
                                       <div className="flex items-center gap-2 text-sm text-muted-foreground">
                                         <span>{taskItems.length} لوحة</span>
                                         
@@ -1489,34 +1590,7 @@ export default function InstallationTasks() {
                                         </Badge>
                                       )}
                                     </Button>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setPrintTaskId(task.id);
-                                        setPrintDialogOpen(true);
-                                      }}
-                                    >
-                                      <Printer className="h-4 w-4 mr-2" />
-                                      طباعة
-                                    </Button>
-                                    {/* زر طباعة اللوحات المنفصلة - يفتح نافذة منبثقة */}
-                                    <BillboardPrintSettingsDialog
-                                      open={printSettingsDialogTaskId === task.id}
-                                      onOpenChange={(open) => setPrintSettingsDialogTaskId(open ? task.id : null)}
-                                      taskId={task.id}
-                                    >
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="bg-primary/10 border-primary/30"
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <FileText className="h-4 w-4 mr-2" />
-                                        طباعة منفصلة
-                                      </Button>
-                                    </BillboardPrintSettingsDialog>
+                                    {/* ✅ تم إلغاء أزرار (طباعة) و(طباعة منفصلة) حسب الطلب */}
                                     {/* زر تعديل نوع المهمة */}
                                     <Button
                                       variant="outline"
@@ -2428,6 +2502,43 @@ export default function InstallationTasks() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Multi-Task Print Dialog - طباعة المهام المحددة */}
+      {multiTaskPrintDialogOpen && selectedTasksForPrint.size > 0 && (() => {
+        // جمع جميع اللوحات من المهام المحددة
+        const selectedTasks = tasks.filter(t => selectedTasksForPrint.has(t.id));
+        const selectedItems = allTaskItems.filter(item => 
+          selectedTasks.some(t => t.id === item.task_id)
+        );
+        
+        // الحصول على معلومات الفريق (أول فريق)
+        const firstTask = selectedTasks[0];
+        const team = teamById[firstTask?.team_id];
+        
+        // جمع أسماء الزبائن
+        const customerNames = [...new Set(
+          selectedTasks.map(t => contractById[t.contract_id]?.['Customer Name'] || 'غير محدد')
+        )].join(' - ');
+        
+        return (
+          <PrintAllContractBillboardsDialog
+            open={multiTaskPrintDialogOpen}
+            onOpenChange={(open) => {
+              setMultiTaskPrintDialogOpen(open);
+              if (!open) {
+                setSelectedTasksForPrint(new Set());
+              }
+            }}
+            contractNumber={firstTask?.contract_id || 0}
+            customerName={customerNames}
+            allTaskItems={selectedItems}
+            tasks={selectedTasks}
+            billboards={billboardById}
+            teams={teamById}
+            designsByTask={designsByTask}
+          />
+        );
+      })()}
     </div>
   );
 }

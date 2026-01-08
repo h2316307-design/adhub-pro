@@ -70,12 +70,32 @@ export function UnifiedTaskInvoice({
   const [showCosts, setShowCosts] = useState(true);
   const [data, setData] = useState<typeof invoiceData>(invoiceData);
   const [displayMode, setDisplayMode] = useState<'detailed' | 'summary'>('detailed');
+  const [contractIds, setContractIds] = useState<number[]>([task.contract_id].filter(Boolean));
 
-  // Load settings and data
+  // Load settings, contracts, and data
   useEffect(() => {
     const loadData = async () => {
       try {
         setIsLoading(true);
+
+        // ✅ استنتاج العقود الفعلية من اللوحات (في حال مهمة تركيب مدموجة بين عقدين)
+        if (task.installation_task_id) {
+          const { data: installItems } = await supabase
+            .from('installation_task_items')
+            .select('billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
+            .eq('task_id', task.installation_task_id);
+
+          const unique = new Set<number>();
+          (installItems || []).forEach((row: any) => {
+            const n = row.billboard?.Contract_Number;
+            if (n) unique.add(Number(n));
+          });
+
+          const derived = Array.from(unique).filter(Boolean).sort((a, b) => a - b);
+          setContractIds(derived.length > 0 ? derived : [task.contract_id].filter(Boolean));
+        } else {
+          setContractIds([task.contract_id].filter(Boolean));
+        }
 
         // Load unified settings
         const { data: unifiedData } = await supabase
@@ -110,7 +130,7 @@ export function UnifiedTaskInvoice({
     if (open) {
       loadData();
     }
-  }, [open, invoiceType, task.id]);
+  }, [open, invoiceType, task.id, task.installation_task_id, task.contract_id]);
 
   const loadInvoiceData = async () => {
     const items: InvoiceItem[] = [];
@@ -124,10 +144,10 @@ export function UnifiedTaskInvoice({
 
     try {
       // Load sizes map
-      const { data: sizesData } = await supabase.from('sizes').select('name, width, height, installation_price');
-      const sizesMap: Record<string, { width: number; height: number; installationPrice: number }> = {};
+      const { data: sizesData } = await supabase.from('sizes').select('name, width, height, installation_price, sort_order');
+      const sizesMap: Record<string, { width: number; height: number; installationPrice: number; sortOrder: number }> = {};
       sizesData?.forEach((s: any) => {
-        sizesMap[s.name] = { width: s.width || 0, height: s.height || 0, installationPrice: s.installation_price || 0 };
+        sizesMap[s.name] = { width: s.width || 0, height: s.height || 0, installationPrice: s.installation_price || 0, sortOrder: s.sort_order ?? 999 };
       });
 
       // جلب صور التصميم من مصادر مختلفة
@@ -159,128 +179,232 @@ export function UnifiedTaskInvoice({
         });
       }
 
-      if (invoiceType === 'print_vendor' && task.print_task_id) {
-        // Load print task data
-        const [printTaskResult, itemsResult] = await Promise.all([
-          supabase.from('print_tasks').select('*, printer:printers!print_tasks_printer_id_fkey(name)').eq('id', task.print_task_id).single(),
-          supabase.from('print_task_items').select('*').eq('task_id', task.print_task_id),
-        ]);
+      // ===============================================
+      // فواتير المطبعة والقص والتركيب - تستخدم نفس منطق فاتورة الزبون
+      // لكن مع التكاليف الأساسية (company costs)
+      // ===============================================
+      if (invoiceType === 'print_vendor' || invoiceType === 'cutout_vendor' || invoiceType === 'installation_team') {
+        // تحديد التكلفة الإجمالية حسب نوع الفاتورة
+        if (invoiceType === 'print_vendor') {
+          totalCost = task.company_print_cost || 0;
+        } else if (invoiceType === 'cutout_vendor') {
+          totalCost = task.company_cutout_cost || 0;
+        }
+        // ملاحظة: فاتورة التركيب ستحسب الإجمالي من جدول المقاسات لاحقاً
 
-        const printTask = printTaskResult.data;
-        const printItems = itemsResult.data || [];
-        vendorName = (printTask as any)?.printer?.name || 'غير محدد';
-        totalArea = printItems.reduce((sum: number, item: any) => sum + (item.area * item.quantity), 0);
-        totalCost = task.company_print_cost || 0;
-        pricePerMeter = totalArea > 0 ? totalCost / totalArea : 0;
+        // جلب اسم المورد/الفرقة
+        if (invoiceType === 'print_vendor' && task.print_task_id) {
+          const { data: printTask } = await supabase
+            .from('print_tasks')
+            .select('*, printer:printers!print_tasks_printer_id_fkey(name)')
+            .eq('id', task.print_task_id)
+            .single();
+          vendorName = (printTask as any)?.printer?.name || 'غير محدد';
+        } else if (invoiceType === 'cutout_vendor' && task.cutout_task_id) {
+          const { data: cutoutTask } = await supabase
+            .from('cutout_tasks')
+            .select('*, printer:printers!cutout_tasks_printer_id_fkey(name)')
+            .eq('id', task.cutout_task_id)
+            .single();
+          vendorName = (cutoutTask as any)?.printer?.name || 'غير محدد';
+        } else if (invoiceType === 'installation_team' && task.installation_task_id) {
+          const { data: installTask } = await supabase
+            .from('installation_tasks')
+            .select('*, team:installation_teams(team_name)')
+            .eq('id', task.installation_task_id)
+            .single();
+          teamName = (installTask as any)?.team?.team_name || 'غير محدد';
+        }
 
-        printItems.forEach((item: any) => {
-          const itemCost = item.area * item.quantity * pricePerMeter;
-          if (item.design_face_a) {
-            items.push({
-              designImage: item.design_face_a,
-              face: 'a',
-              sizeName: item.size_name || `${item.width}×${item.height}`,
-              width: item.width,
-              height: item.height,
-              quantity: item.quantity,
-              area: item.area * item.quantity,
-              printCost: itemCost,
-              installationCost: 0,
-              cutoutCost: 0,
-              totalCost: itemCost,
+        // جلب بيانات من installation_task_items (مثل فاتورة الزبون)
+        if (task.installation_task_id) {
+          const { data: installItems } = await supabase
+            .from('installation_task_items')
+            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, design_face_a, design_face_b, has_cutout)')
+            .eq('task_id', task.installation_task_id);
+
+          if (installItems && installItems.length > 0) {
+            // حساب المساحة الكلية
+            totalArea = 0;
+            installItems.forEach((item: any) => {
+              const billboardSize = item.billboard?.Size;
+              let sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0 };
+              
+              if (sizeInfo.width === 0 && sizeInfo.height === 0 && billboardSize) {
+                const match = billboardSize.match(/(\d+(?:\.\d+)?)[x×](\d+(?:\.\d+)?)/i);
+                if (match) {
+                  sizeInfo = { width: parseFloat(match[1]), height: parseFloat(match[2]), installationPrice: 0 };
+                }
+              }
+              
+              const hasDesignA = item.design_face_a || item.billboard?.design_face_a;
+              const hasDesignB = item.design_face_b || item.billboard?.design_face_b;
+              const facesCount = (hasDesignA ? 1 : 0) + (hasDesignB ? 1 : 0) || 1;
+              
+              const areaForItem = (sizeInfo.width * sizeInfo.height) || 0;
+              totalArea += areaForItem * facesCount;
             });
-          }
-          if (item.design_face_b) {
-            items.push({
-              designImage: item.design_face_b,
-              face: 'b',
-              sizeName: item.size_name || `${item.width}×${item.height}`,
-              width: item.width,
-              height: item.height,
-              quantity: item.quantity,
-              area: item.area * item.quantity,
-              printCost: itemCost,
-              installationCost: 0,
-              cutoutCost: 0,
-              totalCost: itemCost,
+
+            // حساب سعر المتر للطباعة
+            pricePerMeter = totalArea > 0 ? (task.company_print_cost || 0) / totalArea : 0;
+
+            // حساب إجمالي أسعار التركيب من sizesMap
+            let totalSizesInstallationPrice = 0;
+            installItems.forEach((item: any) => {
+              const billboardSize = item.billboard?.Size;
+              const sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
+              totalSizesInstallationPrice += sizeInfo.installationPrice || 0;
             });
+            
+            const installCostRatio = totalSizesInstallationPrice > 0 
+              ? (task.company_installation_cost || 0) / totalSizesInstallationPrice 
+              : 0;
+
+            // حساب تكلفة القص
+            const totalCutoutCost = task.company_cutout_cost || 0;
+            let cutoutBillboardIds = new Set<number>();
+
+            if (task.cutout_task_id && totalCutoutCost > 0) {
+              const { data: cutoutItems } = await supabase
+                .from('cutout_task_items')
+                .select('billboard_id')
+                .eq('task_id', task.cutout_task_id);
+
+              (cutoutItems || []).forEach((ci: any) => {
+                if (ci?.billboard_id != null) cutoutBillboardIds.add(Number(ci.billboard_id));
+              });
+            }
+
+            if (cutoutBillboardIds.size === 0) {
+              installItems
+                .filter((it: any) => it.billboard?.has_cutout === true)
+                .forEach((it: any) => {
+                  const id = it.billboard?.ID ?? it.billboard_id;
+                  if (id != null) cutoutBillboardIds.add(Number(id));
+                });
+            }
+
+            const cutoutCostPerCutoutBillboard = cutoutBillboardIds.size > 0 ? totalCutoutCost / cutoutBillboardIds.size : 0;
+            totalCutouts = cutoutBillboardIds.size;
+
+            // إضافة كل عنصر
+            installItems.forEach((item: any) => {
+              const billboardSize = item.billboard?.Size;
+              let sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
+              
+              if (sizeInfo.width === 0 && sizeInfo.height === 0 && billboardSize) {
+                const match = billboardSize.match(/(\d+(?:\.\d+)?)[x×](\d+(?:\.\d+)?)/i);
+                if (match) {
+                  sizeInfo = { width: parseFloat(match[1]), height: parseFloat(match[2]), installationPrice: 0 };
+                }
+              }
+              
+              const billboardId = item.billboard?.ID || item.billboard_id;
+              const designs = designImages[billboardId] || {};
+              
+              const faceAImage = item.design_face_a || designs.face_a || item.billboard?.design_face_a;
+              const faceBImage = item.design_face_b || designs.face_b || item.billboard?.design_face_b;
+              const areaPerFace = sizeInfo.width * sizeInfo.height;
+              const hasCutout = cutoutBillboardIds.has(Number(billboardId)) || item.billboard?.has_cutout === true;
+              const facesCountForBillboard = faceBImage ? 2 : 1;
+              
+              // حساب التكاليف حسب نوع الفاتورة
+              let printCostPerFace = 0;
+              let installCostPerFace = 0;
+              let cutoutCostPerFace = 0;
+
+              if (invoiceType === 'print_vendor') {
+                printCostPerFace = areaPerFace * pricePerMeter;
+              } else if (invoiceType === 'installation_team') {
+                // ✅ استخدام installation_price مباشرة من جدول المقاسات (بدون نسبة)
+                const baseInstallPrice = sizeInfo.installationPrice || 0;
+                installCostPerFace = baseInstallPrice / facesCountForBillboard;
+              } else if (invoiceType === 'cutout_vendor') {
+                cutoutCostPerFace = hasCutout ? (cutoutCostPerCutoutBillboard / facesCountForBillboard) : 0;
+              }
+
+              const displaySizeName = hasCutout
+                ? `${billboardSize || 'غير محدد'} (مجسم)`
+                : (billboardSize || 'غير محدد');
+
+              // الوجه الأمامي
+              items.push({
+                designImage: faceAImage,
+                face: 'a',
+                sizeName: displaySizeName,
+                width: sizeInfo.width || 0,
+                height: sizeInfo.height || 0,
+                quantity: 1,
+                area: areaPerFace,
+                printCost: printCostPerFace,
+                installationCost: installCostPerFace,
+                cutoutCost: cutoutCostPerFace,
+                totalCost: printCostPerFace + installCostPerFace + cutoutCostPerFace,
+                billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
+              });
+
+              // الوجه الخلفي إذا وجد
+              if (faceBImage) {
+                items.push({
+                  designImage: faceBImage,
+                  face: 'b',
+                  sizeName: displaySizeName,
+                  width: sizeInfo.width || 0,
+                  height: sizeInfo.height || 0,
+                  quantity: 1,
+                  area: areaPerFace,
+                  printCost: printCostPerFace,
+                  installationCost: installCostPerFace,
+                  cutoutCost: cutoutCostPerFace,
+                  totalCost: printCostPerFace + installCostPerFace + cutoutCostPerFace,
+                  billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
+                });
+              }
+            });
+
+            // ترتيب حسب sort_order
+            items.sort((a, b) => {
+              const sortA = sizesMap[a.sizeName.replace(' (مجسم)', '')]?.sortOrder ?? 999;
+              const sortB = sizesMap[b.sizeName.replace(' (مجسم)', '')]?.sortOrder ?? 999;
+              if (sortA !== sortB) return sortA - sortB;
+              return a.face === 'a' ? -1 : 1;
+            });
+
+            // فلترة العناصر بدون تكلفة (للقص مثلاً)
+            if (invoiceType === 'cutout_vendor') {
+              const filtered = items.filter(item => item.cutoutCost > 0);
+              items.length = 0;
+              items.push(...filtered);
+            }
+
+            // ✅ لفاتورة التركيب: حساب الإجمالي من مجموع العناصر
+            if (invoiceType === 'installation_team') {
+              totalCost = items.reduce((sum, item) => sum + item.totalCost, 0);
+            }
           }
-        });
-      } else if (invoiceType === 'cutout_vendor' && task.cutout_task_id) {
-        // Load cutout task data
-        const [cutoutTaskResult, cutoutItemsResult] = await Promise.all([
-          supabase.from('cutout_tasks').select('*, printer:printers!cutout_tasks_printer_id_fkey(name)').eq('id', task.cutout_task_id).single(),
-          supabase.from('cutout_task_items').select('*, billboard:billboards(Billboard_Name, Size)').eq('task_id', task.cutout_task_id),
-        ]);
+        }
 
-        const cutoutTask = cutoutTaskResult.data;
-        const cutoutItems = cutoutItemsResult.data || [];
-        vendorName = (cutoutTask as any)?.printer?.name || 'غير محدد';
-        totalCutouts = cutoutTask?.total_quantity || cutoutItems.reduce((sum: number, item: any) => sum + item.quantity, 0);
-        totalCost = task.company_cutout_cost || 0;
-        cutoutPricePerUnit = totalCutouts > 0 ? totalCost / totalCutouts : 0;
-
-        cutoutItems.forEach((item: any) => {
-          const billboardId = item.billboard_id;
-          const designs = designImages[billboardId] || {};
-          // الحصول على صورة التصميم من cutout_task_items نفسه أو من designImages
-          const cutoutImage = item.cutout_image_url || designs.face_a || designs.face_b;
+        // Fallback: إذا لم توجد عناصر ولكن توجد تكلفة (للطباعة والقص فقط)
+        if (items.length === 0 && totalCost > 0 && invoiceType !== 'installation_team') {
+          const serviceName = invoiceType === 'print_vendor' ? 'خدمة الطباعة (مجمّعة)' 
+            : 'خدمة القص (مجمّعة)';
           
-          const itemCost = item.quantity * cutoutPricePerUnit;
           items.push({
-            designImage: cutoutImage,
+            designImage: undefined,
             face: 'a',
-            sizeName: item.description || item.billboard?.Size || 'مجسم',
+            sizeName: serviceName,
             width: 0,
             height: 0,
-            quantity: item.quantity,
-            area: 0,
-            printCost: 0,
-            installationCost: 0,
-            cutoutCost: itemCost,
-            totalCost: itemCost,
-            billboardName: item.billboard?.Billboard_Name,
-          });
-        });
-      } else if (invoiceType === 'installation_team' && task.installation_task_id) {
-        // Load installation task data
-        const [installTaskResult, installItemsResult] = await Promise.all([
-          supabase.from('installation_tasks').select('*, team:installation_teams(team_name)').eq('id', task.installation_task_id).single(),
-          supabase.from('installation_task_items').select('*, billboard:billboards(ID, Billboard_Name, Size, design_face_a, design_face_b)').eq('task_id', task.installation_task_id),
-        ]);
-
-        const installTask = installTaskResult.data;
-        const installItems = installItemsResult.data || [];
-        teamName = (installTask as any)?.team?.team_name || 'غير محدد';
-        
-        installItems.forEach((item: any) => {
-          const billboardSize = item.billboard?.Size;
-          const sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
-          
-          // جلب صورة التصميم من مصادر متعددة
-          const billboardId = item.billboard?.ID || item.billboard_id;
-          const designs = designImages[billboardId] || {};
-          const designImage = item.design_face_a || item.design_face_b || 
-                             designs.face_a || designs.face_b ||
-                             item.billboard?.design_face_a || item.billboard?.design_face_b;
-
-          items.push({
-            designImage,
-            face: 'a',
-            sizeName: billboardSize || 'غير محدد',
-            width: sizeInfo.width,
-            height: sizeInfo.height,
             quantity: 1,
-            area: sizeInfo.width * sizeInfo.height,
-            printCost: 0,
-            installationCost: sizeInfo.installationPrice,
-            cutoutCost: 0,
-            totalCost: sizeInfo.installationPrice,
-            billboardName: item.billboard?.Billboard_Name,
+            area: invoiceType === 'print_vendor' ? 1 : 0,
+            printCost: invoiceType === 'print_vendor' ? totalCost : 0,
+            installationCost: 0,
+            cutoutCost: invoiceType === 'cutout_vendor' ? totalCost : 0,
+            totalCost: totalCost,
+            billboardName: invoiceType === 'print_vendor' ? 'طباعة' : 'قص مجسمات',
           });
-        });
+        }
 
-        totalCost = items.reduce((sum, item) => sum + item.totalCost, 0);
       } else if (invoiceType === 'customer') {
         // ===============================================
         // DEBUG: تتبع بيانات المهمة
@@ -297,10 +421,10 @@ export function UnifiedTaskInvoice({
 
         // Customer invoice - جلب بيانات من installation_task_items للحصول على اللوحات
         if (task.installation_task_id) {
-          // استخدام العلاقة الصريحة لتجنب خطأ PGRST201
+          // استخدام العلاقة الصريحة لتجنب خطأ PGRST201 - مع جلب has_cutout
           const { data: installItems, error: installError } = await supabase
             .from('installation_task_items')
-            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, design_face_a, design_face_b)')
+            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, design_face_a, design_face_b, has_cutout)')
             .eq('task_id', task.installation_task_id);
 
           console.log('Installation Items Query Result:', { installItems, installError });
@@ -331,18 +455,58 @@ export function UnifiedTaskInvoice({
             
             pricePerMeter = totalArea > 0 ? (task.customer_print_cost || 0) / totalArea : 0;
 
-            // حساب تكلفة التركيب لكل لوحة
+            // ✅ حساب تكلفة التركيب لكل لوحة بناءً على installation_price من جدول sizes (مثل مهمة التركيب)
+            // أولاً: حساب إجمالي أسعار التركيب من sizesMap
+            let totalSizesInstallationPrice = 0;
+            installItems.forEach((item: any) => {
+              const billboardSize = item.billboard?.Size;
+              const sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
+              totalSizesInstallationPrice += sizeInfo.installationPrice || 0;
+            });
+            
+            // حساب نسبة التكلفة الفعلية إلى أسعار المقاسات (للتوزيع النسبي)
             const totalInstallCost = task.customer_installation_cost || 0;
-            const installCostPerItem = installItems.length > 0 ? totalInstallCost / installItems.length : 0;
+            const installCostRatio = totalSizesInstallationPrice > 0 ? totalInstallCost / totalSizesInstallationPrice : 0;
 
-            // حساب تكلفة القص لكل لوحة (إذا وجدت)
+            // ✅ حساب تكلفة القص فقط للوحات التي لديها عناصر قص فعلية (cutout_task_items)
             const totalCutoutCost = task.customer_cutout_cost || 0;
-            const cutoutCostPerItem = installItems.length > 0 ? totalCutoutCost / installItems.length : 0;
+            let cutoutBillboardIds = new Set<number>();
+
+            if (task.cutout_task_id && totalCutoutCost > 0) {
+              const { data: cutoutItems, error: cutoutItemsError } = await supabase
+                .from('cutout_task_items')
+                .select('billboard_id')
+                .eq('task_id', task.cutout_task_id);
+
+              console.log('Cutout items query (customer invoice):', { cutoutItems, cutoutItemsError });
+
+              (cutoutItems || []).forEach((ci: any) => {
+                if (ci?.billboard_id != null) cutoutBillboardIds.add(Number(ci.billboard_id));
+              });
+            }
+
+            // فولباك: لو لم توجد عناصر قص، استخدم has_cutout من اللوحات
+            if (cutoutBillboardIds.size === 0) {
+              installItems
+                .filter((it: any) => it.billboard?.has_cutout === true)
+                .forEach((it: any) => {
+                  const id = it.billboard?.ID ?? it.billboard_id;
+                  if (id != null) cutoutBillboardIds.add(Number(id));
+                });
+            }
+
+            const cutoutCostPerCutoutBillboard = cutoutBillboardIds.size > 0 ? totalCutoutCost / cutoutBillboardIds.size : 0;
+
+            console.log('Cutout calculation (customer invoice):', {
+              totalCutoutCost,
+              cutoutBillboards: cutoutBillboardIds.size,
+              cutoutCostPerCutoutBillboard,
+            });
 
             // إضافة كل عنصر كصف في الفاتورة
             installItems.forEach((item: any) => {
               const billboardSize = item.billboard?.Size;
-              let sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0 };
+              let sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
               
               // إذا لم يكن المقاس موجوداً في sizesMap، استخرج الأبعاد من نص المقاس
               if (sizeInfo.width === 0 && sizeInfo.height === 0 && billboardSize) {
@@ -358,43 +522,71 @@ export function UnifiedTaskInvoice({
               const faceAImage = item.design_face_a || designs.face_a || item.billboard?.design_face_a;
               const faceBImage = item.design_face_b || designs.face_b || item.billboard?.design_face_b;
               const areaPerFace = sizeInfo.width * sizeInfo.height;
+              
+              // ✅ تحديد إذا كانت اللوحة بها مجسم (يعتمد على عناصر القص الفعلية أو علامة has_cutout)
+              const hasCutout = cutoutBillboardIds.has(Number(billboardId)) || item.billboard?.has_cutout === true;
+
+              // ✅ توزيع تكلفة القص على الأوجه (حتى تظهر للوجهين بدون مضاعفة الإجمالي)
+              const facesCountForBillboard = faceBImage ? 2 : 1;
+              const cutoutCostPerFaceForBillboard = hasCutout ? (cutoutCostPerCutoutBillboard / facesCountForBillboard) : 0;
 
               // حساب تكلفة الطباعة لهذا العنصر
               const printCostPerFace = areaPerFace * pricePerMeter;
+
+              // ✅ حساب تكلفة التركيب بناءً على installation_price من المقاس (موزعة نسبياً)
+              const baseInstallPrice = sizeInfo.installationPrice || 0;
+              const itemInstallCost = baseInstallPrice * installCostRatio;
+              
+              // ✅ توزيع تكلفة التركيب على الأوجه - كل وجه يأخذ نصيبه
+              const installCostPerFace = itemInstallCost / facesCountForBillboard;
+
+              // ✅ إنشاء اسم المقاس مع إضافة "مجسم" إذا كانت اللوحة بها مجسم
+              const displaySizeName = hasCutout
+                ? `${billboardSize || 'غير محدد'} (مجسم)`
+                : (billboardSize || 'غير محدد');
 
               // دائماً أضف العنصر الأول (الوجه الأمامي)
               items.push({
                 designImage: faceAImage,
                 face: 'a',
-                sizeName: billboardSize || 'غير محدد',
+                sizeName: displaySizeName,
                 width: sizeInfo.width || 0,
                 height: sizeInfo.height || 0,
                 quantity: 1,
                 area: areaPerFace,
                 printCost: printCostPerFace,
-                installationCost: installCostPerItem,
-                cutoutCost: cutoutCostPerItem,
-                totalCost: printCostPerFace + installCostPerItem + cutoutCostPerItem,
+                installationCost: installCostPerFace,
+                cutoutCost: cutoutCostPerFaceForBillboard,
+                totalCost: printCostPerFace + installCostPerFace + cutoutCostPerFaceForBillboard,
                 billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
               });
 
-              // إضافة الوجه الثاني إذا كان موجوداً
+              // إضافة الوجه الثاني إذا كان موجوداً - مع نفس تكلفة التركيب للوجه
               if (faceBImage) {
                 items.push({
                   designImage: faceBImage,
                   face: 'b',
-                  sizeName: billboardSize || 'غير محدد',
+                  sizeName: displaySizeName,
                   width: sizeInfo.width || 0,
                   height: sizeInfo.height || 0,
                   quantity: 1,
                   area: areaPerFace,
                   printCost: printCostPerFace,
-                  installationCost: 0, // لا نحسب التركيب مرتين
-                  cutoutCost: 0, // لا نحسب القص مرتين
-                  totalCost: printCostPerFace,
+                  installationCost: installCostPerFace, // ✅ نفس تكلفة الوجه الأمامي
+                  cutoutCost: cutoutCostPerFaceForBillboard,
+                  totalCost: printCostPerFace + installCostPerFace + cutoutCostPerFaceForBillboard,
                   billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
                 });
               }
+            });
+
+            // ✅ ترتيب العناصر حسب sort_order من إعدادات المقاسات
+            items.sort((a, b) => {
+              const sortA = sizesMap[a.sizeName.replace(' (مجسم)', '')]?.sortOrder ?? 999;
+              const sortB = sizesMap[b.sizeName.replace(' (مجسم)', '')]?.sortOrder ?? 999;
+              if (sortA !== sortB) return sortA - sortB;
+              // ترتيب ثانوي: الوجه A قبل B
+              return a.face === 'a' ? -1 : 1;
             });
 
             console.log('Generated Invoice Items:', items);
@@ -591,13 +783,31 @@ export function UnifiedTaskInvoice({
   };
 
   const getInvoiceTitle = () => {
-    switch (invoiceType) {
-      case 'customer': return `فاتورة الزبون - ${task.customer_name}`;
-      case 'print_vendor': return `فاتورة الطباعة - ${data?.vendorName || 'المطبعة'}`;
-      case 'cutout_vendor': return `فاتورة القص - ${data?.vendorName || 'المطبعة'}`;
-      case 'installation_team': return `فاتورة التركيب - ${data?.teamName || 'الفرقة'}`;
-      default: return 'فاتورة';
+    const contractLabel = contractIds.length > 1
+      ? `عقود #${contractIds.join(', #')}`
+      : `عقد #${contractIds[0] ?? ''}`;
+
+    const customerName = task.customer_name || '';
+    const invoiceDate = format(new Date(), 'yyyy-MM-dd');
+    const facesCount = data?.items?.length || 0;
+    const totalCost = data?.totalCost || task.customer_total || 0;
+
+    // بناء عنوان الفاتورة بناءً على الخدمات المتوفرة فعلياً
+    const services: string[] = [];
+    if (task.print_task_id || (task.customer_print_cost && task.customer_print_cost > 0)) services.push('طباعة');
+    if (task.cutout_task_id || (task.customer_cutout_cost && task.customer_cutout_cost > 0)) services.push('قص');
+    if (task.installation_task_id || (task.customer_installation_cost && task.customer_installation_cost > 0)) services.push('تركيب');
+
+    const servicesText = services.length > 0 ? services.join(' و') : 'خدمات';
+
+    let recipientName = customerName;
+    if (invoiceType === 'print_vendor' || invoiceType === 'cutout_vendor') {
+      recipientName = data?.vendorName || 'المطبعة';
+    } else if (invoiceType === 'installation_team') {
+      recipientName = data?.teamName || 'الفرقة';
     }
+
+    return `فاتورة ${servicesText} | ${recipientName} | ${contractLabel} | ${invoiceDate} | ${facesCount} وجه | ${totalCost.toLocaleString()} د.ل`;
   };
 
   const getInvoiceIcon = () => {
@@ -662,9 +872,13 @@ export function UnifiedTaskInvoice({
               <div>
                 <DialogTitle className="text-lg">{getInvoiceTitle()}</DialogTitle>
                 <VisuallyHidden>
-                  <DialogDescription>فاتورة عقد رقم {task.contract_id}</DialogDescription>
+                  <DialogDescription>
+                    {contractIds.length > 1 ? `فاتورة عقود رقم ${contractIds.join(', ')}` : `فاتورة عقد رقم ${contractIds[0] ?? ''}`}
+                  </DialogDescription>
                 </VisuallyHidden>
-                <p className="text-sm text-muted-foreground">عقد #{task.contract_id}</p>
+                <p className="text-sm text-muted-foreground">
+                  {contractIds.length > 1 ? `عقود #${contractIds.join(', #')}` : `عقد #${contractIds[0] ?? ''}`}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
@@ -825,6 +1039,63 @@ export function UnifiedTaskInvoice({
                   </div>
                 </div>
               </div>
+
+              {/* ✅ ملخص المقاسات والمجسمات - لجميع أنواع الفواتير */}
+              {data?.items && data.items.length > 0 && (() => {
+                // حساب عدد الأوجه لكل مقاس
+                const sizeCounts: Record<string, number> = {};
+                let totalCutouts = 0;
+                
+                data.items.forEach(item => {
+                  // إزالة "(مجسم)" من اسم المقاس للتجميع
+                  const baseSizeName = item.sizeName.replace(' (مجسم)', '');
+                  sizeCounts[baseSizeName] = (sizeCounts[baseSizeName] || 0) + 1;
+                  
+                  // حساب المجسمات (فقط للوجه الأول لتجنب العد المزدوج)
+                  if (item.sizeName.includes('(مجسم)') && item.face === 'a') {
+                    totalCutouts++;
+                  }
+                });
+
+                return (
+                  <div style={{
+                    background: '#f8f9fa',
+                    padding: '12px 16px',
+                    marginBottom: '16px',
+                    borderRadius: '8px',
+                    border: '1px solid #e9ecef',
+                  }}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+                      <span style={{ fontSize: '13px', fontWeight: 'bold', color: '#495057' }}>ملخص:</span>
+                      {Object.entries(sizeCounts).map(([size, count]) => (
+                        <span key={size} style={{
+                          background: '#fff',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#333',
+                          border: '1px solid #dee2e6',
+                        }}>
+                          {count} وجه - {size}
+                        </span>
+                      ))}
+                      {totalCutouts > 0 && (
+                        <span style={{
+                          background: '#fff3cd',
+                          padding: '4px 10px',
+                          borderRadius: '6px',
+                          fontSize: '12px',
+                          color: '#856404',
+                          border: '1px solid #ffc107',
+                          fontWeight: 'bold',
+                        }}>
+                          🔷 {totalCutouts} مجسم
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Items Table - يظهر فقط في العرض التفصيلي أو لغير فواتير الزبون */}
               {(displayMode === 'detailed' || invoiceType !== 'customer') && (() => {
@@ -997,6 +1268,21 @@ export function UnifiedTaskInvoice({
                           <div style={{ fontSize: '9px', color: '#666', marginTop: '2px' }}>
                             {item.face === 'a' ? 'أمامي' : 'خلفي'}
                           </div>
+                          {/* ✅ إظهار شارة مجسم إذا كان العنصر يحتوي على تكلفة قص */}
+                          {item.cutoutCost > 0 && (
+                            <div style={{ 
+                              fontSize: '9px', 
+                              color: '#9333ea', 
+                              fontWeight: 'bold',
+                              marginTop: '3px',
+                              padding: '2px 6px',
+                              backgroundColor: '#f3e8ff',
+                              borderRadius: '4px',
+                              display: 'inline-block'
+                            }}>
+                              🔷 مجسم
+                            </div>
+                          )}
                         </td>
                         <td style={{ padding: '8px 6px', border: '1px solid #ccc', textAlign: 'center', fontFamily: 'Manrope' }}>
                           {item.area.toFixed(2)} م²

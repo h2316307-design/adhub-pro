@@ -1,3 +1,10 @@
+/**
+ * Auth Service - Role-Based Permission System
+ * 
+ * IMPORTANT: Permissions are role-based only. User-level permissions are deprecated.
+ * All permissions are derived from the user's assigned role in the roles table.
+ * To change a user's permissions, change their role via the role management system.
+ */
 import { supabase } from '@/integrations/supabase/client';
 import { z } from 'zod';
 
@@ -30,13 +37,14 @@ export interface User {
   name: string;
   username?: string;
   role: 'admin' | 'user';
+  roleName?: string; // The actual role name from user_roles
   phone?: string;
   company?: string;
   pricingCategory?: string | null;
   allowedCustomers?: string[] | null;
   approved?: boolean;
   status?: 'pending' | 'approved' | 'rejected';
-  permissions?: string[];
+  permissions?: string[]; // Permissions derived from role ONLY
 }
 
 export interface LoginCredentials {
@@ -52,6 +60,38 @@ export interface RegisterData {
   phone?: string;
   company?: string;
 }
+
+/**
+ * Fetch permissions from user's role
+ * Permissions are derived ONLY from the role, not from user_permissions table
+ */
+const fetchRolePermissions = async (userId: string): Promise<{ permissions: string[], roleName: string }> => {
+  try {
+    // Get user's role name
+    const { data: userRole } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (!userRole?.role) return { permissions: [], roleName: 'user' };
+
+    // Get permissions from the role definition
+    const { data: roleData } = await supabase
+      .from('roles')
+      .select('permissions')
+      .eq('name', userRole.role)
+      .maybeSingle();
+
+    return {
+      permissions: (roleData?.permissions as string[]) || [],
+      roleName: userRole.role
+    };
+  } catch (error) {
+    console.error('Error fetching role permissions:', error);
+    return { permissions: [], roleName: 'user' };
+  }
+};
 
 // تسجيل الدخول باستخدام Supabase Auth - يدعم البريد الإلكتروني أو اسم المستخدم
 export const loginUser = async (credentials: LoginCredentials): Promise<{ user: User | null; error: string | null }> => {
@@ -106,17 +146,11 @@ export const loginUser = async (credentials: LoginCredentials): Promise<{ user: 
       return { user: null, error: 'حدث خطأ أثناء تسجيل الدخول' };
     }
 
-    // جلب بيانات المستخدم من profiles و user_roles
+    // جلب بيانات المستخدم من profiles
     const { data: profileData } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', authUserId)
-      .maybeSingle();
-
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', authUserId)
       .maybeSingle();
 
     // التحقق من موافقة الأدمن - تجاهل إذا لم يكن هناك profile بعد
@@ -138,23 +172,21 @@ export const loginUser = async (credentials: LoginCredentials): Promise<{ user: 
       }
     }
 
-    // جلب الصلاحيات
-    const { data: permissionsData } = await supabase
-      .from('user_permissions')
-      .select('permission')
-      .eq('user_id', authUserId);
+    // جلب الصلاحيات من الدور فقط (role-based permissions only)
+    const { permissions, roleName } = await fetchRolePermissions(authUserId);
 
     const user: User = {
       id: authUserId,
       email: authEmail || '',
       name: profileData?.name || '',
       username: profileData?.username || undefined,
-      role: roleData?.role === 'admin' ? 'admin' : 'user',
+      role: roleName === 'admin' ? 'admin' : 'user',
+      roleName: roleName,
       phone: profileData?.phone || undefined,
       company: profileData?.company || undefined,
       approved: profileData?.approved,
       status: profileData?.status as 'pending' | 'approved' | 'rejected',
-      permissions: permissionsData?.map(p => p.permission) || [],
+      permissions: permissions, // Role-based permissions ONLY
     };
 
     return { user, error: null };
@@ -219,7 +251,7 @@ export const registerUser = async (userData: RegisterData): Promise<{ user: User
     // انتظار قصير لضمان تنفيذ triggers
     await new Promise(resolve => setTimeout(resolve, 500));
 
-    // جلب بيانات المستخدم من profiles و user_roles
+    // جلب بيانات المستخدم من profiles
     const { data: profileData, error: profileError } = await supabase
       .from('profiles')
       .select('*')
@@ -247,14 +279,19 @@ export const registerUser = async (userData: RegisterData): Promise<{ user: User
         .eq('id', data.user.id);
     }
 
+    // جلب الصلاحيات من الدور
+    const { permissions, roleName } = await fetchRolePermissions(data.user.id);
+
     const user: User = {
       id: data.user.id,
       email: data.user.email || '',
       name: profileData?.name || userData.name,
       username: validatedData.username || profileData?.username,
-      role: roleData?.role === 'admin' ? 'admin' : 'user',
+      role: roleName === 'admin' ? 'admin' : 'user',
+      roleName: roleName,
       phone: profileData?.phone || userData.phone,
       company: profileData?.company || userData.company,
+      permissions: permissions, // Role-based permissions ONLY
     };
 
     return { user, error: null };
@@ -282,29 +319,21 @@ export const getCurrentUser = async (): Promise<User | null> => {
       .eq('id', user.id)
       .maybeSingle();
 
-    const { data: roleData } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    // جلب الصلاحيات
-    const { data: permissionsData } = await supabase
-      .from('user_permissions')
-      .select('permission')
-      .eq('user_id', user.id);
+    // جلب الصلاحيات من الدور فقط (role-based permissions only)
+    const { permissions, roleName } = await fetchRolePermissions(user.id);
 
     return {
       id: user.id,
       email: user.email || '',
       name: profileData?.name || '',
       username: profileData?.username || undefined,
-      role: roleData?.role === 'admin' ? 'admin' : 'user',
+      role: roleName === 'admin' ? 'admin' : 'user',
+      roleName: roleName,
       phone: profileData?.phone || undefined,
       company: profileData?.company || undefined,
       approved: profileData?.approved,
       status: profileData?.status as 'pending' | 'approved' | 'rejected',
-      permissions: permissionsData?.map(p => p.permission) || [],
+      permissions: permissions, // Role-based permissions ONLY
     };
   } catch {
     return null;

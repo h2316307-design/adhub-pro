@@ -1,3 +1,10 @@
+/**
+ * Users Management Page - Role-Based Permission System
+ * 
+ * IMPORTANT: Permissions are role-based only. User-level permissions are deprecated.
+ * To change a user's permissions, change their role via the role change dialog.
+ * The "صلاحيات" (permissions) button has been removed as it's no longer relevant.
+ */
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -6,15 +13,21 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Switch } from '@/components/ui/switch';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
 import MultiSelect from '@/components/ui/multi-select';
 import { useAuth } from '@/contexts/AuthContext';
-import { Users as UsersIcon, Shield, Key, UserPlus, Search, RefreshCw, UserCheck, UserX, Edit } from 'lucide-react';
+import { Users as UsersIcon, Shield, Key, UserPlus, Search, RefreshCw, UserCheck, UserX, Edit, Info } from 'lucide-react';
 import { EditUserDialog } from '@/components/users/EditUserDialog';
+
+interface Role {
+  id: string;
+  name: string;
+  display_name: string;
+  permissions: string[];
+}
 
 interface ProfileRow {
   id: string;
@@ -24,12 +37,13 @@ interface ProfileRow {
   phone: string | null;
   company: string | null;
   role: string | null;
+  roleDisplayName?: string;
   created_at: string | null;
   allowed_clients?: string[] | null;
   price_tier?: string | null;
   approved?: boolean;
   status?: 'pending' | 'approved' | 'rejected';
-  permissions?: string[];
+  rolePermissions?: string[]; // Permissions from role (read-only display)
 }
 
 export default function Users() {
@@ -44,37 +58,42 @@ export default function Users() {
   const [allClients, setAllClients] = useState<string[]>([]);
   const [pricingCategories, setPricingCategories] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   
   // Dialog states
   const [passwordModalOpen, setPasswordModalOpen] = useState(false);
   const [passwordTargetId, setPasswordTargetId] = useState<string | null>(null);
   const [passwordNew, setPasswordNew] = useState('');
   const [passwordConfirm, setPasswordConfirm] = useState('');
-  const [permissionsModalOpen, setPermissionsModalOpen] = useState(false);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [selectedRole, setSelectedRole] = useState<string>('user');
   const [editUserOpen, setEditUserOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<ProfileRow | null>(null);
+  const [viewPermissionsOpen, setViewPermissionsOpen] = useState(false);
+  const [viewingUserPermissions, setViewingUserPermissions] = useState<string[]>([]);
+  const [viewingUserName, setViewingUserName] = useState<string>('');
 
-  const availablePages = [
-    { value: 'dashboard', label: 'لوحة التحكم' },
-    { value: 'billboards', label: 'اللوحات الإعلانية' },
-    { value: 'contracts', label: 'العقود' },
-    { value: 'customers', label: 'العملاء' },
-    { value: 'customer_billing', label: 'حسابات العملاء' },
-    { value: 'reports', label: 'التقارير' },
-    { value: 'tasks', label: 'المهام' },
-    { value: 'installation_tasks', label: 'مهام التركيب' },
-    { value: 'print_tasks', label: 'مهام الطباعة' },
-    { value: 'expenses', label: 'المصروفات' },
-    { value: 'salaries', label: 'الرواتب' },
-    { value: 'custody', label: 'العهد' },
-    { value: 'settings', label: 'الإعدادات' },
-    { value: 'users', label: 'المستخدمون' },
-    { value: 'pricing', label: 'التسعير' },
-  ];
+  // تحميل الأدوار المتاحة
+  const loadAvailableRoles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('roles')
+        .select('id, name, display_name, permissions')
+        .order('name', { ascending: true });
+
+      if (!error && data) {
+        setAvailableRoles(data.map((r: any) => ({
+          id: r.id,
+          name: r.name,
+          display_name: r.display_name,
+          permissions: r.permissions || []
+        })));
+      }
+    } catch (e) {
+      console.error('Failed to load roles:', e);
+    }
+  };
 
   // تحميل فئات الأسعار ديناميكياً
   const loadPricingCategories = async () => {
@@ -142,7 +161,7 @@ export default function Users() {
         return;
       }
 
-      // جلب الأدوار والصلاحيات لكل مستخدم
+      // جلب الأدوار لكل مستخدم - الصلاحيات تُشتق من الدور
       const profilesWithDetails = await Promise.all(
         (resp.data || []).map(async (prof) => {
           const { data: roleData } = await supabase
@@ -151,16 +170,17 @@ export default function Users() {
             .eq('user_id', prof.id)
             .maybeSingle();
 
-          const { data: permData } = await supabase
-            .from('user_permissions')
-            .select('permission')
-            .eq('user_id', prof.id);
+          const roleName = roleData?.role || 'user';
+          
+          // Get role display name and permissions from availableRoles
+          const roleInfo = availableRoles.find(r => r.name === roleName);
 
           return {
             ...prof,
-            role: roleData?.role || 'user',
+            role: roleName,
+            roleDisplayName: roleInfo?.display_name || roleName,
             status: prof.status as 'pending' | 'approved' | 'rejected',
-            permissions: permData?.map(p => p.permission) || [],
+            rolePermissions: roleInfo?.permissions || [], // Role-based permissions (read-only)
           };
         })
       );
@@ -175,15 +195,23 @@ export default function Users() {
   };
 
   useEffect(() => {
-    fetchPage(page);
+    loadAvailableRoles();
     loadPricingCategories();
     loadClients();
-  }, [page]);
+  }, []);
+
+  useEffect(() => {
+    if (availableRoles.length > 0) {
+      fetchPage(page);
+    }
+  }, [page, availableRoles]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchPage(1);
-      setPage(1);
+      if (availableRoles.length > 0) {
+        fetchPage(1);
+        setPage(1);
+      }
     }, 300);
     return () => clearTimeout(timer);
   }, [searchTerm]);
@@ -203,24 +231,6 @@ export default function Users() {
         .eq('id', row.id);
 
       if (profileError) throw profileError;
-
-      // تحديث الدور في user_roles
-      const { data: existingRole } = await supabase
-        .from('user_roles')
-        .select('id')
-        .eq('user_id', row.id)
-        .maybeSingle();
-
-      if (existingRole) {
-        await supabase
-          .from('user_roles')
-          .update({ role: row.role as any })
-          .eq('user_id', row.id);
-      } else if (row.role) {
-        await supabase
-          .from('user_roles')
-          .insert({ user_id: row.id, role: row.role as any });
-      }
 
       toast.success('تم حفظ التعديلات بنجاح');
       fetchPage(page);
@@ -267,47 +277,6 @@ export default function Users() {
     }
   };
 
-  const handleOpenPermissions = async (userId: string) => {
-    setSelectedUserId(userId);
-    const { data } = await supabase
-      .from('user_permissions')
-      .select('permission')
-      .eq('user_id', userId);
-    
-    setSelectedPermissions(data?.map(p => p.permission) || []);
-    setPermissionsModalOpen(true);
-  };
-
-  const handleSavePermissions = async () => {
-    if (!selectedUserId) return;
-
-    try {
-      // حذف الصلاحيات القديمة
-      await supabase
-        .from('user_permissions')
-        .delete()
-        .eq('user_id', selectedUserId);
-
-      // إضافة الصلاحيات الجديدة
-      if (selectedPermissions.length > 0) {
-        const { error } = await supabase
-          .from('user_permissions')
-          .insert(selectedPermissions.map(perm => ({
-            user_id: selectedUserId,
-            permission: perm,
-          })));
-
-        if (error) throw error;
-      }
-
-      toast.success('تم حفظ الصلاحيات بنجاح');
-      setPermissionsModalOpen(false);
-      fetchPage(page);
-    } catch (error: any) {
-      toast.error(`فشل حفظ الصلاحيات: ${error.message}`);
-    }
-  };
-
   const handleOpenRoleModal = async (userId: string) => {
     setSelectedUserId(userId);
     const { data } = await supabase
@@ -341,12 +310,18 @@ export default function Users() {
           .insert({ user_id: selectedUserId, role: selectedRole as any });
       }
 
-      toast.success('تم تحديث الدور بنجاح');
+      toast.success('تم تحديث الدور بنجاح - الصلاحيات الجديدة سارية الآن');
       setRoleModalOpen(false);
       fetchPage(page);
     } catch (error: any) {
       toast.error(`فشل تحديث الدور: ${error.message}`);
     }
+  };
+
+  const handleViewPermissions = (user: ProfileRow) => {
+    setViewingUserName(user.name || 'المستخدم');
+    setViewingUserPermissions(user.rolePermissions || []);
+    setViewPermissionsOpen(true);
   };
 
   const handleChangePassword = async () => {
@@ -391,14 +366,15 @@ export default function Users() {
     }
   };
 
-  const getRoleBadge = (role: string | null) => {
+  const getRoleBadge = (role: string | null, displayName?: string) => {
+    const label = displayName || role || 'غير محدد';
     switch (role) {
       case 'admin':
-        return <Badge className="bg-red-600">مدير</Badge>;
+        return <Badge className="bg-red-600">{label}</Badge>;
       case 'user':
-        return <Badge variant="secondary">مستخدم</Badge>;
+        return <Badge variant="secondary">{label}</Badge>;
       default:
-        return <Badge variant="outline">غير محدد</Badge>;
+        return <Badge variant="outline">{label}</Badge>;
     }
   };
 
@@ -415,6 +391,9 @@ export default function Users() {
     }
   };
 
+  // Get selected role info for display
+  const selectedRoleInfo = availableRoles.find(r => r.name === selectedRole);
+
   // إحصائيات المستخدمين
   const pendingCount = rows.filter(r => r.status === 'pending').length;
   const approvedCount = rows.filter(r => r.status === 'approved').length;
@@ -429,7 +408,7 @@ export default function Users() {
             <UsersIcon className="h-8 w-8" />
             إدارة المستخدمين
           </h1>
-          <p className="text-muted-foreground">إدارة المستخدمين والصلاحيات والأدوار</p>
+          <p className="text-muted-foreground">إدارة المستخدمين والأدوار - الصلاحيات مبنية على الدور فقط</p>
         </div>
         <Button onClick={() => fetchPage(page)} variant="outline" size="sm">
           <RefreshCw className="h-4 w-4 ml-2" />
@@ -519,7 +498,7 @@ export default function Users() {
                     <TableHead>الحالة</TableHead>
                     <TableHead>الدور</TableHead>
                     <TableHead>فئة الأسعار</TableHead>
-                    <TableHead>الصلاحيات</TableHead>
+                    <TableHead>الصلاحيات (من الدور)</TableHead>
                     <TableHead>تاريخ الإنشاء</TableHead>
                     <TableHead>إجراءات</TableHead>
                   </TableRow>
@@ -536,7 +515,7 @@ export default function Users() {
                         </div>
                       </TableCell>
                       <TableCell>{getStatusBadge(r.status)}</TableCell>
-                      <TableCell>{getRoleBadge(r.role)}</TableCell>
+                      <TableCell>{getRoleBadge(r.role, r.roleDisplayName)}</TableCell>
                       <TableCell>
                         <Select
                           value={r.price_tier || ''}
@@ -553,9 +532,15 @@ export default function Users() {
                         </Select>
                       </TableCell>
                       <TableCell>
-                        <Badge variant="outline">
-                          {r.permissions?.length || 0} صلاحية
-                        </Badge>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleViewPermissions(r)}
+                          className="gap-1"
+                        >
+                          <Info className="h-4 w-4" />
+                          {r.rolePermissions?.length || 0} صلاحية
+                        </Button>
                       </TableCell>
                       <TableCell className="text-sm">
                         {r.created_at ? new Date(r.created_at).toLocaleDateString('ar-LY') : '—'}
@@ -583,12 +568,10 @@ export default function Users() {
                               }} title="تعديل البيانات">
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenRoleModal(r.id)}>
+                              <Button size="sm" variant="outline" onClick={() => handleOpenRoleModal(r.id)} title="تغيير الدور">
                                 <Shield className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline" onClick={() => handleOpenPermissions(r.id)}>
-                                صلاحيات
-                              </Button>
+                              {/* Removed individual permissions button - permissions are role-based only */}
                               {isAdmin && (
                                 <Button size="sm" variant="outline" onClick={() => { 
                                   setPasswordTargetId(r.id); 
@@ -685,14 +668,17 @@ export default function Users() {
         </DialogContent>
       </Dialog>
 
-      {/* Role change modal */}
+      {/* Role change modal - Enhanced with all available roles */}
       <Dialog open={roleModalOpen} onOpenChange={setRoleModalOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5" />
               تغيير دور المستخدم
             </DialogTitle>
+            <DialogDescription>
+              تغيير الدور هو الطريقة الوحيدة لمنح أو سحب الصلاحيات
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
@@ -702,17 +688,36 @@ export default function Users() {
                   <SelectValue placeholder="اختر الدور" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="user">مستخدم عادي</SelectItem>
-                  <SelectItem value="admin">مدير النظام</SelectItem>
+                  {availableRoles.map((role) => (
+                    <SelectItem key={role.name} value={role.name}>
+                      {role.display_name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
-              <p className="text-sm text-muted-foreground">
-                {selectedRole === 'admin' 
-                  ? 'المدير لديه صلاحيات كاملة على النظام'
-                  : 'المستخدم العادي يمكنه الوصول للصفحات المحددة له فقط'
-                }
-              </p>
             </div>
+
+            {/* Show selected role permissions */}
+            {selectedRoleInfo && (
+              <div className="space-y-2 p-4 bg-muted rounded-lg">
+                <Label className="text-sm font-medium">صلاحيات هذا الدور ({selectedRoleInfo.permissions.length}):</Label>
+                <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                  {selectedRoleInfo.permissions.length > 0 ? (
+                    selectedRoleInfo.permissions.map((perm) => (
+                      <Badge key={perm} variant="outline" className="text-xs">
+                        {perm}
+                      </Badge>
+                    ))
+                  ) : (
+                    <span className="text-sm text-muted-foreground">لا توجد صلاحيات لهذا الدور</span>
+                  )}
+                </div>
+              </div>
+            )}
+
+            <p className="text-sm text-muted-foreground">
+              عند تغيير الدور، سيحصل المستخدم على جميع صلاحيات الدور الجديد فوراً.
+            </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" onClick={() => setRoleModalOpen(false)}>إلغاء</Button>
               <Button onClick={handleSaveRole}>حفظ</Button>
@@ -721,55 +726,32 @@ export default function Users() {
         </DialogContent>
       </Dialog>
 
-      {/* Permissions modal */}
-      <Dialog open={permissionsModalOpen} onOpenChange={setPermissionsModalOpen}>
+      {/* View Permissions Modal (read-only) */}
+      <Dialog open={viewPermissionsOpen} onOpenChange={setViewPermissionsOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              إدارة الصلاحيات
+              <Info className="h-5 w-5" />
+              صلاحيات {viewingUserName}
             </DialogTitle>
+            <DialogDescription>
+              الصلاحيات مُشتقة من الدور المُعين - لتغيير الصلاحيات، غيّر الدور
+            </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <p className="text-sm text-muted-foreground">اختر الصفحات التي يمكن للمستخدم الوصول إليها:</p>
-            <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto">
-              {availablePages.map(p => (
-                <div key={p.value} className="flex items-center gap-2 p-2 rounded border">
-                  <Switch
-                    checked={selectedPermissions.includes(p.value)}
-                    onCheckedChange={(checked) => {
-                      if (checked) {
-                        setSelectedPermissions([...selectedPermissions, p.value]);
-                      } else {
-                        setSelectedPermissions(selectedPermissions.filter(perm => perm !== p.value));
-                      }
-                    }}
-                  />
-                  <Label className="cursor-pointer">{p.label}</Label>
-                </div>
-              ))}
+            <div className="flex flex-wrap gap-2 max-h-64 overflow-y-auto p-2">
+              {viewingUserPermissions.length > 0 ? (
+                viewingUserPermissions.map((perm) => (
+                  <Badge key={perm} variant="secondary" className="text-sm">
+                    {perm}
+                  </Badge>
+                ))
+              ) : (
+                <p className="text-muted-foreground">لا توجد صلاحيات لهذا المستخدم</p>
+              )}
             </div>
-            <div className="flex justify-between items-center">
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSelectedPermissions(availablePages.map(p => p.value))}
-                >
-                  تحديد الكل
-                </Button>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={() => setSelectedPermissions([])}
-                >
-                  إلغاء الكل
-                </Button>
-              </div>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setPermissionsModalOpen(false)}>إلغاء</Button>
-                <Button onClick={handleSavePermissions}>حفظ</Button>
-              </div>
+            <div className="flex justify-end">
+              <Button variant="outline" onClick={() => setViewPermissionsOpen(false)}>إغلاق</Button>
             </div>
           </div>
         </DialogContent>

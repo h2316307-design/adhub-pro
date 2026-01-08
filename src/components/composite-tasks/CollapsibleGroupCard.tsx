@@ -8,6 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 
 interface GroupedTasks {
   contractId: number;
+  /** عقود فعلية من اللوحات (قد تكون متعددة) */
+  contractIds: number[];
   customerName: string;
   tasks: any[];
   totalCustomer: number;
@@ -218,8 +220,21 @@ export const CollapsibleGroupCard: React.FC<CollapsibleGroupCardProps> = ({
                     <div>
                       <CardTitle className="text-base flex items-center gap-2 flex-wrap">
                         <span className="text-foreground">{group.customerName}</span>
-                        <Badge variant="outline" className="border-primary/30 text-primary">عقد #{group.contractId}</Badge>
-                        <Badge className="bg-primary/10 text-primary hover:bg-primary/20">{group.tasks.length} مهمة</Badge>
+                        {group.contractIds.length > 1 ? (
+                          <Badge variant="outline" className="border-primary/30 text-primary">
+                            عقود #{group.contractIds.join(', #')}
+                          </Badge>
+                        ) : (
+                          <Badge variant="outline" className="border-primary/30 text-primary">عقد #{group.contractId}</Badge>
+                        )}
+                        {(() => {
+                          const tasksCount = Math.max(group.contractIds.length, 1);
+                          return (
+                            <Badge className="bg-primary/10 text-primary hover:bg-primary/20">
+                              {tasksCount} {tasksCount === 1 ? 'مهمة' : 'مهام'}
+                            </Badge>
+                          );
+                        })()}
                       </CardTitle>
                     </div>
                   </div>

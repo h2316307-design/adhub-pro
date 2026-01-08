@@ -745,10 +745,65 @@ export async function updateContract(contractId: string, updates: any) {
     throw error || new Error('لم يتم حفظ أي تغييرات (RLS أو رقم العقد غير صحيح)');
   }
 
+  // ✅ IMPORTANT: Sync billboard Days_Count with contract duration after successful update
+  // Contract duration is the SOURCE OF TRUTH for billboard days
+  const startDate = payload['Contract Date'] || payload.start_date;
+  const endDate = payload['End Date'] || payload.end_date;
+  if (startDate && endDate) {
+    try {
+      await syncBillboardDaysWithContract(contractId, startDate, endDate);
+    } catch (syncError) {
+      console.warn('Failed to sync billboard Days_Count:', syncError);
+      // Don't throw - contract update succeeded
+    }
+  }
+
   return Array.isArray(data) ? data[0] : data;
 }
 
-// تحديث العقود المنتهية الصلاحية
+/**
+ * Sync billboard Days_Count with contract duration.
+ * CRITICAL: Contract duration is the SOURCE OF TRUTH for billboard days.
+ * This function MUST be called whenever contract dates change.
+ * 
+ * billboard.Days_Count = contract.end_date - contract.start_date
+ */
+async function syncBillboardDaysWithContract(
+  contractNumber: string,
+  startDate: string,
+  endDate: string
+): Promise<void> {
+  // Calculate days count from contract dates
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 0) {
+    console.warn('Invalid contract dates for Days_Count calculation');
+    return;
+  }
+  
+  const daysCountStr = String(diffDays);
+  
+  // Update all billboards linked to this contract
+  const { error } = await supabase
+    .from('billboards')
+    .update({
+      Days_Count: daysCountStr,
+      Rent_Start_Date: startDate,
+      Rent_End_Date: endDate
+    })
+    .eq('Contract_Number', Number(contractNumber));
+  
+  if (error) {
+    console.error('Failed to sync billboard Days_Count:', error);
+    throw error;
+  }
+  
+  console.log(`✅ Synced Days_Count=${daysCountStr} for billboards of contract #${contractNumber}`);
+}
+
 export async function updateExpiredContracts() {
   const today = new Date().toISOString().split('T')[0];
   
@@ -860,22 +915,45 @@ export async function deleteContract(contractNumber: string) {
   }
 }
 
-// إضافة/إزالة لوحات من عقد مع تحديث بيانات اللوحات المحفوظة
+/**
+ * Add billboards to a contract and update their data.
+ * IMPORTANT: Days_Count is calculated as the difference between end_date and start_date.
+ * This ensures billboard days are always in sync with contract duration.
+ */
 export async function addBillboardsToContract(
   contractNumber: string,
   billboardIds: (string | number)[],
   meta: { start_date: string; end_date: string; customer_name: string }
 ) {
+  // Calculate days count from contract dates (source of truth)
+  let daysCount: string | null = null;
+  if (meta.start_date && meta.end_date) {
+    const start = new Date(meta.start_date);
+    const end = new Date(meta.end_date);
+    const diffTime = end.getTime() - start.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays > 0) {
+      daysCount = String(diffDays);
+    }
+  }
+
   for (const id of billboardIds) {
+    const updateData: Record<string, any> = {
+      Status: 'محجوز',
+      Contract_Number: contractNumber,
+      Customer_Name: meta.customer_name,
+      Rent_Start_Date: meta.start_date,
+      Rent_End_Date: meta.end_date,
+    };
+    
+    // Update Days_Count based on contract duration
+    if (daysCount !== null) {
+      updateData.Days_Count = daysCount;
+    }
+
     const { error } = await supabase
       .from('billboards')
-      .update({
-        Status: 'محجوز',
-        Contract_Number: contractNumber,
-        Customer_Name: meta.customer_name,
-        Rent_Start_Date: meta.start_date,
-        Rent_End_Date: meta.end_date,
-      })
+      .update(updateData)
       .eq('ID', Number(id));
     if (error) throw error;
   }

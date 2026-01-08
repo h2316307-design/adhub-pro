@@ -135,7 +135,7 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
           has_cutout,
           cutout_quantity,
           billboard_id,
-          billboards("ID", "Billboard_Name", "Size")
+          billboards("ID", "Billboard_Name", "Size", "Contract_Number")
         `)
         .eq('task_id', task.id)
         .order('id');
@@ -452,8 +452,14 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
           <div>
             <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">{task.customer_name || 'بدون اسم'}</h2>
             <p className="text-sm text-muted-foreground">
-              {task.contract_id && `عقد رقم: ${task.contract_id} | `}
-              {task.printed_invoices?.invoice_number || `مهمة #${task.id.slice(0, 8)}`}
+              {(() => {
+                const ids: number[] = Array.isArray((task as any)._contractIds) && (task as any)._contractIds.length > 0
+                  ? (task as any)._contractIds
+                  : (task.contract_id ? [task.contract_id] : []);
+
+                const label = ids.length > 1 ? `عقود رقم: ${ids.join(', ')}` : (ids.length === 1 ? `عقد رقم: ${ids[0]}` : '');
+                return `${label}${label ? ' | ' : ''}${task.printed_invoices?.invoice_number || `مهمة #${task.id.slice(0, 8)}`}`;
+              })()}
             </p>
           </div>
         </div>

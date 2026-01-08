@@ -57,14 +57,14 @@ const sidebarSections: SidebarSection[] = [
     title: 'الإدارة المالية',
     items: [
       { id: 'overdue_payments', label: 'الدفعات المتأخرة', icon: AlertCircle, path: '/admin/overdue-payments' },
-      { id: 'payments_receipts', label: 'الدفعات والإيصالات', icon: CreditCard, path: '/admin/payments-receipts-page' },
+      { id: 'payments', label: 'الدفعات والإيصالات', icon: CreditCard, path: '/admin/payments-receipts-page' },
       { id: 'printed_invoices_page', label: 'فواتير الطباعة', icon: Printer, path: '/admin/printed-invoices-page' },
       { id: 'printer_accounts', label: 'حسابات المطابع', icon: Building2, path: '/admin/printer-accounts' },
       { id: 'installation_team_accounts', label: 'حسابات فرق التركيب', icon: DollarSign, path: '/admin/installation-team-accounts' },
       { id: 'salaries', label: 'الرواتب', icon: Users, path: '/admin/salaries' },
-      { id: 'custody_management', label: 'العهد المالية', icon: Briefcase, path: '/admin/custody-management' },
+      { id: 'custody', label: 'العهد المالية', icon: Briefcase, path: '/admin/custody-management' },
       { id: 'revenue', label: 'تقرير الإيرادات', icon: TrendingUp, path: '/admin/revenue' },
-      { id: 'expense_management', label: 'إدارة المصروفات', icon: TrendingDown, path: '/admin/expense-management' },
+      { id: 'expenses', label: 'إدارة المصروفات', icon: TrendingDown, path: '/admin/expense-management' },
     ],
   },
   {
@@ -120,24 +120,13 @@ interface SidebarProps {
 export function Sidebar({ className }: SidebarProps) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, user, signOut, isAdmin } = useAuth();
+  const { profile, user, signOut, hasPermission } = useAuth();
   const { theme, toggleTheme } = useTheme();
-
-  // جلب صلاحيات المستخدم
-  const userPermissions = user?.permissions || [];
-
-  // التحقق من إمكانية الوصول للعنصر
-  const canAccessItem = (itemId: string) => {
-    // المدير يرى كل شيء
-    if (isAdmin) return true;
-    // المستخدم العادي يرى فقط ما لديه صلاحية له
-    return userPermissions.includes(itemId);
-  };
 
   // تصفية العناصر الأساسية حسب الصلاحيات
   const filteredCoreItems = useMemo(
-    () => coreItems.filter(item => canAccessItem(item.id)),
-    [isAdmin, userPermissions]
+    () => coreItems.filter(item => hasPermission(item.id)),
+    [hasPermission]
   );
 
   // تصفية الأقسام والعناصر حسب الصلاحيات
@@ -145,10 +134,10 @@ export function Sidebar({ className }: SidebarProps) {
     () => sidebarSections
       .map(section => ({
         ...section,
-        items: section.items.filter(item => canAccessItem(item.id))
+        items: section.items.filter(item => hasPermission(item.id))
       }))
       .filter(section => section.items.length > 0),
-    [isAdmin, userPermissions]
+    [hasPermission]
   );
 
   const isActive = (path: string) => {

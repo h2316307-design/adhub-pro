@@ -1,3 +1,10 @@
+/**
+ * AuthContext - Role-Based Permission System
+ * 
+ * IMPORTANT: Permissions are role-based only. User-level permissions are deprecated.
+ * All permissions are derived from the user's assigned role in the roles table.
+ * To change a user's permissions, change their role via the role management system.
+ */
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { User, getCurrentUser, logoutUser } from '@/services/authService';
 import { supabase } from '@/integrations/supabase/client';
@@ -14,6 +21,7 @@ interface AuthContextType {
   isAdmin: boolean;
   hasPermission: (permission: string) => boolean;
   canEdit: (section: string) => boolean;
+  refreshUserPermissions: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +35,40 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // Fetch user permissions from their role
+  const fetchRolePermissions = async (userId: string): Promise<string[]> => {
+    try {
+      // Get user's role name
+      const { data: userRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (!userRole?.role) return [];
+
+      // Get permissions from the role definition
+      const { data: roleData } = await supabase
+        .from('roles')
+        .select('permissions')
+        .eq('name', userRole.role)
+        .maybeSingle();
+
+      return (roleData?.permissions as string[]) || [];
+    } catch (error) {
+      console.error('Error fetching role permissions:', error);
+      return [];
+    }
+  };
+
+  // Refresh user permissions from role (useful after role change)
+  const refreshUserPermissions = async () => {
+    if (!user?.id) return;
+
+    const permissions = await fetchRolePermissions(user.id);
+    setUser(prev => prev ? { ...prev, permissions } : null);
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST (without async to prevent deadlock)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -35,11 +77,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Defer Supabase calls with setTimeout to prevent deadlock
         if (session?.user) {
-          setTimeout(() => {
-            getCurrentUser().then(currentUser => {
+          setTimeout(async () => {
+            const currentUser = await getCurrentUser();
+            if (currentUser) {
+              // Permissions are role-based only - fetched in getCurrentUser
               setUser(currentUser);
-              setIsLoading(false);
-            });
+            }
+            setIsLoading(false);
           }, 0);
         } else {
           setUser(null);
@@ -49,14 +93,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       
       if (session?.user) {
-        getCurrentUser().then(currentUser => {
+        const currentUser = await getCurrentUser();
+        if (currentUser) {
           setUser(currentUser);
-          setIsLoading(false);
-        });
+        }
+        setIsLoading(false);
       } else {
         setUser(null);
         setIsLoading(false);
@@ -77,19 +122,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   const isAdmin = user?.role === 'admin';
 
-  // التحقق من وجود صلاحية معينة
+  /**
+   * Check if user has a specific permission
+   * Permissions are derived ONLY from the user's role.
+   * User-level permissions are deprecated and ignored.
+   */
   const hasPermission = (permission: string): boolean => {
     if (isAdmin) return true;
     return user?.permissions?.includes(permission) || false;
   };
 
-  // التحقق من صلاحية التعديل لقسم معين
+  /**
+   * Check if user can edit a specific section
+   * Permissions are derived ONLY from the user's role.
+   */
   const canEdit = (section: string): boolean => {
     if (isAdmin) return true;
-    // يجب أن يكون لديه صلاحية العرض + صلاحية التعديل
-    const hasViewPermission = user?.permissions?.includes(section) || false;
-    const hasEditPermission = user?.permissions?.includes(`${section}_edit`) || false;
-    return hasViewPermission && hasEditPermission;
+    // User can edit if they have the section permission (role-based)
+    return user?.permissions?.includes(section) || false;
   };
 
   const value: AuthContextType = {
@@ -102,7 +152,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     signOut: logout,
     isAdmin,
     hasPermission,
-    canEdit
+    canEdit,
+    refreshUserPermissions
   };
 
   return (

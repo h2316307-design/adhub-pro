@@ -41,6 +41,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   const [designImages, setDesignImages] = useState<Array<{ url: string; face: 'a' | 'b' }>>([]);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [currentInvoiceType, setCurrentInvoiceType] = useState<InvoiceType>('customer');
+  const [calculatedInstallCost, setCalculatedInstallCost] = useState<number>(0);
 
   const openInvoice = (type: InvoiceType) => {
     setCurrentInvoiceType(type);
@@ -53,45 +54,65 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
       try {
         let contractIds: number[] = [];
         
-        // جلب contract_ids من مهمة التركيب إذا كانت مدمجة
+        // جلب العقود الفعلية من اللوحات في مهمة التركيب
         if (task.installation_task_id) {
-          const { data: installTask } = await supabase
-            .from('installation_tasks')
-            .select('contract_ids, contract_id')
-            .eq('id', task.installation_task_id)
-            .single();
+          // جلب أرقام العقود الفعلية من اللوحات المرتبطة بالمهمة
+          const { data: installItems } = await supabase
+            .from('installation_task_items')
+            .select('billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
+            .eq('task_id', task.installation_task_id);
           
-          contractIds = installTask?.contract_ids && installTask.contract_ids.length > 0 
-            ? installTask.contract_ids 
-            : [installTask?.contract_id || task.contract_id];
+          if (installItems && installItems.length > 0) {
+            // جمع أرقام العقود الفريدة من اللوحات
+            const uniqueContracts = new Set<number>();
+            installItems.forEach((item: any) => {
+              if (item.billboard?.Contract_Number) {
+                uniqueContracts.add(item.billboard.Contract_Number);
+              }
+            });
+            contractIds = Array.from(uniqueContracts).filter(Boolean);
+          }
+          
+          // إذا لم نجد عقود من اللوحات، نستخدم contract_id المخزن
+          if (contractIds.length === 0) {
+            contractIds = [task.contract_id].filter(Boolean);
+          }
           
           // جلب أنواع الإعلان من جميع العقود
-          const { data: contracts } = await supabase
-            .from('Contract')
-            .select('"Contract_Number", "Ad Type"')
-            .in('Contract_Number', contractIds);
-          
-          setContractInfo({
-            adTypes: contracts?.map(c => ({ 
-              contractId: c.Contract_Number, 
-              adType: c['Ad Type'] || 'غير محدد' 
-            })) || [],
-            contractIds: contractIds?.filter(Boolean) as number[]
-          });
+          if (contractIds.length > 0) {
+            const { data: contracts } = await supabase
+              .from('Contract')
+              .select('"Contract_Number", "Ad Type"')
+              .in('Contract_Number', contractIds);
+            
+            setContractInfo({
+              adTypes: contracts?.map(c => ({ 
+                contractId: c.Contract_Number, 
+                adType: c['Ad Type'] || 'غير محدد' 
+              })) || [],
+              contractIds: contractIds
+            });
+          } else {
+            setContractInfo({ adTypes: [], contractIds: [] });
+          }
         } else {
           // جلب نوع الإعلان من العقد مباشرة
-          contractIds = [task.contract_id];
+          contractIds = [task.contract_id].filter(Boolean);
           
-          const { data: contract } = await supabase
-            .from('Contract')
-            .select('"Ad Type"')
-            .eq('Contract_Number', task.contract_id)
-            .single();
-          
-          setContractInfo({
-            adTypes: [{ contractId: task.contract_id, adType: contract?.['Ad Type'] || 'غير محدد' }],
-            contractIds: [task.contract_id]
-          });
+          if (contractIds.length > 0) {
+            const { data: contract } = await supabase
+              .from('Contract')
+              .select('"Ad Type"')
+              .eq('Contract_Number', task.contract_id)
+              .single();
+            
+            setContractInfo({
+              adTypes: [{ contractId: task.contract_id, adType: contract?.['Ad Type'] || 'غير محدد' }],
+              contractIds: [task.contract_id]
+            });
+          } else {
+            setContractInfo({ adTypes: [], contractIds: [] });
+          }
         }
 
         // جلب صور التصميم من مصادر مختلفة
@@ -195,6 +216,53 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
     
     fetchContractInfo();
   }, [task.installation_task_id, task.contract_id, task.print_task_id]);
+
+  // ✅ حساب تكلفة التركيب من جدول المقاسات (installation_price)
+  useEffect(() => {
+    const calculateInstallCost = async () => {
+      if (!task.installation_task_id) {
+        setCalculatedInstallCost(0);
+        return;
+      }
+
+      try {
+        // جلب بيانات اللوحات من installation_task_items
+        const { data: installItems } = await supabase
+          .from('installation_task_items')
+          .select('billboard:billboards!installation_task_items_billboard_id_fkey(Size)')
+          .eq('task_id', task.installation_task_id);
+
+        if (!installItems || installItems.length === 0) {
+          setCalculatedInstallCost(0);
+          return;
+        }
+
+        // جلب أسعار التركيب من جدول المقاسات
+        const { data: sizesData } = await supabase
+          .from('sizes')
+          .select('name, installation_price');
+
+        const sizesMap: Record<string, number> = {};
+        sizesData?.forEach((s: any) => {
+          sizesMap[s.name] = s.installation_price || 0;
+        });
+
+        // حساب إجمالي تكلفة التركيب
+        let total = 0;
+        installItems.forEach((item: any) => {
+          const billboardSize = item.billboard?.Size;
+          total += sizesMap[billboardSize] || 0;
+        });
+
+        setCalculatedInstallCost(total);
+      } catch (error) {
+        console.error('Error calculating install cost:', error);
+        setCalculatedInstallCost(0);
+      }
+    };
+
+    calculateInstallCost();
+  }, [task.installation_task_id]);
 
   // Using UnifiedTaskInvoice now - old handlers removed
 
@@ -477,13 +545,24 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           </div>
         )}
 
-        {/* تحليل الربحية */}
-        <CompositeProfitCard
-          customerTotal={task.customer_total}
-          companyTotal={task.company_total}
-          netProfit={task.net_profit}
-          profitPercentage={task.profit_percentage}
-        />
+        {/* تحليل الربحية - استخدام تكلفة التركيب المحسوبة من المقاسات */}
+        {(() => {
+          // تكلفة الشركة = تكلفة التركيب من المقاسات + تكلفة الطباعة + تكلفة القص
+          const companyTotalCalculated = calculatedInstallCost + (task.company_print_cost || 0) + (task.company_cutout_cost || 0);
+          const netProfitCalculated = (task.customer_total || 0) - companyTotalCalculated;
+          const profitPercentageCalculated = companyTotalCalculated > 0 
+            ? ((netProfitCalculated / companyTotalCalculated) * 100) 
+            : 0;
+
+          return (
+            <CompositeProfitCard
+              customerTotal={task.customer_total}
+              companyTotal={companyTotalCalculated}
+              netProfit={netProfitCalculated}
+              profitPercentage={profitPercentageCalculated}
+            />
+          );
+        })()}
 
         {/* ملاحظات */}
         {task.notes && (

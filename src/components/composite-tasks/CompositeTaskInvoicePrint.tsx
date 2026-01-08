@@ -135,11 +135,30 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
       details.cutoutTask = cutoutTaskResult.data;
       
       // جلب معلومات جميع العقود (أرقام العقود وأنواع الإعلان)
-      const rawContractIds = installResult.data?.contract_ids && (installResult.data.contract_ids as number[]).length > 0
-        ? (installResult.data.contract_ids as number[])
-        : [installResult.data?.contract_id || task.contract_id];
-      
-      const uniqueContractIds: number[] = [...new Set(rawContractIds.filter((id): id is number => id != null && typeof id === 'number'))];
+      // ✅ الاعتماد على عقود اللوحات الفعلية من installation_task_items (بدلاً من contract_ids الفارغة)
+      let uniqueContractIds: number[] = [];
+
+      if (task.installation_task_id) {
+        const { data: installContracts } = await supabase
+          .from('installation_task_items')
+          .select('billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
+          .eq('task_id', task.installation_task_id);
+
+        const set = new Set<number>();
+        (installContracts || []).forEach((row: any) => {
+          const n = row.billboard?.Contract_Number;
+          if (n) set.add(Number(n));
+        });
+        uniqueContractIds = Array.from(set);
+      }
+
+      if (uniqueContractIds.length === 0) {
+        const rawContractIds = installResult.data?.contract_ids && (installResult.data.contract_ids as number[]).length > 0
+          ? (installResult.data.contract_ids as number[])
+          : [installResult.data?.contract_id || task.contract_id];
+
+        uniqueContractIds = [...new Set(rawContractIds.filter((id): id is number => id != null && typeof id === 'number'))];
+      }
       
       if (uniqueContractIds.length > 0) {
         const { data: contractsData } = await supabase
