@@ -139,7 +139,7 @@ export const ContractStats: React.FC<ContractStatsProps> = ({ contracts }) => {
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-muted-foreground truncate">{stat.title}</p>
-                <p className={`text-lg font-bold ${stat.color} ${stat.isAmount ? 'text-sm' : ''}`}>
+<p className={`text-lg font-bold font-manrope ${stat.color} ${stat.isAmount ? 'text-sm' : ''}`}>
                   {stat.value}
                 </p>
               </div>

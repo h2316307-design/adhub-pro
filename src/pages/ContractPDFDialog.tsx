@@ -267,49 +267,83 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
     };
   };
 
-  // ✅ REFACTORED: Get discount information from contract
+  // ✅ REFACTORED: Get discount information from contract - استخراج معلومات التخفيض من جميع المصادر الممكنة
   const getDiscountInfo = () => {
-    const discount = contract?.Discount ?? contract?.discount ?? 0;
     const currencyInfo = getCurrencyInfo();
+    const contractAny = contract as any;
+    
+    // البحث في جميع الحقول المحتملة للتخفيض
+    let discountNum = 0;
+    
+    // 1. حقل Discount المباشر (من حفظ العقد)
+    if (contractAny?.Discount !== undefined && contractAny?.Discount !== null) {
+      discountNum = Number(contractAny.Discount);
+    } else if (contractAny?.discount !== undefined && contractAny?.discount !== null) {
+      discountNum = Number(contractAny.discount);
+    }
+    
+    // 2. حساب التخفيض من level_discounts إذا كان موجوداً ولم يكن هناك تخفيض مباشر
+    if (discountNum === 0 && contractAny?.level_discounts && typeof contractAny.level_discounts === 'object') {
+      const levelDiscounts = contractAny.level_discounts as Record<string, number>;
+      const billboards = contract?.billboards || [];
+      
+      if (billboards.length > 0 && Object.keys(levelDiscounts).length > 0) {
+        let totalDiscountAmount = 0;
+        
+        billboards.forEach((billboard: any) => {
+          const level = billboard.level || billboard.Level || billboard.billboard_level || '';
+          const discountPercent = levelDiscounts[level] || 0;
+          const billboardPrice = Number(billboard.price_after_discount || billboard.total_price || billboard.price || 0);
+          
+          if (discountPercent > 0 && billboardPrice > 0) {
+            // إعادة حساب السعر الأصلي قبل الخصم
+            const originalPrice = billboardPrice / (1 - discountPercent / 100);
+            totalDiscountAmount += originalPrice - billboardPrice;
+          }
+        });
+        
+        discountNum = totalDiscountAmount;
+      }
+    }
+    
+    // 3. حساب التخفيض من الفرق بين السعر الكلي والمجموع
+    if (discountNum === 0 && contract?.billboards && contract.billboards.length > 0) {
+      const billboardsTotal = contract.billboards.reduce((sum: number, b: any) => {
+        return sum + Number(b.total_price_before_discount || b.price_before_discount || 0);
+      }, 0);
+      
+      const totalCost = Number(contract?.rent_cost || contract?.['Total Rent'] || (contractAny)?.Total || 0);
+      
+      if (billboardsTotal > 0 && billboardsTotal > totalCost) {
+        discountNum = billboardsTotal - totalCost;
+      }
+    }
 
-    // ✅ IMPORTANT: في قاعدة البيانات الحالية، حقل Discount قد يُستخدم لتخزين تكلفة الطباعة.
-    // إذا كان الخصم يساوي print_cost وكانت الطباعة مفعّلة → لا نعتبره خصماً.
+    // ✅ التحقق من أن الخصم ليس تكلفة الطباعة
     const printCostEnabled = Boolean(
-      contract?.print_cost_enabled === true ||
-        contract?.print_cost_enabled === 1 ||
-        contract?.print_cost_enabled === 'true' ||
-        contract?.print_cost_enabled === '1'
+      contractAny?.print_cost_enabled === true ||
+        contractAny?.print_cost_enabled === 1 ||
+        contractAny?.print_cost_enabled === 'true' ||
+        contractAny?.print_cost_enabled === '1'
     );
-    const printCost = Number(contract?.print_cost ?? 0);
-    const discountNum = Number(discount);
+    const printCost = Number(contractAny?.print_cost ?? 0);
+    
+    // إذا الخصم يساوي تكلفة الطباعة، لا نعتبره خصماً
     if (printCostEnabled && printCost > 0 && !Number.isNaN(discountNum) && discountNum === printCost) {
       return null;
     }
 
-    if (!discount || discountNum === 0 || Number.isNaN(discountNum)) {
+    if (discountNum === 0 || Number.isNaN(discountNum)) {
       return null; // No discount
     }
 
-    // Check if discount is percentage (contains % or is between 0-100 and looks like percentage)
-    const discountStr = String(discount);
-    const isPercentage =
-      discountStr.includes('%') ||
-      (discountNum > 0 && discountNum <= 100 && !discountStr.includes('.'));
-
-    if (isPercentage) {
-      const percentValue = Number(discountStr.replace('%', ''));
-      return {
-        type: 'percentage',
-        value: percentValue,
-        display: `${formatArabicNumber(percentValue)}%`,
-        text: `${formatArabicNumber(percentValue)}%`,
-      };
-    }
+    // تقريب الخصم لأقرب رقم صحيح
+    discountNum = Math.round(discountNum);
 
     return {
       type: 'fixed',
       value: discountNum,
-      display: `${formatArabicNumber(discountNum)} ${currencyInfo.symbol}`,
+      display: formatArabicNumber(discountNum),
       text: `${formatArabicNumber(discountNum)} ${currencyInfo.writtenName}`,
     };
   };
@@ -2430,17 +2464,25 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                 };
 
                 // دالة لاستبدال المتغيرات في محتوى البند
+                const discountInfo = getDiscountInfo();
+                const discountText = discountInfo ? `بعد خصم ${discountInfo.display} ${currencyInfo.writtenName}` : '';
+                
                 const replaceVariables = (text: string): string => {
-                  return text
+                  let result = text
                     .replace(/{duration}/g, contractData.duration)
                     .replace(/{startDate}/g, contractData.startDate)
                     .replace(/{endDate}/g, contractData.endDate)
                     .replace(/{customerName}/g, contractData.customerName)
                     .replace(/{contractNumber}/g, contractData.contractNumber)
                     .replace(/{totalAmount}/g, contractDetails.finalTotal)
+                    .replace(/{discount}/g, discountText)
                     .replace(/{currency}/g, currencyInfo.writtenName)
                     .replace(/{billboardsCount}/g, String(sortedBillboards.length))
                     .replace(/{payments}/g, paymentsHtml);
+                  
+                  // تنظيف المسافات الزائدة إذا كان التخفيض فارغاً
+                  result = result.replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').trim();
+                  return result;
                 };
 
                 return contractTerms.map((term) => {
@@ -3222,17 +3264,26 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                   return lines;
                 };
                 
+                // استخراج معلومات التخفيض
+                const discountInfo = getDiscountInfo();
+                const discountText = discountInfo ? `بعد خصم ${discountInfo.display} ${currencyInfo.writtenName}` : '';
+                
                 const replaceVars = (text: string): string => {
-                  return text
+                  let result = text
                     .replace(/{duration}/g, contractData.duration)
                     .replace(/{startDate}/g, contractData.startDate)
                     .replace(/{endDate}/g, contractData.endDate)
                     .replace(/{customerName}/g, contractData.customerName)
                     .replace(/{contractNumber}/g, contractData.contractNumber)
                     .replace(/{totalAmount}/g, contractDetails.finalTotal)
+                    .replace(/{discount}/g, discountText)
                     .replace(/{currency}/g, currencyInfo.writtenName)
                     .replace(/{billboardsCount}/g, String(sortedBillboards.length))
                     .replace(/{payments}/g, paymentsHtml);
+                  
+                  // تنظيف المسافات الزائدة إذا كان التخفيض فارغاً
+                  result = result.replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').trim();
+                  return result;
                 };
                 
                 return contractTerms.map((term) => {
@@ -3658,6 +3709,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           rentalCost: contractDetails.rentalCost,
           installationCost: contractDetails.installationCost,
           duration: contractDetails.duration,
+          discount: discountInfo ? `بعد خصم ${discountInfo.text}` : '', // ✅ تمرير نص الخصم
         },
         paymentsHtml: paymentsText, // استخدام النسخة النظيفة بدون HTML للطباعة
       });

@@ -873,14 +873,14 @@ export default function InstallationTasks() {
   // Create composite task for installation only (for reinstallation tasks)
   const createCompositeTaskMutation = useMutation({
     mutationFn: async ({ taskId, contractId, customerName, customerId }: { taskId: string; contractId: number; customerName: string; customerId: string | null }) => {
-      // Check if composite task already exists for this installation task
-      const { data: existing } = await supabase
+      // Check if composite task already exists for this installation task OR contract
+      const { data: existingByTask } = await supabase
         .from('composite_tasks')
         .select('id')
         .eq('installation_task_id', taskId)
         .maybeSingle();
 
-      if (existing) {
+      if (existingByTask) {
         throw new Error('توجد مهمة مجمعة مرتبطة بهذه المهمة بالفعل');
       }
 
@@ -910,25 +910,48 @@ export default function InstallationTasks() {
       const finalCustomerId = customerId || contract?.customer_id;
       const finalCustomerName = customerName || contract?.['Customer Name'] || 'غير محدد';
 
-      // Create composite task with installation only
+      const compositeData = {
+        contract_id: contractId,
+        customer_id: finalCustomerId,
+        customer_name: finalCustomerName,
+        task_type: 'reinstallation',
+        installation_task_id: taskId,
+        print_task_id: null,
+        cutout_task_id: null,
+        customer_installation_cost: customerInstallationCost,
+        company_installation_cost: companyInstallationCost,
+        customer_print_cost: 0,
+        company_print_cost: 0,
+        customer_cutout_cost: 0,
+        company_cutout_cost: 0,
+        status: 'pending'
+      };
+
+      // Check if there's an existing composite task for this contract that can be updated
+      const { data: existingByContract } = await supabase
+        .from('composite_tasks')
+        .select('id')
+        .eq('contract_id', contractId)
+        .is('installation_task_id', null)
+        .maybeSingle();
+
+      if (existingByContract) {
+        // Update existing composite task with installation task
+        const { data: compositeTask, error } = await supabase
+          .from('composite_tasks')
+          .update(compositeData)
+          .eq('id', existingByContract.id)
+          .select()
+          .single();
+
+        if (error) throw error;
+        return compositeTask;
+      }
+
+      // Create new composite task
       const { data: compositeTask, error } = await supabase
         .from('composite_tasks')
-        .insert({
-          contract_id: contractId,
-          customer_id: finalCustomerId,
-          customer_name: finalCustomerName,
-          task_type: 'reinstallation',
-          installation_task_id: taskId,
-          print_task_id: null,
-          cutout_task_id: null,
-          customer_installation_cost: customerInstallationCost,
-          company_installation_cost: companyInstallationCost,
-          customer_print_cost: 0,
-          company_print_cost: 0,
-          customer_cutout_cost: 0,
-          company_cutout_cost: 0,
-          status: 'pending'
-        })
+        .insert(compositeData)
         .select()
         .single();
 
@@ -939,6 +962,7 @@ export default function InstallationTasks() {
       toast.success('تم إنشاء المهمة المجمعة للتركيب بنجاح');
       setCreateCompositeDialogOpen(false);
       setSelectedTaskForComposite(null);
+      queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
     },
     onError: (error: any) => {
       toast.error(error.message || 'فشل في إنشاء المهمة المجمعة');

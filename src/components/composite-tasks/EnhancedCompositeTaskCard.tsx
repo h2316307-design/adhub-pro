@@ -336,20 +336,19 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   // Check if task has cutouts
   const hasCutouts = task.customer_cutout_cost > 0 || task.company_cutout_cost > 0;
 
-  // استخراج أول صورة تصميم لعرضها على الكارت المطوي
-  const firstDesignImage = designImages.length > 0 ? designImages[0].url : null;
-  
   // تحديد حالة الإكمال بناءً على حالة المهمة
   const isCompleted = task.status === 'completed';
   const isPartiallyCompleted = task.status === 'in_progress';
 
+  // لا نظهر التصميم هنا لأنه يظهر في CollapsibleGroupCard
   return (
-    <TaskCardWrapper
-      designImage={firstDesignImage}
-      isCompleted={isCompleted}
-      isPartiallyCompleted={isPartiallyCompleted}
-      completionPercentage={isPartiallyCompleted ? 50 : isCompleted ? 100 : 0}
-    >
+    <div className={`relative rounded-lg transition-all duration-300 ${
+      isCompleted 
+        ? 'ring-2 ring-green-500/50 bg-green-50/30 dark:bg-green-950/20' 
+        : isPartiallyCompleted 
+          ? 'ring-2 ring-amber-500/50 bg-amber-50/30 dark:bg-amber-950/20' 
+          : ''
+    }`}>
       <Card className="border-0 shadow-none bg-transparent">
       <CardHeader className="pb-3">
         <div className="flex justify-between items-start">
@@ -628,6 +627,6 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
         </AlertDialog>
       </CardContent>
       </Card>
-    </TaskCardWrapper>
+    </div>
   );
 };

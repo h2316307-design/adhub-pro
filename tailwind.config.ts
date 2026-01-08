@@ -13,6 +13,12 @@ export default {
       },
     },
     extend: {
+      fontFamily: {
+        'doran': ['Doran', 'Cairo', 'Tajawal', 'sans-serif'],
+        'cairo': ['Cairo', 'sans-serif'],
+        'tajawal': ['Tajawal', 'sans-serif'],
+        'manrope': ['Manrope', 'sans-serif'],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

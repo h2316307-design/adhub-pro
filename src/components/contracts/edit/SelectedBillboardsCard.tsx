@@ -91,6 +91,8 @@ interface SelectedBillboardsCardProps {
   partnershipOperatingFeeRate?: number;
   onPartnershipOperatingDataChange?: (data: any[]) => void;
   customerCategory?: string;
+  // ✅ NEW: Level discounts
+  levelDiscounts?: Record<string, number>;
   // ✅ NEW: Print cost props
   printCostDetails?: Array<{
     billboardId: string;
@@ -123,6 +125,8 @@ export function SelectedBillboardsCard({
   partnershipOperatingFeeRate = 3,
   onPartnershipOperatingDataChange,
   customerCategory = '',
+  // ✅ NEW: Level discounts
+  levelDiscounts = {},
   // ✅ NEW: Print cost props
   printCostDetails = [],
   includePrintInPrice = true,

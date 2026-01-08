@@ -129,6 +129,7 @@ export interface UnifiedPrintOptions {
     rentalCost: string;
     installationCost: string;
     duration: string;
+    discount?: string; // نص الخصم (مثلاً: "بعد خصم 5000 دينار ليبي")
   };
   paymentsHtml: string;
 }
@@ -211,6 +212,9 @@ function replaceVariables(
   billboardsCount: number,
   paymentsHtml: string
 ): string {
+  // نص الخصم - إذا لم يكن موجوداً نتركه فارغاً
+  const discountText = contractDetails.discount || '';
+  
   return text
     .replace(/{duration}/g, contractData.duration)
     .replace(/{startDate}/g, contractData.startDate)
@@ -220,6 +224,7 @@ function replaceVariables(
     .replace(/{totalAmount}/g, contractDetails.finalTotal)
     .replace(/{currency}/g, currencyInfo.writtenName)
     .replace(/{billboardsCount}/g, String(billboardsCount))
+    .replace(/{discount}/g, discountText) // ✅ استبدال متغير الخصم
     // NOTE: paymentsHtml may contain <br> etc. We keep it as-is for wrapping,
     // but it MUST be escaped at render time inside SVG text.
     .replace(/{payments}/g, paymentsHtml);

@@ -646,7 +646,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             {/* Top badges row - z-index عالي */}
             <div className="absolute top-4 left-4 right-4 flex justify-between items-start z-30">
               {/* حجم اللوحة */}
-              <Badge className="bg-white/95 dark:bg-slate-900/95 text-foreground shadow-xl border-0 font-bold px-4 py-1.5 text-sm backdrop-blur-sm">
+              <Badge className="bg-white/95 dark:bg-slate-900/95 text-foreground shadow-xl border-0 font-bold px-4 py-1.5 text-sm backdrop-blur-sm font-manrope">
                 {billboard.Size}
               </Badge>
 
@@ -670,19 +670,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               </Badge>
             </div>
 
-            {/* Bottom info overlay - z-index عالي */}
-            <div className="absolute bottom-0 left-0 right-0 p-4 z-30">
-              <h3 className="font-bold text-xl md:text-2xl text-white drop-shadow-lg leading-tight mb-2">
-                {billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`}
-              </h3>
-              
-              {(billboard.Nearest_Landmark || billboard.District || billboard.Municipality) && (
-                <div className="flex items-center gap-2 text-white/90">
-                  <MapPin className="h-4 w-4 flex-shrink-0" />
-                  <span className="text-sm line-clamp-1 drop-shadow">{billboard.Nearest_Landmark || billboard.District || billboard.Municipality}</span>
-                </div>
-              )}
-            </div>
+            {/* Bottom info overlay removed - moved below image */}
 
             {/* Corner badges - z-index عالي */}
             {isNearExpiry && !contractExpired && (
@@ -704,10 +692,43 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             )}
           </div>
 
-          {/* ✅ عرض التصميم الأمامي تحت صورة اللوحة - مع خلفية blur */}
+          {/* ✅ معلومات الموقع مباشرة تحت الصورة */}
+          <div className="px-4 py-3 bg-gradient-to-r from-muted/50 to-muted/30 border-b border-border/30">
+            {/* كود اللوحة وأقرب نقطة دالة بخط كبير */}
+            <div className="space-y-1">
+              <h3 className="font-bold text-lg text-foreground">
+                {billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`}
+              </h3>
+              {billboard.Nearest_Landmark && (
+                <p className="font-bold text-lg text-primary flex items-center gap-2">
+                  <MapPin className="h-5 w-5 flex-shrink-0" />
+                  {billboard.Nearest_Landmark}
+                </p>
+              )}
+            </div>
+            
+            {/* البلدية والمنطقة */}
+            {(billboard.Municipality || billboard.District) && (
+              <div className="flex flex-wrap gap-2 mt-2">
+                {billboard.Municipality && (
+                  <Badge variant="secondary" className="text-xs bg-muted/80">
+                    <Building className="h-3 w-3 ml-1" />
+                    {billboard.Municipality}
+                  </Badge>
+                )}
+                {billboard.District && (
+                  <Badge variant="secondary" className="text-xs bg-muted/80">
+                    المنطقة: {billboard.District}
+                  </Badge>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* ✅ عرض التصميم الأمامي تحت معلومات الموقع - بعرض الكرت الكامل */}
           {isAdmin && frontDesignUrl && (
             <div 
-              className="relative h-24 cursor-pointer group/design overflow-hidden"
+              className="relative w-full aspect-video cursor-pointer group/design overflow-hidden"
               onClick={(e) => {
                 e.stopPropagation();
                 openDesignPreview(frontDesignUrl, 'التصميم الأمامي');
@@ -734,7 +755,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             <div className="grid grid-cols-3 gap-2">
               <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-gradient-to-br from-blue-500/10 to-blue-600/5 border border-blue-500/20">
                 <span className="text-xs text-muted-foreground mb-1">الأوجه</span>
-                <span className="font-bold text-sm text-blue-600 dark:text-blue-400">{getFaceCountDisplay()}</span>
+                <span className="font-bold text-sm text-blue-600 dark:text-blue-400 font-manrope">{getFaceCountDisplay()}</span>
               </div>
               <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-gradient-to-br from-purple-500/10 to-purple-600/5 border border-purple-500/20">
                 <span className="text-xs text-muted-foreground mb-1">النوع</span>
@@ -742,7 +763,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
               </div>
               <div className="flex flex-col items-center justify-center p-3 rounded-xl bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 border border-emerald-500/20 relative">
                 <span className="text-xs text-muted-foreground mb-1">المستوى</span>
-                <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400">{getLevelDisplay()}</span>
+                <span className="font-bold text-sm text-emerald-600 dark:text-emerald-400 font-manrope">{getLevelDisplay()}</span>
                 {isAdmin && (
                   <Button
                     size="icon"
@@ -762,22 +783,6 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                 )}
               </div>
             </div>
-
-            {/* Location badges */}
-            {(billboard.District || billboard.Municipality) && (
-              <div className="flex flex-wrap gap-1.5">
-                {billboard.Municipality && (
-                  <Badge variant="secondary" className="text-xs bg-muted/60 hover:bg-muted transition-colors">
-                    البلدية: {billboard.Municipality}
-                  </Badge>
-                )}
-                {billboard.District && (
-                  <Badge variant="secondary" className="text-xs bg-muted/60 hover:bg-muted transition-colors">
-                    المنطقة: {billboard.District}
-                  </Badge>
-                )}
-              </div>
-            )}
 
             {/* Partnership indicator */}
             {isShared && (

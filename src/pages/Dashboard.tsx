@@ -403,7 +403,7 @@ export default function Dashboard() {
           <div className="expenses-stat-content">
             <div>
               <p className="expenses-stat-text">إجمالي العقود</p>
-              <p className="expenses-stat-value">{legacyContracts.length}</p>
+              <p className="expenses-stat-value font-manrope">{legacyContracts.length}</p>
             </div>
             <FileText className="expenses-stat-icon stat-blue" />
           </div>
@@ -413,7 +413,7 @@ export default function Dashboard() {
           <div className="expenses-stat-content">
             <div>
               <p className="expenses-stat-text">العقود المنتهية قريباً</p>
-              <p className="expenses-stat-value stat-red">{expiringContracts.length}</p>
+              <p className="expenses-stat-value stat-red font-manrope">{expiringContracts.length}</p>
             </div>
             <Clock className="expenses-stat-icon stat-red" />
           </div>
@@ -423,7 +423,7 @@ export default function Dashboard() {
           <div className="expenses-stat-content">
             <div>
               <p className="expenses-stat-text">إجمالي المدفوعات</p>
-              <p className="expenses-stat-value">{payments.length}</p>
+              <p className="expenses-stat-value font-manrope">{payments.length}</p>
             </div>
             <Receipt className="expenses-stat-icon stat-green" />
           </div>
@@ -433,7 +433,7 @@ export default function Dashboard() {
           <div className="expenses-stat-content">
             <div>
               <p className="expenses-stat-text">إجمالي اللوحات</p>
-              <p className="expenses-stat-value">{allBillboards.length}</p>
+              <p className="expenses-stat-value font-manrope">{allBillboards.length}</p>
             </div>
             <Monitor className="expenses-stat-icon stat-purple" />
           </div>

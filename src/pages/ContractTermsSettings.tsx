@@ -113,6 +113,7 @@ const AVAILABLE_VARIABLES = [
   { key: '{customerName}', label: 'اسم العميل', example: 'شركة المثال', description: 'اسم العميل أو الشركة' },
   { key: '{contractNumber}', label: 'رقم العقد', example: '1001', description: 'رقم العقد' },
   { key: '{totalAmount}', label: 'إجمالي المبلغ', example: '50,000', description: 'إجمالي قيمة العقد' },
+  { key: '{discount}', label: 'قيمة التخفيض', example: '5,000', description: 'قيمة التخفيض المطبق على العقد' },
   { key: '{currency}', label: 'العملة', example: 'دينار ليبي', description: 'عملة العقد' },
   { key: '{billboardsCount}', label: 'عدد اللوحات', example: '5', description: 'عدد اللوحات في العقد' },
   { key: '{payments}', label: 'الدفعات', example: 'دفعة أولى 52,000 د.ل بتاريخ 20/07/2025 ثم 7 دفعات × 50,000 د.ل', description: 'ملخص الدفعات مع التواريخ ودمج المتكررة' },
@@ -186,6 +187,7 @@ const SAMPLE_CONTRACT_DATA = {
   adType: 'طلاء المدينة مصراتة',
   year: '2025',
   payments: formatPaymentsSummary(SAMPLE_INSTALLMENTS),
+  discount: '8,300', // قيمة تخفيض تجريبية
 };
 
 // إعدادات موقع كل جزء من الصفحة
@@ -633,6 +635,7 @@ export default function ContractTermsSettings() {
         adType: c['Ad Type'] || '',
         year: c['Contract Date'] ? new Date(c['Contract Date']).getFullYear().toString() : '',
         payments: paymentsText,
+        discount: discount > 0 ? discount.toLocaleString() : '',
       });
 
       // Transform billboards for preview
@@ -920,6 +923,11 @@ export default function ContractTermsSettings() {
   // Replace variables with selected contract data or sample data
   const replaceVariables = (text: string) => {
     const data = previewContractData;
+    // إذا لم يكن هناك تخفيض، نزيل المتغير {discount} بالكامل مع أي مسافات زائدة
+    const discountValue = data.discount && data.discount !== '0' && data.discount !== '' 
+      ? `بعد خصم ${data.discount} ${data.currency}` 
+      : '';
+    
     return text
       .replace(/{duration}/g, data.duration)
       .replace(/{startDate}/g, data.startDate)
@@ -927,9 +935,14 @@ export default function ContractTermsSettings() {
       .replace(/{customerName}/g, data.customerName)
       .replace(/{contractNumber}/g, data.contractNumber)
       .replace(/{totalAmount}/g, data.totalAmount)
+      .replace(/{discount}/g, discountValue)
       .replace(/{currency}/g, data.currency)
       .replace(/{billboardsCount}/g, data.billboardsCount)
-      .replace(/{payments}/g, data.payments);
+      .replace(/{payments}/g, data.payments)
+      // تنظيف المسافات الزائدة إذا كان التخفيض فارغاً
+      .replace(/\s{2,}/g, ' ')
+      .replace(/\.\s*\./g, '.')
+      .trim();
   };
 
   // Highlight variables in text

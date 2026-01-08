@@ -1943,31 +1943,49 @@ export default function RemovalTasks() {
                                   )}
                                 </div>
                                 <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handlePrintTask(task.id);
-                                    }}
-                                    className="gap-1"
-                                  >
-                                    <Printer className="h-4 w-4" />
-                                    طباعة
-                                  </Button>
-                                  {/* زر طباعة اللوحات المنفصلة */}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="gap-1 bg-primary/10 border-primary/30"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      window.location.href = `/admin/billboard-print-settings?task=${task.id}&mode=removal`;
-                                    }}
-                                  >
-                                    <Navigation className="h-4 w-4" />
-                                    طباعة منفصلة
-                                  </Button>
+                                  {/* زر طباعة موحد - نفس طريقة طباعة الكل */}
+                                  {pendingCount > 0 && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        
+                                        // Get pending items for this task
+                                        const pendingTaskItems = taskItems.filter(i => i.status === 'pending');
+                                        
+                                        // Create print items with contract info
+                                        const items: BillboardPrintItem[] = pendingTaskItems.map(item => {
+                                          const team = teamById[task.team_id || ''];
+                                          
+                                          return {
+                                            id: item.id,
+                                            billboard_id: item.billboard_id,
+                                            design_face_a: item.design_face_a || null,
+                                            design_face_b: item.design_face_b || null,
+                                            installed_image_face_a_url: item.installed_image_url || null,
+                                            team_id: task.team_id,
+                                            contract_number: contract?.Contract_Number || task.contract_id,
+                                            ad_type: contract?.['Ad Type'] || null,
+                                          };
+                                        });
+                                        
+                                        const team = teamById[task.team_id || ''];
+                                        setUnifiedPrintData({
+                                          teamId: task.team_id || '',
+                                          teamName: team?.team_name || 'فريق غير محدد',
+                                          items,
+                                          billboards: billboardById,
+                                          teams: teamById,
+                                        });
+                                        setUnifiedPrintDialogOpen(true);
+                                      }}
+                                      className="gap-1"
+                                    >
+                                      <Printer className="h-4 w-4" />
+                                      طباعة ({pendingCount})
+                                    </Button>
+                                  )}
                                   <Button
                                     size="sm"
                                     variant="outline"

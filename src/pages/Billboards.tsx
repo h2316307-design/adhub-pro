@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,6 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { PrintFiltersDialog } from '@/components/billboards/PrintFiltersDialog';
 import { BillboardPrintWithSelection } from '@/components/billboards/BillboardPrintWithSelection';
 import { BillboardSelectionBar } from '@/components/billboards/BillboardSelectionBar';
-import InteractiveMap from '@/components/InteractiveMap';
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from '@/components/ui/pagination';
 import { searchBillboards } from '@/services/billboardService';
 import { useBillboardData } from '@/hooks/useBillboardData';
@@ -30,6 +29,9 @@ import { useBillboardExport } from '@/hooks/useBillboardExport';
 import { useBillboardContract } from '@/hooks/useBillboardContract';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+
+// ✅ تحميل كسول للخريطة لتحسين الأداء
+const InteractiveMap = lazy(() => import('@/components/InteractiveMap'));
 
 export default function Billboards() {
   const navigate = useNavigate();
@@ -49,7 +51,7 @@ export default function Billboards() {
   
   // Collapsible states
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [mapOpen, setMapOpen] = useState(true); // Default to open for background map mode
+  const [mapOpen, setMapOpen] = useState(false); // ✅ مطوية افتراضياً لتحسين الأداء
 
   // Print filters
   const [printFiltersOpen, setPrintFiltersOpen] = useState(false);
@@ -755,7 +757,7 @@ export default function Billboards() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">إجمالي اللوحات</p>
-                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1">{billboards.length}</p>
+                  <p className="text-3xl font-bold text-blue-600 dark:text-blue-400 mt-1 font-manrope">{billboards.length}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-blue-500/20">
                   <MapPin className="h-6 w-6 text-blue-600 dark:text-blue-400" />
@@ -771,7 +773,7 @@ export default function Billboards() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">اللوحات المتاحة</p>
-                  <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1">{availableBillboardsCount}</p>
+                  <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400 mt-1 font-manrope">{availableBillboardsCount}</p>
                 </div>
                 <div className="p-3 rounded-xl bg-emerald-500/20">
                   <MapPin className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
@@ -787,7 +789,7 @@ export default function Billboards() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">أسماء الزبائن</p>
-                  <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1">{dbCustomers.length}</p>
+                  <p className="text-3xl font-bold text-purple-600 dark:text-purple-400 mt-1 font-manrope">{dbCustomers.length}</p>
                   <p className="text-xs text-muted-foreground mt-1">من العقود النشطة</p>
                 </div>
                 <div className="p-3 rounded-xl bg-purple-500/20">
@@ -804,7 +806,7 @@ export default function Billboards() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-muted-foreground">أنواع الإعلانات</p>
-                  <p className="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-1">{dbAdTypes.length}</p>
+                  <p className="text-3xl font-bold text-orange-600 dark:text-orange-400 mt-1 font-manrope">{dbAdTypes.length}</p>
                   <p className="text-xs text-muted-foreground mt-1">من العقود النشطة</p>
                 </div>
                 <div className="p-3 rounded-xl bg-orange-500/20">
@@ -915,7 +917,15 @@ export default function Billboards() {
             </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <InteractiveMap 
+            <Suspense fallback={
+              <div className="h-96 flex items-center justify-center bg-muted/50">
+                <div className="text-center space-y-3">
+                  <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+                  <p className="text-muted-foreground text-sm">جاري تحميل الخريطة...</p>
+                </div>
+              </div>
+            }>
+            <InteractiveMap
               billboards={billboards
                 .filter((b: any) => {
                   const statusRaw = String(b.Status ?? b.status ?? '').trim();
@@ -985,6 +995,7 @@ export default function Billboards() {
                 }) as any}
               onImageView={(url) => console.log('Image view:', url)}
             />
+            </Suspense>
           </CollapsibleContent>
         </Card>
       </Collapsible>

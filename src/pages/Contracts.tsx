@@ -69,6 +69,10 @@ export default function Contracts() {
   const [showYearlyCode, setShowYearlyCode] = useState(true);
   const [separateExpired, setSeparateExpired] = useState(true);
   
+  // فلاتر التواريخ بالأشهر
+  const [startMonthFilter, setStartMonthFilter] = useState<string>('all');
+  const [endMonthFilter, setEndMonthFilter] = useState<string>('all');
+  
   // Multi-select state
   const [selectedContractIds, setSelectedContractIds] = useState<Set<string | number>>(new Set());
   const [isExportingMultiple, setIsExportingMultiple] = useState(false);
@@ -622,7 +626,31 @@ export default function Contracts() {
       }
     }
     
-    if (statusFilter === 'all') return matchesSearch && matchesCustomer && matchesYear;
+    // فلتر شهر البداية
+    let matchesStartMonth = true;
+    if (startMonthFilter !== 'all') {
+      const startDateStr = contract.start_date || (contract as any)['Contract Date'] || (contract as any).contract_date;
+      if (startDateStr) {
+        const startMonth = new Date(startDateStr).getMonth() + 1; // 1-12
+        matchesStartMonth = startMonth === Number(startMonthFilter);
+      } else {
+        matchesStartMonth = false;
+      }
+    }
+    
+    // فلتر شهر النهاية
+    let matchesEndMonth = true;
+    if (endMonthFilter !== 'all') {
+      const endDateStr = contract.end_date || (contract as any)['End Date'];
+      if (endDateStr) {
+        const endMonth = new Date(endDateStr).getMonth() + 1; // 1-12
+        matchesEndMonth = endMonth === Number(endMonthFilter);
+      } else {
+        matchesEndMonth = false;
+      }
+    }
+    
+    if (statusFilter === 'all') return matchesSearch && matchesCustomer && matchesYear && matchesStartMonth && matchesEndMonth;
     
     const today = new Date();
     const endDate = new Date(contract.end_date || '');
@@ -642,7 +670,7 @@ export default function Contracts() {
       matchesStatus = daysRemaining <= 7 && daysRemaining > 0;
     }
 
-    return matchesSearch && matchesCustomer && matchesStatus && matchesYear;
+    return matchesSearch && matchesCustomer && matchesStatus && matchesYear && matchesStartMonth && matchesEndMonth;
   });
 
   // حساب ترتيب العقد في السنة
@@ -1133,7 +1161,7 @@ export default function Contracts() {
                 </SelectContent>
               </Select>
 
-              {(searchQuery || statusFilter !== 'all' || customerFilter !== 'all' || yearFilter !== 'all') && (
+              {(searchQuery || statusFilter !== 'all' || customerFilter !== 'all' || yearFilter !== 'all' || startMonthFilter !== 'all' || endMonthFilter !== 'all') && (
                 <Button 
                   variant="ghost" 
                   size="sm"
@@ -1142,6 +1170,8 @@ export default function Contracts() {
                     setStatusFilter('all');
                     setCustomerFilter('all');
                     setYearFilter('all');
+                    setStartMonthFilter('all');
+                    setEndMonthFilter('all');
                   }}
                   className="text-muted-foreground"
                 >
@@ -1200,6 +1230,55 @@ export default function Contracts() {
                 <Trash2 className="h-3.5 w-3.5" />
                 المهملات ({trashContracts.length})
               </Button>
+            </div>
+            
+            {/* فلاتر الأشهر */}
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <span className="text-sm text-muted-foreground">شهر البداية:</span>
+              <Select value={startMonthFilter} onValueChange={setStartMonthFilter}>
+                <SelectTrigger className="w-32 h-7 bg-background text-xs">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="1">يناير</SelectItem>
+                  <SelectItem value="2">فبراير</SelectItem>
+                  <SelectItem value="3">مارس</SelectItem>
+                  <SelectItem value="4">أبريل</SelectItem>
+                  <SelectItem value="5">مايو</SelectItem>
+                  <SelectItem value="6">يونيو</SelectItem>
+                  <SelectItem value="7">يوليو</SelectItem>
+                  <SelectItem value="8">أغسطس</SelectItem>
+                  <SelectItem value="9">سبتمبر</SelectItem>
+                  <SelectItem value="10">أكتوبر</SelectItem>
+                  <SelectItem value="11">نوفمبر</SelectItem>
+                  <SelectItem value="12">ديسمبر</SelectItem>
+                </SelectContent>
+              </Select>
+              
+              <div className="border-r border-border h-6 mx-1" />
+              
+              <span className="text-sm text-muted-foreground">شهر النهاية:</span>
+              <Select value={endMonthFilter} onValueChange={setEndMonthFilter}>
+                <SelectTrigger className="w-32 h-7 bg-background text-xs">
+                  <SelectValue placeholder="الكل" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="1">يناير</SelectItem>
+                  <SelectItem value="2">فبراير</SelectItem>
+                  <SelectItem value="3">مارس</SelectItem>
+                  <SelectItem value="4">أبريل</SelectItem>
+                  <SelectItem value="5">مايو</SelectItem>
+                  <SelectItem value="6">يونيو</SelectItem>
+                  <SelectItem value="7">يوليو</SelectItem>
+                  <SelectItem value="8">أغسطس</SelectItem>
+                  <SelectItem value="9">سبتمبر</SelectItem>
+                  <SelectItem value="10">أكتوبر</SelectItem>
+                  <SelectItem value="11">نوفمبر</SelectItem>
+                  <SelectItem value="12">ديسمبر</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           

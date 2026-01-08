@@ -16,6 +16,7 @@ import { OfferBillboardPrintDialog } from '@/components/offers/OfferBillboardPri
 import { UnifiedPrintAllDialog, BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import { InstallmentsManager } from '@/components/contracts/edit/InstallmentsManager';
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
+import { LevelDiscountsCard } from '@/components/contracts/edit/LevelDiscountsCard';
 import { 
   DollarSign, List, Map as MapIcon, Printer, FileText, Calendar, Eye, Edit, Trash2, 
   Search, Filter, Plus, Copy, RefreshCw, Wrench, Settings, ArrowRight, CheckCircle2, 
@@ -56,6 +57,9 @@ interface Offer {
   duration_months: number;
   total: number;
   discount: number;
+  discount_type?: 'fixed' | 'percentage';
+  discount_percentage?: number;
+  level_discounts?: Record<string, number>;
   status: string;
   billboards_count: number;
   billboards_data: string;
@@ -112,6 +116,9 @@ export default function OffersPage() {
   const [durationMonths, setDurationMonths] = useState<number>(3);
   const [pricingCategory, setPricingCategory] = useState<string>('عادي');
   const [discount, setDiscount] = useState<number>(0);
+  const [discountType, setDiscountType] = useState<'fixed' | 'percentage'>('fixed');
+  const [discountPercentage, setDiscountPercentage] = useState<number>(0);
+  const [levelDiscounts, setLevelDiscounts] = useState<Record<string, number>>({});
   const [notes, setNotes] = useState('');
   const [contractCurrency, setContractCurrency] = useState<string>('LYD');
   const [exchangeRate, setExchangeRate] = useState<number>(1);
@@ -405,12 +412,37 @@ export default function OffersPage() {
     );
   };
 
+  // حساب التخفيض حسب المستوى
+  const levelDiscountAmount = useMemo(() => {
+    if (Object.keys(levelDiscounts).length === 0) return 0;
+    
+    return selectedBillboards.reduce((sum, b) => {
+      const level = (b as any).Level || (b as any).level || '';
+      const discountPercent = levelDiscounts[level] || 0;
+      const price = calculateBillboardPrice(b);
+      return sum + (price * discountPercent / 100);
+    }, 0);
+  }, [selectedBillboards, levelDiscounts, durationMonths, pricingCategory, exchangeRate]);
+
   const totalBeforeDiscount = useMemo(() => 
     selectedBillboards.reduce((sum, b) => sum + calculateBillboardPrice(b), 0),
     [selectedBillboards, durationMonths, pricingCategory, exchangeRate]
   );
 
-  const totalAfterDiscount = totalBeforeDiscount - discount;
+  // حساب الخصم الكلي (خصم المستوى + خصم إضافي بالنسبة أو مبلغ ثابت)
+  const calculatedDiscount = useMemo(() => {
+    let additionalDiscount = 0;
+    if (discountType === 'percentage' && discountPercentage > 0) {
+      // نسبة مئوية من المبلغ بعد خصم المستوى
+      const afterLevelDiscount = totalBeforeDiscount - levelDiscountAmount;
+      additionalDiscount = afterLevelDiscount * discountPercentage / 100;
+    } else {
+      additionalDiscount = discount;
+    }
+    return Math.round(levelDiscountAmount + additionalDiscount);
+  }, [levelDiscountAmount, discount, discountType, discountPercentage, totalBeforeDiscount]);
+
+  const totalAfterDiscount = totalBeforeDiscount - calculatedDiscount;
 
   // صافي الإيجار = بعد الخصم - التكاليف المجانية فقط (المضمنة في السعر)
   const netRental = useMemo(() => {
@@ -558,30 +590,54 @@ export default function OffersPage() {
 
       setSaving(true);
 
-      const billboardsData = selectedBillboards.map((b: any) => ({
-        id: String(b.ID),
-        ID: b.ID,
-        Billboard_Name: b.Billboard_Name,
-        name: b.Billboard_Name,
-        size: b.Size,
-        Size: b.Size,
-        city: b.City,
-        City: b.City,
-        Municipality: b.Municipality,
-        District: b.District,
-        Nearest_Landmark: b.Nearest_Landmark,
-        Image_URL: b.Image_URL,
-        Faces_Count: b.Faces_Count,
-        GPS_Coordinates: b.GPS_Coordinates,
-        price: calculateBillboardPrice(b),
-        Price: calculateBillboardPrice(b),
-      }));
+      // بناء بيانات اللوحات مع الخصم حسب المستوى
+      const billboardsData = selectedBillboards.map((b: any) => {
+        const level = (b as any).Level || (b as any).level || '';
+        const levelDiscountPercent = levelDiscounts[level] || 0;
+        const originalPrice = calculateBillboardPrice(b);
+        const levelDiscountAmt = originalPrice * levelDiscountPercent / 100;
+        const priceAfterLevelDiscount = originalPrice - levelDiscountAmt;
+        
+        return {
+          id: String(b.ID),
+          ID: b.ID,
+          Billboard_Name: b.Billboard_Name,
+          name: b.Billboard_Name,
+          size: b.Size,
+          Size: b.Size,
+          Level: level,
+          level: level,
+          city: b.City,
+          City: b.City,
+          Municipality: b.Municipality,
+          District: b.District,
+          Nearest_Landmark: b.Nearest_Landmark,
+          Image_URL: b.Image_URL,
+          Faces_Count: b.Faces_Count,
+          GPS_Coordinates: b.GPS_Coordinates,
+          price: priceAfterLevelDiscount,
+          Price: priceAfterLevelDiscount,
+          original_price: originalPrice,
+          total_price_before_discount: originalPrice,
+          price_after_discount: priceAfterLevelDiscount,
+          level_discount_percent: levelDiscountPercent,
+          level_discount_amount: levelDiscountAmt,
+        };
+      });
 
-      const billboardPrices = selectedBillboards.map((b: any) => ({
-        billboardId: String(b.ID),
-        originalPrice: b.Price || 0,
-        contractPrice: calculateBillboardPrice(b),
-      }));
+      const billboardPrices = selectedBillboards.map((b: any) => {
+        const level = (b as any).Level || (b as any).level || '';
+        const levelDiscountPercent = levelDiscounts[level] || 0;
+        const originalPrice = calculateBillboardPrice(b);
+        const priceAfterDiscount = originalPrice - (originalPrice * levelDiscountPercent / 100);
+        
+        return {
+          billboardId: String(b.ID),
+          originalPrice: originalPrice,
+          contractPrice: priceAfterDiscount,
+          levelDiscountPercent,
+        };
+      });
 
       const offerData = {
         customer_name: customerName,
@@ -590,7 +646,10 @@ export default function OffersPage() {
         end_date: endDate,
         duration_months: durationMonths,
         total: grandTotal,
-        discount,
+        discount: calculatedDiscount, // إجمالي الخصم المحسوب
+        discount_type: discountType,
+        discount_percentage: discountPercentage,
+        level_discounts: Object.keys(levelDiscounts).length > 0 ? levelDiscounts : null,
         status: editingOffer?.status || 'pending',
         billboards_count: selected.length,
         billboards_data: JSON.stringify(billboardsData),
@@ -652,6 +711,9 @@ export default function OffersPage() {
     setEndDate('');
     setDurationMonths(3);
     setDiscount(0);
+    setDiscountType('fixed');
+    setDiscountPercentage(0);
+    setLevelDiscounts({});
     setNotes('');
     setPricingCategory('عادي');
     setContractCurrency('LYD');
@@ -793,6 +855,9 @@ export default function OffersPage() {
     setEndDate(offer.end_date || '');
     setDurationMonths(offer.duration_months);
     setDiscount(offer.discount || 0);
+    setDiscountType(offer.discount_type || 'fixed');
+    setDiscountPercentage(offer.discount_percentage || 0);
+    setLevelDiscounts(offer.level_discounts || {});
     setNotes(offer.notes || '');
     setPricingCategory(offer.pricing_category || 'عادي');
     setContractCurrency(offer.currency || 'LYD');
@@ -1947,10 +2012,11 @@ export default function OffersPage() {
                     durationMonths={durationMonths}
                     durationDays={0}
                     currencySymbol={currentCurrency.symbol}
-                    totalDiscount={discount}
-                    discountType="amount"
-                    discountValue={discount}
+                    totalDiscount={calculatedDiscount}
+                    discountType={discountType === 'percentage' ? 'percentage' : 'amount'}
+                    discountValue={discountType === 'percentage' ? discountPercentage : discount}
                     customerCategory={pricingCategory}
+                    levelDiscounts={levelDiscounts}
                   />
                 </div>
 
@@ -2340,6 +2406,17 @@ export default function OffersPage() {
                   </CardContent>
                 </Card>
 
+                {/* Level Discounts Card */}
+                {selected.length > 0 && (
+                  <LevelDiscountsCard
+                    selectedBillboards={selectedBillboards}
+                    levelDiscounts={levelDiscounts}
+                    setLevelDiscounts={setLevelDiscounts}
+                    currencySymbol={currentCurrency.symbol}
+                    calculateBillboardPrice={calculateBillboardPrice}
+                  />
+                )}
+
                 {/* Cost Summary */}
                 <Card className="bg-gradient-to-br from-primary/5 via-primary/10 to-primary/5 border-primary/30 overflow-hidden">
                   <div className="h-1 bg-gradient-to-r from-primary via-primary/50 to-transparent" />
@@ -2363,15 +2440,59 @@ export default function OffersPage() {
                       <span className="text-muted-foreground">إيجار اللوحات:</span>
                       <span className="font-medium">{totalBeforeDiscount.toLocaleString('ar-LY')} {currentCurrency.symbol}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-muted-foreground">- الخصم:</span>
-                      <Input
-                        type="number"
-                        value={discount}
-                        onChange={(e) => setDiscount(Number(e.target.value))}
-                        className="w-32 text-left h-8"
-                      />
+                    {/* خصم المستويات */}
+                    {levelDiscountAmount > 0 && (
+                      <div className="flex justify-between text-sm text-green-600">
+                        <span>- خصم المستويات:</span>
+                        <span className="font-medium">{Math.round(levelDiscountAmount).toLocaleString('ar-LY')} {currentCurrency.symbol}</span>
+                      </div>
+                    )}
+                    
+                    {/* نوع الخصم الإضافي */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-muted-foreground">- الخصم الإضافي:</span>
+                        <Select value={discountType} onValueChange={(v: 'fixed' | 'percentage') => setDiscountType(v)}>
+                          <SelectTrigger className="w-24 h-8">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="fixed">مبلغ</SelectItem>
+                            <SelectItem value="percentage">نسبة %</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="flex justify-end">
+                        {discountType === 'percentage' ? (
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              value={discountPercentage}
+                              onChange={(e) => setDiscountPercentage(Number(e.target.value))}
+                              className="w-20 text-left h-8"
+                              min={0}
+                              max={100}
+                            />
+                            <span className="text-sm">%</span>
+                          </div>
+                        ) : (
+                          <Input
+                            type="number"
+                            value={discount}
+                            onChange={(e) => setDiscount(Number(e.target.value))}
+                            className="w-32 text-left h-8"
+                          />
+                        )}
+                      </div>
                     </div>
+                    
+                    {/* إجمالي الخصم */}
+                    {calculatedDiscount > 0 && (
+                      <div className="flex justify-between text-sm text-green-600 font-medium">
+                        <span>إجمالي الخصم:</span>
+                        <span>{calculatedDiscount.toLocaleString('ar-LY')} {currentCurrency.symbol}</span>
+                      </div>
+                    )}
                     
                     {/* التركيب */}
                     {installationEnabled && installationCost > 0 && (

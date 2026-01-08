@@ -8,7 +8,8 @@ import {
   Building, AlertCircle, Clock, CheckCircle, Printer, 
   Hammer, Wrench, Percent, PaintBucket, FileText, 
   Send, FileSpreadsheet, MoreHorizontal, Phone,
-  TrendingUp, TrendingDown, Minus, ImageIcon, RefreshCw
+  TrendingUp, TrendingDown, Minus, ImageIcon, RefreshCw,
+  Maximize2, X
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -56,6 +57,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   const [dominantColor, setDominantColor] = useState<string | null>(null);
   const [actualPaid, setActualPaid] = useState<number | null>(null);
   const [isRenewing, setIsRenewing] = useState(false);
+  const [showDesignFullscreen, setShowDesignFullscreen] = useState(false);
 
   // دالة تجديد العقد - إنشاء عقد جديد من بيانات العقد الحالي
   const handleRenewContract = async () => {
@@ -341,26 +343,58 @@ export const ContractCard: React.FC<ContractCardProps> = ({
       
       {/* صورة التصميم إذا متوفرة */}
       {designImage && (
-        <div className="relative h-32 w-full overflow-hidden bg-muted">
-          <img 
-            src={designImage} 
-            alt="تصميم الإعلان" 
-            className="w-full h-full object-cover"
-            onError={(e) => {
-              (e.target as HTMLImageElement).style.display = 'none';
-            }}
-          />
-          <div className="absolute top-2 left-2">
-            <Badge 
-              variant="secondary" 
-              className="gap-1 border-0"
-              style={dominantColor ? { backgroundColor: `rgba(${dominantColor}, 0.9)`, color: 'white' } : { backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}
-            >
-              <ImageIcon className="h-3 w-3" />
-              تصميم متوفر
-            </Badge>
+        <>
+          <div 
+            className="relative h-32 w-full overflow-hidden bg-muted cursor-pointer group/design"
+            onClick={() => setShowDesignFullscreen(true)}
+          >
+            <img 
+              src={designImage} 
+              alt="تصميم الإعلان" 
+              className="w-full h-full object-cover transition-transform duration-300 group-hover/design:scale-105"
+              onError={(e) => {
+                (e.target as HTMLImageElement).style.display = 'none';
+              }}
+            />
+            <div className="absolute inset-0 bg-black/0 group-hover/design:bg-black/20 transition-colors duration-300 flex items-center justify-center">
+              <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover/design:opacity-100 transition-opacity duration-300" />
+            </div>
+            <div className="absolute top-2 left-2">
+              <Badge 
+                variant="secondary" 
+                className="gap-1 border-0"
+                style={dominantColor ? { backgroundColor: `rgba(${dominantColor}, 0.9)`, color: 'white' } : { backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}
+              >
+                <ImageIcon className="h-3 w-3" />
+                تصميم متوفر
+              </Badge>
+            </div>
           </div>
-        </div>
+          
+          {/* Fullscreen Design Modal */}
+          {showDesignFullscreen && (
+            <div 
+              className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+              onClick={() => setShowDesignFullscreen(false)}
+            >
+              <button
+                onClick={() => setShowDesignFullscreen(false)}
+                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                <X className="h-6 w-6 text-white" />
+              </button>
+              <img 
+                src={designImage} 
+                alt="تصميم الإعلان - عرض كامل" 
+                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+                onClick={(e) => e.stopPropagation()}
+              />
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
+                عقد #{contractNumber} - {contract.customer_name}
+              </div>
+            </div>
+          )}
+        </>
       )}
       
       {/* شريط الحالة العلوي */}

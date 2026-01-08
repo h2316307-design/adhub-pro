@@ -6,6 +6,10 @@ export type OfferRow = {
   duration_months: number;
   notes?: string;
   selected_boards: any[];
+  discount?: number;
+  discount_type?: string;
+  discount_percentage?: number;
+  level_discounts?: any[];
   created_at?: string;
 };
 
@@ -16,6 +20,10 @@ export async function createOffer(row: OfferRow): Promise<OfferRow | null> {
       duration_months: row.duration_months,
       notes: row.notes || null,
       selected_boards: row.selected_boards ? JSON.stringify(row.selected_boards) : JSON.stringify([]),
+      discount: row.discount || 0,
+      discount_type: row.discount_type || 'fixed',
+      discount_percentage: row.discount_percentage || 0,
+      level_discounts: row.level_discounts ? JSON.stringify(row.level_discounts) : JSON.stringify([]),
     };
     const { data, error } = await (supabase as any)
       .from('offers')

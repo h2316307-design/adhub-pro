@@ -168,7 +168,7 @@ function CustomerRow({
       {/* الإجمالي */}
       <TableCell className="py-4">
         <div className="flex flex-col items-end">
-          <span className="font-bold text-foreground">{customer.totalRent.toLocaleString('ar-LY')}</span>
+          <span className="font-bold font-manrope text-foreground">{customer.totalRent.toLocaleString('ar-LY')}</span>
           <span className="text-[10px] text-muted-foreground">د.ل</span>
         </div>
       </TableCell>
@@ -176,7 +176,7 @@ function CustomerRow({
       {/* المدفوع */}
       <TableCell className="py-4">
         <div className="flex flex-col items-end">
-          <span className="font-semibold text-emerald-600 dark:text-emerald-400">{customer.totalPaid.toLocaleString('ar-LY')}</span>
+          <span className="font-semibold font-manrope text-emerald-600 dark:text-emerald-400">{customer.totalPaid.toLocaleString('ar-LY')}</span>
           <span className="text-[10px] text-muted-foreground">د.ل</span>
         </div>
       </TableCell>
@@ -184,7 +184,7 @@ function CustomerRow({
       {/* رصيد الحساب */}
       <TableCell className="py-4">
         <div className="flex flex-col items-end">
-          <span className="font-semibold text-blue-600 dark:text-blue-400">{customer.accountBalance.toLocaleString('ar-LY')}</span>
+          <span className="font-semibold font-manrope text-blue-600 dark:text-blue-400">{customer.accountBalance.toLocaleString('ar-LY')}</span>
           <span className="text-[10px] text-muted-foreground">د.ل</span>
         </div>
       </TableCell>
@@ -192,7 +192,7 @@ function CustomerRow({
       {/* المتبقي */}
       <TableCell className="py-4">
         <div className="flex flex-col items-end">
-          <span className={`font-bold ${remaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+          <span className={`font-bold font-manrope ${remaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
             {remaining.toLocaleString('ar-LY')}
           </span>
           <span className="text-[10px] text-muted-foreground">د.ل</span>

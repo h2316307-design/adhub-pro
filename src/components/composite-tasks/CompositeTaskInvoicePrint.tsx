@@ -18,10 +18,43 @@ interface CompositeTaskInvoicePrintProps {
   task: CompositeTaskWithDetails;
 }
 
+// دالة لتوليد عنوان الفاتورة ديناميكياً بناءً على المكونات
+function generateDynamicInvoiceTitle(task: CompositeTaskWithDetails, details: any): { ar: string; en: string } {
+  const hasPrint = (task.customer_print_cost || 0) > 0 || (details?.print?.print_task_items?.length > 0);
+  const hasInstallation = (task.customer_installation_cost || 0) > 0 || (details?.installationItems?.length > 0);
+  const hasCutout = (task.customer_cutout_cost || 0) > 0 || (details?.totalCutouts > 0);
+  
+  const components: string[] = [];
+  const componentsEn: string[] = [];
+  
+  if (hasPrint) {
+    components.push('طباعة');
+    componentsEn.push('Print');
+  }
+  if (hasInstallation) {
+    components.push('تركيب');
+    componentsEn.push('Installation');
+  }
+  if (hasCutout) {
+    components.push('قص');
+    componentsEn.push('Cutout');
+  }
+  
+  if (components.length === 0) {
+    return { ar: 'فاتورة', en: 'Invoice' };
+  }
+  
+  const arTitle = `فاتورة ${components.join(' و')}`;
+  const enTitle = `${componentsEn.join(' & ')} Invoice`;
+  
+  return { ar: arTitle, en: enTitle };
+}
+
 export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintProps) {
   const [taskDetails, setTaskDetails] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(true); // خيار إظهار التفاصيل
+  const [displayMode, setDisplayMode] = useState<'detailed' | 'summary'>('detailed'); // نوع العرض
   const [logoDataUri, setLogoDataUri] = useState<string>('');
 
   useEffect(() => {
@@ -148,8 +181,8 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
       }
       
       // جلب بيانات اللوحات لعناصر التركيب (عند عدم وجود طباعة)
-      if (installResult.data?.installation_task_items?.length > 0) {
-        const installItems = installResult.data.installation_task_items;
+      const installItems = details.installation?.installation_task_items || installItemsResult.data || [];
+      if (installItems.length > 0) {
         const billboardIds = installItems
           .map((item: any) => item.billboard_id)
           .filter((id: any) => id != null);
@@ -166,6 +199,17 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
               const sizeInfo = details.sizesMap[b.Size];
               const contractDesign = contractDesignMap[String(b.ID)] || {};
               
+              // استخراج المقاس من النص إذا لم يوجد في sizesMap
+              let width = sizeInfo?.width;
+              let height = sizeInfo?.height;
+              if (!width || !height) {
+                const sizeMatch = b.Size?.match(/(\d+)x(\d+)/);
+                if (sizeMatch) {
+                  width = parseInt(sizeMatch[1]);
+                  height = parseInt(sizeMatch[2]);
+                }
+              }
+              
               // استخدام التصميم من العقد أولاً، ثم من اللوحة، ثم صورة اللوحة
               const designA = contractDesign.designFaceA || b.design_face_a || contractDesign.billboardImage || b.Image_URL;
               const designB = contractDesign.designFaceB || b.design_face_b;
@@ -173,8 +217,8 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
               details.installationBillboards[b.ID] = {
                 name: b.Billboard_Name,
                 size: b.Size,
-                width: sizeInfo?.width,
-                height: sizeInfo?.height,
+                width: width,
+                height: height,
                 design_face_a: designA,
                 design_face_b: designB,
                 location: contractDesign.billboardLocation
@@ -186,12 +230,25 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
         // بناء قائمة عناصر التركيب مع بيانات اللوحات
         details.installationItems = installItems.map((item: any) => {
           const billboard = details.installationBillboards?.[item.billboard_id] || {};
+          
+          // استخراج المقاس من billboard.Size إذا لم يكن موجوداً
+          let width = billboard.width;
+          let height = billboard.height;
+          if (!width || !height) {
+            const sizeStr = item.billboard?.Size || billboard.size;
+            const sizeMatch = sizeStr?.match(/(\d+)x(\d+)/);
+            if (sizeMatch) {
+              width = parseInt(sizeMatch[1]);
+              height = parseInt(sizeMatch[2]);
+            }
+          }
+          
           return {
             ...item,
-            billboard_name: billboard.name,
-            billboard_size: billboard.size,
-            width: billboard.width,
-            height: billboard.height,
+            billboard_name: billboard.name || item.billboard?.Billboard_Name,
+            billboard_size: billboard.size || item.billboard?.Size,
+            width: width,
+            height: height,
             design_face_a: item.design_face_a || billboard.design_face_a,
             design_face_b: item.design_face_b || billboard.design_face_b,
             location: billboard.location
@@ -264,7 +321,7 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
       return;
     }
 
-    const invoiceHTML = generateInvoiceHTML(task, taskDetails, showDetails, logo);
+    const invoiceHTML = generateInvoiceHTML(task, taskDetails, showDetails, logo, displayMode);
 
     // ✅ انتظر تحميل الصور (خصوصاً الشعار) قبل الطباعة
     printWindow.onload = () => {
@@ -280,44 +337,291 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
     printWindow.focus();
   };
 
+  // ✅ التحقق من وجود بنود فعلية أو تكاليف (للسماح بإنشاء عناصر افتراضية)
+  const hasItems = taskDetails && (
+    (taskDetails.print?.print_task_items?.length > 0) ||
+    (taskDetails.installationItems?.length > 0) ||
+    (taskDetails.totalCutouts > 0) ||
+    // ✅ السماح بالطباعة إذا كانت هناك تكاليف (ستُنشأ عناصر افتراضية)
+    (task.customer_print_cost || 0) > 0 ||
+    (task.customer_installation_cost || 0) > 0 ||
+    (task.customer_cutout_cost || 0) > 0
+  );
+
+  // توليد عنوان الفاتورة
+  const invoiceTitle = taskDetails ? generateDynamicInvoiceTitle(task, taskDetails) : { ar: 'فاتورة', en: 'Invoice' };
+
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-2">
       <Popover>
         <PopoverTrigger asChild>
           <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
             <Settings2 className="h-4 w-4" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-56" align="end">
-          <div className="space-y-3">
-            <h4 className="font-medium text-sm">خيارات الطباعة</h4>
-            <div className="flex items-center space-x-2 space-x-reverse">
-              <Checkbox 
-                id="showDetails" 
-                checked={showDetails}
-                onCheckedChange={(checked) => setShowDetails(checked as boolean)}
-              />
-              <Label htmlFor="showDetails" className="text-sm cursor-pointer">
-                إظهار التفاصيل (طباعة، قص، تركيب)
-              </Label>
+        <PopoverContent className="w-64" align="end">
+          <div className="space-y-4">
+            <h4 className="font-medium text-sm border-b pb-2">خيارات الطباعة</h4>
+            
+            {/* نوع العرض */}
+            <div className="space-y-2">
+              <Label className="text-xs font-medium text-muted-foreground">نوع العرض:</Label>
+              <div className="flex gap-2">
+                <Button
+                  variant={displayMode === 'detailed' ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => setDisplayMode('detailed')}
+                >
+                  تفصيلي
+                </Button>
+                <Button
+                  variant={displayMode === 'summary' ? 'default' : 'outline'}
+                  size="sm"
+                  className="flex-1 text-xs"
+                  onClick={() => setDisplayMode('summary')}
+                >
+                  مجمّع
+                </Button>
+              </div>
+            </div>
+            
+            {/* إظهار أعمدة التفاصيل */}
+            {displayMode === 'detailed' && (
+              <div className="flex items-center space-x-2 space-x-reverse">
+                <Checkbox 
+                  id="showDetails" 
+                  checked={showDetails}
+                  onCheckedChange={(checked) => setShowDetails(checked as boolean)}
+                />
+                <Label htmlFor="showDetails" className="text-sm cursor-pointer">
+                  إظهار أعمدة التكاليف التفصيلية
+                </Label>
+              </div>
+            )}
+
+            {/* معاينة العنوان */}
+            <div className="pt-2 border-t">
+              <Label className="text-xs font-medium text-muted-foreground">عنوان الفاتورة:</Label>
+              <p className="text-sm font-semibold mt-1">{invoiceTitle.ar}</p>
             </div>
           </div>
         </PopoverContent>
       </Popover>
+      
       <Button 
         onClick={handlePrint} 
         variant="outline" 
         size="sm"
-        disabled={loading || !taskDetails}
+        disabled={loading || !taskDetails || !hasItems}
+        title={!hasItems ? 'لا توجد بنود في هذه الفاتورة' : ''}
       >
         <Printer className="h-4 w-4 mr-2" />
-        {loading ? 'جاري التحميل...' : 'طباعة فاتورة الزبون'}
+        {loading ? 'جاري التحميل...' : !hasItems ? 'لا توجد بنود' : 'طباعة فاتورة الزبون'}
       </Button>
     </div>
   );
 }
 
-function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showDetails: boolean = true, logoDataUri: string = ''): string {
+// دالة إنشاء صفحة فاتورة فارغة مع رسالة توضيحية
+function generateEmptyInvoiceHTML(task: CompositeTaskWithDetails, invoiceTitle: { ar: string; en: string }, invoiceDate: string, logoDataUri: string): string {
+  return `
+<!DOCTYPE html>
+<html dir="rtl" lang="ar">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${invoiceTitle.ar} - ${task.customer_name}</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;700&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { font-family: 'Noto Sans Arabic', Arial, sans-serif; direction: rtl; text-align: right; background: white; }
+    .page { width: 190mm; min-height: 277mm; padding: 20mm; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 30px; }
+    .logo { max-width: 150px; height: auto; }
+    .title { font-size: 24px; font-weight: bold; }
+    .empty-message { text-align: center; padding: 60px 20px; background: #f8f9fa; border: 2px dashed #ccc; border-radius: 10px; margin-top: 50px; }
+    .empty-icon { font-size: 48px; margin-bottom: 20px; color: #999; }
+    .empty-text { font-size: 18px; color: #666; line-height: 1.8; }
+    .customer-info { background: #f8f9fa; padding: 15px; border-radius: 8px; margin-bottom: 20px; }
+    .info-row { display: flex; justify-content: space-between; margin-bottom: 8px; }
+    .info-label { color: #666; }
+    .info-value { font-weight: bold; }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="header">
+      <div>
+        <div class="title">${invoiceTitle.ar}</div>
+        <div style="font-size: 12px; color: #666;">${invoiceTitle.en}</div>
+      </div>
+      ${logoDataUri ? `<img src="${logoDataUri}" class="logo" alt="شعار الشركة">` : ''}
+    </div>
+    
+    <div class="customer-info">
+      <div class="info-row">
+        <span class="info-label">العميل:</span>
+        <span class="info-value">${task.customer_name || 'غير محدد'}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">رقم العقد:</span>
+        <span class="info-value">#${task.contract_id}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">التاريخ:</span>
+        <span class="info-value">${invoiceDate}</span>
+      </div>
+    </div>
+    
+    <div class="empty-message">
+      <div class="empty-icon">📋</div>
+      <div class="empty-text">
+        <strong>لا توجد بنود في هذه الفاتورة</strong><br><br>
+        هذه المهمة لا تحتوي على عناصر طباعة أو تركيب أو قص.<br>
+        يرجى التأكد من إضافة البنود المطلوبة قبل إنشاء الفاتورة.
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+  `;
+}
+
+// دالة توليد جدول العرض المجمّع (عمود تكلفة واحد لكل عنصر)
+function generateSummarySection(task: CompositeTaskWithDetails, details: any, invoiceTitle: { ar: string; en: string }, pricePerMeter: number = 0): string {
+  const totalAmount = (task.customer_total || 0) - (task.discount_amount || 0);
+  
+  const printItems = details.print?.print_task_items || [];
+  const installationItems = details.installationItems || [];
+  const isInstallationOnly = printItems.length === 0 && installationItems.length > 0;
+  const items = isInstallationOnly ? installationItems : printItems;
+  
+  // سعر المتر للزبون
+  const totalArea = printItems.reduce((sum: number, item: any) => sum + (item.area * item.quantity), 0);
+  const customerPricePerMeter = totalArea > 0 ? (task.customer_print_cost || 0) / totalArea : 0;
+  
+  // سعر المجسم للزبون
+  const cutoutPricePerUnit = details.customerCutoutUnitPrice || 0;
+  
+  // سعر التركيب لكل لوحة
+  const installationCostPerItem = installationItems.length > 0 
+    ? (task.customer_installation_cost || 0) / installationItems.length 
+    : 0;
+  
+  // تجميع العناصر المتشابهة
+  const groupSimilarItems = (items: any[]) => {
+    const grouped: Record<string, any> = {};
+    
+    items.forEach((item: any) => {
+      const billboardSize = details.billboardSizes?.[item.billboard_id];
+      const displayWidth = billboardSize?.width || item.width;
+      const displayHeight = billboardSize?.height || item.height;
+      const sizeKey = `${displayWidth}×${displayHeight}`;
+      
+      const isBackFace = item.design_face_b && !item.design_face_a;
+      const designImage = isBackFace ? item.design_face_b : item.design_face_a;
+      const faceLabel = isBackFace ? 'خلفي' : 'أمامي';
+      const hasCutout = (item.cutout_quantity || 0) > 0;
+      
+      const groupKey = `${designImage || 'no-design'}_${sizeKey}_${faceLabel}_${hasCutout}`;
+      
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = {
+          designImage,
+          faceLabel,
+          displayWidth,
+          displayHeight,
+          sizeKey,
+          items: [],
+          totalQuantity: 0,
+          totalArea: 0,
+          totalCutouts: 0
+        };
+      }
+      
+      const itemArea = (item.area || 0) * (item.quantity || 1);
+      grouped[groupKey].items.push(item);
+      grouped[groupKey].totalQuantity += (item.quantity || 1);
+      grouped[groupKey].totalArea += itemArea;
+      grouped[groupKey].totalCutouts += (item.cutout_quantity || 0);
+    });
+    
+    return Object.values(grouped);
+  };
+  
+  const groupedItems = groupSimilarItems(items);
+  
+  // بناء صفوف الجدول
+  let rows = '';
+  let rowIndex = 1;
+  
+  groupedItems.forEach((group: any) => {
+    // حساب التكلفة الإجمالية للعنصر
+    const printCost = group.totalArea * customerPricePerMeter;
+    const cutoutCost = group.totalCutouts * cutoutPricePerUnit;
+    const installCost = isInstallationOnly ? (group.totalQuantity * installationCostPerItem) : 0;
+    const totalItemCost = printCost + cutoutCost + installCost;
+    
+    rows += `
+      <tr>
+        <td style="text-align: center; font-weight: bold;">${rowIndex}</td>
+        <td style="padding: 0;">
+          ${group.designImage 
+            ? `<img src="${group.designImage}" style="width: 100%; height: 60px; object-fit: contain; display: block;" onerror="this.style.display='none'" />`
+            : '<div style="text-align: center; color: #999;">-</div>'}
+        </td>
+        <td style="text-align: center;">
+          <div style="font-weight: bold;">${group.displayWidth}×${group.displayHeight} م</div>
+          <div style="font-size: 8px; color: #666; margin-top: 2px;">${group.faceLabel}</div>
+        </td>
+        <td style="text-align: center;"><strong>×${group.totalQuantity}</strong></td>
+        <td style="text-align: center;">${group.totalArea.toFixed(2)} م²</td>
+        <td style="text-align: center; font-weight: bold; font-size: 11px; background: #f0f9ff;">
+          ${totalItemCost.toFixed(2)} د.ل
+        </td>
+      </tr>
+    `;
+    rowIndex++;
+  });
+  
+  return `
+    <div class="items-section">
+      <div class="section-title" style="background: #1e40af;">بنود الفاتورة</div>
+      <table class="items-table" style="border-color: #1e40af;">
+        <thead>
+          <tr>
+            <th style="width: 30px; background: #1e40af;">#</th>
+            <th style="width: 80px; background: #1e40af;">التصميم</th>
+            <th style="width: 80px; background: #1e40af;">المقاس</th>
+            <th style="width: 50px; background: #1e40af;">الكمية</th>
+            <th style="width: 60px; background: #1e40af;">المساحة</th>
+            <th style="width: 100px; background: #1e40af;">التكلفة</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+    </div>
+    
+    ${(task.discount_amount || 0) > 0 ? `
+    <div style="margin-top: 10px; padding: 8px; background: #fef2f2; border: 1px solid #fecaca; border-radius: 4px; display: flex; justify-content: space-between;">
+      <span style="color: #dc2626;">خصم ${task.discount_reason ? `(${task.discount_reason})` : ''}</span>
+      <span style="color: #dc2626; font-weight: bold;">- ${(task.discount_amount || 0).toLocaleString('ar-LY')} د.ل</span>
+    </div>
+    ` : ''}
+    
+    <div style="margin-top: 15px; background: #1e40af; color: white; padding: 12px; text-align: center; border-radius: 6px; font-size: 16px; font-weight: bold;">
+      الإجمالي المطلوب: ${totalAmount.toLocaleString('ar-LY')} دينار ليبي
+    </div>
+  `;
+}
+
+function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showDetails: boolean = true, logoDataUri: string = '', displayMode: 'detailed' | 'summary' = 'detailed'): string {
+  // توليد عنوان الفاتورة ديناميكياً
+  const invoiceTitle = generateDynamicInvoiceTitle(task, details);
+  
   const invoiceDate = task.invoice_date 
     ? format(new Date(task.invoice_date), 'dd MMMM yyyy', { locale: ar })
     : format(new Date(), 'dd MMMM yyyy', { locale: ar });
@@ -325,11 +629,67 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
   const printItems = details.print?.print_task_items || [];
   const installationItems = details.installationItems || [];
   
+  // التحقق من وجود بنود فعلية
+  const hasRealItems = printItems.length > 0 || installationItems.length > 0 || (details.totalCutouts || 0) > 0;
+  
+  // التحقق من وجود تكاليف (حتى لو لم تكن هناك عناصر فعلية)
+  const hasCosts = (task.customer_print_cost || 0) > 0 || 
+                   (task.customer_installation_cost || 0) > 0 || 
+                   (task.customer_cutout_cost || 0) > 0;
+  
+  // ⚠️ قاعدة حرجة: يُمنع إنشاء فاتورة فارغة تماماً
+  // إذا لم توجد عناصر فعلية ولا تكاليف، أعد صفحة رسالة
+  if (!hasRealItems && !hasCosts) {
+    return generateEmptyInvoiceHTML(task, invoiceTitle, invoiceDate, logoDataUri);
+  }
+  
+  // ✅ إنشاء عناصر افتراضية (Virtual Items) إذا لم تكن هناك عناصر فعلية لكن توجد تكاليف
+  // هذا يضمن أن الفاتورة لن تكون فارغة أبداً
+  const virtualItems: any[] = [];
+  if (!hasRealItems && hasCosts) {
+    if ((task.customer_print_cost || 0) > 0) {
+      virtualItems.push({
+        type: 'virtual',
+        category: 'print',
+        description: 'الطباعة (مهمة مجمّعة)',
+        description_en: 'Printing (Composite Task)',
+        quantity: 1,
+        unit_price: task.customer_print_cost,
+        total: task.customer_print_cost
+      });
+    }
+    if ((task.customer_installation_cost || 0) > 0) {
+      virtualItems.push({
+        type: 'virtual',
+        category: 'installation',
+        description: 'التركيب (مهمة مجمّعة)',
+        description_en: 'Installation (Composite Task)',
+        quantity: 1,
+        unit_price: task.customer_installation_cost,
+        total: task.customer_installation_cost
+      });
+    }
+    if ((task.customer_cutout_cost || 0) > 0) {
+      virtualItems.push({
+        type: 'virtual',
+        category: 'cutout',
+        description: 'القص (مهمة مجمّعة)',
+        description_en: 'Cutout (Composite Task)',
+        quantity: 1,
+        unit_price: task.customer_cutout_cost,
+        total: task.customer_cutout_cost
+      });
+    }
+  }
+  
+  // استخدام العناصر الافتراضية إذا لم تكن هناك عناصر حقيقية
+  const useVirtualItems = virtualItems.length > 0;
+  
   // تحديد إذا كانت فاتورة تركيب فقط (بدون طباعة)
   const isInstallationOnly = printItems.length === 0 && installationItems.length > 0;
   
   // العناصر المستخدمة في الفاتورة
-  const invoiceItems = isInstallationOnly ? installationItems : printItems;
+  const invoiceItems = useVirtualItems ? virtualItems : (isInstallationOnly ? installationItems : printItems);
   
   // حساب إجمالي المساحة من print_task_items
   const totalArea = printItems.reduce((sum: number, item: any) => sum + (item.area * item.quantity), 0);
@@ -391,39 +751,87 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     return Object.values(grouped);
   };
 
+  // دالة إنشاء جدول العناصر الافتراضية (Virtual Items)
+  const generateVirtualItemsTable = (items: any[]): string => {
+    return `
+      <div class="items-section">
+        <div class="section-title" style="background: #1e40af;">بنود الفاتورة</div>
+        <table class="items-table" style="border-color: #1e40af;">
+          <thead>
+            <tr>
+              <th style="width: 50%; background: #1e40af;">البند</th>
+              <th style="width: 20%; background: #1e40af;">الكمية</th>
+              <th style="width: 30%; background: #1e40af;">المبلغ</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${items.map((item: any) => `
+              <tr>
+                <td style="text-align: right; padding: 12px;">
+                  <strong>${item.description}</strong>
+                  <br><span style="font-size: 9px; color: #666;">${item.description_en}</span>
+                </td>
+                <td style="text-align: center;"><strong>${item.quantity}</strong></td>
+                <td style="text-align: center;"><strong>${Number(item.total).toLocaleString('ar-LY')} د.ل</strong></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <div style="margin-top: 10px; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 9px; color: #856404;">
+          ℹ️ هذه الفاتورة تم إنشاؤها من بيانات التكاليف الإجمالية. للحصول على تفاصيل اللوحات، يرجى مراجعة المهمة المجمّعة.
+        </div>
+      </div>
+    `;
+  };
+
+  // تحديد الأعمدة المتوفرة (لإخفاء الفارغة)
+  const hasPrintCost = (task.customer_print_cost || 0) > 0;
+  const hasInstallationCost = (task.customer_installation_cost || 0) > 0;
+  const hasCutoutCost = (task.customer_cutout_cost || 0) > 0;
+  const hasAnyCutouts = invoiceItems.some((item: any) => (item.cutout_quantity || 0) > 0);
+
   // دالة إنشاء جدول العناصر
   const generateItemsTable = (items: any[], isInstallOnly: boolean, showDetails: boolean = true) => {
+    // ✅ التحقق من العناصر الافتراضية أولاً
+    if (items.length > 0 && items[0]?.type === 'virtual') {
+      return generateVirtualItemsTable(items);
+    }
+    
     const sectionTitle = isInstallOnly ? 'تفاصيل التركيب' : 'تفاصيل الطباعة والمجسمات';
     
     let headerColumns = '';
+    let rowIndex = 1;
+    
     if (isInstallOnly) {
       headerColumns = `
-        <th style="width: 50px;">التصميم</th>
-        <th style="width: 150px;">اللوحة</th>
-        <th style="width: 70px;">المقاس</th>
-        <th style="width: 100px;">تكلفة التركيب</th>
+        <th style="width: 30px; background: #1e40af;">#</th>
+        <th style="width: 80px; background: #1e40af;">التصميم</th>
+        <th style="width: 150px; background: #1e40af;">اللوحة</th>
+        <th style="width: 70px; background: #1e40af;">المقاس</th>
+        <th style="width: 100px; background: #1e40af;">تكلفة التركيب</th>
       `;
     } else if (showDetails) {
-      // عرض كل الأعمدة عند تفعيل التفاصيل
+      // بناء الأعمدة ديناميكياً بناءً على البيانات المتوفرة
       headerColumns = `
-        <th style="width: 50px;">التصميم</th>
-        <th style="width: 70px;">المقاس</th>
-        <th style="width: 40px;">الكمية</th>
-        <th style="width: 60px;">المساحة</th>
-        <th style="width: 60px;">سعر المتر</th>
-        <th style="width: 70px;">تكلفة الطباعة</th>
-        <th style="width: 50px;">المجسمات</th>
-        <th style="width: 70px;">تكلفة القص</th>
-        <th style="width: 80px;">الإجمالي</th>
+        <th style="width: 30px; background: #1e40af;">#</th>
+        <th style="width: 80px; background: #1e40af;">التصميم</th>
+        <th style="width: 70px; background: #1e40af;">المقاس</th>
+        <th style="width: 40px; background: #1e40af;">الكمية</th>
+        <th style="width: 60px; background: #1e40af;">المساحة</th>
+        ${hasPrintCost ? `<th style="width: 70px; background: #1e40af;">الطباعة<br><span style="font-size:7px;">(${pricePerMeter.toFixed(2)} د.ل/م²)</span></th>` : ''}
+        ${hasAnyCutouts ? `<th style="width: 50px; background: #1e40af;">المجسمات</th>` : ''}
+        ${hasCutoutCost && hasAnyCutouts ? `<th style="width: 70px; background: #1e40af;">تكلفة القص</th>` : ''}
+        <th style="width: 80px; background: #1e40af;">الإجمالي</th>
       `;
     } else {
-      // عرض مختصر: إخفاء تكلفة الطباعة والقص وسعر المتر والمجسمات
+      // عرض مختصر
       headerColumns = `
-        <th style="width: 70px;">التصميم</th>
-        <th style="width: 90px;">المقاس</th>
-        <th style="width: 60px;">الكمية</th>
-        <th style="width: 80px;">المساحة</th>
-        <th style="width: 120px;">الإجمالي</th>
+        <th style="width: 30px; background: #1e40af;">#</th>
+        <th style="width: 80px; background: #1e40af;">التصميم</th>
+        <th style="width: 80px; background: #1e40af;">المقاس</th>
+        <th style="width: 50px; background: #1e40af;">الكمية</th>
+        <th style="width: 70px; background: #1e40af;">المساحة</th>
+        <th style="width: 100px; background: #1e40af;">الإجمالي</th>
       `;
     }
     
@@ -431,19 +839,24 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     
     if (isInstallOnly) {
       // للتركيب: نعرض كل عنصر بشكل منفصل
-      rows = items.map((item: any) => {
+      rows = items.map((item: any, idx: number) => {
         const designImage = item.design_face_a || item.design_face_b;
         const faceLabel = item.design_face_b && !item.design_face_a ? 'خلفي' : 'أمامي';
         const itemCost = item.customer_installation_cost || installationCostPerItem;
         
         return `
           <tr>
-            <td>
-              ${designImage ? '<img src="' + designImage + '" class="design-image" onerror="this.style.display=\'none\'" />' : '-'}
-              ${designImage ? '<div style="font-size:7px;color:#666;text-align:center;margin-top:2px;">' + faceLabel + '</div>' : ''}
+            <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+            <td style="padding: 0;">
+              ${designImage 
+                ? `<img src="${designImage}" style="width: 100%; height: 60px; object-fit: contain; display: block;" onerror="this.style.display='none'" />`
+                : '<div style="text-align: center; color: #999;">-</div>'}
             </td>
             <td><strong>${item.billboard_name || 'لوحة'}</strong></td>
-            <td><strong>${(item.width || '-') + '×' + (item.height || '-')} م</strong></td>
+            <td>
+              <div style="font-weight: bold;">${(item.width || '-')}×${(item.height || '-')} م</div>
+              <div style="font-size: 8px; color: #666; margin-top: 2px;">${faceLabel}</div>
+            </td>
             <td><strong>${Number(itemCost).toFixed(2)} د.ل</strong></td>
           </tr>
         `;
@@ -452,7 +865,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       // للطباعة: تجميع العناصر المتشابهة
       const groupedItems = groupSimilarItems(items, isInstallOnly);
       
-      rows = groupedItems.map((group: any) => {
+      rows = groupedItems.map((group: any, idx: number) => {
         const printCost = group.totalArea * pricePerMeter;
         const cutoutCostForGroup = group.totalCutouts * cutoutPricePerUnit;
         const itemTotal = printCost + cutoutCostForGroup;
@@ -460,40 +873,53 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
         if (showDetails) {
           return `
             <tr>
-              <td>
-                ${group.designImage ? '<img src="' + group.designImage + '" class="design-image" onerror="this.style.display=\'none\'" />' : '-'}
-                ${group.designImage ? '<div style="font-size:7px;color:#666;text-align:center;margin-top:2px;">' + group.faceLabel + '</div>' : ''}
+              <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+              <td style="padding: 0;">
+                ${group.designImage 
+                  ? `<img src="${group.designImage}" style="width: 100%; height: 60px; object-fit: contain; display: block;" onerror="this.style.display='none'" />`
+                  : '<div style="text-align: center; color: #999;">-</div>'}
               </td>
-              <td><strong>${group.displayWidth}×${group.displayHeight} م</strong></td>
+              <td>
+                <div style="font-weight: bold;">${group.displayWidth}×${group.displayHeight} م</div>
+                <div style="font-size: 8px; color: #666; margin-top: 2px;">${group.faceLabel}</div>
+              </td>
               <td><strong>×${group.totalQuantity}</strong></td>
               <td>${group.totalArea.toFixed(2)} م²</td>
-              <td>${pricePerMeter.toFixed(2)} د.ل</td>
-              <td><strong>${printCost.toFixed(2)} د.ل</strong></td>
+              ${hasPrintCost ? `<td><strong>${printCost.toFixed(2)} د.ل</strong></td>` : ''}
+              ${hasAnyCutouts ? `
               <td>
                 ${group.totalCutouts > 0 
                   ? '<div class="cutout-badge">×' + group.totalCutouts + '</div>' 
-                  : '<span class="no-cutout">لا يوجد</span>'}
-              </td>
-              <td>
-                ${group.totalCutouts > 0 
-                  ? '<strong>' + cutoutCostForGroup.toFixed(2) + ' د.ل</strong><br><span style="font-size:7px;color:#666">(' + cutoutPricePerUnit.toFixed(2) + ' د.ل × ' + group.totalCutouts + ')</span>' 
                   : '<span class="no-cutout">-</span>'}
               </td>
-              <td><strong>${itemTotal.toFixed(2)} د.ل</strong></td>
+              ` : ''}
+              ${hasCutoutCost && hasAnyCutouts ? `
+              <td>
+                ${group.totalCutouts > 0 
+                  ? '<strong>' + cutoutCostForGroup.toFixed(2) + ' د.ل</strong>' 
+                  : '<span class="no-cutout">-</span>'}
+              </td>
+              ` : ''}
+              <td style="background: #f0f9ff;"><strong>${itemTotal.toFixed(2)} د.ل</strong></td>
             </tr>
           `;
         } else {
           // عرض مبسط بدون تفاصيل الطباعة والقص
           return `
             <tr>
-              <td>
-                ${group.designImage ? '<img src="' + group.designImage + '" class="design-image" onerror="this.style.display=\'none\'" />' : '-'}
-                ${group.designImage ? '<div style="font-size:7px;color:#666;text-align:center;margin-top:2px;">' + group.faceLabel + '</div>' : ''}
+              <td style="text-align: center; font-weight: bold;">${idx + 1}</td>
+              <td style="padding: 0;">
+                ${group.designImage 
+                  ? `<img src="${group.designImage}" style="width: 100%; height: 60px; object-fit: contain; display: block;" onerror="this.style.display='none'" />`
+                  : '<div style="text-align: center; color: #999;">-</div>'}
               </td>
-              <td><strong>${group.displayWidth}×${group.displayHeight} م</strong></td>
+              <td>
+                <div style="font-weight: bold;">${group.displayWidth}×${group.displayHeight} م</div>
+                <div style="font-size: 8px; color: #666; margin-top: 2px;">${group.faceLabel}</div>
+              </td>
               <td><strong>×${group.totalQuantity}</strong></td>
               <td>${group.totalArea.toFixed(2)} م²</td>
-              <td><strong>${itemTotal.toFixed(2)} د.ل</strong></td>
+              <td style="background: #f0f9ff;"><strong>${itemTotal.toFixed(2)} د.ل</strong></td>
             </tr>
           `;
         }
@@ -502,8 +928,8 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     
     return `
       <div class="items-section">
-        <div class="section-title">${sectionTitle}</div>
-        <table class="items-table">
+        <div class="section-title" style="background: #1e40af;">${sectionTitle}</div>
+        <table class="items-table" style="border-color: #1e40af;">
           <thead>
             <tr>${headerColumns}</tr>
           </thead>
@@ -606,7 +1032,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       justify-content: space-between;
       align-items: flex-start;
       margin-bottom: 15px;
-      border-bottom: 2px solid #000;
+      border-bottom: 2px solid #1e40af;
       padding-bottom: 12px;
     }
     
@@ -618,7 +1044,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     .invoice-title {
       font-size: 22px;
       font-weight: bold;
-      color: #000;
+      color: #1e40af;
       margin-bottom: 6px;
     }
     
@@ -650,7 +1076,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       padding: 12px;
       border-radius: 6px;
       margin-bottom: 15px;
-      border: 2px solid #000;
+      border: 2px solid #1e40af;
     }
 
     .section-title {
@@ -659,7 +1085,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       color: white;
       margin-bottom: 10px;
       text-align: center;
-      background: #000;
+      background: #1e40af;
       padding: 6px;
       border-radius: 4px;
     }
@@ -701,24 +1127,24 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     }
 
     .items-table th {
-      background: #000;
+      background: #1e40af;
       color: #fff;
       font-weight: bold;
       padding: 6px 4px;
       text-align: center;
-      border: 1px solid #000;
+      border: 1px solid #1e40af;
       font-size: 9px;
     }
 
     .items-table td {
       padding: 5px 3px;
-      border: 1px solid #ddd;
+      border: 1px solid #93c5fd;
       text-align: center;
       vertical-align: middle;
     }
 
     .items-table tbody tr:nth-child(even) {
-      background: #f8f9fa;
+      background: #f0f9ff;
     }
 
     .design-image {
@@ -727,14 +1153,14 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       object-fit: contain;
       margin: 0 auto;
       display: block;
-      border: 1px solid #ddd;
+      border: 1px solid #93c5fd;
       border-radius: 3px;
     }
 
     .cutout-badge {
       display: inline-block;
-      background: #fee2e2;
-      color: #dc2626;
+      background: #dbeafe;
+      color: #1e40af;
       padding: 1px 4px;
       border-radius: 3px;
       font-size: 8px;
@@ -748,11 +1174,11 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     }
 
     .cost-section {
-      background: #f8f9fa;
+      background: #f0f9ff;
       padding: 8px;
       border-radius: 6px;
       margin-bottom: 10px;
-      border: 2px solid #ddd;
+      border: 2px solid #93c5fd;
     }
 
     .cost-grid {
@@ -766,24 +1192,24 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       background: white;
       padding: 6px;
       border-radius: 4px;
-      border: 1px solid #ddd;
+      border: 1px solid #93c5fd;
       text-align: center;
     }
 
     .cost-label {
       font-size: 8px;
-      color: #666;
+      color: #1e40af;
       margin-bottom: 2px;
     }
 
     .cost-value {
       font-size: 12px;
       font-weight: bold;
-      color: #000;
+      color: #1e40af;
     }
 
     .total-section {
-      background: #000;
+      background: #1e40af;
       color: white;
       padding: 8px;
       text-align: center;
@@ -798,7 +1224,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       left: 10mm;
       right: 10mm;
       padding-top: 8px;
-      border-top: 2px solid #000;
+      border-top: 2px solid #1e40af;
       text-align: center;
       font-size: 8px;
       color: #666;
@@ -808,7 +1234,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     }
 
     .page-number {
-      background: #000;
+      background: #1e40af;
       color: white;
       padding: 3px 10px;
       border-radius: 10px;
@@ -857,8 +1283,8 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
     <div class="content-wrapper">
       <div class="page-header">
         <div class="invoice-info">
-          <div class="invoice-title">فاتورة مجمعة</div>
-          <div class="invoice-subtitle">Composite Task Invoice</div>
+          <div class="invoice-title">${invoiceTitle.ar}</div>
+          <div class="invoice-subtitle">${invoiceTitle.en}</div>
           <div class="invoice-details">
             <div><strong>التاريخ:</strong> ${invoiceDate}</div>
             <div><strong>${details.contractsInfo?.length > 1 ? 'أرقام العقود:' : 'رقم العقد:'}</strong> ${details.contractsInfo?.length > 1 ? details.contractsInfo.map((c: any) => '#' + c.contractId).join(', ') : '#' + task.contract_id}</div>
@@ -890,7 +1316,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
         ${details.contractsInfo?.length > 0 ? `
         <div style="margin-top: 8px; display: flex; gap: 8px; flex-wrap: wrap;">
           ${details.contractsInfo.map((c: any) => `
-            <div style="background: #e5e7eb; padding: 4px 8px; border-radius: 4px; font-size: 10px;">
+            <div style="background: #dbeafe; padding: 4px 8px; border-radius: 4px; font-size: 10px; border: 1px solid #93c5fd;">
               <strong>#${c.contractId}:</strong> ${c.adType}
             </div>
           `).join('')}
@@ -899,11 +1325,11 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
       </div>
       ` : ''}
 
-      ${pageItems.length > 0 ? generateItemsTable(pageItems, isInstallationOnly, showDetails) : ''}
+      ${pageItems.length > 0 ? (displayMode === 'summary' ? generateSummarySection(task, details, invoiceTitle, pricePerMeter) : generateItemsTable(pageItems, isInstallationOnly, showDetails)) : ''}
 
       ${pageIndex === totalPages - 1 ? `
       <div class="cost-section">
-        ${showDetails ? `
+        ${displayMode === 'detailed' && showDetails ? `
         <div class="section-title">ملخص التكاليف</div>
         <div class="cost-grid">
           ${task.customer_installation_cost > 0 || task.task_type === 'new_installation' ? `

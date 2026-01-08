@@ -238,6 +238,12 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
 
   useEffect(() => {
     const loadGoogleMaps = async () => {
+      // Check if Google Maps is already loaded
+      if (window.google?.maps) {
+        initializeMap()
+        return
+      }
+
       if (!window.google) {
         await new Promise<void>((resolve) => {
           window.initMap = () => resolve()
@@ -248,7 +254,8 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
           script.defer = true
           document.head.appendChild(script)
 
-          setTimeout(() => resolve(), 3000)
+          // Reduced timeout for faster feedback
+          setTimeout(() => resolve(), 2000)
         })
       }
 
@@ -261,19 +268,24 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
         })
       }
 
+      // Faster check interval
       await new Promise<void>((resolve) => {
         const checkGoogle = setInterval(() => {
           if (window.google && window.google.maps) {
             clearInterval(checkGoogle)
             resolve()
           }
-        }, 100)
+        }, 50) // Reduced from 100ms to 50ms
         setTimeout(() => {
           clearInterval(checkGoogle)
           resolve()
-        }, 5000)
+        }, 3000) // Reduced from 5000ms to 3000ms
       })
 
+      initializeMap()
+    }
+
+    const initializeMap = () => {
       if (mapRef.current && window.google?.maps && !mapInstanceRef.current) {
         // Mobile-optimized map settings
         const isMobile = window.innerWidth < 768

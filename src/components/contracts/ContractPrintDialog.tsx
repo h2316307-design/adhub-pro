@@ -151,6 +151,71 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
     const endDate = contract.end_date || contract['End Date'] || '';
     const totalCost = contract.rent_cost || contract['Total Rent'] || (contract as any).Total || 0;
     
+    // ✅ استخراج معلومات التخفيض من جميع المصادر الممكنة
+    const contractAny = contract as any;
+    
+    // البحث في جميع الحقول المحتملة للتخفيض
+    let discountNum = 0;
+    
+    // 1. حقل Discount المباشر (من حفظ العقد)
+    if (contractAny.Discount !== undefined && contractAny.Discount !== null) {
+      discountNum = Number(contractAny.Discount);
+    } else if (contractAny.discount !== undefined && contractAny.discount !== null) {
+      discountNum = Number(contractAny.discount);
+    }
+    
+    // 2. حساب التخفيض من level_discounts إذا كان موجوداً ولم يكن هناك تخفيض مباشر
+    if (discountNum === 0 && contractAny.level_discounts && typeof contractAny.level_discounts === 'object') {
+      // هذا تخفيض حسب المستوى - نحسب إجمالي التخفيض
+      const levelDiscounts = contractAny.level_discounts as Record<string, number>;
+      const billboards = contract.billboards || [];
+      
+      if (billboards.length > 0 && Object.keys(levelDiscounts).length > 0) {
+        let totalDiscountAmount = 0;
+        
+        billboards.forEach((billboard: any) => {
+          const level = billboard.level || billboard.Level || billboard.billboard_level || '';
+          const discountPercent = levelDiscounts[level] || 0;
+          const billboardPrice = Number(billboard.price_after_discount || billboard.total_price || billboard.price || 0);
+          
+          if (discountPercent > 0 && billboardPrice > 0) {
+            // إعادة حساب السعر الأصلي قبل الخصم
+            const originalPrice = billboardPrice / (1 - discountPercent / 100);
+            totalDiscountAmount += originalPrice - billboardPrice;
+          }
+        });
+        
+        discountNum = totalDiscountAmount;
+      }
+    }
+    
+    // 3. حساب التخفيض من الفرق بين السعر الكلي والمجموع
+    if (discountNum === 0 && contract.billboards && contract.billboards.length > 0) {
+      const billboardsTotal = contract.billboards.reduce((sum: number, b: any) => {
+        return sum + Number(b.total_price_before_discount || b.price_before_discount || 0);
+      }, 0);
+      
+      if (billboardsTotal > 0 && billboardsTotal > totalCost) {
+        discountNum = billboardsTotal - totalCost;
+      }
+    }
+    
+    let discountText = '';
+    
+    // التحقق من أن الخصم ليس تكلفة الطباعة
+    const printCostEnabled = Boolean(
+      contractAny.print_cost_enabled === true ||
+      contractAny.print_cost_enabled === 1 ||
+      contractAny.print_cost_enabled === 'true' ||
+      contractAny.print_cost_enabled === '1'
+    );
+    const printCost = Number(contractAny.print_cost ?? 0);
+    
+    // إذا لم يكن الخصم يساوي تكلفة الطباعة، نعتبره خصماً حقيقياً
+    if (discountNum > 0 && !isNaN(discountNum) && !(printCostEnabled && printCost > 0 && discountNum === printCost)) {
+      discountText = `بعد خصم ${Math.round(discountNum).toLocaleString('ar-LY')} دينار ليبي`;
+    }
+    
     // Get installments data
     const installmentsData = (contract as any).installments_data || null;
     const paymentsText = formatPaymentsForPrint(installmentsData);
@@ -204,7 +269,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
       phoneNumber: '',
       billboardImage: getBillboardImage(contract),
       payments: paymentsText,
-      paymentsLines: paymentsLines
+      paymentsLines: paymentsLines,
+      discountText: discountText // ✅ إضافة نص التخفيض
     };
   };
 
@@ -971,7 +1037,7 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 dominant-baseline="middle"
                 style="direction: rtl; unicode-bidi: plaintext; text-align: center"
               >
-                ${rtlSafe(`قيمة العقد ${toArabicNumbers(contractData.price)} دينار ليبي. جدول الدفعات:`)}
+                ${rtlSafe(`قيمة العقد ${toArabicNumbers(contractData.price)} دينار ليبي${contractData.discountText ? ' ' + contractData.discountText : ''}. جدول الدفعات:`)}
               </text>
               ${contractData.paymentsLines.map((line: string, idx: number) => `
               <text
@@ -1491,7 +1557,8 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
                 البند الخامس:
               </text>
               <text x="1180" y="2410" font-family="Doran, sans-serif" font-size="38" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">
-                قيمة العقد ${contractData.price} دينار ليبي. جدول الدفعات:
+                قيمة العقد ${contractData.price} دينار ليبي${contractData.discountText ? ' ' + contractData.discountText : ''}. جدول الدفعات:
+              </text>
               </text>
               ${contractData.paymentsLines.map((line: string, idx: number) => `
               <text x="1200" y="${2470 + (idx * 50)}" font-family="Doran, sans-serif" font-size="32" fill="#000" text-anchor="middle" dominant-baseline="middle" style="direction: rtl; text-align: center">

@@ -207,6 +207,74 @@ export default function PricingList() {
   const [newDurationMonths, setNewDurationMonths] = useState<number>(1);
   const [newDurationOrder, setNewDurationOrder] = useState<number>(1);
   const [newDurationDbColumn, setNewDurationDbColumn] = useState('');
+  const [isUpdatingSizeIds, setIsUpdatingSizeIds] = useState(false); // ✅ حالة تحديث size_id
+
+  // ✅ دالة تحديث size_id للأسعار التي ليس لديها size_id
+  const updateMissingSizeIds = async () => {
+    try {
+      setIsUpdatingSizeIds(true);
+      console.log('🔄 بدء تحديث size_id للأسعار...');
+      
+      // الحصول على الأسعار التي ليس لديها size_id
+      const { data: pricingWithoutSizeId, error: fetchError } = await supabase
+        .from('pricing')
+        .select('id, size')
+        .is('size_id', null);
+      
+      if (fetchError) {
+        console.error('❌ خطأ في جلب الأسعار:', fetchError);
+        toast.error('فشل في جلب الأسعار');
+        return;
+      }
+      
+      if (!pricingWithoutSizeId || pricingWithoutSizeId.length === 0) {
+        toast.success('جميع الأسعار لديها size_id بالفعل!');
+        return;
+      }
+      
+      console.log(`📊 وجدت ${pricingWithoutSizeId.length} سجل بدون size_id`);
+      
+      let updatedCount = 0;
+      let failedCount = 0;
+      
+      for (const pricing of pricingWithoutSizeId) {
+        // البحث عن size_id المناسب
+        const sizeInfo = sizesData.find(s => s.name === pricing.size);
+        
+        if (sizeInfo?.id) {
+          const { error: updateError } = await supabase
+            .from('pricing')
+            .update({ size_id: sizeInfo.id })
+            .eq('id', pricing.id);
+          
+          if (updateError) {
+            console.error(`❌ فشل تحديث السجل ${pricing.id}:`, updateError);
+            failedCount++;
+          } else {
+            updatedCount++;
+          }
+        } else {
+          console.warn(`⚠️ لم يتم العثور على size_id للمقاس: ${pricing.size}`);
+          failedCount++;
+        }
+      }
+      
+      console.log(`✅ تم تحديث ${updatedCount} سجل`);
+      if (failedCount > 0) {
+        console.log(`⚠️ فشل تحديث ${failedCount} سجل`);
+      }
+      
+      // إعادة تحميل البيانات
+      await loadData();
+      
+      toast.success(`تم تحديث ${updatedCount} سجل بنجاح${failedCount > 0 ? ` (${failedCount} فشل)` : ''}`);
+    } catch (error) {
+      console.error('💥 خطأ في تحديث size_id:', error);
+      toast.error('حدث خطأ في تحديث size_id');
+    } finally {
+      setIsUpdatingSizeIds(false);
+    }
+  };
 
   // تحميل البيانات من قاعدة البيانات
   const loadData = async () => {
@@ -668,9 +736,16 @@ export default function PricingList() {
 
       console.log('➕ الفئات الجديدة للإضافة:', newCategories.length);
 
+      // ✅ الحصول على size_id من sizesData
+      const sizeInfo = sizesData.find(s => s.name === sz);
+      const sizeId = sizeInfo?.id || null;
+      
+      console.log('🔑 size_id للمقاس:', sizeId);
+
       // إنشاء سجلات أسعار للمقاس الجديد للفئات الجديدة فقط
       const pricingInserts = newCategories.map(category => ({
         size: sz,
+        size_id: sizeId, // ✅ إضافة size_id
         billboard_level: selectedLevel,
         customer_category: category,
         one_month: 0,
@@ -1066,6 +1141,12 @@ export default function PricingList() {
       const monthOption = MONTH_OPTIONS.find(m => m.key === month);
       if (!monthOption) return;
 
+      // ✅ الحصول على size_id من sizesData
+      const sizeInfo = sizesData.find(s => s.name === size);
+      const sizeId = sizeInfo?.id || null;
+      
+      console.log('💾 حفظ السعر:', { size, sizeId, customer, month, value });
+
       // البحث عن السجل الموجود
       const existingRow = pricingData.find(p => 
         p.size === size && 
@@ -1074,7 +1155,8 @@ export default function PricingList() {
       );
 
       const updateData = {
-        [monthOption.dbColumn]: value || 0
+        [monthOption.dbColumn]: value || 0,
+        size_id: sizeId // ✅ إضافة size_id عند التحديث
       };
 
       if (existingRow) {
@@ -1097,9 +1179,10 @@ export default function PricingList() {
             : p
         ));
       } else {
-        // إنشاء سجل جديد
+        // إنشاء سجل جديد مع size_id
         const newRow = {
           size,
+          size_id: sizeId, // ✅ إضافة size_id عند الإنشاء
           billboard_level: selectedLevel,
           customer_category: customer,
           one_month: monthOption.dbColumn === 'one_month' ? (value || 0) : 0,
@@ -1109,6 +1192,8 @@ export default function PricingList() {
           full_year: monthOption.dbColumn === 'full_year' ? (value || 0) : 0,
           one_day: monthOption.dbColumn === 'one_day' ? (value || 0) : 0
         };
+
+        console.log('➕ إضافة سجل جديد:', newRow);
 
         const { data, error } = await supabase
           .from('pricing')
@@ -1781,6 +1866,22 @@ export default function PricingList() {
               </div>
               <Button variant="outline" className="ml-2" onClick={() => setAddCatOpen(true)}>إضافة فئة</Button>
               <Button variant="outline" onClick={() => setAddSizeOpen(true)}>إضافة مقاس</Button>
+              <Button 
+                variant="outline" 
+                onClick={updateMissingSizeIds}
+                disabled={isUpdatingSizeIds}
+                className="ml-2"
+                title="تحديث size_id للأسعار القديمة"
+              >
+                {isUpdatingSizeIds ? (
+                  <span className="flex items-center gap-2">
+                    <span className="h-4 w-4 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    جاري التحديث...
+                  </span>
+                ) : (
+                  'تحديث size_id'
+                )}
+              </Button>
               <Button className="ml-2 bg-primary text-primary-foreground hover:bg-primary/90" onClick={() => setPrintOpen(true)}>
                 <Printer className="h-4 w-4 ml-2" /> طباعة الأسعار
               </Button>

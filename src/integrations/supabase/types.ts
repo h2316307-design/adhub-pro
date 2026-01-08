@@ -3421,6 +3421,8 @@ export type Database = {
           customer_id: string | null
           customer_name: string
           discount: number | null
+          discount_percentage: number | null
+          discount_type: string | null
           duration_months: number
           end_date: string | null
           exchange_rate: number | null
@@ -3431,6 +3433,7 @@ export type Database = {
           installation_details: Json | null
           installation_enabled: boolean | null
           installments_data: Json | null
+          level_discounts: Json | null
           notes: string | null
           offer_number: number
           operating_fee: number | null
@@ -3440,6 +3443,7 @@ export type Database = {
           print_cost_enabled: boolean | null
           print_details: Json | null
           print_price_per_meter: number | null
+          selected_boards: Json | null
           start_date: string
           status: string | null
           total: number | null
@@ -3455,6 +3459,8 @@ export type Database = {
           customer_id?: string | null
           customer_name: string
           discount?: number | null
+          discount_percentage?: number | null
+          discount_type?: string | null
           duration_months?: number
           end_date?: string | null
           exchange_rate?: number | null
@@ -3465,6 +3471,7 @@ export type Database = {
           installation_details?: Json | null
           installation_enabled?: boolean | null
           installments_data?: Json | null
+          level_discounts?: Json | null
           notes?: string | null
           offer_number?: number
           operating_fee?: number | null
@@ -3474,6 +3481,7 @@ export type Database = {
           print_cost_enabled?: boolean | null
           print_details?: Json | null
           print_price_per_meter?: number | null
+          selected_boards?: Json | null
           start_date: string
           status?: string | null
           total?: number | null
@@ -3489,6 +3497,8 @@ export type Database = {
           customer_id?: string | null
           customer_name?: string
           discount?: number | null
+          discount_percentage?: number | null
+          discount_type?: string | null
           duration_months?: number
           end_date?: string | null
           exchange_rate?: number | null
@@ -3499,6 +3509,7 @@ export type Database = {
           installation_details?: Json | null
           installation_enabled?: boolean | null
           installments_data?: Json | null
+          level_discounts?: Json | null
           notes?: string | null
           offer_number?: number
           operating_fee?: number | null
@@ -3508,6 +3519,7 @@ export type Database = {
           print_cost_enabled?: boolean | null
           print_details?: Json | null
           print_price_per_meter?: number | null
+          selected_boards?: Json | null
           start_date?: string
           status?: string | null
           total?: number | null

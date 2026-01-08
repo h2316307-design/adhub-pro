@@ -129,7 +129,7 @@ export default function Reports() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">تقارير يومية</p>
-              <p className="text-2xl font-bold">{dailyReports.length}</p>
+              <p className="text-2xl font-bold font-manrope">{dailyReports.length}</p>
             </div>
           </div>
         </Card>
@@ -141,7 +141,7 @@ export default function Reports() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">تقارير أسبوعية</p>
-              <p className="text-2xl font-bold">{weeklyReports.length}</p>
+              <p className="text-2xl font-bold font-manrope">{weeklyReports.length}</p>
             </div>
           </div>
         </Card>
@@ -153,7 +153,7 @@ export default function Reports() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">تقارير شهرية</p>
-              <p className="text-2xl font-bold">{monthlyReports.length}</p>
+              <p className="text-2xl font-bold font-manrope">{monthlyReports.length}</p>
             </div>
           </div>
         </Card>

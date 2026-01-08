@@ -116,7 +116,7 @@ export function LevelDiscountsCard({
           </div>
           {totalDiscountAmount > 0 && (
             <Badge className="bg-red-500/10 text-red-600 border-red-500/20">
-              إجمالي التخفيض: {totalDiscountAmount.toLocaleString('ar-LY')} {currencySymbol}
+              إجمالي التخفيض: <span className="font-manrope">{totalDiscountAmount.toLocaleString('ar-LY')}</span> {currencySymbol}
             </Badge>
           )}
         </CardTitle>
@@ -136,11 +136,11 @@ export function LevelDiscountsCard({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <span className="text-lg font-bold text-primary">{summary.level}</span>
+                      <span className="text-lg font-bold font-manrope text-primary">{summary.level}</span>
                     </div>
                     <div>
                       <div className="font-bold text-foreground">مستوى {summary.level}</div>
-                      <div className="text-sm text-muted-foreground">
+                      <div className="text-sm text-muted-foreground font-manrope">
                         {summary.billboards.length} لوحة
                       </div>
                     </div>
@@ -176,15 +176,15 @@ export function LevelDiscountsCard({
                     <div className="text-left min-w-[120px]">
                       {summary.discountAmount > 0 ? (
                         <>
-                          <div className="text-sm line-through text-muted-foreground">
+                          <div className="text-sm line-through text-muted-foreground font-manrope">
                             {summary.totalPrice.toLocaleString('ar-LY')}
                           </div>
-                          <div className="font-bold text-primary">
+                          <div className="font-bold font-manrope text-primary">
                             {summary.priceAfterDiscount.toLocaleString('ar-LY')} {currencySymbol}
                           </div>
                         </>
                       ) : (
-                        <div className="font-bold text-foreground">
+                        <div className="font-bold font-manrope text-foreground">
                           {summary.totalPrice.toLocaleString('ar-LY')} {currencySymbol}
                         </div>
                       )}
@@ -194,7 +194,7 @@ export function LevelDiscountsCard({
 
                 {/* Discount indicator */}
                 {summary.discountAmount > 0 && (
-                  <div className="mt-3 flex items-center gap-2 text-sm text-red-600">
+                  <div className="mt-3 flex items-center gap-2 text-sm text-red-600 font-manrope">
                     <TrendingDown className="h-4 w-4" />
                     <span>تخفيض {summary.discountPercent}% = {summary.discountAmount.toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>
@@ -211,7 +211,7 @@ export function LevelDiscountsCard({
                           <span className="font-medium text-foreground">{bb.name}</span>
                           <Badge variant="outline" className="text-xs">{bb.size}</Badge>
                         </div>
-                        <span className="font-bold text-primary">{bb.price.toLocaleString('ar-LY')} {currencySymbol}</span>
+                        <span className="font-bold font-manrope text-primary">{bb.price.toLocaleString('ar-LY')} {currencySymbol}</span>
                       </div>
                     ))}
                   </div>

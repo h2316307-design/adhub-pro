@@ -44,17 +44,17 @@ export const DesignImageWithBlur: React.FC<DesignImageWithBlurProps> = ({
       className={cn("relative overflow-hidden", className)}
       onClick={onClick}
     >
-      {/* Blurred background layer */}
+      {/* Blurred background layer - تحسين الضبابية */}
       <div className="absolute inset-0">
         <img
           src={src}
           alt=""
-          className="w-full h-full object-cover scale-125 blur-xl"
+          className="w-full h-full object-cover scale-150 blur-2xl opacity-60"
           loading="lazy"
           aria-hidden="true"
         />
         {/* Dark overlay for better contrast */}
-        <div className="absolute inset-0 bg-black/40" />
+        <div className="absolute inset-0 bg-black/50" />
       </div>
       
       {/* Main image layer - object-contain to show full image */}
