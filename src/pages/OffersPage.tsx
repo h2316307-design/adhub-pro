@@ -2448,42 +2448,54 @@ export default function OffersPage() {
                       </div>
                     )}
                     
-                    {/* نوع الخصم الإضافي */}
+                    {/* الخصم الإضافي - القيمة والنسبة معاً */}
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">- الخصم الإضافي:</span>
-                        <Select value={discountType} onValueChange={(v: 'fixed' | 'percentage') => setDiscountType(v)}>
-                          <SelectTrigger className="w-24 h-8">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="fixed">مبلغ</SelectItem>
-                            <SelectItem value="percentage">نسبة %</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div className="flex justify-end">
-                        {discountType === 'percentage' ? (
-                          <div className="flex items-center gap-1">
-                            <Input
-                              type="number"
-                              value={discountPercentage}
-                              onChange={(e) => setDiscountPercentage(Number(e.target.value))}
-                              className="w-20 text-left h-8"
-                              min={0}
-                              max={100}
-                            />
-                            <span className="text-sm">%</span>
-                          </div>
-                        ) : (
+                      <span className="text-sm text-muted-foreground">الخصم الإضافي:</span>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">القيمة ({currentCurrency.symbol})</label>
                           <Input
                             type="number"
                             value={discount}
-                            onChange={(e) => setDiscount(Number(e.target.value))}
-                            className="w-32 text-left h-8"
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              setDiscount(val);
+                              setDiscountType('fixed');
+                              // حساب النسبة المقابلة
+                              const afterLevel = totalBeforeDiscount - levelDiscountAmount;
+                              if (afterLevel > 0) {
+                                setDiscountPercentage(Math.round((val / afterLevel) * 100 * 10) / 10);
+                              }
+                            }}
+                            className="h-8"
+                            min={0}
                           />
-                        )}
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs text-muted-foreground">النسبة (%)</label>
+                          <Input
+                            type="number"
+                            value={discountPercentage}
+                            onChange={(e) => {
+                              const val = Number(e.target.value) || 0;
+                              setDiscountPercentage(Math.min(100, val));
+                              setDiscountType('percentage');
+                              // حساب القيمة المقابلة
+                              const afterLevel = totalBeforeDiscount - levelDiscountAmount;
+                              setDiscount(Math.round((afterLevel * val) / 100));
+                            }}
+                            className="h-8"
+                            min={0}
+                            max={100}
+                            step={0.1}
+                          />
+                        </div>
                       </div>
+                      {(discount > 0 || discountPercentage > 0) && (
+                        <p className="text-xs text-green-600">
+                          خصم {discountPercentage.toFixed(1)}% = {discount.toLocaleString('ar-LY')} {currentCurrency.symbol}
+                        </p>
+                      )}
                     </div>
                     
                     {/* إجمالي الخصم */}

@@ -71,10 +71,9 @@ export function EditContractSidebar({
     }
   };
 
-  // Calculate totals
-  const discountAmount = formData.discountType === 'percent' 
-    ? (totalRentCost * formData.discountValue) / 100
-    : formData.discountValue;
+  // Calculate totals - الخصم دائماً قيمة ثابتة
+  const discountAmount = formData.discountValue || 0;
+  const discountPercentage = totalRentCost > 0 ? (discountAmount / totalRentCost) * 100 : 0;
 
   const totalAfterDiscount = totalRentCost - discountAmount;
   const operatingFee = (totalAfterDiscount * formData.operatingFeeRate) / 100;
@@ -82,6 +81,11 @@ export function EditContractSidebar({
 
   const totalInstallments = installments.reduce((sum, inst) => sum + (inst.amount || 0), 0);
   const remainingAmount = finalTotal - totalInstallments;
+
+  // حساب القيمة من النسبة
+  const calculateDiscountFromPercentage = (percentage: number) => {
+    return (totalRentCost * percentage) / 100;
+  };
 
   return (
     <div className="w-full lg:w-80 space-y-6">
@@ -218,34 +222,43 @@ export function EditContractSidebar({
             </div>
           )}
 
-          <div>
-            <Label htmlFor="discountType">نوع الخصم</Label>
-            <Select
-              value={formData.discountType}
-              onValueChange={(value) => updateFormData({ discountType: value })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="percent">نسبة مئوية</SelectItem>
-                <SelectItem value="amount">مبلغ ثابت</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor="discountValue">
-              قيمة الخصم {formData.discountType === 'percent' ? '(%)' : '(ريال)'}
-            </Label>
-            <Input
-              id="discountValue"
-              type="number"
-              min="0"
-              step="0.01"
-              value={formData.discountValue}
-              onChange={(e) => updateFormData({ discountValue: parseFloat(e.target.value) || 0 })}
-            />
+          <div className="space-y-2">
+            <Label>الخصم</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label htmlFor="discountValue" className="text-xs text-muted-foreground">القيمة (ريال)</Label>
+                <Input
+                  id="discountValue"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.discountValue}
+                  onChange={(e) => updateFormData({ discountValue: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <Label htmlFor="discountPercentage" className="text-xs text-muted-foreground">النسبة (%)</Label>
+                <Input
+                  id="discountPercentage"
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.1"
+                  value={discountPercentage.toFixed(1)}
+                  onChange={(e) => {
+                    const percentage = parseFloat(e.target.value) || 0;
+                    updateFormData({ discountValue: calculateDiscountFromPercentage(percentage) });
+                  }}
+                  placeholder="0"
+                />
+              </div>
+            </div>
+            {discountAmount > 0 && (
+              <p className="text-xs text-green-600">
+                خصم {discountPercentage.toFixed(1)}% = {discountAmount.toLocaleString()} ريال
+              </p>
+            )}
           </div>
 
           <div>

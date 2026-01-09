@@ -29,6 +29,7 @@ export default function Offers() {
   const [durationMonths, setDurationMonths] = useState<number>(3);
   const [notes, setNotes] = useState('');
   const [pricingCategory, setPricingCategory] = useState<CustomerType>('عادي' as CustomerType);
+  const [discountValue, setDiscountValue] = useState<number>(0);
 
   useEffect(() => {
     (async () => {
@@ -85,6 +86,20 @@ export default function Offers() {
     const level = (b.level || b.Level) as any;
     const price = getPriceFor(size, level, pricingCategory as CustomerType, durationMonths) ?? 0;
     return price || 0;
+  };
+
+  // حساب الإجمالي والخصم
+  const totalBeforeDiscount = useMemo(() => {
+    return billboards
+      .filter((b: any) => selected.includes(String(b.ID)))
+      .reduce((sum, b) => sum + priceForBoard(b), 0);
+  }, [billboards, selected, pricingCategory, durationMonths]);
+
+  const discountPercentage = totalBeforeDiscount > 0 ? (discountValue / totalBeforeDiscount) * 100 : 0;
+  const totalAfterDiscount = totalBeforeDiscount - discountValue;
+
+  const calculateDiscountFromPercentage = (percentage: number) => {
+    return (totalBeforeDiscount * percentage) / 100;
   };
 
   const handlePrintOffer = async () => {
@@ -305,6 +320,65 @@ export default function Offers() {
                   </SelectContent>
                 </Select>
               </div>
+              
+              {/* حقل الخصم */}
+              <div>
+                <label className="text-sm font-medium">الخصم</label>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div>
+                    <label className="text-xs text-muted-foreground">القيمة (د.ل)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={discountValue}
+                      onChange={(e) => setDiscountValue(parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted-foreground">النسبة (%)</label>
+                    <Input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.1"
+                      value={discountPercentage.toFixed(1)}
+                      onChange={(e) => {
+                        const percentage = parseFloat(e.target.value) || 0;
+                        setDiscountValue(calculateDiscountFromPercentage(percentage));
+                      }}
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+                {discountValue > 0 && (
+                  <p className="text-xs text-green-600 mt-1">
+                    خصم {discountPercentage.toFixed(1)}% = {discountValue.toLocaleString('ar-LY')} د.ل
+                  </p>
+                )}
+              </div>
+
+              {/* ملخص السعر */}
+              {selected.length > 0 && (
+                <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span>الإجمالي:</span>
+                    <span>{totalBeforeDiscount.toLocaleString('ar-LY')} د.ل</span>
+                  </div>
+                  {discountValue > 0 && (
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>الخصم:</span>
+                      <span>-{discountValue.toLocaleString('ar-LY')} د.ل</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between font-bold border-t pt-2">
+                    <span>الصافي:</span>
+                    <span>{totalAfterDiscount.toLocaleString('ar-LY')} د.ل</span>
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="text-sm">ملاحظات</label>
                 <Input value={notes} onChange={(e)=>setNotes(e.target.value)} placeholder="اختياري" />

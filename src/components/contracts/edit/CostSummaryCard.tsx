@@ -266,30 +266,50 @@ export function CostSummaryCard({
           </div>
         )}
 
-        {/* Discount Section */}
+        {/* Discount Section - القيمة والنسبة معاً */}
         <div className="p-4 rounded-xl bg-red-500/5 border-2 border-red-500/20 space-y-3">
           <label className="text-sm font-semibold text-red-600 dark:text-red-400 flex items-center gap-2">
             <Percent className="h-4 w-4" />
             الخصم
           </label>
           <div className="grid grid-cols-2 gap-3">
-            <Select value={discountType} onValueChange={(v) => setDiscountType(v as any)}>
-              <SelectTrigger className="h-11 bg-background border-border">
-                <SelectValue placeholder="النوع" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border z-[10000]">
-                <SelectItem value="percent">نسبة %</SelectItem>
-                <SelectItem value="amount">مبلغ ثابت</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input
-              type="number"
-              value={discountValue}
-              onChange={(e) => setDiscountValue(Number(e.target.value) || 0)}
-              placeholder="0"
-              className="h-11 bg-background"
-            />
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">القيمة ({currencySymbol})</label>
+              <Input
+                type="number"
+                value={discountType === 'amount' ? discountValue : (baseTotal > 0 ? Math.round((baseTotal * discountValue) / 100) : 0)}
+                onChange={(e) => {
+                  const val = Number(e.target.value) || 0;
+                  setDiscountType('amount');
+                  setDiscountValue(val);
+                }}
+                placeholder="0"
+                className="h-11 bg-background"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs text-muted-foreground">النسبة (%)</label>
+              <Input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={discountType === 'percent' ? discountValue : (baseTotal > 0 ? ((discountValue / baseTotal) * 100).toFixed(1) : 0)}
+                onChange={(e) => {
+                  const val = Number(e.target.value) || 0;
+                  setDiscountType('percent');
+                  setDiscountValue(Math.min(100, val));
+                }}
+                placeholder="0"
+                className="h-11 bg-background"
+              />
+            </div>
           </div>
+          {discountAmount > 0 && (
+            <p className="text-xs text-green-600 dark:text-green-400">
+              خصم {baseTotal > 0 ? ((discountAmount / baseTotal) * 100).toFixed(1) : 0}% = {discountAmount.toLocaleString('ar-LY')} {currencySymbol}
+            </p>
+          )}
         </div>
 
         <Collapsible open={showDetails} onOpenChange={setShowDetails}>
@@ -475,7 +495,7 @@ export function CostSummaryCard({
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-red-600 flex items-center gap-1">
                       <Minus className="h-3 w-3" />
-                      خصم {discountType === 'percent' ? `${discountValue}%` : 'ثابت'}
+                      خصم {baseTotal > 0 ? ((discountAmount / baseTotal) * 100).toFixed(1) : 0}%
                     </span>
                     <span className="font-bold text-lg text-red-600">-{(discountAmount || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>

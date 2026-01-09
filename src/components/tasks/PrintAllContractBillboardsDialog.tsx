@@ -5,13 +5,15 @@ import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Printer, FileDown, Users, Check, FileText, Settings2 } from 'lucide-react';
+import { Printer, FileDown, Users, Check, FileText, Settings2, Table2 } from 'lucide-react';
 import QRCode from 'qrcode';
 import html2pdf from 'html2pdf.js';
 import { supabase } from '@/integrations/supabase/client';
 import { BackgroundSelector } from '@/components/billboard-print/BackgroundSelector';
 import { PrintCustomizationDialog } from '@/components/print-customization';
 import { usePrintCustomization, PrintCustomizationSettings } from '@/hooks/usePrintCustomization';
+import { useTablePrintSettings } from '@/hooks/useTablePrintSettings';
+import { TablePrintSettingsDialog } from './TablePrintSettingsDialog';
 
 interface PrintAllContractBillboardsDialogProps {
   open: boolean;
@@ -38,15 +40,25 @@ export function PrintAllContractBillboardsDialog({
 }: PrintAllContractBillboardsDialogProps) {
   const [includeDesigns, setIncludeDesigns] = useState(true);
   const [printType, setPrintType] = useState<'client' | 'installation'>('client');
+  const [printMode, setPrintMode] = useState<'cards' | 'table'>('cards');
   const [loading, setLoading] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [adType, setAdType] = useState('');
   const [contractAdTypes, setContractAdTypes] = useState<Record<number, string>>({});
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
   const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
+  const [tableSettingsDialogOpen, setTableSettingsDialogOpen] = useState(false);
   
   // جلب إعدادات التخصيص من قاعدة البيانات
   const { settings: customSettings, loading: settingsLoading } = usePrintCustomization();
+  const { 
+    settings: tableSettings, 
+    loading: tableSettingsLoading,
+    updateSetting: updateTableSetting,
+    saveSettings: saveTableSettings,
+    resetToDefaults: resetTableSettings,
+    saving: savingTableSettings
+  } = useTablePrintSettings();
 
   // جمع كل اللوحات من جميع الفرق للعقد المحدد أو جميع المهام الممررة مباشرة
   const contractTasks = useMemo(() => {
@@ -563,6 +575,419 @@ export function PrintAllContractBillboardsDialog({
     `;
   };
 
+  // دالة إنشاء HTML للجدول
+  const generateTablePrintHTML = async () => {
+    const sortedItems = await sortBillboardsBySize(contractItems);
+    const s = tableSettings;
+    const selectedTeamNames = Array.from(selectedTeamIds)
+      .map(id => teams[id]?.team_name)
+      .filter(Boolean)
+      .join(' - ');
+
+    // استخراج الأعمدة المفعلة مرتبة
+    const enabledColumns = [...s.columns_order]
+      .filter(c => c.enabled)
+      .sort((a, b) => a.order - b.order);
+
+    // تحليل بيانات اللوحات لمعرفة الأعمدة الفارغة
+    const columnHasData: Record<string, boolean> = {};
+    enabledColumns.forEach(col => {
+      columnHasData[col.id] = false;
+    });
+
+    // فحص كل لوحة لتحديد الأعمدة التي تحتوي على بيانات
+    sortedItems.forEach(item => {
+      const billboard = billboards[item.billboard_id];
+      if (!billboard) return;
+
+      // تجهيز بيانات الصف
+      let designFaceA = item.design_face_a;
+      let designFaceB = item.design_face_b;
+      const task = contractTasks.find(t => t.id === item.task_id);
+      if (!designFaceA && task) {
+        const taskDesigns = designsByTask[task.id] || [];
+        const selectedDesign = taskDesigns.find((d: any) => d.id === item.selected_design_id) || taskDesigns[0];
+        if (selectedDesign) {
+          designFaceA = selectedDesign.design_face_a_url;
+          designFaceB = selectedDesign.design_face_b_url;
+        }
+      }
+
+      enabledColumns.forEach(col => {
+        switch (col.id) {
+          case 'row_number':
+            columnHasData[col.id] = true;
+            break;
+          case 'billboard_image':
+            if (billboard.Image_URL) columnHasData[col.id] = true;
+            break;
+          case 'billboard_name':
+            if (billboard.Billboard_Name) columnHasData[col.id] = true;
+            break;
+          case 'size':
+            if (billboard.Size) columnHasData[col.id] = true;
+            break;
+          case 'faces_count':
+            if (billboard.Faces_Count) columnHasData[col.id] = true;
+            break;
+          case 'location':
+            if (billboard.Municipality || billboard.District) columnHasData[col.id] = true;
+            break;
+          case 'landmark':
+            if (billboard.Nearest_Landmark) columnHasData[col.id] = true;
+            break;
+          case 'contract_number':
+            if (billboard.Contract_Number || contractNumber) columnHasData[col.id] = true;
+            break;
+          case 'installation_date':
+            if (item.installation_date) columnHasData[col.id] = true;
+            break;
+          case 'design_images':
+            if (designFaceA || designFaceB) columnHasData[col.id] = true;
+            break;
+          case 'installed_images':
+            if (item.installed_image_face_a_url || item.installed_image_face_b_url) columnHasData[col.id] = true;
+            break;
+          case 'qr_code':
+            if (billboard.GPS_Coordinates) columnHasData[col.id] = true;
+            break;
+        }
+      });
+    });
+
+    // الأعمدة النهائية (مع إخفاء الفارغة إن كان مفعلاً)
+    const finalColumns = s.auto_hide_empty_columns 
+      ? enabledColumns.filter(col => columnHasData[col.id])
+      : enabledColumns;
+
+    // تقسيم اللوحات إلى صفحات
+    const pages: string[] = [];
+    const rowsPerPage = s.rows_per_page || 10;
+    
+    for (let pageIndex = 0; pageIndex < Math.ceil(sortedItems.length / rowsPerPage); pageIndex++) {
+      const pageItems = sortedItems.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
+      
+      const tableRows = await Promise.all(pageItems.map(async (item, index) => {
+        const billboard = billboards[item.billboard_id];
+        if (!billboard) return '';
+        
+        const globalIndex = pageIndex * rowsPerPage + index + 1;
+        const name = billboard.Billboard_Name || `لوحة ${item.billboard_id}`;
+        const municipality = billboard.Municipality || '';
+        const district = billboard.District || '';
+        const landmark = billboard.Nearest_Landmark || '';
+        const size = billboard.Size || '';
+        const facesCount = billboard.Faces_Count || 1;
+        const itemContractNumber = billboard.Contract_Number || contractNumber;
+        
+        // التصاميم
+        let designFaceA = item.design_face_a;
+        let designFaceB = item.design_face_b;
+        const task = contractTasks.find(t => t.id === item.task_id);
+        if (!designFaceA && task) {
+          const taskDesigns = designsByTask[task.id] || [];
+          const selectedDesign = taskDesigns.find((d: any) => d.id === item.selected_design_id) || taskDesigns[0];
+          if (selectedDesign) {
+            designFaceA = selectedDesign.design_face_a_url;
+            designFaceB = selectedDesign.design_face_b_url;
+          }
+        }
+        
+        // صور التركيب
+        const installedImageFaceA = item.installed_image_face_a_url;
+        const installedImageFaceB = item.installed_image_face_b_url;
+        
+        // تاريخ التركيب
+        const installationDate = item.installation_date 
+          ? new Date(item.installation_date).toLocaleDateString('ar-LY', { year: 'numeric', month: '2-digit', day: '2-digit' })
+          : '-';
+
+        // QR Code
+        let qrCodeDataUrl = '';
+        let mapLink = '';
+        if (finalColumns.some(c => c.id === 'qr_code')) {
+          const coords = billboard.GPS_Coordinates || '';
+          mapLink = coords 
+            ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` 
+            : '';
+          if (coords) {
+            try {
+              qrCodeDataUrl = await QRCode.toDataURL(mapLink, { width: 50 });
+            } catch (error) {
+              console.error('Error generating QR code:', error);
+            }
+          }
+        }
+
+        const rowBg = index % 2 === 0 ? s.row_bg_color : s.row_alt_bg_color;
+        
+        // إنشاء خلايا الصف حسب ترتيب الأعمدة
+        const cells = finalColumns.map((col, colIndex) => {
+          const isFirstColumn = colIndex === 0;
+          const cellStyle = isFirstColumn 
+            ? `background: ${s.first_column_bg_color}; color: ${s.first_column_text_color}; font-weight: bold;`
+            : '';
+
+          switch (col.id) {
+            case 'row_number':
+              return `<td class="cell" style="${cellStyle}">${globalIndex}</td>`;
+            case 'billboard_image':
+              return `<td class="cell img-cell" style="${cellStyle}">
+                ${billboard.Image_URL ? `<img src="${billboard.Image_URL}" alt="${name}" class="billboard-img" />` : '-'}
+              </td>`;
+            case 'billboard_name':
+              return `<td class="cell" style="${cellStyle}">${name}</td>`;
+            case 'size':
+              return `<td class="cell" style="${cellStyle}">${size}</td>`;
+            case 'faces_count':
+              return `<td class="cell" style="${cellStyle}">${facesCount}</td>`;
+            case 'location':
+              return `<td class="cell" style="${cellStyle}">${[municipality, district].filter(Boolean).join(' - ') || '-'}</td>`;
+            case 'landmark':
+              return `<td class="cell" style="${cellStyle}">${landmark || '-'}</td>`;
+            case 'contract_number':
+              return `<td class="cell" style="${cellStyle}">${itemContractNumber}</td>`;
+            case 'installation_date':
+              return `<td class="cell" style="${cellStyle}">${installationDate}</td>`;
+            case 'design_images':
+              return `<td class="cell img-cell" style="${cellStyle}">
+                <div class="img-group">
+                  ${designFaceA ? `<img src="${designFaceA}" alt="أمامي" class="design-img" />` : ''}
+                  ${designFaceB ? `<img src="${designFaceB}" alt="خلفي" class="design-img" />` : ''}
+                  ${!designFaceA && !designFaceB ? '-' : ''}
+                </div>
+              </td>`;
+            case 'installed_images':
+              return `<td class="cell img-cell" style="${cellStyle}">
+                <div class="img-group">
+                  ${installedImageFaceA ? `<img src="${installedImageFaceA}" alt="أمامي" class="installed-img" />` : ''}
+                  ${installedImageFaceB ? `<img src="${installedImageFaceB}" alt="خلفي" class="installed-img" />` : ''}
+                  ${!installedImageFaceA && !installedImageFaceB ? '-' : ''}
+                </div>
+              </td>`;
+            case 'qr_code':
+              return `<td class="cell img-cell" style="${cellStyle}">
+                ${qrCodeDataUrl && mapLink ? `<a href="${mapLink}" target="_blank" class="qr-link"><img src="${qrCodeDataUrl}" alt="QR" class="qr-img" /></a>` : '-'}
+              </td>`;
+            default:
+              return '';
+          }
+        });
+        
+        return `<tr style="background: ${rowBg};">${cells.join('')}</tr>`;
+      }));
+
+      // إنشاء رؤوس الأعمدة
+      const headerCells = finalColumns.map((col, colIndex) => {
+        const isFirstColumn = colIndex === 0;
+        const headerStyle = isFirstColumn 
+          ? `background: ${s.first_column_bg_color}; color: ${s.first_column_text_color};`
+          : '';
+        return `<th class="header-cell" style="${headerStyle}">${col.label}</th>`;
+      });
+
+      pages.push(`
+        <div class="page">
+          <div class="page-header">
+            <div class="title">${s.page_title} - عقد رقم ${contractNumber}</div>
+            <div class="subtitle">${customerName}${adType ? ' - ' + adType : ''}${selectedTeamNames ? ' - ' + selectedTeamNames : ''}</div>
+            <div class="page-info">صفحة ${pageIndex + 1} من ${Math.ceil(sortedItems.length / rowsPerPage)} | إجمالي اللوحات: ${sortedItems.length}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>${headerCells.join('')}</tr>
+            </thead>
+            <tbody>
+              ${tableRows.join('')}
+            </tbody>
+          </table>
+        </div>
+      `);
+    }
+
+    const isLandscape = s.page_orientation === 'landscape';
+    const pageMargin = s.page_margin || '8mm';
+    
+    return `
+      <!DOCTYPE html>
+      <html dir="rtl" lang="ar">
+      <head>
+        <meta charset="UTF-8" />
+        <title>جدول لوحات العقد #${contractNumber} - ${customerName}</title>
+        <style>
+          @font-face {
+            font-family: 'Doran';
+            src: url('/fonts/Doran-Medium.otf') format('opentype');
+            font-weight: 500;
+            font-style: normal;
+          }
+
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+
+          body {
+            font-family: '${s.primary_font}', Arial, sans-serif;
+            direction: rtl;
+            background: white;
+            color: ${s.row_text_color};
+            padding: 0;
+            margin: 0;
+          }
+
+          .page {
+            width: ${isLandscape ? '297mm' : '210mm'};
+            height: ${isLandscape ? '210mm' : '297mm'};
+            padding: ${pageMargin};
+            margin: 0 auto;
+            page-break-after: always;
+            page-break-inside: avoid;
+            background: white;
+            overflow: visible;
+          }
+
+          .page:last-child {
+            page-break-after: avoid;
+          }
+
+          .page-header {
+            text-align: center;
+            margin-bottom: 5mm;
+            padding-bottom: 3mm;
+            border-bottom: 2px solid ${s.header_bg_color};
+          }
+
+          .title {
+            font-size: ${s.title_font_size};
+            font-weight: bold;
+            color: ${s.header_bg_color};
+            margin-bottom: 1mm;
+          }
+
+          .subtitle {
+            font-size: 12px;
+            color: #666;
+          }
+
+          .page-info {
+            font-size: 10px;
+            color: #999;
+            margin-top: 1mm;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: ${s.row_font_size};
+            table-layout: auto;
+          }
+
+          .header-cell {
+            background: ${s.header_bg_color};
+            color: ${s.header_text_color};
+            padding: 5px 4px;
+            font-size: ${s.header_font_size};
+            font-weight: bold;
+            text-align: center;
+            border: 1px solid ${s.border_color};
+            white-space: nowrap;
+          }
+
+          .cell {
+            padding: 4px 3px;
+            border: 1px solid ${s.border_color};
+            text-align: center;
+            vertical-align: middle;
+            color: ${s.row_text_color};
+            font-size: ${s.row_font_size};
+          }
+
+          .img-cell {
+            padding: 3px;
+            vertical-align: middle;
+          }
+
+          .billboard-img {
+            max-width: ${s.billboard_image_size};
+            height: auto;
+            object-fit: contain;
+            border-radius: 3px;
+            border: 1px solid ${s.border_color};
+            display: block;
+            margin: 0 auto;
+          }
+
+          .img-group {
+            display: flex;
+            gap: 3px;
+            justify-content: center;
+            flex-wrap: nowrap;
+          }
+
+          .design-img {
+            max-width: ${s.design_image_size};
+            height: auto;
+            object-fit: contain;
+            border-radius: 2px;
+            border: 1px solid ${s.border_color};
+          }
+
+          .installed-img {
+            max-width: ${s.installed_image_size};
+            height: auto;
+            object-fit: contain;
+            border-radius: 2px;
+            border: 1px solid #22c55e;
+          }
+
+          .qr-img {
+            width: 35px;
+            height: 35px;
+            cursor: pointer;
+          }
+
+          .qr-link {
+            display: inline-block;
+          }
+
+          @page {
+            size: ${isLandscape ? 'A4 landscape' : 'A4 portrait'};
+            margin: 5mm;
+          }
+
+          @media print {
+            body {
+              -webkit-print-color-adjust: exact !important;
+              print-color-adjust: exact !important;
+            }
+            .page {
+              page-break-after: always;
+              margin: 0;
+              box-shadow: none;
+              padding: ${pageMargin};
+            }
+            .page:last-child {
+              page-break-after: avoid;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        ${pages.join('\n')}
+        <script>
+          window.onload = function() {
+            setTimeout(function() {
+              window.print();
+            }, 500);
+          };
+        <\/script>
+      </body>
+      </html>
+    `;
+  };
+
   const handlePrint = async () => {
     if (contractItems.length === 0) {
       toast.error('لا توجد لوحات للطباعة');
@@ -571,13 +996,13 @@ export function PrintAllContractBillboardsDialog({
 
     setLoading(true);
     try {
-      const html = await generatePrintHTML();
+      const html = printMode === 'table' ? await generateTablePrintHTML() : await generatePrintHTML();
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(html);
         printWindow.document.close();
-        toast.success(`تم تحضير ${contractItems.length} صفحة للطباعة ${printType === 'installation' ? '(فريق التركيب)' : '(العميل)'}`);
-        onOpenChange(false);
+        toast.success(`تم تحضير ${contractItems.length} ${printMode === 'table' ? 'صف' : 'صفحة'} للطباعة ${printType === 'installation' ? '(فريق التركيب)' : '(العميل)'}`);
+        // لا نغلق الحوار لكي يتمكن المستخدم من الطباعة مرة أخرى
       }
     } catch (error) {
       console.error('Error printing:', error);
@@ -717,35 +1142,85 @@ export function PrintAllContractBillboardsDialog({
             </div>
           </div>
 
-          {/* اختيار الخلفية وزر التخصيص */}
+          {/* نوع الطباعة (بطاقات / جدول) */}
           <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
-            <div className="flex items-center justify-between">
-              <BackgroundSelector
-                value={customBackgroundUrl}
-                onChange={setCustomBackgroundUrl}
-              />
+            <Label className="text-sm font-bold flex items-center gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              نوع الطباعة
+            </Label>
+            <div className="flex gap-2">
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCustomizationDialogOpen(true)}
-                className="flex items-center gap-2"
+                variant={printMode === 'cards' ? 'default' : 'outline'}
+                onClick={() => setPrintMode('cards')}
+                className="flex-1 flex items-center gap-2"
               >
-                <Settings2 className="h-4 w-4" />
-                تخصيص الطباعة
+                <FileText className="h-4 w-4" />
+                بطاقات (صفحة لكل لوحة)
+              </Button>
+              <Button
+                variant={printMode === 'table' ? 'default' : 'outline'}
+                onClick={() => setPrintMode('table')}
+                className="flex-1 flex items-center gap-2"
+              >
+                <Table2 className="h-4 w-4" />
+                جدول
               </Button>
             </div>
           </div>
 
+          {/* إعدادات البطاقات (تظهر فقط في وضع البطاقات) */}
+          {printMode === 'cards' && (
+            <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <BackgroundSelector
+                  value={customBackgroundUrl}
+                  onChange={setCustomBackgroundUrl}
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCustomizationDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Settings2 className="h-4 w-4" />
+                  تخصيص الطباعة
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* إعدادات الجدول (تظهر فقط في وضع الجدول) */}
+          {printMode === 'table' && (
+            <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-muted-foreground">
+                  جدول يحتوي على جميع اللوحات مع الصور والتفاصيل
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTableSettingsDialogOpen(true)}
+                  className="flex items-center gap-2"
+                >
+                  <Settings2 className="h-4 w-4" />
+                  إعدادات الجدول
+                </Button>
+              </div>
+            </div>
+          )}
+
           {/* خيارات الطباعة */}
           <div className="space-y-3">
-            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-              <Checkbox
-                id="includeDesigns"
-                checked={includeDesigns}
-                onCheckedChange={(c) => setIncludeDesigns(!!c)}
-              />
-              <Label htmlFor="includeDesigns" className="cursor-pointer flex-1">تضمين التصاميم</Label>
-            </div>
+            {printMode === 'cards' && (
+              <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                <Checkbox
+                  id="includeDesigns"
+                  checked={includeDesigns}
+                  onCheckedChange={(c) => setIncludeDesigns(!!c)}
+                />
+                <Label htmlFor="includeDesigns" className="cursor-pointer flex-1">تضمين التصاميم</Label>
+              </div>
+            )}
 
             <div className="flex gap-2">
               <Button
@@ -770,11 +1245,20 @@ export function PrintAllContractBillboardsDialog({
             <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
               إلغاء
             </Button>
-            <Button onClick={handlePrint} disabled={loading || settingsLoading || contractItems.length === 0} className="flex-1">
+            <Button 
+              onClick={handlePrint} 
+              disabled={loading || settingsLoading || tableSettingsLoading || contractItems.length === 0} 
+              className="flex-1"
+            >
               <Printer className="h-4 w-4 ml-2" />
-              طباعة
+              طباعة {printMode === 'table' ? 'جدول' : 'بطاقات'}
             </Button>
-            <Button onClick={handleDownloadPDF} disabled={loading || settingsLoading || contractItems.length === 0} variant="secondary" className="flex-1">
+            <Button 
+              onClick={handleDownloadPDF} 
+              disabled={loading || settingsLoading || contractItems.length === 0} 
+              variant="secondary" 
+              className="flex-1"
+            >
               <FileDown className="h-4 w-4 ml-2" />
               PDF
             </Button>
@@ -782,11 +1266,25 @@ export function PrintAllContractBillboardsDialog({
         </div>
       </DialogContent>
       
-      {/* نافذة التخصيص */}
+      {/* نافذة تخصيص البطاقات */}
       <PrintCustomizationDialog
         open={customizationDialogOpen}
         onOpenChange={setCustomizationDialogOpen}
         backgroundUrl={customBackgroundUrl}
+      />
+
+      {/* نافذة إعدادات الجدول */}
+      <TablePrintSettingsDialog
+        open={tableSettingsDialogOpen}
+        onOpenChange={setTableSettingsDialogOpen}
+        settings={tableSettings}
+        onUpdateSetting={updateTableSetting}
+        onSave={async () => {
+          const ok = await saveTableSettings(tableSettings);
+          if (ok) setTableSettingsDialogOpen(false);
+        }}
+        onReset={resetTableSettings}
+        saving={savingTableSettings}
       />
     </Dialog>
   );
