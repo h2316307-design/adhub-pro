@@ -17,7 +17,7 @@ import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import InteractiveMap from '@/components/InteractiveMap';
+import SelectableBillboardsMap from '@/components/Map/SelectableBillboardsMap';
 import { cleanupOrphanedBillboards } from '@/services/contractCleanupService';
 import { isBillboardAvailable, getDaysUntilExpiry } from '@/utils/contractUtils';
 
@@ -2266,7 +2266,7 @@ export default function ContractEdit() {
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="border-t border-border">
-                      <InteractiveMap
+                      <SelectableBillboardsMap
                         billboards={billboards
                           .filter((b) => selected.includes(String((b as any).ID)))
                           .map(b => ({
@@ -2285,6 +2285,8 @@ export default function ContractEdit() {
                             Faces_Count: (b as any).Faces_Count || '1',
                             Municipality: (b as any).Municipality || '',
                             Rent_End_Date: (b as any).Rent_End_Date || null,
+                            Customer_Name: (b as any).Customer_Name || customerName || '',
+                            Ad_Type: (b as any).Ad_Type || adType || '',
                             id: String((b as any).ID || ''),
                             name: (b as any).Billboard_Name || '',
                             location: (b as any).Nearest_Landmark || '',
@@ -2393,7 +2395,7 @@ export default function ContractEdit() {
                     onCleanup={handleCleanup}
                   />
 
-                  <InteractiveMap
+                  <SelectableBillboardsMap
                     billboards={filtered.map((b) => {
                       const endDate = (b as any).Rent_End_Date ?? (b as any).rent_end_date ?? null;
                       const daysUntilExpiry = getDaysUntilExpiry(endDate);
@@ -2417,6 +2419,8 @@ export default function ContractEdit() {
                         Faces_Count: (b as any).Faces_Count || '1',
                         Municipality: (b as any).Municipality || '',
                         Rent_End_Date: endDate,
+                        Customer_Name: (b as any).Customer_Name || '',
+                        Ad_Type: (b as any).Ad_Type || '',
                         id: String((b as any).ID || ''),
                         name: (b as any).Billboard_Name || '',
                         location: (b as any).Nearest_Landmark || '',
@@ -2445,6 +2449,7 @@ export default function ContractEdit() {
                       });
                       toast.success(`تم تحديد ${billboardIds.length} لوحة`);
                     }}
+                    showAvailableOnlyFilter={true}
                   />
                 </TabsContent>
               </Tabs>

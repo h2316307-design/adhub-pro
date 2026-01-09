@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, lazy, Suspense } from 'react';
+import { useState, useEffect, useMemo, lazy, Suspense, startTransition } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,9 +29,10 @@ import { useBillboardExport } from '@/hooks/useBillboardExport';
 import { useBillboardContract } from '@/hooks/useBillboardContract';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { MapSkeleton } from '@/components/Map/MapSkeleton';
 
-// ✅ تحميل كسول للخريطة لتحسين الأداء
-const InteractiveMap = lazy(() => import('@/components/InteractiveMap'));
+// ✅ تحميل كسول للخريطة لتحسين الأداء + دعم التبديل بين Google / OSM
+const AdminBillboardsMap = lazy(() => import('@/components/Map/AdminBillboardsMap'));
 
 export default function Billboards() {
   const navigate = useNavigate();
@@ -572,9 +573,12 @@ export default function Billboards() {
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const pagedBillboards = sortedFilteredBillboards.slice(startIndex, startIndex + PAGE_SIZE);
 
-  // ✅ UPDATED: Calculate available billboards count
+  // ✅ UPDATED: Calculate available billboards count (excluding friend company billboards)
   const availableBillboardsCount = useMemo(() => {
     return billboards.filter((billboard: any) => {
+      // ✅ استبعاد لوحات الشركات الصديقة
+      if (billboard.friend_company_id) return false;
+      
       const statusValue = String(billboard.Status ?? billboard.status ?? '').trim();
       const statusLower = statusValue.toLowerCase();
       const hasContract = !!(getCurrentContractNumber(billboard) && getCurrentContractNumber(billboard) !== '0');
@@ -898,7 +902,7 @@ export default function Billboards() {
       </Collapsible>
 
       {/* ✅ Collapsible Map */}
-      <Collapsible open={mapOpen} onOpenChange={setMapOpen} className="mb-6">
+      <Collapsible open={mapOpen} onOpenChange={(open) => startTransition(() => setMapOpen(open))} className="mb-6">
         <Card className="border-2 shadow-lg overflow-hidden">
           <CollapsibleTrigger asChild>
             <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
@@ -918,84 +922,77 @@ export default function Billboards() {
             </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <Suspense fallback={
-              <div className="h-96 flex items-center justify-center bg-muted/50">
-                <div className="text-center space-y-3">
-                  <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-                  <p className="text-muted-foreground text-sm">جاري تحميل الخريطة...</p>
-                </div>
-              </div>
-            }>
-            <InteractiveMap
-              billboards={billboards
-                .filter((b: any) => {
-                  const statusRaw = String(b.Status ?? b.status ?? '').trim();
-                  const statusLower = statusRaw.toLowerCase();
+            <Suspense fallback={<MapSkeleton className="h-[600px]" />}>
+              <AdminBillboardsMap
+                billboards={billboards
+                  .filter((b: any) => {
+                    const statusRaw = String(b.Status ?? b.status ?? '').trim();
+                    const statusLower = statusRaw.toLowerCase();
 
-                  // Exclude only removed billboards
-                  const isRemoved = statusRaw === 'إزالة' || statusRaw === 'ازالة' || statusLower === 'removed';
-                  if (isRemoved) return false;
+                    // Exclude only removed billboards
+                    const isRemoved = statusRaw === 'إزالة' || statusRaw === 'ازالة' || statusLower === 'removed';
+                    if (isRemoved) return false;
 
-                  // Check if billboard has valid coordinates
-                  const coords = (b as any).GPS_Coordinates || '';
-                  if (!coords) return false;
+                    // Check if billboard has valid coordinates
+                    const coords = (b as any).GPS_Coordinates || '';
+                    if (!coords) return false;
 
-                  return true;
-                })
-                .map(b => {
-                  const statusRaw = String(b.Status ?? b.status ?? '').trim();
-                  const contractNumRaw = String(b.Contract_Number ?? b.contractNumber ?? '').trim();
-                  const hasContract = !!contractNumRaw && contractNumRaw !== '0';
-                  const endDate = b.Rent_End_Date ?? b.rent_end_date ?? (b as any).expiryDate ?? null;
-                  const isExpired = !!endDate && !isNaN(new Date(endDate).getTime()) && new Date(endDate) < new Date();
-                  
-                  // Determine display status
-                  let displayStatus: 'available' | 'maintenance' | 'rented' = 'available';
-                  if (statusRaw === 'صيانة' || statusRaw.toLowerCase() === 'maintenance') {
-                    displayStatus = 'maintenance';
-                  } else if (hasContract && !isExpired) {
-                    displayStatus = 'rented';
-                  } else {
-                    displayStatus = 'available';
-                  }
-                  
-                  // Arabic status for display
-                  const arabicStatus = displayStatus === 'rented' ? 'مؤجر' : displayStatus === 'maintenance' ? 'صيانة' : 'متاح';
-                  
-                  return {
-                    ID: (b as any).ID || 0,
-                    Billboard_Name: (b as any).Billboard_Name || '',
-                    City: (b as any).City || '',
-                    District: (b as any).District || '',
-                    Size: (b as any).Size || '',
-                    Status: arabicStatus,
-                    Price: (b as any).Price || '0',
-                    Level: (b as any).Level || '',
-                    Image_URL: (b as any).Image_URL || '',
-                    GPS_Coordinates: (b as any).GPS_Coordinates || '',
-                    GPS_Link: (b as any).GPS_Link || '',
-                    Nearest_Landmark: (b as any).Nearest_Landmark || '',
-                    Faces_Count: (b as any).Faces_Count || '1',
-                    Municipality: (b as any).Municipality || '',
-                    Rent_End_Date: (b as any).Rent_End_Date || null,
-                    Customer_Name: (b as any).Customer_Name || '',
-                    Ad_Type: (b as any).Ad_Type || '',
-                    Contract_Number: (b as any).Contract_Number || null,
-                    // Normalized fields for InteractiveMap
-                    id: String((b as any).ID || ''),
-                    name: (b as any).Billboard_Name || '',
-                    location: (b as any).Nearest_Landmark || '',
-                    size: (b as any).Size || '',
-                    status: displayStatus,
-                    coordinates: (b as any).GPS_Coordinates || '',
-                    imageUrl: (b as any).Image_URL || '',
-                    expiryDate: (b as any).Rent_End_Date || null,
-                    area: (b as any).District || '',
-                    municipality: (b as any).Municipality || '',
-                  };
-                }) as any}
-              onImageView={(url) => console.log('Image view:', url)}
-            />
+                    return true;
+                  })
+                  .map(b => {
+                    const statusRaw = String(b.Status ?? b.status ?? '').trim();
+                    const contractNumRaw = String(b.Contract_Number ?? b.contractNumber ?? '').trim();
+                    const hasContract = !!contractNumRaw && contractNumRaw !== '0';
+                    const endDate = b.Rent_End_Date ?? b.rent_end_date ?? (b as any).expiryDate ?? null;
+                    const isExpired = !!endDate && !isNaN(new Date(endDate).getTime()) && new Date(endDate) < new Date();
+                    
+                    // Determine display status
+                    let displayStatus: 'available' | 'maintenance' | 'rented' = 'available';
+                    if (statusRaw === 'صيانة' || statusRaw.toLowerCase() === 'maintenance') {
+                      displayStatus = 'maintenance';
+                    } else if (hasContract && !isExpired) {
+                      displayStatus = 'rented';
+                    } else {
+                      displayStatus = 'available';
+                    }
+                    
+                    // Arabic status for display
+                    const arabicStatus = displayStatus === 'rented' ? 'مؤجر' : displayStatus === 'maintenance' ? 'صيانة' : 'متاح';
+                    
+                    return {
+                      ID: (b as any).ID || 0,
+                      Billboard_Name: (b as any).Billboard_Name || '',
+                      City: (b as any).City || '',
+                      District: (b as any).District || '',
+                      Size: (b as any).Size || '',
+                      Status: arabicStatus,
+                      Price: (b as any).Price || '0',
+                      Level: (b as any).Level || '',
+                      Image_URL: (b as any).Image_URL || '',
+                      GPS_Coordinates: (b as any).GPS_Coordinates || '',
+                      GPS_Link: (b as any).GPS_Link || '',
+                      Nearest_Landmark: (b as any).Nearest_Landmark || '',
+                      Faces_Count: (b as any).Faces_Count || '1',
+                      Municipality: (b as any).Municipality || '',
+                      Rent_End_Date: (b as any).Rent_End_Date || null,
+                      Customer_Name: (b as any).Customer_Name || '',
+                      Ad_Type: (b as any).Ad_Type || '',
+                      Contract_Number: (b as any).Contract_Number || null,
+                      // Normalized fields for InteractiveMap
+                      id: String((b as any).ID || ''),
+                      name: (b as any).Billboard_Name || '',
+                      location: (b as any).Nearest_Landmark || '',
+                      size: (b as any).Size || '',
+                      status: displayStatus,
+                      coordinates: (b as any).GPS_Coordinates || '',
+                      imageUrl: (b as any).Image_URL || '',
+                      expiryDate: (b as any).Rent_End_Date || null,
+                      area: (b as any).District || '',
+                      municipality: (b as any).Municipality || '',
+                    };
+                  }) as any}
+                onImageView={(url) => console.log('Image view:', url)}
+              />
             </Suspense>
           </CollapsibleContent>
         </Card>

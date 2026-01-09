@@ -190,6 +190,11 @@ export const useBillboardExport = () => {
         const hasContract = !!(billboard.Contract_Number ?? billboard.contractNumber);
         const contractExpired = isContractExpired(billboard.Rent_End_Date ?? billboard.rent_end_date);
         
+        // ✅ استبعاد لوحات الشركات الصديقة
+        if (billboard.friend_company_id) {
+          return false;
+        }
+        
         // ✅ استبعاد اللوحات المخفية من المتاح (العمود الجديد)
         const isVisibleInAvailable = billboard.is_visible_in_available !== false; // default true
         if (!isVisibleInAvailable) {
@@ -596,6 +601,11 @@ export const useBillboardExport = () => {
         const hasContract = !!(billboard.Contract_Number ?? billboard.contractNumber);
         const contractExpired = isContractExpired(billboard.Rent_End_Date ?? billboard.rent_end_date);
         
+        // ✅ استبعاد لوحات الشركات الصديقة
+        if (billboard.friend_company_id) {
+          return false;
+        }
+        
         // ✅ استبعاد اللوحات المخفية من المتاح
         const isVisibleInAvailable = billboard.is_visible_in_available !== false;
         if (!isVisibleInAvailable) {
@@ -807,6 +817,9 @@ export const useBillboardExport = () => {
         const hasContract = !!(billboard.Contract_Number ?? billboard.contractNumber);
         const contractExpired = isContractExpired(billboard.Rent_End_Date ?? billboard.rent_end_date);
         
+        // ✅ استبعاد لوحات الشركات الصديقة
+        if (billboard.friend_company_id) return false;
+        
         const isVisibleInAvailable = billboard.is_visible_in_available !== false;
         if (!isVisibleInAvailable) return false;
         
@@ -956,6 +969,9 @@ export const useBillboardExport = () => {
         const maintenanceType = String(billboard.maintenance_type ?? '').trim();
         const hasContract = !!(billboard.Contract_Number ?? billboard.contractNumber);
         const contractExpired = isContractExpired(billboard.Rent_End_Date ?? billboard.rent_end_date);
+        
+        // ✅ استبعاد لوحات الشركات الصديقة
+        if (billboard.friend_company_id) return false;
         
         // ✅ استبعاد اللوحات المخفية من المتاح
         const isVisibleInAvailable = billboard.is_visible_in_available !== false;

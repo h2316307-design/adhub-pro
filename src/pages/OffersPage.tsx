@@ -9,7 +9,7 @@ import type { Billboard } from '@/types';
 import { useContractPricing } from '@/hooks/useContractPricing';
 import { BillboardSelectionMap } from '@/components/Map/BillboardSelectionMap';
 import { BillboardImage } from '@/components/BillboardImage';
-import InteractiveMap from '@/components/InteractiveMap';
+import SelectableBillboardsMap from '@/components/Map/SelectableBillboardsMap';
 import { CustomerInfoForm } from '@/components/contracts/edit/CustomerInfoForm';
 import ContractPDFDialog from './ContractPDFDialog';
 import { OfferBillboardPrintDialog } from '@/components/offers/OfferBillboardPrintDialog';
@@ -154,6 +154,7 @@ export default function OffersPage() {
   const [bbSearchQuery, setBbSearchQuery] = useState('');
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
+  const [bbAvailableOnly, setBbAvailableOnly] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   // Create from contract dialog
@@ -482,6 +483,12 @@ export default function OffersPage() {
   // Apply search and other filters
   const displayedBillboards = useMemo(() => {
     const searchLower = bbSearchQuery.toLowerCase().trim();
+
+    const isAvailable = (b: any) => {
+      const status = String(b.Status || b.status || '').toLowerCase();
+      return status === 'متاح' || status === 'available' || status === '';
+    };
+
     return filteredBillboards.filter((b: any) => {
       const name = String(b.Billboard_Name || '').toLowerCase();
       const landmark = String(b.Nearest_Landmark || '').toLowerCase();
@@ -491,20 +498,25 @@ export default function OffersPage() {
       const district = String(b.District || '').toLowerCase();
       const level = String(b.Level || '').toLowerCase();
       const id = String(b.ID || '');
-      
-      const matchesSearch = !searchLower || 
-        name.includes(searchLower) || 
+
+      const matchesSearch = !searchLower ||
+        name.includes(searchLower) ||
         landmark.includes(searchLower) ||
         municipality.includes(searchLower) ||
         district.includes(searchLower) ||
         level.includes(searchLower) ||
         id.includes(searchLower);
+
       const matchesCity = cityFilter === 'all' || city === cityFilter;
       const matchesSize = sizeFilter === 'all' || size === sizeFilter;
-      
-      return matchesSearch && matchesCity && matchesSize;
+
+      // Available-only filter: keep selected visible so user can remove it
+      const isSelected = selected.includes(String(b.ID));
+      const matchesAvailability = !bbAvailableOnly || isAvailable(b) || isSelected;
+
+      return matchesSearch && matchesCity && matchesSize && matchesAvailability;
     });
-  }, [filteredBillboards, bbSearchQuery, cityFilter, sizeFilter]);
+  }, [filteredBillboards, bbSearchQuery, cityFilter, sizeFilter, bbAvailableOnly, selected]);
 
   const cities = useMemo(() => 
     Array.from(new Set(billboards.map((b: any) => b.City).filter(Boolean))),
@@ -2080,18 +2092,52 @@ export default function OffersPage() {
                           ))}
                         </SelectContent>
                       </Select>
+
+                      <div className="flex items-center gap-2 bg-background border border-border rounded-md px-3 py-2">
+                        <Switch
+                          id="bb-available-only"
+                          checked={bbAvailableOnly}
+                          onCheckedChange={setBbAvailableOnly}
+                        />
+                        <Label htmlFor="bb-available-only" className="text-sm font-medium cursor-pointer whitespace-nowrap">
+                          المتاحة فقط
+                        </Label>
+                      </div>
                     </div>
 
                     {viewMode === 'map' ? (
-                      <div className="h-[500px] rounded-lg overflow-hidden border">
-                        <InteractiveMap
-                          billboards={displayedBillboards}
+                      <div className="h-[700px] rounded-lg overflow-hidden">
+                        <SelectableBillboardsMap
+                          billboards={displayedBillboards.map((b: any) => ({
+                            ...b,
+                            id: String(b.ID || ''),
+                            name: b.Billboard_Name || '',
+                            location: b.Nearest_Landmark || '',
+                            size: b.Size || '',
+                            status: b.Status || 'متاح',
+                            coordinates: b.GPS_Coordinates || '',
+                            imageUrl: b.Image_URL || '',
+                            expiryDate: b.Rent_End_Date || null,
+                            area: b.District || '',
+                            municipality: b.Municipality || '',
+                            Customer_Name: b.Customer_Name || '',
+                            Ad_Type: b.Ad_Type || '',
+                          }))}
                           onImageView={() => {}}
                           selectedBillboards={new Set(selected)}
                           onToggleSelection={(id) => {
                             const billboard = billboards.find((b: any) => String(b.ID) === id);
                             if (billboard) toggleSelect(billboard);
                           }}
+                          onSelectMultiple={(billboardIds) => {
+                            billboardIds.forEach(id => {
+                              const billboard = billboards.find((b: any) => String(b.ID) === id);
+                              if (billboard && !selected.includes(String(billboard.ID))) {
+                                toggleSelect(billboard);
+                              }
+                            });
+                          }}
+                          showAvailableOnlyFilter={false}
                         />
                       </div>
                     ) : loading ? (

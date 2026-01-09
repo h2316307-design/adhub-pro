@@ -3,6 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Billboard } from "@/types"
 import { MapPin, Layers, ZoomIn, ZoomOut, Clock, Download, PenTool, X, CheckCircle2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { loadScriptOnce } from "@/lib/loadExternalScript"
 
 interface InteractiveMapProps {
   billboards: Billboard[]
@@ -11,6 +12,7 @@ interface InteractiveMapProps {
   onToggleSelection?: (billboardId: string) => void
   onSelectMultiple?: (billboardIds: string[]) => void
   onDownloadSelected?: () => void
+  onReady?: () => void
 }
 
 declare global {
@@ -87,134 +89,86 @@ const getSizeColor = (size: string): { bg: string, border: string, text: string 
   return sizeColorMap[size]
 }
 
-// Create glass-effect pin SVG with size color and status indicator
-// NOTE: Selected pins use a simplified SVG (no filters/animations) to avoid cases where
-// Google Maps renders the label but drops the icon.
+// Create pin SVG matching OpenStreetMap style - with size label at bottom
 const createPinIcon = (size: string, status: string, isSelected: boolean = false) => {
   const colors = getSizeColor(size)
   const statusColor = status === "متاح" ? "#10b981" : status === "قريباً" ? "#f59e0b" : "#ef4444"
+  const displaySize = size.length > 6 ? size.substring(0, 5) + ".." : size
 
-  const pinSize = isSelected ? 72 : 56
+  // Matching OpenStreet pin dimensions
+  const width = 52
+  const height = 64
 
-  // Simplified selected icon (more compatible across Google Maps renderers)
-  if (isSelected) {
-    return {
-      url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-        <svg xmlns="http://www.w3.org/2000/svg" width="${pinSize + 20}" height="${pinSize + 30}" viewBox="0 0 ${pinSize + 20} ${pinSize + 30}">
-          <g transform="translate(10, 5)">
-            <!-- Pin shape -->
-            <path d="M${pinSize / 2} 2C${pinSize * 0.242} 2 2 ${pinSize * 0.242} 2 ${pinSize / 2}c0 ${pinSize * 0.367} ${pinSize / 2 - 2} ${pinSize * 0.733} ${pinSize / 2 - 2} ${pinSize * 0.733}s${pinSize / 2 - 2}-${pinSize * 0.367} ${pinSize / 2 - 2}-${pinSize * 0.733}C${pinSize - 2} ${pinSize * 0.242} ${pinSize * 0.758} 2 ${pinSize / 2} 2z"
-                  fill="${colors.bg}"
-                  stroke="#d4af37"
-                  stroke-width="4"/>
-            <!-- Inner circle -->
-            <circle cx="${pinSize / 2}" cy="${pinSize * 0.467}" r="${pinSize * 0.3}" fill="#1a1a2e" fill-opacity="0.9" stroke="#d4af37" stroke-width="2"/>
-            <!-- Status indicator -->
-            <circle cx="${pinSize / 2}" cy="${pinSize * 0.467}" r="${pinSize * 0.117}" fill="${statusColor}" stroke="#ffffff" stroke-width="2"/>
-            <!-- Selected checkmark -->
-            <circle cx="${pinSize * 0.78}" cy="${pinSize * 0.2}" r="10" fill="#d4af37" stroke="#1a1a2e" stroke-width="2"/>
-            <path d="M${pinSize * 0.78 - 4} ${pinSize * 0.2} l3 3 l6 -6" fill="none" stroke="#1a1a2e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-          </g>
-        </svg>
-      `)}`,
-      scaledSize: new window.google.maps.Size(pinSize + 20, pinSize + 30),
-      anchor: new window.google.maps.Point((pinSize + 20) / 2, pinSize + 25),
-      labelOrigin: new window.google.maps.Point((pinSize + 20) / 2, pinSize + 5),
-    }
-  }
+  const selectedStroke = isSelected ? '#d4af37' : colors.border
+  const strokeWidth = isSelected ? 3 : 2
 
-  // Original animated/glass icon for normal (non-selected) markers
-  const selectedGlow = ""
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 52 64">
+      <g>
+        <!-- Pin shadow -->
+        <ellipse cx="26" cy="60" rx="10" ry="3" fill="rgba(0,0,0,0.3)"/>
+        <!-- Pin body -->
+        <path d="M26 2C14.954 2 6 10.954 6 22c0 12 20 38 20 38s20-26 20-38C46 10.954 37.046 2 26 2z"
+              fill="${colors.bg}" stroke="${selectedStroke}" stroke-width="${strokeWidth}"/>
+        <!-- Inner circle -->
+        <circle cx="26" cy="22" r="14" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1.5"/>
+        <!-- Status dot -->
+        <circle cx="26" cy="22" r="5" fill="${statusColor}"/>
+        <!-- Size label background -->
+        <rect x="4" y="42" width="44" height="16" rx="4" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1"/>
+        <!-- Size text -->
+        <text x="26" y="53" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="${colors.bg}">${displaySize}</text>
+        ${isSelected ? `
+          <!-- Selected checkmark -->
+          <circle cx="42" cy="10" r="8" fill="#d4af37" stroke="#1a1a2e" stroke-width="2"/>
+          <path d="M38 10 l3 3 l5 -5" fill="none" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        ` : ''}
+      </g>
+    </svg>
+  `
 
   return {
-    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="${pinSize + 20}" height="${pinSize + 30}" viewBox="0 0 ${pinSize + 20} ${pinSize + 30}">
-        <defs>
-          <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
-            <feDropShadow dx="0" dy="4" stdDeviation="4" flood-color="#000" flood-opacity="0.4"/>
-          </filter>
-          <linearGradient id="glassGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" style="stop-color:${colors.bg};stop-opacity:1"/>
-            <stop offset="50%" style="stop-color:${colors.bg};stop-opacity:0.9"/>
-            <stop offset="100%" style="stop-color:${colors.bg};stop-opacity:0.8"/>
-          </linearGradient>
-          <linearGradient id="glassShine" x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" style="stop-color:white;stop-opacity:0.6"/>
-            <stop offset="50%" style="stop-color:white;stop-opacity:0.15"/>
-            <stop offset="100%" style="stop-color:white;stop-opacity:0"/>
-          </linearGradient>
-        </defs>
-        <g transform="translate(10, 5)">
-          ${selectedGlow}
-          <!-- Pin shape with glass effect -->
-          <path filter="url(#shadow)" d="M${pinSize / 2} 2C${pinSize * 0.242} 2 2 ${pinSize * 0.242} 2 ${pinSize / 2}c0 ${pinSize * 0.367} ${pinSize / 2 - 2} ${pinSize * 0.733} ${pinSize / 2 - 2} ${pinSize * 0.733}s${pinSize / 2 - 2}-${pinSize * 0.367} ${pinSize / 2 - 2}-${pinSize * 0.733}C${pinSize - 2} ${pinSize * 0.242} ${pinSize * 0.758} 2 ${pinSize / 2} 2z"
-                fill="url(#glassGrad)"
-                stroke="${colors.border}"
-                stroke-width="3"/>
-          <!-- Glass shine overlay -->
-          <ellipse cx="${pinSize * 0.37}" cy="${pinSize * 0.3}" rx="${pinSize * 0.2}" ry="${pinSize * 0.133}" fill="url(#glassShine)" opacity="0.6"/>
-          <!-- Inner circle -->
-          <circle cx="${pinSize / 2}" cy="${pinSize * 0.467}" r="${pinSize * 0.3}" fill="#1a1a2e" fill-opacity="0.9" stroke="${colors.border}" stroke-width="2"/>
-          <!-- Status indicator -->
-          <circle cx="${pinSize / 2}" cy="${pinSize * 0.467}" r="${pinSize * 0.117}" fill="${statusColor}" stroke="white" stroke-width="2">
-            <animate attributeName="opacity" values="1;0.6;1" dur="2s" repeatCount="indefinite"/>
-          </circle>
-        </g>
-      </svg>
-    `)}`,
-    scaledSize: new window.google.maps.Size(pinSize + 20, pinSize + 30),
-    anchor: new window.google.maps.Point((pinSize + 20) / 2, pinSize + 25),
-    labelOrigin: new window.google.maps.Point((pinSize + 20) / 2, pinSize + 5),
+    url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+    scaledSize: new window.google.maps.Size(width, height),
+    anchor: new window.google.maps.Point(width / 2, height - 4),
   }
 }
 
-// Create cluster icon with pin shape - matching billboard pins
+// Create cluster icon matching OpenStreetMap style
 const createClusterIcon = (count: number) => {
-  const size = 60
   const displayCount = count > 99 ? '99+' : String(count)
-  const fontSize = count > 99 ? 10 : count > 9 ? 12 : 14
+  const fontSize = count > 99 ? 11 : count > 9 ? 13 : 15
 
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(`
-    <svg xmlns="http://www.w3.org/2000/svg" width="${size + 10}" height="${size + 20}" viewBox="0 0 ${size + 10} ${size + 20}">
-      <defs>
-        <filter id="clusterShadow" x="-50%" y="-50%" width="200%" height="200%">
-          <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#d4af37" flood-opacity="0.5"/>
-        </filter>
-        <linearGradient id="clusterGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" style="stop-color:#d4af37;stop-opacity:1"/>
-          <stop offset="100%" style="stop-color:#b8962e;stop-opacity:1"/>
-        </linearGradient>
-      </defs>
-      <g transform="translate(5, 3)">
-        <!-- Pin shape -->
-        <path filter="url(#clusterShadow)" 
-              d="M${size/2} 2C${size*0.25} 2 2 ${size*0.25} 2 ${size/2}c0 ${size*0.35} ${size/2 - 2} ${size*0.7} ${size/2 - 2} ${size*0.7}s${size/2 - 2}-${size*0.35} ${size/2 - 2}-${size*0.7}C${size - 2} ${size*0.25} ${size*0.75} 2 ${size/2} 2z"
-              fill="url(#clusterGrad)"
-              stroke="#1a1a2e"
-              stroke-width="3"/>
-        <!-- Inner circle -->
-        <circle cx="${size/2}" cy="${size*0.42}" r="${size*0.28}" fill="#1a1a2e" stroke="#d4af37" stroke-width="2"/>
-        <!-- Count text -->
-        <text x="${size/2}" y="${size*0.47}" text-anchor="middle" font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="#d4af37">${displayCount}</text>
-      </g>
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="50" height="50" viewBox="0 0 50 50">
+      <circle cx="25" cy="25" r="23" fill="#d4af37" stroke="#1a1a2e" stroke-width="3"/>
+      <circle cx="25" cy="25" r="16" fill="#1a1a2e"/>
+      <text x="25" y="30" text-anchor="middle" font-family="Arial,sans-serif" font-size="${fontSize}" font-weight="bold" fill="#d4af37">${displayCount}</text>
     </svg>
-  `)}`
+  `
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`
 }
 
 // Store current open InfoWindow to close when clicking map
 let currentInfoWindow: any = null
 
-export default function InteractiveMap({ billboards, onImageView, selectedBillboards, onToggleSelection, onSelectMultiple, onDownloadSelected }: InteractiveMapProps) {
+export default function InteractiveMap({ billboards, onImageView, selectedBillboards, onToggleSelection, onSelectMultiple, onDownloadSelected, onReady }: InteractiveMapProps) {
   const mapRef = useRef<HTMLDivElement>(null)
   const mapInstanceRef = useRef<any>(null)
   const markersRef = useRef<any[]>([])
   const clustererRef = useRef<any>(null)
+  const infoWindowRef = useRef<any>(null)
   const drawingPolygonRef = useRef<any>(null)
   const drawingPathRef = useRef<{ lat: number; lng: number }[]>([])
+  const didInitRef = useRef(false)
+  const didFitBoundsRef = useRef(false)
+  const prevBillboardsLenRef = useRef(0)
   const [mapLoaded, setMapLoaded] = useState(false)
   const [mapStyle, setMapStyle] = useState<'roadmap' | 'satellite' | 'hybrid'>('satellite')
   const [isDrawingMode, setIsDrawingMode] = useState(false)
   const [drawingPoints, setDrawingPoints] = useState<{ lat: number; lng: number }[]>([])
+  const [zoomedImage, setZoomedImage] = useState<string | null>(null)
 
   const selectedCount = selectedBillboards?.size || 0
 
@@ -237,64 +191,23 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
   ]
 
   useEffect(() => {
-    const loadGoogleMaps = async () => {
-      // Check if Google Maps is already loaded
-      if (window.google?.maps) {
-        initializeMap()
-        return
-      }
+    // ✅ منع تحميل السكربتات مرتين (React.StrictMode يشغل useEffect مرتين في التطوير)
+    if (didInitRef.current) return
+    didInitRef.current = true
 
-      if (!window.google) {
-        await new Promise<void>((resolve) => {
-          window.initMap = () => resolve()
-
-          const script = document.createElement("script")
-          script.src = "https://cdn.jsdelivr.net/gh/somanchiu/Keyless-Google-Maps-API@v7.1/mapsJavaScriptAPI.js"
-          script.async = true
-          script.defer = true
-          document.head.appendChild(script)
-
-          // Reduced timeout for faster feedback
-          setTimeout(() => resolve(), 2000)
-        })
-      }
-
-      if (!window.markerClusterer) {
-        await new Promise<void>((resolve) => {
-          const script = document.createElement("script")
-          script.src = "https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js"
-          script.onload = () => resolve()
-          document.head.appendChild(script)
-        })
-      }
-
-      // Faster check interval
-      await new Promise<void>((resolve) => {
-        const checkGoogle = setInterval(() => {
-          if (window.google && window.google.maps) {
-            clearInterval(checkGoogle)
-            resolve()
-          }
-        }, 50) // Reduced from 100ms to 50ms
-        setTimeout(() => {
-          clearInterval(checkGoogle)
-          resolve()
-        }, 3000) // Reduced from 5000ms to 3000ms
-      })
-
-      initializeMap()
-    }
+    let cancelled = false
 
     const initializeMap = () => {
+      if (cancelled) return
       if (mapRef.current && window.google?.maps && !mapInstanceRef.current) {
-        // Mobile-optimized map settings
+        // Optimized map settings for better performance
         const isMobile = window.innerWidth < 768
 
         const map = new window.google.maps.Map(mapRef.current, {
           center: { lat: 32.7, lng: 13.2 },
           zoom: isMobile ? 7 : 8,
           styles: darkMapStyles,
-          mapTypeId: 'hybrid', // Default to satellite view
+          mapTypeId: 'hybrid',
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
@@ -304,21 +217,43 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
           panControl: false,
           keyboardShortcuts: false,
           gestureHandling: 'greedy',
-          // Mobile performance optimizations
           maxZoom: 18,
           minZoom: 5,
-          clickableIcons: false, // Disable clickable POIs for better performance
-          disableDoubleClickZoom: isMobile, // Prevent accidental zooms on mobile
+          clickableIcons: false,
+          disableDoubleClickZoom: isMobile,
+          // Performance optimizations
+          tilt: 0,
+          isFractionalZoomEnabled: false,
         })
 
         mapInstanceRef.current = map
+        if (!infoWindowRef.current) {
+          infoWindowRef.current = new window.google.maps.InfoWindow({ content: "" })
+        }
+
         setMapLoaded(true)
+        requestAnimationFrame(() => onReady?.())
 
         // Close InfoWindow when clicking on map
         map.addListener("click", () => {
           if (currentInfoWindow) {
             currentInfoWindow.close()
             currentInfoWindow = null
+          }
+        })
+        
+        // Show/hide floating labels based on zoom level
+        map.addListener("zoom_changed", () => {
+          const zoom = map.getZoom()
+          const showLabels = zoom >= 14
+          if (map._floatingLabels) {
+            map._floatingLabels.forEach((item: any) => {
+              if (showLabels) {
+                item.label.show()
+              } else {
+                item.label.hide()
+              }
+            })
           }
         })
 
@@ -354,7 +289,51 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
       }
     }
 
+    const loadGoogleMaps = async () => {
+      try {
+        if (window.google?.maps) {
+          initializeMap()
+          return
+        }
+
+        // ✅ تحميل Google Maps (Keyless) مرة واحدة فقط
+        await loadScriptOnce(
+          "https://cdn.jsdelivr.net/gh/somanchiu/Keyless-Google-Maps-API@v7.1/mapsJavaScriptAPI.js",
+          "google-maps-keyless"
+        )
+
+        // ✅ تحميل markerclusterer مرة واحدة فقط
+        await loadScriptOnce(
+          "https://unpkg.com/@googlemaps/markerclusterer/dist/index.min.js",
+          "google-maps-markerclusterer"
+        )
+
+        // انتظر توفر google.maps لفترة قصيرة
+        await new Promise<void>((resolve) => {
+          const startedAt = Date.now()
+          const check = setInterval(() => {
+            if (window.google?.maps) {
+              clearInterval(check)
+              resolve()
+            } else if (Date.now() - startedAt > 3500) {
+              clearInterval(check)
+              resolve()
+            }
+          }, 50)
+        })
+
+        initializeMap()
+      } catch (e) {
+        console.error("Failed to load Google Maps scripts", e)
+        initializeMap()
+      }
+    }
+
     loadGoogleMaps()
+
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const addBillboardMarkers = useCallback((map: any) => {
@@ -371,6 +350,9 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
     const normalMarkers: any[] = []
     const selectedMarkers: any[] = []
 
+    const bounds = new window.google.maps.LatLngBounds()
+    let boundsCount = 0
+
     billboards.forEach((billboard) => {
       const coordsStr = (billboard as any).coordinates || (billboard as any).GPS_Coordinates || ''
       if (!coordsStr) return
@@ -378,6 +360,9 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
       if (coords.length !== 2 || isNaN(coords[0]) || isNaN(coords[1])) return
 
       const [lat, lng] = coords
+
+      bounds.extend(new window.google.maps.LatLng(lat, lng))
+      boundsCount++
       const expiryDate = (billboard as any).expiryDate || (billboard as any).Rent_End_Date || null
       const daysRemaining = getDaysRemaining(expiryDate)
       const billboardSize = (billboard as any).size || (billboard as any).Size || ''
@@ -395,21 +380,19 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
         position: { lat, lng },
         title: (billboard as any).name || (billboard as any).Billboard_Name || '',
         icon: createPinIcon(billboardSize, billboardStatus, isSelected),
-        label: {
-          text: billboardSize,
-          color: isSelected ? '#d4af37' : '#fff',
-          fontWeight: 'bold',
-          fontSize: isSelected ? '11px' : '10px',
-          className: 'marker-label'
-        },
-        optimized: true, // Better performance on mobile
-        zIndex: isSelected ? 1000 : 1 // Selected markers on top
+        optimized: true,
+        zIndex: isSelected ? 500 : 1, // Lower z-index for markers
+        clickable: true,
       })
 
       // Add floating label for rented billboards showing customer name and ad type
+      // Only show labels at high zoom levels (not when clustered)
+      const floatingLabelsToAdd: { label: any; lat: number; lng: number }[] = []
+      
       if (isRented && (customerName || adType)) {
         const labelContent = document.createElement('div')
         labelContent.className = 'billboard-floating-label'
+        labelContent.style.display = 'none' // Hidden by default
         labelContent.innerHTML = `
           <div style="
             background: #1a1a2e;
@@ -431,11 +414,13 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
         class FloatingLabel extends window.google.maps.OverlayView {
           private position: google.maps.LatLng
           private div: HTMLDivElement | null = null
+          public labelDiv: HTMLDivElement | null = null
 
           constructor(position: google.maps.LatLng, content: HTMLDivElement) {
             super()
             this.position = position
             this.div = content
+            this.labelDiv = content
           }
 
           onAdd() {
@@ -463,6 +448,14 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
               this.div.parentNode.removeChild(this.div)
             }
           }
+          
+          show() {
+            if (this.div) this.div.style.display = 'block'
+          }
+          
+          hide() {
+            if (this.div) this.div.style.display = 'none'
+          }
         }
 
         const floatingLabel = new FloatingLabel(
@@ -470,7 +463,12 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
           labelContent
         )
         floatingLabel.setMap(map)
+        floatingLabelsToAdd.push({ label: floatingLabel, lat, lng })
       }
+      
+      // Store floating labels reference for zoom-based visibility
+      if (!map._floatingLabels) map._floatingLabels = []
+      floatingLabelsToAdd.forEach(item => map._floatingLabels.push(item))
 
       // Format date for display
       const formatExpiryDate = (dateStr: string | null): string => {
@@ -510,82 +508,99 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
       const billboardImageUrl = (billboard as any).imageUrl || (billboard as any).Image_URL || ''
       // customerName, adType, isRented already defined above
 
+      const gpsCoords = (billboard as any).GPS_Coordinates || `${lat},${lng}`
+
       const infoWindow = new window.google.maps.InfoWindow({
+        zIndex: 9999, // High z-index for InfoWindow
+        disableAutoPan: false,
         content: `
-          <div style="padding: 0; font-family: 'Manrope', 'Tajawal', sans-serif; direction: rtl; width: 280px; background: linear-gradient(145deg, #1a1a2e, #16162b); border-radius: 14px; overflow: hidden; border: 2px solid ${isSelected ? '#d4af37' : 'transparent'};">
-            <!-- Image Section -->
-            <div style="position: relative; height: 120px; overflow: hidden;">
-              <img src="${billboardImageUrl || '/roadside-billboard.png'}"
+          <div style="font-family: 'Tajawal',system-ui,sans-serif; direction: rtl; width: 240px; background: #1a1a2e; border-radius: 12px; overflow: hidden;">
+            
+            <!-- Header with image - clickable to zoom -->
+            <div style="position: relative; height: 100px; background: #252542; cursor: pointer;" onclick="window.dispatchEvent(new CustomEvent('showBillboardImage', { detail: '${billboardImageUrl || "/roadside-billboard.png"}' }))">
+              <img src="${billboardImageUrl || "/roadside-billboard.png"}"
                    alt="${billboardName}"
-                   style="width: 100%; height: 100%; object-fit: cover;"
-                   onerror="this.src='https://lh3.googleusercontent.com/d/13yTnaEWp2tFSxCmg8AuXH1e9QvPNMYWq'" />
-              <div style="position: absolute; inset: 0; background: linear-gradient(to top, #1a1a2e, transparent 60%);"></div>
-
-              <!-- Size Badge with distinct color -->
-              <div style="position: absolute; top: 8px; right: 8px; background: ${sizeColor.bg}; padding: 5px 10px; border-radius: 8px; font-size: 11px; font-weight: 700; color: ${sizeColor.text}; border: 2px solid ${sizeColor.border}; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-                ${billboardSize}
+                   style="width: 100%; height: 100%; object-fit: contain; background: #252542;"
+                   onerror="this.style.display='none'" />
+              
+              <!-- Zoom hint -->
+              <div style="position: absolute; bottom: 6px; left: 6px; background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/><path d="M11 8v6"/><path d="M8 11h6"/></svg>
               </div>
-
-              <!-- Status Badge -->
-              <div style="position: absolute; bottom: 8px; right: 8px; background: ${billboardStatus === 'متاح' ? 'rgba(16,185,129,0.95)' : billboardStatus === 'قريباً' ? 'rgba(245,158,11,0.95)' : 'rgba(239,68,68,0.95)'}; padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; color: white; display: flex; align-items: center; gap: 4px;">
+              
+              <!-- Status badge -->
+              <div style="position: absolute; top: 6px; left: 6px; background: ${billboardStatus === 'متاح' ? '#10b981' : billboardStatus === 'قريباً' ? '#f59e0b' : '#ef4444'}; padding: 3px 8px; border-radius: 12px; display: flex; align-items: center; gap: 4px;">
                 <span style="width: 5px; height: 5px; border-radius: 50%; background: white;"></span>
-                ${billboardStatus}
+                <span style="color: white; font-size: 10px; font-weight: 600;">${billboardStatus}</span>
+              </div>
+              
+              <!-- Size badge -->
+              <div style="position: absolute; top: 6px; right: 6px; background: ${sizeColor.bg}; padding: 3px 10px; border-radius: 12px;">
+                <span style="color: ${sizeColor.text}; font-size: 10px; font-weight: 700;">${billboardSize}</span>
               </div>
             </div>
 
-            <!-- Content Section -->
-            <div style="padding: 12px;">
-              <h3 style="font-weight: 700; font-size: 13px; color: #fff; margin-bottom: 6px; line-height: 1.4;">${billboardName}</h3>
+            <!-- Content -->
+            <div style="padding: 10px;">
+              <!-- Title -->
+              <h3 style="font-size: 12px; font-weight: 700; color: #fff; margin: 0 0 8px 0; line-height: 1.3;">${billboardName}</h3>
 
-              ${isRented && customerName ? `
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 6px; background: rgba(239,68,68,0.15); border-radius: 8px; border: 1px solid rgba(239,68,68,0.3);">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                  <p style="color: #ef4444; font-size: 11px; margin: 0; flex: 1; font-weight: 600;">${customerName}</p>
-                </div>
-              ` : ''}
-
-              ${isRented && adType ? `
-                <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 6px; background: rgba(139,92,246,0.15); border-radius: 8px; border: 1px solid rgba(139,92,246,0.3);">
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
-                  <p style="color: #8b5cf6; font-size: 10px; margin: 0; flex: 1; font-weight: 600;">📢 ${adType}</p>
-                </div>
-              ` : ''}
-
-              <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px; padding: 6px; background: rgba(212,175,55,0.1); border-radius: 8px;">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                <p style="color: #999; font-size: 10px; margin: 0; flex: 1;">${billboardLocation}</p>
-              </div>
-
-              ${billboardStatus !== 'متاح' && daysRemaining !== null && daysRemaining > 0 ? `
-                <div style="background: rgba(245,158,11,0.1); padding: 8px; border-radius: 8px; margin-bottom: 8px;">
-                  <div style="display: flex; align-items: center; gap: 5px; margin-bottom: 2px;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
-                    <span style="font-weight: 700; color: #f59e0b; font-size: 11px;">متبقي ${daysRemaining} يوم</span>
+              <!-- Info rows -->
+              <div style="display: flex; flex-direction: column; gap: 5px;">
+                
+                ${isRented && customerName ? `
+                  <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(239,68,68,0.12); border-radius: 6px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    <span style="font-size: 10px; color: #ef4444; font-weight: 600;">${customerName}</span>
                   </div>
-                  <p style="color: #777; font-size: 9px; margin: 0;">تاريخ الإتاحة: ${formattedExpiryDate}</p>
-                </div>
-              ` : ''}
+                ` : ''}
 
-              <div style="display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 10px;">
-                ${billboardArea ? `<span style="background: rgba(245,158,11,0.15); color: #f59e0b; padding: 3px 8px; border-radius: 5px; font-size: 9px; font-weight: 600;">${billboardArea}</span>` : ''}
-                <span style="background: rgba(212,175,55,0.15); color: #d4af37; padding: 3px 8px; border-radius: 5px; font-size: 9px; font-weight: 600;">${billboardMunicipality}</span>
+                ${isRented && adType ? `
+                  <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(139,92,246,0.12); border-radius: 6px;">
+                    <span style="font-size: 10px;">📢</span>
+                    <span style="font-size: 10px; color: #8b5cf6; font-weight: 600;">${adType}</span>
+                  </div>
+                ` : ''}
+
+                ${billboardLocation ? `
+                  <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(212,175,55,0.08); border-radius: 6px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#d4af37" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    <span style="font-size: 9px; color: #888;">${billboardLocation}</span>
+                  </div>
+                ` : ''}
+
+                ${billboardStatus !== 'متاح' && daysRemaining !== null && daysRemaining > 0 ? `
+                  <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(245,158,11,0.12); border-radius: 6px;">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    <span style="font-size: 10px; color: #f59e0b; font-weight: 700;">متبقي ${daysRemaining} يوم</span>
+                  </div>
+                ` : ''}
               </div>
 
-              <!-- Selection Button -->
-              <button
-                onclick="window.dispatchEvent(new CustomEvent('toggleBillboardSelection', { detail: '${billboardId}' }))"
-                style="width: 100%; padding: 10px; border-radius: 10px; border: none; font-weight: 700; font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; transition: all 0.3s; ${isSelected
-                  ? 'background: linear-gradient(135deg, #d4af37, #b8860b); color: #1a1a1a;'
-                  : 'background: rgba(212,175,55,0.15); color: #d4af37; border: 1px solid rgba(212,175,55,0.3);'
-                }">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  ${isSelected
-                    ? '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>'
-                    : '<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>'
-                  }
-                </svg>
-                ${isSelected ? 'تم الاختيار ✓' : 'اختيار للتحميل'}
-              </button>
+              <!-- Tags -->
+              <div style="display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0;">
+                ${billboardArea ? `<span style="background: rgba(245,158,11,0.12); color: #f59e0b; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600;">${billboardArea}</span>` : ''}
+                ${billboardMunicipality ? `<span style="background: rgba(59,130,246,0.12); color: #3b82f6; padding: 2px 6px; border-radius: 4px; font-size: 9px; font-weight: 600;">${billboardMunicipality}</span>` : ''}
+              </div>
+
+              <!-- Action buttons -->
+              <div style="display: flex; gap: 6px;">
+                ${gpsCoords ? `
+                  <a href="https://www.google.com/maps?q=${gpsCoords}" target="_blank" rel="noopener noreferrer"
+                     style="flex: 1; display: flex; align-items: center; justify-content: center; gap: 4px; padding: 8px; border-radius: 8px; background: linear-gradient(135deg, #d4af37, #b8860b); color: #1a1a2e; text-decoration: none; font-weight: 600; font-size: 10px;">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      خرائط جوجل
+                  </a>
+                ` : ''}
+                <button
+                  onclick="window.dispatchEvent(new CustomEvent('toggleBillboardSelection', { detail: '${billboardId}' }))"
+                  style="flex: 1; padding: 8px; border-radius: 8px; border: none; font-weight: 600; font-size: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 4px; ${isSelected
+                    ? 'background: #10b981; color: white;'
+                    : 'background: rgba(212,175,55,0.15); color: #d4af37; border: 1px solid rgba(212,175,55,0.3);'
+                  }">
+                  ${isSelected ? '✓ مختار' : 'اختيار'}
+                </button>
+              </div>
             </div>
           </div>
         `,
@@ -615,20 +630,22 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
       clustererRef.current = new window.markerClusterer.MarkerClusterer({
         map,
         markers: normalMarkers,
-        gridSize: isMobile ? 80 : 60,
-        minimumClusterSize: isMobile ? 3 : 2,
+        algorithm: new window.markerClusterer.SuperClusterAlgorithm({
+          maxZoom: 14,
+          radius: isMobile ? 100 : 80,
+        }),
         renderer: {
           render: ({ count, position }: any) => {
-            const iconSize = 70
+            const iconSize = 50
             return new window.google.maps.Marker({
               position,
               icon: {
                 url: createClusterIcon(count),
-                scaledSize: new window.google.maps.Size(iconSize, iconSize + 10),
-                anchor: new window.google.maps.Point(iconSize / 2, iconSize)
+                scaledSize: new window.google.maps.Size(iconSize, iconSize),
+                anchor: new window.google.maps.Point(iconSize / 2, iconSize / 2)
               },
               optimized: true,
-              zIndex: count + 100
+              zIndex: 50, // Lower than InfoWindow
             })
           },
         },
@@ -639,6 +656,18 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
 
     // Always draw selected markers above clusters
     selectedMarkers.forEach((marker) => marker.setMap(map))
+
+    // Auto-fit map to show pins (only on first load or when billboard list changes)
+    const shouldFit = !didFitBoundsRef.current || billboards.length !== prevBillboardsLenRef.current
+    if (boundsCount > 0 && shouldFit) {
+      try {
+        map.fitBounds(bounds, 60)
+        didFitBoundsRef.current = true
+        prevBillboardsLenRef.current = billboards.length
+      } catch {
+        // ignore
+      }
+    }
   }, [billboards, selectedBillboards])
 
   useEffect(() => {
@@ -649,7 +678,10 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
 
   useEffect(() => {
     const handleShowImage = (event: any) => {
-      onImageView(event.detail)
+      // Show internal lightbox
+      setZoomedImage(event.detail)
+      // Also call external handler if provided
+      onImageView?.(event.detail)
     }
 
     const handleToggleSelection = (event: any) => {
@@ -662,11 +694,11 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
       }
     }
 
-    document.addEventListener("showBillboardImage", handleShowImage)
+    window.addEventListener("showBillboardImage", handleShowImage)
     window.addEventListener("toggleBillboardSelection", handleToggleSelection)
 
     return () => {
-      document.removeEventListener("showBillboardImage", handleShowImage)
+      window.removeEventListener("showBillboardImage", handleShowImage)
       window.removeEventListener("toggleBillboardSelection", handleToggleSelection)
     }
   }, [onImageView, onToggleSelection])
@@ -1015,6 +1047,46 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
           </div>
         </CardContent>
       </Card>
+      
+      {/* Image Lightbox - Full screen overlay with highest z-index */}
+      {zoomedImage && (
+        <div
+          className="fixed inset-0 bg-black/95 flex items-center justify-center p-4 cursor-pointer"
+          style={{ zIndex: 99999 }}
+          onClick={() => setZoomedImage(null)}
+        >
+          {/* Close button */}
+          <button
+            className="absolute top-6 right-6 z-10 h-14 w-14 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center justify-center transition-all duration-200 border border-white/20"
+            onClick={(e) => {
+              e.stopPropagation();
+              setZoomedImage(null);
+            }}
+          >
+            <X className="h-7 w-7" />
+          </button>
+          
+          {/* Hint text */}
+          <div className="absolute top-6 left-6 text-white/60 text-sm font-medium">
+            اضغط في أي مكان للإغلاق
+          </div>
+          
+          {/* Image container */}
+          <div 
+            className="relative max-w-[95vw] max-h-[90vh] flex items-center justify-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={zoomedImage}
+              alt="Billboard"
+              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
+              onError={(e) => {
+                (e.target as HTMLImageElement).src = "/roadside-billboard.png";
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   )
 }
