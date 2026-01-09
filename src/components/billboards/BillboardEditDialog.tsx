@@ -353,230 +353,312 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
   return (
     <Dialog open={editOpen} onOpenChange={setEditOpen}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-card border-border">
-        <DialogHeader>
-          <DialogTitle className="text-foreground">تعديل اللوحة</DialogTitle>
-        </DialogHeader>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          <div>
-            <Label className="text-foreground">الاسم (غير قابل للتعديل)</Label>
-            <Input 
-              value={editForm.Billboard_Name || ''} 
-              disabled 
-              className="bg-muted cursor-not-allowed text-sm text-muted-foreground border-border"
-              title="اسم اللوحة غير قابل للتعديل"
-            />
-          </div>
-          <div>
-            <Label className="text-foreground">المدينة</Label>
-            <Select value={editForm.City || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, City: v }))}>
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر المدينة" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {citiesList.filter(c => c && String(c).trim()).map((c) => (
-                  <SelectItem key={c} value={c as string} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">{c}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-foreground">البلدية</Label>
-            <Select value={editForm.Municipality || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Municipality: v }))}>
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر البلدية" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {municipalities.filter(m => m && m.id && m.name && String(m.name).trim()).map((m) => (
-                  <SelectItem key={m.id} value={m.name} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">{m.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="lg:col-span-2">
-            <Label className="text-foreground">أقرب معلم</Label>
-            <Input 
-              className="text-sm bg-input border-border text-foreground" 
-              value={editForm.Nearest_Landmark || ''} 
-              onChange={(e) => setEditForm((p: any) => ({ ...p, Nearest_Landmark: e.target.value }))} 
-            />
-          </div>
-          <div className="relative">
-            <Label className="text-foreground">المنطقة</Label>
-            <Input 
-              className="text-sm bg-input border-border text-foreground" 
-              value={districtInput} 
-              onChange={(e) => handleDistrictInputChange(e.target.value)}
-              onFocus={() => setShowDistrictSuggestions(districtInput.length > 0)}
-              onBlur={() => setTimeout(() => setShowDistrictSuggestions(false), 200)}
-              placeholder="اكتب لعرض المناطق المتاحة" 
-            />
-            {/* ✅ NEW: District suggestions dropdown */}
-            {showDistrictSuggestions && filteredDistricts.length > 0 && (
-              <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-60 overflow-auto rounded-md border border-border bg-popover shadow-lg">
-                {filteredDistricts.map((district) => (
-                  <div
-                    key={district}
-                    className="cursor-pointer px-3 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-                    onMouseDown={() => handleDistrictSuggestionSelect(district)}
-                  >
-                    {district}
-                  </div>
-                ))}
-              </div>
+        <DialogHeader className="pb-4 border-b border-border">
+          <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
+            <span className="w-2 h-6 bg-primary rounded-full" />
+            تعديل اللوحة
+            {editForm.Billboard_Name && (
+              <span className="text-sm font-normal text-muted-foreground mr-2">
+                ({editForm.Billboard_Name})
+              </span>
             )}
-          </div>
-          <div>
-            <Label className="text-foreground">الإحداثيات</Label>
-            <Input 
-              className="text-sm bg-input border-border text-foreground" 
-              value={editForm.GPS_Coordinates || ''} 
-              onChange={(e) => setEditForm((p: any) => ({ ...p, GPS_Coordinates: e.target.value }))} 
-              placeholder="lat, lng" 
-            />
-          </div>
-          <div>
-            <Label className="text-foreground">عدد الأوجه</Label>
-            <Select value={String(editForm.Faces_Count || '')} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Faces_Count: v }))}>
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر عدد الأوجه">
-                  {editForm.Faces_Count ? 
-                    faces.find(f => String(f.count) === String(editForm.Faces_Count) || String(f.face_count) === String(editForm.Faces_Count))?.name || editForm.Faces_Count
-                    : "اختر عدد الأوجه"
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {faces.filter(face => face && face.id && (face.count != null || face.face_count != null)).map((face) => {
-                  // ✅ FIXED: Use both count and face_count fields
-                  const faceCount = face.count || face.face_count;
-                  return (
-                    <SelectItem key={face.id} value={String(faceCount)} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
-                      {face.name} ({faceCount} {faceCount === 1 ? 'وجه' : faceCount === 2 ? 'وجهين' : 'أوجه'})
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-foreground">المقاس</Label>
-            <Select value={editForm.Size || ''} onValueChange={(v) => {
-              // العثور على size_id المقابل للمقاس المختار
-              const selectedSize = sizes.find(s => s.name === v);
-              setEditForm((p: any) => ({ 
-                ...p, 
-                Size: v,
-                size_id: selectedSize?.id || null
-              }));
-            }}>
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر المقاس" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {sizes.filter(s => s && s.id && s.name && String(s.name).trim()).map((s) => (
-                  <SelectItem key={s.id} value={s.name} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">{s.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-foreground">المستوى</Label>
-            <Select value={editForm.Level || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Level: v }))}>
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر المستوى">
-                  {editForm.Level || "اختر المستوى"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {levels.filter(lv => lv && String(lv).trim()).length > 0 ? (
-                  levels.filter(lv => lv && String(lv).trim()).map((lv) => (
-                    <SelectItem key={lv} value={lv} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
-                      {lv}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد مستويات متاحة</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          <div>
-            <Label className="text-foreground">نوع اللوحة</Label>
-            <Select value={editForm.billboard_type || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, billboard_type: v }))}>
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر نوع اللوحة">
-                  {editForm.billboard_type || "اختر نوع اللوحة"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                {billboardTypes.filter(type => type && String(type).trim()).length > 0 ? (
-                  billboardTypes.filter(type => type && String(type).trim()).map((type) => (
-                    <SelectItem key={type} value={type} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
-                      {type}
-                    </SelectItem>
-                  ))
-                ) : (
-                  <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد أنواع لوحات متاحة</SelectItem>
-                )}
-              </SelectContent>
-            </Select>
-          </div>
-          
-          {/* Compact Image Upload Section */}
-          <div className="lg:col-span-3">
-            <Label className="flex items-center gap-2 text-sm text-foreground">
-              <Upload className="h-4 w-4" />
-              صورة اللوحة
-            </Label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-              <div className="space-y-2">
-                <Input
-                  type="file"
-                  accept="image/*"
-                  onChange={handleImageSelect}
-                  disabled={uploadingImage}
-                  className="text-sm bg-input border-border text-foreground"
-                />
-                <Input
-                  placeholder="رابط الصورة (احتياطي)"
-                  value={editForm.Image_URL || ''}
-                  onChange={(e) => setEditForm((p: any) => ({ ...p, Image_URL: e.target.value }))}
-                  className="text-sm bg-input border-border text-foreground"
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6 py-4">
+          {/* معلومات أساسية */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-primary rounded-full" />
+              المعلومات الأساسية
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/30 border border-border">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">اسم اللوحة</Label>
+                <Input 
+                  value={editForm.Billboard_Name || ''} 
+                  disabled 
+                  className="bg-muted/50 cursor-not-allowed text-sm font-medium text-muted-foreground border-border"
                 />
               </div>
-              {imagePreview && (
-                <div className="w-full h-32 bg-muted rounded-lg overflow-hidden border border-border">
-                  <BillboardImage 
-                    billboard={editForm}
-                    className="w-full h-full object-cover"
-                    alt="معاينة الصورة"
-                  />
-                </div>
-              )}
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">المدينة</Label>
+                <Select value={editForm.City || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, City: v }))}>
+                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                    <SelectValue placeholder="اختر المدينة" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {citiesList.filter(c => c && String(c).trim()).map((c) => (
+                      <SelectItem key={c} value={c as string} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">البلدية</Label>
+                <Select value={editForm.Municipality || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Municipality: v }))}>
+                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                    <SelectValue placeholder="اختر البلدية">
+                      {editForm.Municipality || 'اختر البلدية'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border max-h-60">
+                    {municipalities && municipalities.length > 0 ? (
+                      municipalities.map((m) => (
+                        <SelectItem 
+                          key={m.id || m.name} 
+                          value={m.name} 
+                          className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                        >
+                          {m.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-data" disabled className="text-muted-foreground">
+                        لا توجد بلديات متاحة
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="relative">
+                <Label className="text-xs text-muted-foreground mb-1.5 block">المنطقة</Label>
+                <Input 
+                  className="text-sm bg-background border-border text-foreground h-9" 
+                  value={districtInput} 
+                  onChange={(e) => handleDistrictInputChange(e.target.value)}
+                  onFocus={() => setShowDistrictSuggestions(districtInput.length > 0)}
+                  onBlur={() => setTimeout(() => setShowDistrictSuggestions(false), 200)}
+                  placeholder="اكتب للبحث" 
+                />
+                {showDistrictSuggestions && filteredDistricts.length > 0 && (
+                  <div className="absolute top-full left-0 right-0 z-50 mt-1 max-h-48 overflow-auto rounded-md border border-border bg-popover shadow-lg">
+                    {filteredDistricts.map((district) => (
+                      <div
+                        key={district}
+                        className="cursor-pointer px-3 py-2 text-sm text-popover-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+                        onMouseDown={() => handleDistrictSuggestionSelect(district)}
+                      >
+                        {district}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
-          <div className="lg:col-span-3">
-            <div className="flex items-center gap-3">
-              <Label className="text-sm text-foreground">لوحة شراكة</Label>
+          {/* الموقع */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-green-500 rounded-full" />
+              الموقع
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg bg-muted/30 border border-border">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">أقرب معلم</Label>
+                <Input 
+                  className="text-sm bg-background border-border text-foreground h-9" 
+                  value={editForm.Nearest_Landmark || ''} 
+                  onChange={(e) => setEditForm((p: any) => ({ ...p, Nearest_Landmark: e.target.value }))} 
+                  placeholder="مثال: بجانب مصرف الجمهورية"
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">الإحداثيات GPS</Label>
+                <Input 
+                  className="text-sm bg-background border-border text-foreground h-9 font-mono" 
+                  value={editForm.GPS_Coordinates || ''} 
+                  onChange={(e) => setEditForm((p: any) => ({ ...p, GPS_Coordinates: e.target.value }))} 
+                  placeholder="32.8752, 13.1875" 
+                  dir="ltr"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* المواصفات الفنية */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full" />
+              المواصفات الفنية
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/30 border border-border">
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">المقاس</Label>
+                <Select value={editForm.Size || ''} onValueChange={(v) => {
+                  const selectedSize = sizes.find(s => s.name === v);
+                  setEditForm((p: any) => ({ 
+                    ...p, 
+                    Size: v,
+                    size_id: selectedSize?.id || null
+                  }));
+                }}>
+                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                    <SelectValue placeholder="اختر المقاس">
+                      {editForm.Size || 'اختر المقاس'}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border max-h-60">
+                    {sizes && sizes.length > 0 ? (
+                      sizes.map((s) => (
+                        <SelectItem 
+                          key={s.id} 
+                          value={s.name} 
+                          className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                        >
+                          {s.name}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="no-sizes" disabled className="text-muted-foreground">
+                        لا توجد مقاسات متاحة
+                      </SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">عدد الأوجه</Label>
+                <Select value={String(editForm.Faces_Count || '')} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Faces_Count: v }))}>
+                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                    <SelectValue placeholder="اختر">
+                      {editForm.Faces_Count ? 
+                        faces.find(f => String(f.count) === String(editForm.Faces_Count) || String(f.face_count) === String(editForm.Faces_Count))?.name || editForm.Faces_Count
+                        : "اختر"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {faces.filter(face => face && face.id && (face.count != null || face.face_count != null)).map((face) => {
+                      const faceCount = face.count || face.face_count;
+                      return (
+                        <SelectItem key={face.id} value={String(faceCount)} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+                          {face.name} ({faceCount})
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">المستوى</Label>
+                <Select value={editForm.Level || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Level: v }))}>
+                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                    <SelectValue placeholder="اختر المستوى">
+                      {editForm.Level || "اختر المستوى"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {levels && levels.filter(lv => lv && String(lv).trim()).length > 0 ? (
+                      levels.filter(lv => lv && String(lv).trim()).map((lv) => (
+                        <SelectItem key={lv} value={lv} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+                          {lv}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد مستويات</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">نوع اللوحة</Label>
+                <Select value={editForm.billboard_type || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, billboard_type: v }))}>
+                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                    <SelectValue placeholder="اختر النوع">
+                      {editForm.billboard_type || "اختر النوع"}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover border-border">
+                    {billboardTypes && billboardTypes.filter(type => type && String(type).trim()).length > 0 ? (
+                      billboardTypes.filter(type => type && String(type).trim()).map((type) => (
+                        <SelectItem key={type} value={type} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+                          {type}
+                        </SelectItem>
+                      ))
+                    ) : (
+                      <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد أنواع</SelectItem>
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </div>
+          
+          {/* صورة اللوحة */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <Upload className="h-3.5 w-3.5" />
+              صورة اللوحة
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-lg bg-muted/30 border border-border">
+              <div className="md:col-span-2 space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">رفع صورة جديدة</Label>
+                  <Input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImageSelect}
+                    disabled={uploadingImage}
+                    className="text-sm bg-background border-border text-foreground h-9"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">أو رابط الصورة</Label>
+                  <Input
+                    placeholder="https://..."
+                    value={editForm.Image_URL || ''}
+                    onChange={(e) => setEditForm((p: any) => ({ ...p, Image_URL: e.target.value }))}
+                    className="text-sm bg-background border-border text-foreground h-9"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center justify-center">
+                {imagePreview ? (
+                  <div className="w-full h-28 bg-muted rounded-lg overflow-hidden border border-border shadow-sm">
+                    <BillboardImage 
+                      billboard={editForm}
+                      className="w-full h-full object-cover"
+                      alt="معاينة الصورة"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-full h-28 bg-muted/50 rounded-lg border border-dashed border-border flex items-center justify-center">
+                    <span className="text-xs text-muted-foreground">لا توجد صورة</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* الشراكة */}
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/30 border border-border">
               <input 
                 type="checkbox" 
+                id="partnership-checkbox"
                 checked={!!editForm.is_partnership} 
                 onChange={(e)=> setEditForm((p:any)=>({...p, is_partnership: e.target.checked}))} 
-                className="accent-primary"
+                className="w-4 h-4 accent-primary rounded"
               />
+              <Label htmlFor="partnership-checkbox" className="text-sm text-foreground cursor-pointer">
+                لوحة شراكة
+              </Label>
             </div>
           </div>
 
           {editForm.is_partnership && (
-            <div className="lg:col-span-3 p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 space-y-4">
-              <div className="flex items-center gap-2 mb-2">
-                <span className="text-lg font-semibold text-foreground">إعدادات الشراكة</span>
+            <div className="p-4 rounded-xl bg-gradient-to-br from-primary/10 to-primary/5 border border-primary/20 space-y-4">
+              <div className="flex items-center gap-2">
+                <span className="w-1.5 h-1.5 bg-primary rounded-full" />
+                <span className="text-sm font-semibold text-foreground">إعدادات الشراكة</span>
               </div>
               
               {/* الشركات المشاركة */}
               <div>
-                <Label className="text-sm text-foreground mb-2 block">الشركات المشاركة</Label>
+                <Label className="text-xs text-muted-foreground mb-1.5 block">الشركات المشاركة</Label>
                 {loadingPartners ? (
                   <div className="text-sm text-muted-foreground">جاري تحميل الشركاء...</div>
                 ) : (
@@ -589,7 +671,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                       }
                     }}
                   >
-                    <SelectTrigger className="text-sm bg-input border-border text-foreground">
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
                       <SelectValue placeholder="إضافة شريك جديد" />
                     </SelectTrigger>
                     <SelectContent className="bg-popover border-border">
@@ -608,7 +690,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 {Array.isArray(editForm.partner_companies) && editForm.partner_companies.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {editForm.partner_companies.map((partner: string, idx: number) => (
-                      <div key={idx} className="inline-flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary border border-primary/20 rounded-full text-sm">
+                      <div key={idx} className="inline-flex items-center gap-1 px-2.5 py-1 bg-primary/10 text-primary border border-primary/20 rounded-full text-xs">
                         <span>{partner}</span>
                         <button
                           type="button"
@@ -629,21 +711,21 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
               {/* رأس المال */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-xs text-muted-foreground">إجمالي رأس المال</Label>
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">إجمالي رأس المال</Label>
                   <Input 
-                    className="mt-1 text-lg font-semibold bg-input border-border text-foreground" 
+                    className="text-sm font-medium bg-background border-border text-foreground h-9" 
                     type="number" 
                     value={editForm.capital || 0} 
                     onChange={(e)=> setEditForm((p:any)=>({...p, capital: Number(e.target.value)}))} 
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">المتبقي للاسترداد</Label>
-                  <div className="mt-1 flex items-center gap-2 h-10">
-                    <span className="text-2xl font-bold text-primary">
+                  <Label className="text-xs text-muted-foreground mb-1.5 block">المتبقي للاسترداد</Label>
+                  <div className="flex items-center gap-2 h-9 px-3 rounded-md bg-background border border-border">
+                    <span className="text-sm font-bold text-primary">
                       {(editForm.capital_remaining || editForm.capital || 0).toLocaleString()}
                     </span>
-                    <span className="text-sm text-muted-foreground">د.ل</span>
+                    <span className="text-xs text-muted-foreground">د.ل</span>
                   </div>
                 </div>
               </div>
@@ -655,7 +737,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                     <span>نسبة الاسترداد</span>
                     <span>{(((editForm.capital - (editForm.capital_remaining || editForm.capital)) / editForm.capital) * 100).toFixed(1)}%</span>
                   </div>
-                  <div className="h-2 rounded-full bg-muted overflow-hidden">
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-500"
                       style={{ width: `${((editForm.capital - (editForm.capital_remaining || editForm.capital)) / editForm.capital) * 100}%` }}
@@ -663,48 +745,59 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                   </div>
                 </div>
               )}
-              
-              <p className="text-xs text-muted-foreground">
-                * لتعديل نسب التوزيع والإعدادات المتقدمة، استخدم صفحة "اللوحات المشتركة"
-              </p>
             </div>
           )}
 
-          {/* Friend Company Selection - Outside partnership section */}
-          <div className="lg:col-span-3">
-            <Label className="text-foreground">الشركة الصديقة (اختياري)</Label>
-            <Select 
-              value={editForm.friend_company_id || 'none'} 
-              onValueChange={(v) => setEditForm((p: any) => ({ ...p, friend_company_id: v === 'none' ? null : v }))}
-            >
-              <SelectTrigger className="text-sm bg-input border-border text-foreground">
-                <SelectValue placeholder="اختر الشركة الصديقة" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="none" className="text-popover-foreground">بدون شركة صديقة</SelectItem>
-                {friendCompanies.map((company) => (
-                  <SelectItem 
-                    key={company.id} 
-                    value={company.id}
-                    className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-                  >
-                    {company.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          {/* الشركة الصديقة */}
+          <div className="space-y-3">
+            <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-2">
+              <span className="w-1.5 h-1.5 bg-purple-500 rounded-full" />
+              الشركة الصديقة
+            </h3>
+            <div className="p-4 rounded-lg bg-muted/30 border border-border">
+              <Select 
+                value={editForm.friend_company_id || 'none'} 
+                onValueChange={(v) => setEditForm((p: any) => ({ ...p, friend_company_id: v === 'none' ? null : v }))}
+              >
+                <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                  <SelectValue placeholder="اختر الشركة الصديقة" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover border-border">
+                  <SelectItem value="none" className="text-popover-foreground">بدون شركة صديقة</SelectItem>
+                  {friendCompanies.map((company) => (
+                    <SelectItem 
+                      key={company.id} 
+                      value={company.id}
+                      className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                    >
+                      {company.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-
-
         </div>
-        <div className="flex justify-end gap-2 mt-4">
-          <Button variant="outline" onClick={() => {
-            setEditOpen(false);
-            setImagePreview('');
-            setSelectedFile(null);
-          }} className="border-border text-foreground hover:bg-accent hover:text-accent-foreground">إلغاء</Button>
-          <Button onClick={saveEdit} disabled={saving || uploadingImage} className="bg-primary text-primary-foreground hover:bg-primary/90">
-            {saving ? 'جارٍ الحفظ...' : uploadingImage ? 'جاري رفع الصورة...' : 'حفظ'}
+
+        {/* أزرار الحفظ */}
+        <div className="flex justify-end gap-3 pt-4 border-t border-border mt-4">
+          <Button 
+            variant="outline" 
+            onClick={() => {
+              setEditOpen(false);
+              setImagePreview('');
+              setSelectedFile(null);
+            }} 
+            className="px-6"
+          >
+            إلغاء
+          </Button>
+          <Button 
+            onClick={saveEdit} 
+            disabled={saving || uploadingImage} 
+            className="px-6 bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            {saving ? 'جارٍ الحفظ...' : uploadingImage ? 'جاري رفع الصورة...' : 'حفظ التعديلات'}
           </Button>
         </div>
       </DialogContent>

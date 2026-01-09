@@ -231,11 +231,11 @@ export default function MunicipalityStickers() {
         unified_size_height: unifiedSizeHeight,
         reserve_count: reserveCount,
         max_number: maxNumber,
-        element_positions: elementPositions as unknown as Record<string, unknown>,
-        element_visibility: elementVisibility as unknown as Record<string, unknown>,
-        color_settings: colorSettings as unknown as Record<string, unknown>,
-        font_settings: fontSettings as unknown as Record<string, unknown>,
-        size_configs: sizeConfigs as unknown as Record<string, unknown>,
+        element_positions: JSON.parse(JSON.stringify(elementPositions)),
+        element_visibility: JSON.parse(JSON.stringify(elementVisibility)),
+        color_settings: JSON.parse(JSON.stringify(colorSettings)),
+        font_settings: JSON.parse(JSON.stringify(fontSettings)),
+        size_configs: JSON.parse(JSON.stringify(sizeConfigs)),
         updated_at: new Date().toISOString(),
       };
 

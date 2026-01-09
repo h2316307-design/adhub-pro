@@ -134,10 +134,10 @@ export function BackgroundSelector({ value, onChange, compact = false }: Backgro
                 </button>
                 
                 {backgrounds.map((bg) => (
-                  <button
+                  <div
                     key={bg.id}
                     onClick={() => handleSelect(bg)}
-                    className={`aspect-[210/297] rounded border-2 overflow-hidden relative group ${
+                    className={`aspect-[210/297] rounded border-2 overflow-hidden relative group cursor-pointer ${
                       value === bg.url ? 'border-primary ring-2 ring-primary/30' : 'border-border'
                     }`}
                   >
@@ -152,17 +152,17 @@ export function BackgroundSelector({ value, onChange, compact = false }: Backgro
                       </div>
                     )}
                     {!bg.is_default && (
-                      <button
+                      <div
                         onClick={(e) => {
                           e.stopPropagation();
                           deleteMutation.mutate(bg.id);
                         }}
-                        className="absolute top-1 left-1 p-1 bg-destructive/80 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="absolute top-1 left-1 p-1 bg-destructive/80 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                       >
                         <Trash2 className="h-2.5 w-2.5 text-destructive-foreground" />
-                      </button>
+                      </div>
                     )}
-                  </button>
+                  </div>
                 ))}
               </div>
             </ScrollArea>
@@ -249,10 +249,10 @@ export function BackgroundSelector({ value, onChange, compact = false }: Backgro
             </button>
             
             {backgrounds.map((bg) => (
-              <button
+              <div
                 key={bg.id}
                 onClick={() => handleSelect(bg)}
-                className={`aspect-[210/297] rounded border-2 overflow-hidden relative group ${
+                className={`aspect-[210/297] rounded border-2 overflow-hidden relative group cursor-pointer ${
                   value === bg.url ? 'border-primary ring-2 ring-primary/30' : 'border-border'
                 }`}
                 title={bg.name}
@@ -271,17 +271,17 @@ export function BackgroundSelector({ value, onChange, compact = false }: Backgro
                   {bg.name}
                 </div>
                 {!bg.is_default && (
-                  <button
+                  <div
                     onClick={(e) => {
                       e.stopPropagation();
                       deleteMutation.mutate(bg.id);
                     }}
-                    className="absolute top-1 left-1 p-1 bg-destructive/80 rounded opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 left-1 p-1 bg-destructive/80 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
                   >
                     <Trash2 className="h-3 w-3 text-destructive-foreground" />
-                  </button>
+                  </div>
                 )}
-              </button>
+              </div>
             ))}
           </div>
         </ScrollArea>

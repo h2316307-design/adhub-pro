@@ -96,52 +96,55 @@ export function PrintAllContractBillboardsDialog({
   useEffect(() => {
     if (open) {
       setSelectedTeamIds(new Set(Object.keys(itemsByTeam)));
+      setLoading(false); // إعادة تعيين حالة التحميل عند الفتح
       
       // جلب رقم العقد ونوع الإعلان لكل لوحة من جدول billboards
-      const billboardIds = allContractItems.map(item => item.billboard_id);
-      if (billboardIds.length > 0) {
-        supabase
-          .from('billboards')
-          .select('ID, Contract_Number')
-          .in('ID', billboardIds)
-          .then(async ({ data: billboardsData }) => {
-            // جمع أرقام العقود الفريدة
-            const uniqueContractNumbers = [...new Set(
-              (billboardsData || [])
-                .map(b => b.Contract_Number)
-                .filter((c): c is number => c !== null)
-            )];
+      const fetchContractData = async () => {
+        try {
+          const billboardIds = allContractItems.map(item => item.billboard_id);
+          if (billboardIds.length === 0) return;
+          
+          // جلب أرقام العقود من اللوحات
+          const { data: billboardsData } = await supabase
+            .from('billboards')
+            .select('ID, Contract_Number')
+            .in('ID', billboardIds);
+          
+          // جمع أرقام العقود الفريدة
+          const uniqueContractNumbers = [...new Set(
+            (billboardsData || [])
+              .map(b => b.Contract_Number)
+              .filter((c): c is number => c !== null && c !== undefined)
+          )];
+          
+          // إضافة رقم العقد الرئيسي إذا لم يكن موجوداً
+          if (!uniqueContractNumbers.includes(contractNumber)) {
+            uniqueContractNumbers.push(contractNumber);
+          }
+          
+          if (uniqueContractNumbers.length > 0) {
+            // جلب نوع الإعلان لكل عقد
+            const { data: contractsData } = await supabase
+              .from('Contract')
+              .select('Contract_Number, "Ad Type"')
+              .in('Contract_Number', uniqueContractNumbers);
             
-            if (uniqueContractNumbers.length > 0) {
-              // جلب نوع الإعلان لكل عقد
-              const { data: contractsData } = await supabase
-                .from('Contract')
-                .select('Contract_Number, "Ad Type"')
-                .in('Contract_Number', uniqueContractNumbers);
-              
-              const adTypesMap: Record<number, string> = {};
-              (contractsData || []).forEach(c => {
-                adTypesMap[c.Contract_Number] = c['Ad Type'] || '';
-              });
-              setContractAdTypes(adTypesMap);
-              
-              // تعيين نوع الإعلان الأول كقيمة افتراضية
-              if (contractsData && contractsData.length > 0) {
-                setAdType(contractsData[0]['Ad Type'] || '');
-              }
-            }
-          });
-      }
+            const adTypesMap: Record<number, string> = {};
+            (contractsData || []).forEach(c => {
+              adTypesMap[c.Contract_Number] = c['Ad Type'] || '';
+            });
+            setContractAdTypes(adTypesMap);
+            
+            // تعيين نوع الإعلان للعقد الرئيسي كقيمة افتراضية
+            const mainContractAdType = adTypesMap[contractNumber] || '';
+            setAdType(mainContractAdType);
+          }
+        } catch (error) {
+          console.error('Error fetching contract data:', error);
+        }
+      };
       
-      // جلب نوع الإعلان للعقد الرئيسي
-      supabase
-        .from('Contract')
-        .select('"Ad Type"')
-        .eq('Contract_Number', contractNumber)
-        .single()
-        .then(({ data }) => {
-          setAdType(data?.['Ad Type'] || '');
-        });
+      fetchContractData();
     }
   }, [open, itemsByTeam, contractNumber, allContractItems]);
 
@@ -387,12 +390,29 @@ export function PrintAllContractBillboardsDialog({
       .filter(Boolean)
       .join(' - ');
 
+    // جمع أرقام العقود الفريدة وأنواع الإعلانات
+    const uniqueContracts = new Set<number>();
+    const uniqueAdTypes = new Set<string>();
+    
+    contractItems.forEach(item => {
+      const billboard = billboards[item.billboard_id];
+      if (billboard) {
+        const itemContract = billboard.Contract_Number || contractNumber;
+        const itemAdType = contractAdTypes[itemContract] || adType;
+        uniqueContracts.add(itemContract);
+        if (itemAdType) uniqueAdTypes.add(itemAdType);
+      }
+    });
+    
+    const contractNumbersStr = Array.from(uniqueContracts).join(', ');
+    const adTypesStr = Array.from(uniqueAdTypes).join(' / ');
+
     return `
       <!DOCTYPE html>
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8" />
-        <title>تركيب #${contractNumber} - ${customerName} - ${adType || 'إعلان'} - ${contractItems.length} لوحة${selectedTeamNames ? ` - ${selectedTeamNames}` : ''}</title>
+        <title>تركيب - عقد #${contractNumbersStr} - ${customerName}${adTypesStr ? ` - ${adTypesStr}` : ''} - ${contractItems.length} لوحة${selectedTeamNames ? ` - ${selectedTeamNames}` : ''}</title>
         <style>
           @font-face {
             font-family: 'Manrope';
@@ -425,15 +445,16 @@ export function PrintAllContractBillboardsDialog({
           .page {
             position: relative;
             width: 210mm;
-            height: 297mm;
+            min-height: 297mm;
             margin: 0;
             padding: 0;
             page-break-after: always;
+            page-break-inside: avoid;
             overflow: hidden;
           }
 
           .page:last-child {
-            page-break-after: avoid;
+            page-break-after: auto;
           }
 
           .background {
@@ -548,8 +569,11 @@ export function PrintAllContractBillboardsDialog({
             }
             .page {
               page-break-after: always;
+              page-break-inside: avoid;
               margin: 0;
               box-shadow: none;
+              height: 297mm;
+              overflow: hidden;
             }
             .page:last-child {
               page-break-after: auto;
@@ -575,10 +599,25 @@ export function PrintAllContractBillboardsDialog({
     `;
   };
 
-  // دالة إنشاء HTML للجدول
+  // دالة إنشاء HTML للجدول - تنسيق fares2 مع أسود وذهبي
   const generateTablePrintHTML = async () => {
     const sortedItems = await sortBillboardsBySize(contractItems);
-    const s = tableSettings;
+    // استخدام الألوان الثابتة من fares2 مباشرة
+    const GOLD = '#E8CC64';
+    const BLACK = '#000000';
+    const WHITE = '#ffffff';
+    
+    const s = {
+      ...tableSettings,
+      header_bg_color: BLACK,
+      header_text_color: GOLD,
+      first_column_bg_color: GOLD,
+      first_column_text_color: BLACK,
+      border_color: BLACK,
+      row_bg_color: WHITE,
+      row_text_color: BLACK,
+    };
+    
     const selectedTeamNames = Array.from(selectedTeamIds)
       .map(id => teams[id]?.team_name)
       .filter(Boolean)
@@ -660,9 +699,9 @@ export function PrintAllContractBillboardsDialog({
       ? enabledColumns.filter(col => columnHasData[col.id])
       : enabledColumns;
 
-    // تقسيم اللوحات إلى صفحات
+    // تقسيم اللوحات إلى صفحات - أقصى 11 صف في الصفحة
     const pages: string[] = [];
-    const rowsPerPage = s.rows_per_page || 10;
+    const rowsPerPage = Math.min(s.rows_per_page || 11, 11);
     
     for (let pageIndex = 0; pageIndex < Math.ceil(sortedItems.length / rowsPerPage); pageIndex++) {
       const pageItems = sortedItems.slice(pageIndex * rowsPerPage, (pageIndex + 1) * rowsPerPage);
@@ -719,38 +758,39 @@ export function PrintAllContractBillboardsDialog({
           }
         }
 
-        const rowBg = index % 2 === 0 ? s.row_bg_color : s.row_alt_bg_color;
+        const rowBg = '#ffffff'; // خلفية بيضاء دائماً مثل fares2
         
-        // إنشاء خلايا الصف حسب ترتيب الأعمدة
+        // إنشاء خلايا الصف حسب ترتيب الأعمدة - مطابق لـ fares2
         const cells = finalColumns.map((col, colIndex) => {
           const isFirstColumn = colIndex === 0;
-          const cellStyle = isFirstColumn 
-            ? `background: ${s.first_column_bg_color}; color: ${s.first_column_text_color}; font-weight: bold;`
-            : '';
 
           switch (col.id) {
             case 'row_number':
-              return `<td class="cell" style="${cellStyle}">${globalIndex}</td>`;
+              return `<td class="number-cell"><div class="billboard-number">${globalIndex}</div></td>`;
             case 'billboard_image':
-              return `<td class="cell img-cell" style="${cellStyle}">
-                ${billboard.Image_URL ? `<img src="${billboard.Image_URL}" alt="${name}" class="billboard-img" />` : '-'}
+              return `<td class="image-cell">
+                ${billboard.Image_URL 
+                  ? `<img src="${billboard.Image_URL}" alt="${name}" class="billboard-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                     <div class="image-placeholder" style="display:none;"><span>صورة</span></div>`
+                  : `<div class="image-placeholder"><span>صورة</span></div>`
+                }
               </td>`;
             case 'billboard_name':
-              return `<td class="cell" style="${cellStyle}">${name}</td>`;
+              return `<td style="font-weight: 600; text-align: right; padding: 4px; font-size: 8px;">${name}</td>`;
             case 'size':
-              return `<td class="cell" style="${cellStyle}">${size}</td>`;
+              return `<td style="font-weight: 600; font-size: 8px; color: #000000;">${size}</td>`;
             case 'faces_count':
-              return `<td class="cell" style="${cellStyle}">${facesCount}</td>`;
+              return `<td style="font-size: 9px; padding: 2px; font-weight: 700;">${facesCount}</td>`;
             case 'location':
-              return `<td class="cell" style="${cellStyle}">${[municipality, district].filter(Boolean).join(' - ') || '-'}</td>`;
+              return `<td style="font-weight: 500; text-align: right; padding: 4px; font-size: 8px;">${[municipality, district].filter(Boolean).join(' - ') || '-'}</td>`;
             case 'landmark':
-              return `<td class="cell" style="${cellStyle}">${landmark || '-'}</td>`;
+              return `<td style="text-align: right; padding: 4px; font-size: 8px;">${landmark || '-'}</td>`;
             case 'contract_number':
-              return `<td class="cell" style="${cellStyle}">${itemContractNumber}</td>`;
+              return `<td style="font-size: 8px; padding: 2px;">${itemContractNumber}</td>`;
             case 'installation_date':
-              return `<td class="cell" style="${cellStyle}">${installationDate}</td>`;
+              return `<td style="font-size: 8px; padding: 2px;">${installationDate}</td>`;
             case 'design_images':
-              return `<td class="cell img-cell" style="${cellStyle}">
+              return `<td class="image-cell">
                 <div class="img-group">
                   ${designFaceA ? `<img src="${designFaceA}" alt="أمامي" class="design-img" />` : ''}
                   ${designFaceB ? `<img src="${designFaceB}" alt="خلفي" class="design-img" />` : ''}
@@ -758,7 +798,7 @@ export function PrintAllContractBillboardsDialog({
                 </div>
               </td>`;
             case 'installed_images':
-              return `<td class="cell img-cell" style="${cellStyle}">
+              return `<td class="image-cell">
                 <div class="img-group">
                   ${installedImageFaceA ? `<img src="${installedImageFaceA}" alt="أمامي" class="installed-img" />` : ''}
                   ${installedImageFaceB ? `<img src="${installedImageFaceB}" alt="خلفي" class="installed-img" />` : ''}
@@ -766,47 +806,52 @@ export function PrintAllContractBillboardsDialog({
                 </div>
               </td>`;
             case 'qr_code':
-              return `<td class="cell img-cell" style="${cellStyle}">
-                ${qrCodeDataUrl && mapLink ? `<a href="${mapLink}" target="_blank" class="qr-link"><img src="${qrCodeDataUrl}" alt="QR" class="qr-img" /></a>` : '-'}
+              return `<td class="qr-cell" style="padding: 2px;">
+                ${qrCodeDataUrl && mapLink 
+                  ? `<a href="${mapLink}" target="_blank" class="qr-link" title="اضغط لفتح الموقع على الخريطة">
+                       <img src="${qrCodeDataUrl}" class="qr-code" style="width: 50px; height: 50px; object-fit: contain;" alt="QR" />
+                     </a>`
+                  : '<span style="color: #999; font-size: 7px;">-</span>'
+                }
               </td>`;
             default:
               return '';
           }
         });
         
-        return `<tr style="background: ${rowBg};">${cells.join('')}</tr>`;
+        return `<tr style="height: 60px; background: ${rowBg};">${cells.join('')}</tr>`;
       }));
 
-      // إنشاء رؤوس الأعمدة
+      // إنشاء رؤوس الأعمدة مع عرض كل عمود
       const headerCells = finalColumns.map((col, colIndex) => {
         const isFirstColumn = colIndex === 0;
         const headerStyle = isFirstColumn 
-          ? `background: ${s.first_column_bg_color}; color: ${s.first_column_text_color};`
-          : '';
+          ? `background: ${s.first_column_bg_color}; color: ${s.first_column_text_color}; width: ${col.width || '8%'};`
+          : `width: ${col.width || '8%'};`;
         return `<th class="header-cell" style="${headerStyle}">${col.label}</th>`;
       });
 
+      // محتوى الصفحة - مطابق لتنسيق fares2 مع خلفية repo.svg
       pages.push(`
-        <div class="page">
-          <div class="page-header">
-            <div class="title">${s.page_title} - عقد رقم ${contractNumber}</div>
-            <div class="subtitle">${customerName}${adType ? ' - ' + adType : ''}${selectedTeamNames ? ' - ' + selectedTeamNames : ''}</div>
-            <div class="page-info">صفحة ${pageIndex + 1} من ${Math.ceil(sortedItems.length / rowsPerPage)} | إجمالي اللوحات: ${sortedItems.length}</div>
-          </div>
-          <table>
-            <thead>
-              <tr>${headerCells.join('')}</tr>
-            </thead>
-            <tbody>
-              ${tableRows.join('')}
-            </tbody>
-          </table>
+        <div class="info-bar">
+          <span>عقد رقم: ${contractNumber} | العميل: ${customerName}${adType ? ' | ' + adType : ''}${selectedTeamNames ? ' | الفريق: ' + selectedTeamNames : ''} | صفحة ${pageIndex + 1} من ${Math.ceil(sortedItems.length / rowsPerPage)}</span>
         </div>
+        <table>
+          <thead>
+            <tr>${headerCells.join('')}</tr>
+          </thead>
+          <tbody>
+            ${tableRows.join('')}
+          </tbody>
+        </table>
       `);
     }
 
     const isLandscape = s.page_orientation === 'landscape';
     const pageMargin = s.page_margin || '8mm';
+    const tableTopMargin = '60mm'; // إزاحة الجدول 60mm من الأعلى
+    const rowHeight = s.row_height || '60px';
+    const qrSize = s.qr_code_size || '50px';
     
     return `
       <!DOCTYPE html>
@@ -814,6 +859,7 @@ export function PrintAllContractBillboardsDialog({
       <head>
         <meta charset="UTF-8" />
         <title>جدول لوحات العقد #${contractNumber} - ${customerName}</title>
+        <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
           @font-face {
             font-family: 'Doran';
@@ -822,160 +868,206 @@ export function PrintAllContractBillboardsDialog({
             font-style: normal;
           }
 
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+          @page {
+            size: ${isLandscape ? 'A4 landscape' : 'A4 portrait'};
+            margin: ${pageMargin};
           }
 
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+
           body {
-            font-family: '${s.primary_font}', Arial, sans-serif;
+            font-family: '${s.primary_font}', 'Tajawal', 'Arial', sans-serif;
             direction: rtl;
-            background: white;
-            color: ${s.row_text_color};
-            padding: 0;
-            margin: 0;
+            background: #ffffff;
+            color: #000;
+            line-height: 1.3;
+            font-size: ${s.row_font_size};
           }
 
           .page {
+            position: relative;
             width: ${isLandscape ? '297mm' : '210mm'};
-            height: ${isLandscape ? '210mm' : '297mm'};
+            min-height: ${isLandscape ? '210mm' : '297mm'};
             padding: ${pageMargin};
             margin: 0 auto;
             page-break-after: always;
             page-break-inside: avoid;
             background: white;
-            overflow: visible;
           }
 
           .page:last-child {
-            page-break-after: avoid;
+            page-break-after: auto;
           }
 
-          .page-header {
-            text-align: center;
-            margin-bottom: 5mm;
-            padding-bottom: 3mm;
-            border-bottom: 2px solid ${s.header_bg_color};
+          /* خلفية الصفحة - repo.svg */
+          .page-background {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('/repo.svg');
+            background-size: 100% 100%;
+            background-repeat: no-repeat;
+            z-index: 0;
           }
 
-          .title {
-            font-size: ${s.title_font_size};
-            font-weight: bold;
-            color: ${s.header_bg_color};
-            margin-bottom: 1mm;
+          .page-content {
+            position: relative;
+            z-index: 1;
+            padding-top: ${tableTopMargin}; /* إزاحة 60mm من الأعلى */
           }
 
-          .subtitle {
-            font-size: 12px;
-            color: #666;
+          .info-bar {
+            margin-bottom: 8px;
+            padding: 6px 10px;
+            background: ${s.header_bg_color};
+            display: inline-block;
           }
 
-          .page-info {
+          .info-bar span {
             font-size: 10px;
-            color: #999;
-            margin-top: 1mm;
+            color: ${s.header_text_color};
+            font-weight: 700;
           }
 
+          /* Table Styles - مطابق لـ fares2 */
           table {
             width: 100%;
             border-collapse: collapse;
+            margin-bottom: 10px;
             font-size: ${s.row_font_size};
-            table-layout: auto;
+            background: #ffffff;
           }
 
-          .header-cell {
+          th {
             background: ${s.header_bg_color};
             color: ${s.header_text_color};
-            padding: 5px 4px;
+            font-weight: 700;
             font-size: ${s.header_font_size};
-            font-weight: bold;
-            text-align: center;
+            height: 30px;
             border: 1px solid ${s.border_color};
-            white-space: nowrap;
+            padding: 4px 2px;
+            text-align: center;
           }
 
-          .cell {
-            padding: 4px 3px;
+          td {
             border: 1px solid ${s.border_color};
+            padding: 2px;
             text-align: center;
             vertical-align: middle;
-            color: ${s.row_text_color};
-            font-size: ${s.row_font_size};
+            background: #ffffff;
+            color: #000;
           }
 
-          .img-cell {
-            padding: 3px;
-            vertical-align: middle;
+          /* العمود الأول - ذهبي مثل fares2 */
+          td.number-cell {
+            background: ${s.first_column_bg_color};
+            padding: 2px;
+            font-weight: 700;
+            font-size: 9px;
+            color: ${s.first_column_text_color};
+            width: 60px;
           }
 
-          .billboard-img {
-            max-width: ${s.billboard_image_size};
+          td.image-cell {
+            background: #ffffff;
+            padding: 0;
+            width: 70px;
+          }
+
+          .billboard-image {
+            width: 100%;
             height: auto;
+            max-height: ${rowHeight};
             object-fit: contain;
-            border-radius: 3px;
-            border: 1px solid ${s.border_color};
             display: block;
             margin: 0 auto;
           }
 
-          .img-group {
-            display: flex;
-            gap: 3px;
-            justify-content: center;
-            flex-wrap: nowrap;
+          .billboard-number {
+            color: ${s.first_column_text_color};
+            font-weight: 700;
+            font-size: 9px;
           }
 
-          .design-img {
-            max-width: ${s.design_image_size};
+          td.qr-cell {
+            width: 60px;
+            padding: 2px;
+            vertical-align: middle;
+          }
+
+          .qr-code {
+            width: 100%;
             height: auto;
-            object-fit: contain;
-            border-radius: 2px;
-            border: 1px solid ${s.border_color};
-          }
-
-          .installed-img {
-            max-width: ${s.installed_image_size};
-            height: auto;
-            object-fit: contain;
-            border-radius: 2px;
-            border: 1px solid #22c55e;
-          }
-
-          .qr-img {
-            width: 35px;
-            height: 35px;
+            max-height: ${rowHeight};
+            display: block;
+            margin: 0 auto;
             cursor: pointer;
           }
 
           .qr-link {
-            display: inline-block;
+            display: block;
+            text-align: center;
           }
 
-          @page {
-            size: ${isLandscape ? 'A4 landscape' : 'A4 portrait'};
-            margin: 5mm;
+          .img-group {
+            display: flex;
+            gap: 2px;
+            justify-content: center;
+            align-items: center;
+          }
+
+          .design-img, .installed-img {
+            max-width: 48%;
+            max-height: calc(${rowHeight} - 4px);
+            object-fit: contain;
+          }
+
+          .image-placeholder {
+            width: 100%;
+            height: ${rowHeight};
+            background: #f0f0f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 7px;
+            color: #666;
           }
 
           @media print {
             body {
-              -webkit-print-color-adjust: exact !important;
-              print-color-adjust: exact !important;
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
+              background: #ffffff !important;
+            }
+            .no-print { display: none; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; page-break-after: auto; }
+            td, th, .billboard-image, .image-placeholder, td.image-cell, td.number-cell {
+              print-color-adjust: exact;
+              -webkit-print-color-adjust: exact;
             }
             .page {
               page-break-after: always;
               margin: 0;
               box-shadow: none;
-              padding: ${pageMargin};
             }
             .page:last-child {
-              page-break-after: avoid;
+              page-break-after: auto;
             }
           }
         </style>
       </head>
       <body>
-        ${pages.join('\n')}
+        ${pages.map((pageContent, idx) => `
+          <div class="page">
+            <div class="page-background"></div>
+            <div class="page-content">
+              ${pageContent}
+            </div>
+          </div>
+        `).join('\n')}
         <script>
           window.onload = function() {
             setTimeout(function() {
@@ -989,25 +1081,53 @@ export function PrintAllContractBillboardsDialog({
   };
 
   const handlePrint = async () => {
+    console.log('🖨️ handlePrint called', { printMode, printType, contractItemsCount: contractItems.length, loading });
+    
     if (contractItems.length === 0) {
+      console.log('❌ No items to print');
       toast.error('لا توجد لوحات للطباعة');
       return;
     }
 
+    if (loading) {
+      console.log('⏳ Already loading, returning');
+      return; // منع النقر المزدوج
+    }
+    
     setLoading(true);
+    console.log('🔄 Starting print generation...');
     try {
       const html = printMode === 'table' ? await generateTablePrintHTML() : await generatePrintHTML();
+      console.log('✅ HTML generated, opening print window...');
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(html);
         printWindow.document.close();
+        console.log('✅ Print window opened successfully');
         toast.success(`تم تحضير ${contractItems.length} ${printMode === 'table' ? 'صف' : 'صفحة'} للطباعة ${printType === 'installation' ? '(فريق التركيب)' : '(العميل)'}`);
-        // لا نغلق الحوار لكي يتمكن المستخدم من الطباعة مرة أخرى
+        
+        // إعادة تفعيل الزر عند إغلاق النافذة المنبثقة
+        const checkWindowClosed = setInterval(() => {
+          if (printWindow.closed) {
+            clearInterval(checkWindowClosed);
+            setLoading(false);
+            console.log('🔄 Print window closed, button re-enabled');
+          }
+        }, 500);
+        
+        // إعادة التفعيل بعد 30 ثانية كحد أقصى
+        setTimeout(() => {
+          clearInterval(checkWindowClosed);
+          setLoading(false);
+        }, 30000);
+      } else {
+        console.log('❌ Print window blocked by browser');
+        toast.error('تم حظر نافذة الطباعة من المتصفح. يرجى السماح بالنوافذ المنبثقة');
+        setLoading(false);
       }
     } catch (error) {
-      console.error('Error printing:', error);
+      console.error('❌ Error printing:', error);
       toast.error('فشل في تحضير الطباعة');
-    } finally {
       setLoading(false);
     }
   };

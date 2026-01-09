@@ -8,6 +8,7 @@ export interface TableColumn {
   label: string;
   enabled: boolean;
   order: number;
+  width?: string;
 }
 
 export interface TablePrintSettings {
@@ -35,6 +36,7 @@ export interface TablePrintSettings {
   billboard_image_size: string;
   design_image_size: string;
   installed_image_size: string;
+  qr_code_size: string;
   
   // خيارات العرض
   show_qr_code: boolean;
@@ -51,44 +53,53 @@ export interface TablePrintSettings {
   
   // إعدادات الخطوط
   primary_font: string;
+  
+  // إعدادات موقع الجدول والخلفية
+  table_top_margin: string;
+  table_background_url: string;
+  table_background_enabled: boolean;
+  row_height: string;
 }
 
-// الأعمدة الافتراضية مع ترتيبها
+// الأعمدة الافتراضية مع ترتيبها وعرضها
 export const defaultColumns: TableColumn[] = [
-  { id: 'row_number', label: '#', enabled: true, order: 0 },
-  { id: 'billboard_image', label: 'صورة اللوحة', enabled: true, order: 1 },
-  { id: 'billboard_name', label: 'اسم اللوحة', enabled: true, order: 2 },
-  { id: 'size', label: 'المقاس', enabled: true, order: 3 },
-  { id: 'faces_count', label: 'الأوجه', enabled: true, order: 4 },
-  { id: 'location', label: 'الموقع', enabled: true, order: 5 },
-  { id: 'landmark', label: 'أقرب معلم', enabled: true, order: 6 },
-  { id: 'contract_number', label: 'العقد', enabled: true, order: 7 },
-  { id: 'installation_date', label: 'تاريخ التركيب', enabled: true, order: 8 },
-  { id: 'design_images', label: 'التصميم', enabled: true, order: 9 },
-  { id: 'installed_images', label: 'صور التركيب', enabled: true, order: 10 },
-  { id: 'qr_code', label: 'QR', enabled: true, order: 11 },
+  { id: 'row_number', label: '#', enabled: true, order: 0, width: '5%' },
+  { id: 'billboard_image', label: 'صورة اللوحة', enabled: true, order: 1, width: '10%' },
+  { id: 'billboard_name', label: 'اسم اللوحة', enabled: true, order: 2, width: '15%' },
+  { id: 'size', label: 'المقاس', enabled: true, order: 3, width: '8%' },
+  { id: 'faces_count', label: 'الأوجه', enabled: true, order: 4, width: '5%' },
+  { id: 'location', label: 'الموقع', enabled: true, order: 5, width: '12%' },
+  { id: 'landmark', label: 'أقرب معلم', enabled: true, order: 6, width: '12%' },
+  { id: 'contract_number', label: 'العقد', enabled: true, order: 7, width: '6%' },
+  { id: 'installation_date', label: 'تاريخ التركيب', enabled: true, order: 8, width: '8%' },
+  { id: 'design_images', label: 'التصميم', enabled: true, order: 9, width: '8%' },
+  { id: 'installed_images', label: 'صور التركيب', enabled: true, order: 10, width: '8%' },
+  { id: 'qr_code', label: 'QR', enabled: true, order: 11, width: '5%' },
 ];
 
 export const defaultTablePrintSettings: TablePrintSettings = {
   setting_key: 'table_print_default',
   
-  header_bg_color: '#1e3a5f',
-  header_text_color: '#ffffff',
+  // ألوان مطابقة لتصدير PDF من fares2
+  header_bg_color: '#000000', // أسود
+  header_text_color: '#E8CC64', // ذهبي
   row_bg_color: '#ffffff',
-  row_alt_bg_color: '#f8fafc',
-  row_text_color: '#1f2937',
-  border_color: '#d1d5db',
+  row_alt_bg_color: '#ffffff',
+  row_text_color: '#000000',
+  border_color: '#000000',
   
-  first_column_bg_color: '#1e3a5f',
-  first_column_text_color: '#ffffff',
+  // العمود الأول ذهبي
+  first_column_bg_color: '#E8CC64',
+  first_column_text_color: '#000000',
   
-  header_font_size: '11px',
-  row_font_size: '10px',
-  title_font_size: '16px',
+  header_font_size: '9px',
+  row_font_size: '8px',
+  title_font_size: '14px',
   
-  billboard_image_size: '50px',
-  design_image_size: '40px',
-  installed_image_size: '40px',
+  billboard_image_size: '55px',
+  design_image_size: '50px',
+  installed_image_size: '50px',
+  qr_code_size: '50px',
   
   show_qr_code: true,
   auto_hide_empty_columns: true,
@@ -96,11 +107,17 @@ export const defaultTablePrintSettings: TablePrintSettings = {
   columns_order: defaultColumns,
   
   page_title: 'جدول لوحات العقد',
-  rows_per_page: 10,
+  rows_per_page: 11, // أقصى عدد صفوف في الصفحة
   page_orientation: 'portrait',
-  page_margin: '8mm',
+  page_margin: '10mm',
   
   primary_font: 'Doran',
+  
+  // إعدادات موقع الجدول والخلفية
+  table_top_margin: '10mm',
+  table_background_url: '',
+  table_background_enabled: false,
+  row_height: '60px',
 };
 
 export function useTablePrintSettings() {
@@ -135,69 +152,42 @@ export function useTablePrintSettings() {
     setLoading(false);
   }, []);
 
-  const saveSettings = useCallback(async (newSettings: Partial<TablePrintSettings>) => {
+  const saveSettings = useCallback(async (newSettings: TablePrintSettings) => {
+    console.log('💾 saveSettings called');
     setSaving(true);
     try {
-      const updatedSettings = { ...settings, ...newSettings };
-      const payload = JSON.parse(JSON.stringify(updatedSettings));
+      const payload = JSON.parse(JSON.stringify(newSettings));
 
-      // تحقق أولاً إذا كان السجل موجوداً
-      const { data: existing, error: existingError } = await supabase
+      // استخدام upsert لتبسيط العملية
+      const { error } = await supabase
         .from('billboard_print_settings')
-        .select('id')
-        .eq('setting_key', 'table_print_default')
-        .maybeSingle();
+        .upsert({
+          setting_key: 'table_print_default',
+          elements: payload,
+          updated_at: new Date().toISOString(),
+        }, {
+          onConflict: 'setting_key'
+        });
 
-      if (existingError) {
-        console.error('Error checking existing settings:', existingError);
-        toast.error('تعذر التحقق من إعدادات الجدول');
+      if (error) {
+        console.error('❌ Error saving settings:', error);
+        toast.error(`فشل حفظ الإعدادات: ${error.message}`);
         setSaving(false);
         return false;
       }
 
-      if (existing) {
-        const { error } = await supabase
-          .from('billboard_print_settings')
-          .update({
-            elements: payload,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('setting_key', 'table_print_default');
-
-        if (error) {
-          console.error('Error saving settings (update):', error);
-          toast.error('فشل حفظ الإعدادات');
-          setSaving(false);
-          return false;
-        }
-      } else {
-        const { error } = await supabase
-          .from('billboard_print_settings')
-          .insert({
-            setting_key: 'table_print_default',
-            elements: payload,
-            updated_at: new Date().toISOString(),
-          });
-
-        if (error) {
-          console.error('Error saving settings (insert):', error);
-          toast.error('فشل حفظ الإعدادات');
-          setSaving(false);
-          return false;
-        }
-      }
-
-      setSettings(updatedSettings);
+      console.log('✅ Settings saved successfully');
+      setSettings(newSettings);
       toast.success('تم حفظ إعدادات الجدول بنجاح');
       setSaving(false);
       return true;
     } catch (error) {
-      console.error('Error in saveSettings:', error);
+      console.error('❌ Error in saveSettings:', error);
       toast.error('خطأ في حفظ الإعدادات');
       setSaving(false);
       return false;
     }
-  }, [settings]);
+  }, []);
 
   const updateSetting = useCallback(<K extends keyof TablePrintSettings>(key: K, value: TablePrintSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }));
