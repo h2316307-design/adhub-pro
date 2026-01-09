@@ -526,7 +526,7 @@ export function SizesInvoicePrintDialog({
     }
   };
 
-  // Header rendering - MATCHING UnifiedInvoicePreview exactly
+  // Header rendering - العناوين يمين والشعار يسار
   const renderHeader = () => {
     if (individual.showHeader === false) return null;
     
@@ -539,28 +539,10 @@ export function SizesInvoicePrintDialog({
         paddingBottom: '15px',
         borderBottom: `2px solid ${primaryColor}`,
       }}>
-        {/* Invoice Title Side */}
-        {shared.showInvoiceTitle && (
-          <div style={{ flex: 1, textAlign: getTextAlign(shared.invoiceTitleAlignment), direction: 'ltr' }}>
-            <h1 style={{ 
-              fontSize: `${shared.invoiceTitleFontSize || 28}px`, fontWeight: 'bold', margin: 0,
-              fontFamily: 'Manrope, sans-serif', letterSpacing: '2px',
-              color: secondaryColor,
-            }}>
-              {sizesSettings.subtitle || 'SIZES STATEMENT'}
-            </h1>
-            <div style={{ fontSize: '11px', color: customerText, marginTop: '8px', lineHeight: 1.6 }}>
-              التاريخ: <span style={{ fontFamily: 'Manrope, sans-serif' }}>{new Date().toLocaleDateString('ar-LY')}</span><br/>
-              أرقام العقود: <span style={{ fontFamily: 'Manrope, sans-serif' }}>{contractNumbers.join(' - ')}</span>
-            </div>
-          </div>
-        )}
-
-        {/* Company Info Side */}
+        {/* Logo Side - Left */}
         <div style={{ 
           flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: shared.logoPosition === 'left' ? 'flex-start' 
-                    : shared.logoPosition === 'center' ? 'center' : 'flex-end',
+          alignItems: 'flex-start',
           gap: '8px',
         }}>
           {shared.showLogo && shared.logoPath && (
@@ -574,23 +556,43 @@ export function SizesInvoicePrintDialog({
             <div style={{ 
               fontSize: `${shared.contactInfoFontSize || 10}px`, 
               color: customerText, lineHeight: 1.6,
-              textAlign: getTextAlign(shared.contactInfoAlignment) || 'center',
+              textAlign: 'left',
             }}>
               {shared.companyAddress && <div>{shared.companyAddress}</div>}
               {shared.companyPhone && <div>هاتف: <span style={{ fontFamily: 'Manrope, sans-serif', direction: 'ltr', display: 'inline-block' }}>{shared.companyPhone}</span></div>}
             </div>
           )}
-          
+        </div>
+
+        {/* Titles Side - Right */}
+        <div style={{ flex: 1, textAlign: 'right' }}>
           {shared.showCompanyInfo && (shared.showCompanyName || shared.showCompanySubtitle) && (
-            <div style={{ fontSize: '11px', color: customerText, lineHeight: 1.8, textAlign: 'right' }}>
+            <div style={{ marginBottom: '8px' }}>
               {shared.showCompanyName && (
-                <div style={{ fontWeight: 'bold', fontSize: '14px', color: primaryColor, marginBottom: '2px' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '16px', color: primaryColor, marginBottom: '2px' }}>
                   {shared.companyName}
                 </div>
               )}
               {shared.showCompanySubtitle && (
-                <div>{shared.companySubtitle}</div>
+                <div style={{ fontSize: '12px', color: customerText }}>{shared.companySubtitle}</div>
               )}
+            </div>
+          )}
+          
+          {shared.showInvoiceTitle && (
+            <div>
+              <h1 style={{ 
+                fontSize: `${shared.invoiceTitleFontSize || 28}px`, fontWeight: 'bold', margin: 0,
+                fontFamily: 'Manrope, sans-serif', letterSpacing: '2px',
+                color: secondaryColor,
+                textAlign: 'right',
+              }}>
+                {sizesSettings.subtitle || 'SIZES STATEMENT'}
+              </h1>
+              <div style={{ fontSize: '12px', color: customerText, marginTop: '8px', lineHeight: 1.6, textAlign: 'right' }}>
+                التاريخ: <span style={{ fontFamily: 'Manrope, sans-serif' }}>{new Date().toLocaleDateString('ar-LY')}</span><br/>
+                أرقام العقود: <span style={{ fontFamily: 'Manrope, sans-serif' }}>{contractNumbers.join(' - ')}</span>
+              </div>
             </div>
           )}
         </div>

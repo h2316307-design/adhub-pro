@@ -4,6 +4,7 @@
  * IMPORTANT: Permissions are role-based only. User-level permissions are deprecated.
  * Access is granted based on hasPermission(permissionName) derived from user's role.
  * Do NOT use isAdmin for access control - use hasPermission instead.
+ * Must be used within AuthProvider context.
  */
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';

@@ -54,10 +54,32 @@ export const ContractCard: React.FC<ContractCardProps> = ({
 }) => {
   const navigate = useNavigate();
   const [designImage, setDesignImage] = useState<string | null>(null);
-  const [dominantColor, setDominantColor] = useState<string | null>(null);
+  // نخزن اللون كلون HSL (صيغة CSS الحديثة: "210 50% 40%")
+  const [dominantHsl, setDominantHsl] = useState<string | null>(null);
   const [actualPaid, setActualPaid] = useState<number | null>(null);
   const [isRenewing, setIsRenewing] = useState(false);
   const [showDesignFullscreen, setShowDesignFullscreen] = useState(false);
+  const [customerData, setCustomerData] = useState<{ phone: string | null; company: string | null } | null>(null);
+
+  // جلب بيانات العميل من جدول customers
+  useEffect(() => {
+    const fetchCustomerData = async () => {
+      const customerId = (contract as any).customer_id;
+      if (!customerId) return;
+      
+      const { data, error } = await supabase
+        .from('customers')
+        .select('phone, company')
+        .eq('id', customerId)
+        .single();
+      
+      if (!error && data) {
+        setCustomerData(data);
+      }
+    };
+    
+    fetchCustomerData();
+  }, [contract]);
 
   // دالة تجديد العقد - إنشاء عقد جديد من بيانات العقد الحالي
   const handleRenewContract = async () => {
@@ -165,8 +187,44 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   const paymentPercentage = finalTotalCost > 0 ? (totalPaid / finalTotalCost) * 100 : 0;
   const remaining = finalTotalCost - totalPaid;
   
-  // استخراج اللون السائد من الصورة
+  // استخراج اللون السائد من الصورة (كنمط HSL لتوافق أفضل مع الثيم)
   const extractDominantColor = (imageUrl: string) => {
+    const rgbToHsl = (r: number, g: number, b: number) => {
+      r /= 255;
+      g /= 255;
+      b /= 255;
+
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      const delta = max - min;
+
+      let h = 0;
+      let s = 0;
+      const l = (max + min) / 2;
+
+      if (delta !== 0) {
+        s = delta / (1 - Math.abs(2 * l - 1));
+        switch (max) {
+          case r:
+            h = ((g - b) / delta) % 6;
+            break;
+          case g:
+            h = (b - r) / delta + 2;
+            break;
+          default:
+            h = (r - g) / delta + 4;
+        }
+        h *= 60;
+        if (h < 0) h += 360;
+      }
+
+      return {
+        h: Math.round(h),
+        s: Math.round(s * 100),
+        l: Math.round(l * 100),
+      };
+    };
+
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
@@ -174,16 +232,20 @@ export const ContractCard: React.FC<ContractCardProps> = ({
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-        
+
         canvas.width = 50;
         canvas.height = 50;
         ctx.drawImage(img, 0, 0, 50, 50);
-        
+
         const imageData = ctx.getImageData(0, 0, 50, 50).data;
-        let r = 0, g = 0, b = 0, count = 0;
-        
+        let r = 0,
+          g = 0,
+          b = 0,
+          count = 0;
+
         for (let i = 0; i < imageData.length; i += 4) {
           const brightness = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
+          // تجاهل الأسود/الأبيض الشديد
           if (brightness > 30 && brightness < 225) {
             r += imageData[i];
             g += imageData[i + 1];
@@ -191,51 +253,76 @@ export const ContractCard: React.FC<ContractCardProps> = ({
             count++;
           }
         }
-        
+
         if (count > 0) {
           r = Math.round(r / count);
           g = Math.round(g / count);
           b = Math.round(b / count);
-          setDominantColor(`${r}, ${g}, ${b}`);
+
+          const hsl = rgbToHsl(r, g, b);
+          setDominantHsl(`${hsl.h} ${hsl.s}% ${hsl.l}%`);
+        } else {
+          // fallback بسيط لو فشل الاستخراج
+          setDominantHsl('var(--primary)');
         }
       } catch (e) {
-        console.log('Could not extract color');
+        // غالباً بسبب CORS (canvas tainted)
+        setDominantHsl('var(--primary)');
       }
     };
     img.src = imageUrl;
   };
   
-  // جلب أول صورة تصميم من مهام التركيب
+  // جلب أول صورة تصميم من مهام التركيب عبر اللوحات المشتركة
   useEffect(() => {
     const fetchDesignImage = async () => {
-      const contractId = (contract as any).Contract_Number || (contract as any)['Contract Number'] || contract.id;
-      
-      // جلب جميع مهام التركيب للعقد
-      const { data: tasks } = await supabase
-        .from('installation_tasks')
-        .select('id')
-        .eq('contract_id', contractId);
-      
-      if (tasks && tasks.length > 0) {
-        // البحث في جميع المهام عن أي عنصر يحتوي على تصميم
-        const taskIds = tasks.map(t => t.id);
-        const { data: items } = await supabase
-          .from('installation_task_items')
-          .select('design_face_a, design_face_b')
-          .in('task_id', taskIds)
-          .or('design_face_a.not.is.null,design_face_b.not.is.null')
-          .limit(1);
-        
-        if (items && items.length > 0) {
-          const img = items[0].design_face_a || items[0].design_face_b;
-          if (img) {
-            setDesignImage(img);
-            extractDominantColor(img);
+      const rawContractNumber =
+        (contract as any).Contract_Number ?? (contract as any)['Contract Number'] ?? contract.id;
+
+      const contractNumber = Number(rawContractNumber);
+      if (!Number.isFinite(contractNumber)) return;
+
+      let foundImage: string | null = null;
+
+      // جلب billboard_ids من العقد
+      const { data: contractData } = await supabase
+        .from('Contract')
+        .select('billboard_ids')
+        .eq('Contract_Number', contractNumber)
+        .single();
+
+      if (contractData?.billboard_ids) {
+        // تحويل النص إلى مصفوفة أرقام
+        const billboardIds = contractData.billboard_ids
+          .split(',')
+          .map((id: string) => parseInt(id.trim(), 10))
+          .filter((id: number) => !isNaN(id));
+
+        if (billboardIds.length > 0) {
+          // البحث عن تصميم في installation_task_items للوحات هذا العقد
+          const { data: items } = await supabase
+            .from('installation_task_items')
+            .select('design_face_a, design_face_b')
+            .in('billboard_id', billboardIds)
+            .or('design_face_a.not.is.null,design_face_b.not.is.null')
+            .limit(1);
+
+          if (items && items.length > 0) {
+            foundImage = items[0].design_face_a || items[0].design_face_b;
           }
         }
       }
+
+      // إذا وجدنا صورة، نثبتها ونستخرج اللون السائد
+      if (foundImage) {
+        setDesignImage(foundImage);
+        extractDominantColor(foundImage);
+      } else {
+        setDesignImage(null);
+        setDominantHsl(null);
+      }
     };
-    
+
     fetchDesignImage();
   }, [contract]);
   
@@ -264,26 +351,32 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   
   // حساب التقدم/التأخر
   const getProgress = () => {
+    // إذا كانت نسبة السداد 100% أو أكثر - مكتمل
+    if (paymentPercentage >= 100) {
+      return { label: 'مكتمل', variant: 'default' as const, percent: 0, icon: <CheckCircle className="h-4 w-4" /> };
+    }
+
     const startDate = contract.start_date ? new Date(contract.start_date) : null;
     const endDate = contract.end_date ? new Date(contract.end_date) : null;
     const today = new Date();
-    
+
     if (!startDate || !endDate || today < startDate) {
-      return { text: '—', color: 'text-muted-foreground', icon: <Minus className="h-4 w-4" /> };
+      return { label: '—', variant: 'secondary' as const, percent: 0, icon: <Minus className="h-4 w-4" /> };
     }
-    
+
     const totalDuration = endDate.getTime() - startDate.getTime();
     const elapsed = today.getTime() - startDate.getTime();
     const timePercentage = totalDuration > 0 ? Math.min(Math.max((elapsed / totalDuration) * 100, 0), 100) : 0;
-    const timeDifference = paymentPercentage - timePercentage;
-    
-    if (Math.abs(timeDifference) < 5) {
-      return { text: 'متوازن', color: 'text-green-600', icon: <Minus className="h-4 w-4" /> };
+    const diff = paymentPercentage - timePercentage;
+    const percent = Math.abs(diff);
+
+    if (percent < 5) {
+      return { label: 'متوازن', variant: 'secondary' as const, percent, icon: <Minus className="h-4 w-4" /> };
     }
-    if (timeDifference > 0) {
-      return { text: `متقدم ${Math.abs(timeDifference).toFixed(0)}%`, color: 'text-blue-600', icon: <TrendingUp className="h-4 w-4" /> };
+    if (diff > 0) {
+      return { label: `متقدم ${percent.toFixed(0)}%`, variant: 'default' as const, percent, icon: <TrendingUp className="h-4 w-4" /> };
     }
-    return { text: `متأخر ${Math.abs(timeDifference).toFixed(0)}%`, color: 'text-red-600', icon: <TrendingDown className="h-4 w-4" /> };
+    return { label: `متأخر ${percent.toFixed(0)}%`, variant: 'destructive' as const, percent, icon: <TrendingDown className="h-4 w-4" /> };
   };
   
   const status = getStatus();
@@ -309,30 +402,34 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     return 'border-border hover:border-primary/50';
   };
 
-  // نمط الكارت مع اللون السائد
-  const cardStyle = dominantColor ? {
-    background: `linear-gradient(135deg, rgba(${dominantColor}, 0.08) 0%, transparent 50%)`,
-    borderColor: `rgba(${dominantColor}, 0.3)`,
-  } : {};
+  // نمط الكارت مع اللون السائد - ألوان قوية وواضحة جداً
+  const cardStyle = dominantHsl
+    ? {
+        background: `linear-gradient(145deg, hsl(${dominantHsl} / 0.35) 0%, hsl(${dominantHsl} / 0.18) 40%, hsl(${dominantHsl} / 0.08) 80%, transparent 100%)`,
+        borderColor: `hsl(${dominantHsl} / 0.75)`,
+        borderWidth: '3px',
+        boxShadow: `0 12px 32px hsl(${dominantHsl} / 0.3), 0 4px 12px hsl(${dominantHsl} / 0.2), inset 0 0 60px hsl(${dominantHsl} / 0.1)`,
+      }
+    : {};
 
   return (
     <Card 
       className={`group relative overflow-hidden transition-all duration-300 hover:shadow-lg ${getCardStyle()} ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
       style={cardStyle}
     >
-      {/* Checkbox للاختيار */}
+      {/* Checkbox للاختيار - في أعلى اليمين فوق كل شيء */}
       {onToggleSelect && (
         <div 
-          className="absolute top-3 right-3 z-30 cursor-pointer"
+          className="absolute -top-1 -right-1 z-50 cursor-pointer p-2"
           onClick={(e) => {
             e.stopPropagation();
             onToggleSelect(contract.id);
           }}
         >
-          <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${
+          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all shadow-md ${
             isSelected 
               ? 'bg-primary border-primary text-primary-foreground' 
-              : 'bg-background/80 border-border hover:border-primary backdrop-blur-sm'
+              : 'bg-background border-border hover:border-primary'
           }`}>
             {isSelected && (
               <CheckCircle className="h-4 w-4" />
@@ -360,10 +457,20 @@ export const ContractCard: React.FC<ContractCardProps> = ({
               <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover/design:opacity-100 transition-opacity duration-300" />
             </div>
             <div className="absolute top-2 left-2">
-              <Badge 
-                variant="secondary" 
+              <Badge
+                variant="secondary"
                 className="gap-1 border-0"
-                style={dominantColor ? { backgroundColor: `rgba(${dominantColor}, 0.9)`, color: 'white' } : { backgroundColor: 'rgba(0,0,0,0.6)', color: 'white' }}
+                style={
+                  dominantHsl
+                    ? {
+                        backgroundColor: `hsl(${dominantHsl} / 0.92)`,
+                        color: 'hsl(var(--primary-foreground))',
+                      }
+                    : {
+                        backgroundColor: 'hsl(var(--foreground) / 0.6)',
+                        color: 'hsl(var(--primary-foreground))',
+                      }
+                }
               >
                 <ImageIcon className="h-3 w-3" />
                 تصميم متوفر
@@ -398,24 +505,29 @@ export const ContractCard: React.FC<ContractCardProps> = ({
       )}
       
       {/* شريط الحالة العلوي */}
-      <div 
-        className={`h-1.5 w-full ${!dominantColor ? (
-          status.variant === 'destructive' ? 'bg-destructive' :
-          status.variant === 'default' ? 'bg-primary' :
-          status.className?.includes('orange') ? 'bg-orange-500' :
-          'bg-muted'
-        ) : ''}`}
-        style={dominantColor ? { backgroundColor: `rgb(${dominantColor})` } : {}}
+      <div
+        className={`h-1.5 w-full ${
+          !dominantHsl
+            ? status.variant === 'destructive'
+              ? 'bg-destructive'
+              : status.variant === 'default'
+                ? 'bg-primary'
+                : status.className?.includes('orange')
+                  ? 'bg-orange-500'
+                  : 'bg-muted'
+            : ''
+        }`}
+        style={dominantHsl ? { backgroundColor: `hsl(${dominantHsl})` } : {}}
       />
       
       <CardContent className="p-5">
         {/* الرأس */}
         <div className="flex items-start justify-between mb-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="text-lg font-bold text-foreground">#{contractNumber}</span>
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-2xl font-bold font-manrope text-foreground">#{contractNumber}</span>
               {yearlyCode && (
-                <Badge variant="secondary" className="text-xs font-normal">
+                <Badge variant="secondary" className="text-base font-bold font-manrope px-2 py-1">
                   {yearlyCode}
                 </Badge>
               )}
@@ -424,9 +536,24 @@ export const ContractCard: React.FC<ContractCardProps> = ({
                 {status.label}
               </Badge>
             </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-4 w-4" />
-              <span className="font-medium text-foreground">{contract.customer_name}</span>
+            {/* اسم العميل مع الشركة والهاتف */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div className="flex items-center gap-1.5">
+                <User className="h-4 w-4 text-muted-foreground" />
+                <span className="font-bold text-xl text-foreground">{contract.customer_name}</span>
+              </div>
+              {(contract.Company || customerData?.company) && (
+                <div className="flex items-center gap-1.5">
+                  <Building className="h-4 w-4 text-primary" />
+                  <span className="font-semibold text-lg text-primary">{contract.Company || customerData?.company}</span>
+                </div>
+              )}
+              {(contract.Phone || customerData?.phone) && (
+                <div className="flex items-center gap-1.5">
+                  <Phone className="h-4 w-4 text-muted-foreground" />
+                  <span dir="ltr" className="font-manrope font-semibold text-lg text-muted-foreground">{contract.Phone || customerData?.phone}</span>
+                </div>
+              )}
             </div>
           </div>
           
@@ -496,110 +623,182 @@ export const ContractCard: React.FC<ContractCardProps> = ({
           </DropdownMenu>
         </div>
         
-        {/* نوع الإعلان والتواريخ */}
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <div className="flex items-center gap-2 text-sm">
-            <Building className="h-4 w-4 text-muted-foreground" />
-            <span className="text-muted-foreground">النوع:</span>
-            <span className="font-medium">{(contract as any)['Ad Type'] || 'غير محدد'}</span>
-          </div>
-          {(contract as any).Phone && (
-            <div className="flex items-center gap-2 text-sm">
-              <Phone className="h-4 w-4 text-muted-foreground" />
-              <span dir="ltr">{(contract as any).Phone}</span>
-            </div>
-          )}
+        {/* نوع الإعلان */}
+        <div className="flex items-center gap-2 mb-4">
+          <PaintBucket className="h-5 w-5 text-primary" />
+          <span className="text-muted-foreground text-base">نوع الإعلان:</span>
+          <span className="font-bold text-xl text-primary">{(contract as any)['Ad Type'] || 'غير محدد'}</span>
         </div>
         
-        <div className="grid grid-cols-2 gap-3 mb-4 p-3 bg-muted/50 rounded-lg">
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-4 w-4 text-green-600" />
+        {/* التواريخ */}
+        <div className="grid grid-cols-2 gap-3 mb-3 p-3 bg-muted/50 rounded-lg">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-green-600" />
             <div>
               <span className="text-muted-foreground text-xs block">البداية</span>
-              <span className="font-medium">{contract.start_date ? new Date(contract.start_date).toLocaleDateString('ar') : '—'}</span>
+              <span className="font-semibold font-manrope text-base">{contract.start_date ? new Date(contract.start_date).toLocaleDateString('ar') : '—'}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm">
-            <Calendar className="h-4 w-4 text-red-600" />
+          <div className="flex items-center gap-2">
+            <Calendar className="h-5 w-5 text-red-600" />
             <div>
               <span className="text-muted-foreground text-xs block">النهاية</span>
-              <span className="font-medium">{contract.end_date ? new Date(contract.end_date).toLocaleDateString('ar') : '—'}</span>
+              <span className="font-semibold font-manrope text-base">{contract.end_date ? new Date(contract.end_date).toLocaleDateString('ar') : '—'}</span>
             </div>
+          </div>
+        </div>
+        
+        {/* شريط السداد - محسّن وأوضح */}
+        <div 
+          className="mb-4 p-3 rounded-xl border-2"
+          style={dominantHsl ? {
+            background: `linear-gradient(135deg, hsl(${dominantHsl} / 0.12) 0%, hsl(${dominantHsl} / 0.04) 100%)`,
+            borderColor: `hsl(${dominantHsl} / 0.4)`,
+          } : {
+            background: 'hsl(var(--muted) / 0.5)',
+            borderColor: 'hsl(var(--border))',
+          }}
+        >
+          <div className="flex justify-between items-center mb-2">
+            <div className="flex items-center gap-2">
+              <DollarSign className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-foreground">نسبة السداد</span>
+            </div>
+            <span 
+              className="text-2xl font-bold font-manrope"
+              style={dominantHsl ? { color: `hsl(${dominantHsl})` } : { color: 'hsl(var(--primary))' }}
+            >
+              {paymentPercentage.toFixed(0)}%
+            </span>
+          </div>
+          <div 
+            className="relative h-4 rounded-full overflow-hidden"
+            style={{ backgroundColor: dominantHsl ? `hsl(${dominantHsl} / 0.2)` : 'hsl(var(--muted))' }}
+          >
+            <div 
+              className="absolute inset-y-0 right-0 rounded-full transition-all duration-500"
+              style={{
+                width: `${Math.min(paymentPercentage, 100)}%`,
+                background: dominantHsl 
+                  ? `linear-gradient(90deg, hsl(${dominantHsl}) 0%, hsl(${dominantHsl} / 0.8) 100%)`
+                  : 'linear-gradient(90deg, hsl(var(--primary)) 0%, hsl(var(--primary) / 0.8) 100%)',
+                boxShadow: dominantHsl ? `0 0 12px hsl(${dominantHsl} / 0.5)` : '0 0 12px hsl(var(--primary) / 0.5)',
+              }}
+            />
+          </div>
+          <div className="flex justify-between items-center mt-2">
+            <span className="text-muted-foreground text-sm">
+              المدفوع:{' '}
+              <span className="font-bold font-manrope text-base" style={{ color: 'hsl(var(--primary))' }}>
+                {totalPaid.toLocaleString('ar-LY')} د.ل
+              </span>
+            </span>
+            <span className="text-muted-foreground text-sm">
+              المتبقي:{' '}
+              <span className="font-bold font-manrope text-base" style={{ color: 'hsl(var(--foreground))' }}>
+                {remaining.toLocaleString('ar-LY')} د.ل
+              </span>
+            </span>
+          </div>
+
+          {/* ✅ متأخر/متوازن/متقدم تحت شريط السداد */}
+          <div className="mt-2">
+            <Badge
+              variant={progress.variant}
+              className="gap-1"
+              style={
+                dominantHsl
+                  ? {
+                      backgroundColor:
+                        progress.variant === 'default'
+                          ? `hsl(${dominantHsl} / 0.18)`
+                          : progress.variant === 'destructive'
+                            ? 'hsl(var(--destructive) / 0.12)'
+                            : 'hsl(var(--muted) / 0.7)',
+                      borderColor:
+                        progress.variant === 'default'
+                          ? `hsl(${dominantHsl} / 0.5)`
+                          : progress.variant === 'destructive'
+                            ? 'hsl(var(--destructive) / 0.35)'
+                            : 'hsl(var(--border))',
+                      color:
+                        progress.variant === 'default'
+                          ? `hsl(${dominantHsl})`
+                          : progress.variant === 'destructive'
+                            ? 'hsl(var(--destructive))'
+                            : 'hsl(var(--foreground))',
+                    }
+                  : undefined
+              }
+            >
+              {progress.icon}
+              <span className="text-sm font-medium">{progress.label}</span>
+            </Badge>
           </div>
         </div>
         
         {/* التكاليف */}
         <div className="space-y-2 mb-4">
-          <div className="flex justify-between items-center text-sm">
-            <span className="text-muted-foreground">الإيجار</span>
-            <span className="font-semibold text-green-600">{totalRent.toLocaleString('ar-LY')} د.ل</span>
+          <div className="flex justify-between items-center">
+            <span className="text-muted-foreground text-sm">الإيجار</span>
+            <span className="font-bold font-manrope text-base" style={{ color: 'hsl(var(--primary))' }}>
+              {totalRent.toLocaleString('ar-LY')} د.ل
+            </span>
           </div>
           
           {installationCost > 0 && (
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1 text-muted-foreground text-sm">
                 <Wrench className="h-3 w-3" />
                 <span>التركيب</span>
               </div>
-              <span className="font-medium text-orange-600">{installationCost.toLocaleString('ar-LY')} د.ل</span>
+              <span className="font-semibold font-manrope text-base" style={{ color: 'hsl(var(--foreground))' }}>
+                {installationCost.toLocaleString('ar-LY')} د.ل
+              </span>
             </div>
           )}
           
           {printCost > 0 && (
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1 text-muted-foreground text-sm">
                 <PaintBucket className="h-3 w-3" />
                 <span>الطباعة</span>
               </div>
-              <span className="font-medium text-purple-600">{printCost.toLocaleString('ar-LY')} د.ل</span>
+              <span className="font-semibold font-manrope text-base" style={{ color: 'hsl(var(--foreground))' }}>
+                {printCost.toLocaleString('ar-LY')} د.ل
+              </span>
             </div>
           )}
           
           {operatingFee > 0 && (
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1 text-muted-foreground text-sm">
                 <Percent className="h-3 w-3" />
                 <span>رسوم التشغيل</span>
               </div>
-              <span className="font-medium text-blue-600">{operatingFee.toLocaleString('ar-LY')} د.ل</span>
+              <span className="font-semibold font-manrope text-base" style={{ color: 'hsl(var(--foreground))' }}>
+                {operatingFee.toLocaleString('ar-LY')} د.ل
+              </span>
             </div>
           )}
           
           {discount > 0 && (
-            <div className="flex justify-between items-center text-sm">
-              <div className="flex items-center gap-1 text-muted-foreground">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-1 text-muted-foreground text-sm">
                 <TrendingDown className="h-3 w-3" />
                 <span>التخفيض</span>
               </div>
-              <span className="font-medium text-red-500">- {discount.toLocaleString('ar-LY')} د.ل</span>
+              <span className="font-semibold font-manrope text-base" style={{ color: 'hsl(var(--destructive))' }}>
+                - {discount.toLocaleString('ar-LY')} د.ل
+              </span>
             </div>
           )}
           
           <div className="border-t pt-2 flex justify-between items-center">
             <span className="font-semibold">المجموع الكلي</span>
-            <span className="font-bold text-lg text-primary">{finalTotalCost.toLocaleString('ar-LY')} د.ل</span>
+            <span className="font-bold font-manrope text-xl text-primary">{finalTotalCost.toLocaleString('ar-LY')} د.ل</span>
           </div>
         </div>
-        
-        {/* شريط التقدم */}
-        <div className="mb-4">
-          <div className="flex justify-between items-center mb-2 text-sm">
-            <span className="text-muted-foreground">نسبة السداد</span>
-            <span className="font-semibold">{paymentPercentage.toFixed(0)}%</span>
-          </div>
-          <Progress value={paymentPercentage} className="h-2" />
-          <div className="flex justify-between items-center mt-1 text-xs text-muted-foreground">
-            <span>المدفوع: {totalPaid.toLocaleString('ar-LY')} د.ل</span>
-            <span>المتبقي: {remaining.toLocaleString('ar-LY')} د.ل</span>
-          </div>
-        </div>
-        
-        {/* مؤشر التقدم/التأخر */}
-        <div className={`flex items-center gap-2 p-2 rounded-lg bg-muted/50 ${progress.color}`}>
-          {progress.icon}
-          <span className="text-sm font-medium">{progress.text}</span>
-        </div>
-        
         {/* الأزرار السريعة */}
         <div className="flex gap-2 mt-4 pt-4 border-t">
           <Button

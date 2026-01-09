@@ -308,20 +308,29 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
         const endDateRaw = contractEndDate || b.Rent_End_Date || b.rent_end_date || b.end_date || '';
         const endDate = endDateRaw ? formatDateForPrint(endDateRaw) : '';
         
-        // Calculate days count using contract dates
-        const startDateRaw = contractStartDate || b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+        // حساب عدد الأيام من تواريخ العقد مباشرة (المصدر الوحيد للحقيقة)
+        // نستخدم تواريخ العقد فقط وليس بيانات اللوحة لضمان التزامن
         let daysCount = '';
-        if (startDateRaw && endDateRaw) {
-          const start = new Date(startDateRaw);
-          const end = new Date(endDateRaw);
+        if (contractStartDate && contractEndDate) {
+          const start = new Date(contractStartDate);
+          const end = new Date(contractEndDate);
           if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
             const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
             daysCount = days > 0 ? String(days) : '';
           }
         }
-        // Fallback to existing days count if calculation failed
-        if (!daysCount) {
-          daysCount = b.Days_Count ?? b.days_count ?? (contract as any).Duration ?? '';
+        // Fallback فقط إذا لم تتوفر تواريخ العقد
+        if (!daysCount && !contractStartDate && !contractEndDate) {
+          const startDateRaw = b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+          const endDateRaw = b.Rent_End_Date || b.rent_end_date || b.end_date || '';
+          if (startDateRaw && endDateRaw) {
+            const start = new Date(startDateRaw);
+            const end = new Date(endDateRaw);
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+              const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+              daysCount = days > 0 ? String(days) : '';
+            }
+          }
         }
         
         let coords: string = String(
@@ -1219,20 +1228,29 @@ export function ContractPrintDialog({ contract, trigger }: ContractPrintDialogPr
         const endDateRaw = contractEndDate || b.Rent_End_Date || b.rent_end_date || b.end_date || '';
         const endDate = endDateRaw ? formatDateForPrint(endDateRaw) : '';
         
-        // Calculate days count using contract dates
-        const startDateRaw = contractStartDate || b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+        // حساب عدد الأيام من تواريخ العقد مباشرة (المصدر الوحيد للحقيقة)
+        // نستخدم تواريخ العقد فقط وليس بيانات اللوحة لضمان التزامن
         let daysCount = '';
-        if (startDateRaw && endDateRaw) {
-          const start = new Date(startDateRaw);
-          const end = new Date(endDateRaw);
+        if (contractStartDate && contractEndDate) {
+          const start = new Date(contractStartDate);
+          const end = new Date(contractEndDate);
           if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
             const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
             daysCount = days > 0 ? String(days) : '';
           }
         }
-        // Fallback to existing days count if calculation failed
-        if (!daysCount) {
-          daysCount = b.Days_Count ?? b.days_count ?? (contract as any).Duration ?? '';
+        // Fallback فقط إذا لم تتوفر تواريخ العقد
+        if (!daysCount && !contractStartDate && !contractEndDate) {
+          const startDateRaw = b.Rent_Start_Date || b.rent_start_date || b.start_date || '';
+          const endDateRaw = b.Rent_End_Date || b.rent_end_date || b.end_date || '';
+          if (startDateRaw && endDateRaw) {
+            const start = new Date(startDateRaw);
+            const end = new Date(endDateRaw);
+            if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+              const days = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
+              daysCount = days > 0 ? String(days) : '';
+            }
+          }
         }
         
         let coords: string = String(

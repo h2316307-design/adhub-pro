@@ -22,53 +22,57 @@ interface Role {
   created_at: string;
 }
 
+// صلاحيات الوصول (مشاهدة) - كل صفحة لها صلاحية وصول
 const availablePermissions = [
-  { id: 'dashboard', label: 'لوحة التحكم', description: 'عرض لوحة التحكم الرئيسية' },
-  { id: 'billboards', label: 'اللوحات الإعلانية', description: 'إدارة اللوحات الإعلانية' },
-  { id: 'contracts', label: 'العقود', description: 'إدارة العقود' },
-  { id: 'offers', label: 'العروض', description: 'إدارة العروض' },
-  { id: 'customers', label: 'العملاء', description: 'إدارة العملاء' },
-  { id: 'customer_billing', label: 'حسابات العملاء', description: 'عرض وإدارة حسابات العملاء' },
-  { id: 'reports', label: 'التقارير', description: 'عرض التقارير والإحصائيات' },
-  { id: 'tasks', label: 'المهام اليومية', description: 'إدارة المهام اليومية' },
-  { id: 'installation_tasks', label: 'مهام التركيب', description: 'إدارة مهام التركيب' },
-  { id: 'removal_tasks', label: 'مهام الإزالة', description: 'إدارة مهام الإزالة' },
-  { id: 'print_tasks', label: 'مهام الطباعة', description: 'إدارة مهام الطباعة' },
-  { id: 'cutout_tasks', label: 'مهام المجسمات', description: 'إدارة مهام المجسمات' },
-  { id: 'composite_tasks', label: 'المهام المجمعة', description: 'إدارة المهام المجمعة' },
-  { id: 'expenses', label: 'المصروفات', description: 'إدارة المصروفات' },
-  { id: 'salaries', label: 'الرواتب', description: 'إدارة رواتب الموظفين' },
-  { id: 'custody', label: 'العهد المالية', description: 'إدارة العهد المالية' },
-  { id: 'revenue', label: 'الإيرادات', description: 'عرض تقارير الإيرادات' },
-  { id: 'payments', label: 'الدفعات', description: 'إدارة الدفعات والإيصالات' },
-  { id: 'overdue_payments', label: 'الدفعات المتأخرة', description: 'عرض الدفعات المتأخرة' },
-  { id: 'printers', label: 'المطابع', description: 'إدارة المطابع' },
-  { id: 'printer_accounts', label: 'حسابات المطابع', description: 'إدارة حسابات المطابع' },
-  { id: 'installation_teams', label: 'فرق التركيب', description: 'إدارة فرق التركيب' },
-  { id: 'installation_team_accounts', label: 'حسابات فرق التركيب', description: 'إدارة حسابات فرق التركيب' },
-  { id: 'friend_billboards', label: 'لوحات الأصدقاء', description: 'إدارة لوحات الأصدقاء' },
-  { id: 'friend_accounts', label: 'حسابات الأصدقاء', description: 'إدارة حسابات الأصدقاء' },
-  { id: 'shared_billboards', label: 'اللوحات المشتركة', description: 'إدارة اللوحات المشتركة' },
-  { id: 'shared_companies', label: 'الشركات المشاركة', description: 'إدارة الشركات المشاركة' },
-  { id: 'municipality_stickers', label: 'ملصقات البلديات', description: 'إدارة ملصقات البلديات' },
-  { id: 'extended_billboards', label: 'اللوحات الممددة', description: 'عرض اللوحات الممددة' },
-  { id: 'delayed_billboards', label: 'اللوحات المتأخرة', description: 'عرض اللوحات المتأخرة' },
-  { id: 'billboard_cleanup', label: 'تنظيف اللوحات', description: 'تنظيف اللوحات المنتهية' },
-  { id: 'billboard_maintenance', label: 'صيانة اللوحات', description: 'إدارة صيانة اللوحات' },
-  { id: 'booking_requests', label: 'طلبات الحجز', description: 'إدارة طلبات الحجز' },
-  { id: 'users', label: 'المستخدمون', description: 'إدارة المستخدمين' },
-  { id: 'roles', label: 'الأدوار', description: 'إدارة الأدوار والصلاحيات' },
-  { id: 'pricing', label: 'التسعير', description: 'إدارة أسعار الإيجار' },
-  { id: 'pricing_factors', label: 'معاملات التسعير', description: 'إدارة معاملات التسعير' },
-  { id: 'settings', label: 'الإعدادات', description: 'الوصول للإعدادات العامة' },
-  { id: 'database_backup', label: 'النسخ الاحتياطي', description: 'إدارة النسخ الاحتياطي' },
-  { id: 'messaging_settings', label: 'إعدادات المراسلات', description: 'إعدادات الرسائل' },
-  { id: 'currency_settings', label: 'إعدادات العملة', description: 'إعدادات العملة' },
-  { id: 'pdf_templates', label: 'قوالب PDF', description: 'إدارة قوالب PDF' },
-  { id: 'print_design', label: 'تصميم الطباعة', description: 'إدارة تصميم الطباعة' },
-  { id: 'contract_terms', label: 'بنود العقد', description: 'إدارة بنود العقد' },
-  { id: 'system_settings', label: 'إعدادات النظام', description: 'إعدادات النظام المتقدمة' },
+  { id: 'dashboard', label: 'لوحة التحكم', description: 'عرض لوحة التحكم الرئيسية', hasEdit: false },
+  { id: 'billboards', label: 'اللوحات الإعلانية', description: 'عرض اللوحات الإعلانية', hasEdit: true },
+  { id: 'contracts', label: 'العقود', description: 'عرض العقود', hasEdit: true },
+  { id: 'offers', label: 'العروض', description: 'عرض العروض', hasEdit: true },
+  { id: 'customers', label: 'العملاء', description: 'عرض العملاء', hasEdit: true },
+  { id: 'customer_billing', label: 'حسابات العملاء', description: 'عرض حسابات العملاء', hasEdit: true },
+  { id: 'reports', label: 'التقارير', description: 'عرض التقارير والإحصائيات', hasEdit: false },
+  { id: 'tasks', label: 'المهام اليومية', description: 'عرض المهام اليومية', hasEdit: true },
+  { id: 'installation_tasks', label: 'مهام التركيب', description: 'عرض مهام التركيب', hasEdit: true },
+  { id: 'removal_tasks', label: 'مهام الإزالة', description: 'عرض مهام الإزالة', hasEdit: true },
+  { id: 'print_tasks', label: 'مهام الطباعة', description: 'عرض مهام الطباعة', hasEdit: true },
+  { id: 'cutout_tasks', label: 'مهام المجسمات', description: 'عرض مهام المجسمات', hasEdit: true },
+  { id: 'composite_tasks', label: 'المهام المجمعة', description: 'عرض المهام المجمعة', hasEdit: true },
+  { id: 'expenses', label: 'المصروفات', description: 'عرض المصروفات', hasEdit: true },
+  { id: 'salaries', label: 'الرواتب', description: 'عرض رواتب الموظفين', hasEdit: true },
+  { id: 'custody', label: 'العهد المالية', description: 'عرض العهد المالية', hasEdit: true },
+  { id: 'revenue', label: 'الإيرادات', description: 'عرض تقارير الإيرادات', hasEdit: false },
+  { id: 'payments', label: 'الدفعات', description: 'عرض الدفعات والإيصالات', hasEdit: true },
+  { id: 'overdue_payments', label: 'الدفعات المتأخرة', description: 'عرض الدفعات المتأخرة', hasEdit: false },
+  { id: 'printers', label: 'المطابع', description: 'عرض المطابع', hasEdit: true },
+  { id: 'printer_accounts', label: 'حسابات المطابع', description: 'عرض حسابات المطابع', hasEdit: true },
+  { id: 'installation_teams', label: 'فرق التركيب', description: 'عرض فرق التركيب', hasEdit: true },
+  { id: 'installation_team_accounts', label: 'حسابات فرق التركيب', description: 'عرض حسابات فرق التركيب', hasEdit: true },
+  { id: 'friend_billboards', label: 'لوحات الأصدقاء', description: 'عرض لوحات الأصدقاء', hasEdit: true },
+  { id: 'friend_accounts', label: 'حسابات الأصدقاء', description: 'عرض حسابات الأصدقاء', hasEdit: true },
+  { id: 'shared_billboards', label: 'اللوحات المشتركة', description: 'عرض اللوحات المشتركة', hasEdit: true },
+  { id: 'shared_companies', label: 'الشركات المشاركة', description: 'عرض الشركات المشاركة', hasEdit: true },
+  { id: 'municipality_stickers', label: 'ملصقات البلديات', description: 'عرض ملصقات البلديات', hasEdit: true },
+  { id: 'extended_billboards', label: 'اللوحات الممددة', description: 'عرض اللوحات الممددة', hasEdit: false },
+  { id: 'delayed_billboards', label: 'اللوحات المتأخرة', description: 'عرض اللوحات المتأخرة', hasEdit: false },
+  { id: 'billboard_cleanup', label: 'تنظيف اللوحات', description: 'عرض تنظيف اللوحات المنتهية', hasEdit: true },
+  { id: 'billboard_maintenance', label: 'صيانة اللوحات', description: 'عرض صيانة اللوحات', hasEdit: true },
+  { id: 'booking_requests', label: 'طلبات الحجز', description: 'عرض طلبات الحجز', hasEdit: true },
+  { id: 'users', label: 'المستخدمون', description: 'عرض المستخدمين', hasEdit: true },
+  { id: 'roles', label: 'الأدوار', description: 'عرض الأدوار والصلاحيات', hasEdit: true },
+  { id: 'pricing', label: 'التسعير', description: 'عرض أسعار الإيجار', hasEdit: true },
+  { id: 'pricing_factors', label: 'معاملات التسعير', description: 'عرض معاملات التسعير', hasEdit: true },
+  { id: 'settings', label: 'الإعدادات', description: 'الوصول للإعدادات العامة', hasEdit: true },
+  { id: 'database_backup', label: 'النسخ الاحتياطي', description: 'عرض النسخ الاحتياطي', hasEdit: true },
+  { id: 'messaging_settings', label: 'إعدادات المراسلات', description: 'عرض إعدادات الرسائل', hasEdit: true },
+  { id: 'currency_settings', label: 'إعدادات العملة', description: 'عرض إعدادات العملة', hasEdit: true },
+  { id: 'pdf_templates', label: 'قوالب PDF', description: 'عرض قوالب PDF', hasEdit: true },
+  { id: 'print_design', label: 'تصميم الطباعة', description: 'عرض تصميم الطباعة', hasEdit: true },
+  { id: 'contract_terms', label: 'بنود العقد', description: 'عرض بنود العقد', hasEdit: true },
+  { id: 'system_settings', label: 'إعدادات النظام', description: 'عرض إعدادات النظام المتقدمة', hasEdit: true },
 ];
+
+// الصلاحيات التي تدعم التعديل (سيتم إنشاء صلاحية _edit لكل منها)
+const editablePermissions = availablePermissions.filter(p => p.hasEdit);
 
 export default function RolesManagement() {
   const [roles, setRoles] = useState<Role[]>([]);
@@ -220,9 +224,14 @@ export default function RolesManagement() {
   };
 
   const selectAllPermissions = () => {
+    // تحديد كل صلاحيات المشاهدة + التعديل
+    const allPerms = [
+      ...availablePermissions.map(p => p.id),
+      ...editablePermissions.map(p => `${p.id}_edit`)
+    ];
     setFormData(prev => ({
       ...prev,
-      permissions: availablePermissions.map(p => p.id),
+      permissions: allPerms,
     }));
   };
 
@@ -230,6 +239,23 @@ export default function RolesManagement() {
     setFormData(prev => ({
       ...prev,
       permissions: [],
+    }));
+  };
+
+  // تحديد كل صلاحيات التعديل
+  const selectAllEditPermissions = () => {
+    const editPerms = editablePermissions.map(p => `${p.id}_edit`);
+    setFormData(prev => ({
+      ...prev,
+      permissions: [...new Set([...prev.permissions, ...editPerms])],
+    }));
+  };
+
+  // إلغاء كل صلاحيات التعديل
+  const clearAllEditPermissions = () => {
+    setFormData(prev => ({
+      ...prev,
+      permissions: prev.permissions.filter(p => !p.endsWith('_edit')),
     }));
   };
 
@@ -380,9 +406,10 @@ export default function RolesManagement() {
               />
             </div>
 
+            {/* صلاحيات المشاهدة */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <Label className="text-lg font-semibold">الصلاحيات</Label>
+                <Label className="text-lg font-semibold">صلاحيات المشاهدة (الوصول للصفحات)</Label>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" onClick={selectAllPermissions}>
                     تحديد الكل
@@ -393,7 +420,7 @@ export default function RolesManagement() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[400px] overflow-y-auto p-4 border rounded-lg">
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto p-4 border rounded-lg">
                 {availablePermissions.map((perm) => (
                   <div
                     key={perm.id}
@@ -417,7 +444,69 @@ export default function RolesManagement() {
               </div>
 
               <p className="text-sm text-muted-foreground">
-                تم تحديد {formData.permissions.length} من {availablePermissions.length} صلاحية
+                تم تحديد {formData.permissions.filter(p => !p.endsWith('_edit')).length} من {availablePermissions.length} صلاحية مشاهدة
+              </p>
+            </div>
+
+            {/* صلاحيات التعديل */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <Label className="text-lg font-semibold">صلاحيات التعديل (إضافة/تعديل/حذف)</Label>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={selectAllEditPermissions}>
+                    تحديد كل التعديل
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={clearAllEditPermissions}>
+                    إلغاء كل التعديل
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-[300px] overflow-y-auto p-4 border rounded-lg bg-muted/30">
+                {editablePermissions.map((perm) => {
+                  const editPermId = `${perm.id}_edit`;
+                  const hasViewPermission = formData.permissions.includes(perm.id);
+                  return (
+                    <div
+                      key={editPermId}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        formData.permissions.includes(editPermId)
+                          ? 'bg-green-500/10 border-green-500'
+                          : hasViewPermission 
+                            ? 'hover:bg-muted' 
+                            : 'opacity-50 cursor-not-allowed'
+                      }`}
+                      onClick={() => {
+                        if (hasViewPermission) {
+                          togglePermission(editPermId);
+                        }
+                      }}
+                    >
+                      <Checkbox
+                        checked={formData.permissions.includes(editPermId)}
+                        disabled={!hasViewPermission}
+                        onCheckedChange={() => {
+                          if (hasViewPermission) {
+                            togglePermission(editPermId);
+                          }
+                        }}
+                      />
+                      <div className="flex-1">
+                        <p className="font-medium text-sm flex items-center gap-1">
+                          <Edit className="h-3 w-3" />
+                          تعديل {perm.label}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {hasViewPermission ? 'السماح بالتعديل والحذف' : 'يجب تفعيل المشاهدة أولاً'}
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <p className="text-sm text-muted-foreground">
+                تم تحديد {formData.permissions.filter(p => p.endsWith('_edit')).length} من {editablePermissions.length} صلاحية تعديل
               </p>
             </div>
           </div>

@@ -1835,7 +1835,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
 
       const contractDetails = calculateContractDetails();
       const paymentInstallments = getPaymentInstallments();
-      const year = new Date().getFullYear();
+      const year = contract?.['Contract Date'] ? new Date(contract['Contract Date']).getFullYear() : (contract?.start_date ? new Date(contract.start_date).getFullYear() : new Date().getFullYear());
       const currencyInfo = getCurrencyInfo();
       const discountInfo = getDiscountInfo();
 
@@ -1955,7 +1955,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         // Check for valid values (not empty, not 0, not "0")
         const getValidValue = (val: any) => val && val !== '0' && val !== 0 ? String(val) : '';
         const rent_end_date = getValidValue(b.Rent_End_Date) || getValidValue(b.rent_end_date) || getValidValue(b.end_date) || contractDetails.endDate || '';
-        const duration_days = getValidValue(b.Days_Count) || getValidValue(b.days_count) || getValidValue(b.duration_days) || contractDetails.duration || '';
+
+        // ✅ FIX: مدة اللوحات تعتمد على تواريخ العقد (المصدر الوحيد للحقيقة)
+        // لا نعتمد على Days_Count المخزن في جدول اللوحات لأنه قد لا يتزامن بعد تعديل مدة العقد
+        const duration_days = contractDetails.duration || '';
 
         // باقي الحقول
         let coords: string = String(b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? '');
@@ -2805,7 +2808,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       // استخدم نفس منطق توليد HTML الخاص بـ handlePrintContract
       const contractDetails = calculateContractDetails();
       const paymentInstallments = getPaymentInstallments();
-      const year = new Date().getFullYear();
+      const year = contract?.['Contract Date'] ? new Date(contract['Contract Date']).getFullYear() : (contract?.start_date ? new Date(contract.start_date).getFullYear() : new Date().getFullYear());
       const currencyInfo = getCurrencyInfo();
       const discountInfo = getDiscountInfo();
 
@@ -2893,7 +2896,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         // ✅ FIX: Use same logic - check for valid values (not empty, not 0)
         const getValidValue = (val: any) => val && val !== '0' && val !== 0 ? String(val) : '';
         const rent_end_date = getValidValue(b.Rent_End_Date) || getValidValue(b.rent_end_date) || getValidValue(b.end_date) || contractDetails.endDate || '';
-        const duration_days = getValidValue(b.Days_Count) || getValidValue(b.days_count) || getValidValue(b.duration_days) || contractDetails.duration || '';
+
+        // ✅ FIX: مدة اللوحات تعتمد على تواريخ العقد (المصدر الوحيد للحقيقة)
+        // لا نعتمد على Days_Count المخزن في جدول اللوحات لأنه قد لا يتزامن بعد تعديل مدة العقد
+        const duration_days = contractDetails.duration || '';
 
         let coords: string = String(b.GPS_Coordinates ?? b.coords ?? b.coordinates ?? b.GPS ?? '');
         if (!coords || coords === 'undefined' || coords === 'null') {
@@ -3505,7 +3511,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       const paymentInstallments = getPaymentInstallments();
       const currencyInfo = getCurrencyInfo();
       const discountInfo = getDiscountInfo();
-      const year = new Date().getFullYear();
+      const year = contract?.['Contract Date'] ? new Date(contract['Contract Date']).getFullYear() : (contract?.start_date ? new Date(contract.start_date).getFullYear() : new Date().getFullYear());
 
       const isOffer = contract?.is_offer === true || 
                       (contract?.['Ad Type'] || contract?.ad_type || '').includes('عرض') ||
@@ -3571,10 +3577,10 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
         let coords = String(b.GPS_Coordinates ?? b.coords ?? '');
         const gpsLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : (b.GPS_Link || '');
 
-        // ✅ FIX: Add endDate and durationDays with fallback - check for valid values
+        // ✅ FIX: Add endDate and durationDays - source of truth = contract dates
         const getValidValue = (val: any) => val && val !== '0' && val !== 0 ? String(val) : '';
         const rent_end_date = getValidValue(b.Rent_End_Date) || getValidValue(b.rent_end_date) || getValidValue(b.end_date) || contractDetails.endDate || '';
-        const duration_days = getValidValue(b.Days_Count) || getValidValue(b.days_count) || getValidValue(b.duration_days) || contractDetails.duration || '';
+        const duration_days = contractDetails.duration || '';
 
         return {
           id,

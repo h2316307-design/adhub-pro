@@ -134,12 +134,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   /**
    * Check if user can edit a specific section
-   * Permissions are derived ONLY from the user's role.
+   * User needs both view permission AND edit permission (section_edit)
+   * Admins always have edit access
    */
   const canEdit = (section: string): boolean => {
     if (isAdmin) return true;
-    // User can edit if they have the section permission (role-based)
-    return user?.permissions?.includes(section) || false;
+    // User can edit if they have both view permission AND edit permission
+    const hasViewPermission = user?.permissions?.includes(section) || false;
+    const hasEditPermission = user?.permissions?.includes(`${section}_edit`) || false;
+    return hasViewPermission && hasEditPermission;
   };
 
   const value: AuthContextType = {
@@ -163,6 +166,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   );
 };
 
+// Custom hook to use auth context
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {
