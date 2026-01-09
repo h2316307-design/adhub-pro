@@ -125,9 +125,12 @@ function getCellContent(
       return row.landmark || '';
     case 'size':
       return row.size || '';
-    case 'faces':
-      return `<span class="num">${row.faces || ''}</span>`;
-    case 'price':
+    case 'faces': {
+      const value = row.faces ?? '';
+      const str = String(value);
+      const isNumeric = typeof value === 'number' || /^\s*\d+\s*$/.test(str);
+      return isNumeric ? `<span class="num">${str}</span>` : str;
+    }
       return row.price || '';
     case 'endDate':
       return row.rent_end_date || '';
@@ -544,6 +547,65 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
   `;
 }
 
+/**
+ * فلترة الأعمدة بناءً على توفر البيانات
+ * الأعمدة الاختيارية (السعر، المدة، تاريخ الانتهاء) تظهر فقط إذا كانت تحتوي على بيانات
+ */
+function filterColumnsBasedOnData(
+  columns: PageSectionSettings['tableSettings']['columns'],
+  billboards: BillboardRowData[]
+): PageSectionSettings['tableSettings']['columns'] {
+  // الأعمدة التي تخفى إذا كانت فارغة
+  const optionalColumns = ['price', 'endDate', 'durationDays'];
+  
+  return columns.map(col => {
+    if (!optionalColumns.includes(col.key)) {
+      return col; // العمود غير اختياري - يبقى كما هو
+    }
+    
+    // التحقق من وجود بيانات في هذا العمود
+    const hasData = billboards.some(b => {
+      switch (col.key) {
+        case 'price':
+          return b.price && b.price.trim() !== '';
+        case 'endDate':
+          return b.rent_end_date && b.rent_end_date.trim() !== '';
+        case 'durationDays':
+          return b.duration_days && b.duration_days.trim() !== '';
+        default:
+          return false;
+      }
+    });
+    
+    // إذا لم توجد بيانات، نخفي العمود
+    return { ...col, visible: col.visible && hasData };
+  });
+}
+
+/**
+ * إعادة توزيع عرض الأعمدة بعد الفلترة
+ */
+function redistributeColumnWidths(
+  columns: PageSectionSettings['tableSettings']['columns']
+): PageSectionSettings['tableSettings']['columns'] {
+  const visibleColumns = columns.filter(c => c.visible);
+  const hiddenColumns = columns.filter(c => !c.visible);
+  
+  if (hiddenColumns.length === 0) return columns;
+  
+  // حساب العرض المتاح للإضافة
+  const totalHiddenWidth = hiddenColumns.reduce((sum, c) => sum + c.width, 0);
+  const totalVisibleWidth = visibleColumns.reduce((sum, c) => sum + c.width, 0);
+  
+  // توزيع العرض بالتناسب على الأعمدة المرئية
+  const scaleFactor = (totalVisibleWidth + totalHiddenWidth) / totalVisibleWidth;
+  
+  return columns.map(col => {
+    if (!col.visible) return col;
+    return { ...col, width: Math.round(col.width * scaleFactor * 100) / 100 };
+  });
+}
+
 export function renderAllBillboardsTablePagesPreviewLike(
   billboards: BillboardRowData[],
   settings: PageSectionSettings,
@@ -555,6 +617,19 @@ export function renderAllBillboardsTablePagesPreviewLike(
 
   if (billboards.length === 0) return [];
 
+  // فلترة الأعمدة بناءً على توفر البيانات وإعادة توزيع العرض
+  const filteredColumns = filterColumnsBasedOnData(settings.tableSettings.columns, billboards);
+  const adjustedColumns = redistributeColumnWidths(filteredColumns);
+  
+  // إنشاء نسخة معدلة من الإعدادات
+  const adjustedSettings: PageSectionSettings = {
+    ...settings,
+    tableSettings: {
+      ...settings.tableSettings,
+      columns: adjustedColumns
+    }
+  };
+
   const pages: BillboardRowData[][] = [];
   for (let i = 0; i < billboards.length; i += actualRowsPerPage) {
     pages.push(billboards.slice(i, i + actualRowsPerPage));
@@ -562,7 +637,7 @@ export function renderAllBillboardsTablePagesPreviewLike(
 
   return pages.map((pageBillboards, pageIndex) =>
     renderBillboardsTablePagePreviewLike({
-      settings,
+      settings: adjustedSettings,
       billboards: pageBillboards,
       tableBgUrl,
       pageIndex,

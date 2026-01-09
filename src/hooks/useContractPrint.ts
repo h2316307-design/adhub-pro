@@ -239,10 +239,9 @@ export function useContractPrint() {
       return false;
     }
 
-    // Calculate print scale for A4 (fallback) + dynamic scale inside print window
-    // 150% scale confirmed by user to fill page correctly
+    // Calculate print scale for A4
     const a4WidthPx = (210 / 25.4) * 96;
-    const printScale = (a4WidthPx / designWidth) * 1.5;
+    const printScale = a4WidthPx / designWidth;
 
     // Get all styles from the current page
     const stylesHtml = Array.from(
@@ -254,13 +253,25 @@ export function useContractPrint() {
     const origin = window.location.origin;
 
     // Generate pages HTML
-    const pagesContent = pagesHtml.map((pageHtml, idx) => `
-      <div class="print-page" data-page="${idx + 1}">
-        <div class="print-content" style="width: ${designWidth}px; height: ${designHeight}px;">
-          ${pageHtml}
+    // إذا كان المحتوى يحتوي على contract-preview-container، نستخدمه مباشرة
+    // وإلا نلفه في print-content
+    const pagesContent = pagesHtml.map((pageHtml, idx) => {
+      const hasContainer = pageHtml.includes('contract-preview-container');
+      if (hasContainer) {
+        return `
+          <div class="print-page" data-page="${idx + 1}">
+            ${pageHtml}
+          </div>
+        `;
+      }
+      return `
+        <div class="print-page" data-page="${idx + 1}">
+          <div class="print-content" style="width: ${designWidth}px; height: ${designHeight}px;">
+            ${pageHtml}
+          </div>
         </div>
-      </div>
-    `).join('\n');
+      `;
+    }).join('\n');
 
     const html = `
       <!DOCTYPE html>
@@ -308,7 +319,8 @@ export function useContractPrint() {
             page-break-after: avoid;
           }
 
-          .print-content {
+          .print-page .contract-preview-container,
+          .print-page .print-content {
             position: absolute !important;
             left: 0 !important;
             top: 0 !important;
@@ -323,10 +335,13 @@ export function useContractPrint() {
             direction: ltr;
           }
 
-          .print-content img { max-width: none !important; }
+          .print-page .contract-preview-container img,
+          .print-page .print-content img { max-width: none !important; }
 
-          .print-content,
-          .print-content * {
+          .print-page .contract-preview-container,
+          .print-page .contract-preview-container *,
+          .print-page .print-content,
+          .print-page .print-content * {
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
             color-adjust: exact !important;
@@ -368,8 +383,7 @@ export function useContractPrint() {
               document.body.removeChild(probe);
 
                if (measuredA4WidthPx && measuredA4WidthPx > 0) {
-                 // Keep the same 150% multiplier used in the fallback scale
-                 const dynamicScale = (measuredA4WidthPx / ${designWidth}) * 1.5;
+                 const dynamicScale = measuredA4WidthPx / ${designWidth};
                  document.documentElement.style.setProperty('--print-scale', String(dynamicScale));
                }
             } catch (e) {

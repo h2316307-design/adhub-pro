@@ -527,6 +527,8 @@ export function SizesInvoicePrintDialog({
   };
 
   // Header rendering - العناوين يمين والشعار يسار
+  // ملاحظة: في RTL، العنصر الأول في flex يظهر على اليمين
+  // لذلك نضع العناوين أولاً (يمين) ثم الشعار (يسار)
   const renderHeader = () => {
     if (individual.showHeader === false) return null;
     
@@ -539,32 +541,7 @@ export function SizesInvoicePrintDialog({
         paddingBottom: '15px',
         borderBottom: `2px solid ${primaryColor}`,
       }}>
-        {/* Logo Side - Left */}
-        <div style={{ 
-          flex: 1, display: 'flex', flexDirection: 'column',
-          alignItems: 'flex-start',
-          gap: '8px',
-        }}>
-          {shared.showLogo && shared.logoPath && (
-            <img src={shared.logoPath} alt="Logo" 
-              style={{ height: `${shared.logoSize || 60}px`, objectFit: 'contain', flexShrink: 0 }}
-              onError={(e) => { e.currentTarget.style.display = 'none'; }}
-            />
-          )}
-          
-          {shared.showContactInfo && (
-            <div style={{ 
-              fontSize: `${shared.contactInfoFontSize || 10}px`, 
-              color: customerText, lineHeight: 1.6,
-              textAlign: 'left',
-            }}>
-              {shared.companyAddress && <div>{shared.companyAddress}</div>}
-              {shared.companyPhone && <div>هاتف: <span style={{ fontFamily: 'Manrope, sans-serif', direction: 'ltr', display: 'inline-block' }}>{shared.companyPhone}</span></div>}
-            </div>
-          )}
-        </div>
-
-        {/* Titles Side - Right */}
+        {/* Titles Side - Right (أول عنصر في RTL يظهر على اليمين) */}
         <div style={{ flex: 1, textAlign: 'right' }}>
           {shared.showCompanyInfo && (shared.showCompanyName || shared.showCompanySubtitle) && (
             <div style={{ marginBottom: '8px' }}>
@@ -593,6 +570,31 @@ export function SizesInvoicePrintDialog({
                 التاريخ: <span style={{ fontFamily: 'Manrope, sans-serif' }}>{new Date().toLocaleDateString('ar-LY')}</span><br/>
                 أرقام العقود: <span style={{ fontFamily: 'Manrope, sans-serif' }}>{contractNumbers.join(' - ')}</span>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Logo Side - Left (ثاني عنصر في RTL يظهر على اليسار) */}
+        <div style={{ 
+          flex: 1, display: 'flex', flexDirection: 'column',
+          alignItems: 'flex-end',
+          gap: '8px',
+        }}>
+          {shared.showLogo && shared.logoPath && (
+            <img src={shared.logoPath} alt="Logo" 
+              style={{ height: `${shared.logoSize || 60}px`, objectFit: 'contain', flexShrink: 0 }}
+              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+            />
+          )}
+          
+          {shared.showContactInfo && (
+            <div style={{ 
+              fontSize: `${shared.contactInfoFontSize || 10}px`, 
+              color: customerText, lineHeight: 1.6,
+              textAlign: 'left',
+            }}>
+              {shared.companyAddress && <div>{shared.companyAddress}</div>}
+              {shared.companyPhone && <div>هاتف: <span style={{ fontFamily: 'Manrope, sans-serif', direction: 'ltr', display: 'inline-block' }}>{shared.companyPhone}</span></div>}
             </div>
           )}
         </div>

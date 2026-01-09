@@ -89,7 +89,9 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
   const [backgroundType, setBackgroundType] = useState<'preset' | 'custom'>('preset');
   const [selectedPeriod, setSelectedPeriod] = useState('monthly');
   const [discounts, setDiscounts] = useState<{ [level: string]: { type: 'percentage' | 'fixed'; value: number } }>({});
-  
+
+  // أسماء عدد الأوجه (من جدول الإعدادات billboard_faces)
+  const [billboardFacesLabels, setBillboardFacesLabels] = useState<Record<number, string>>({});
   // ✅ استخدام useContractTemplateSettings hook مباشرة - مرتبط بإعدادات قالب العقد
   const { data: templateData, isLoading: templateLoading } = useContractTemplateSettings();
   
@@ -145,6 +147,36 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
     };
 
     loadSettings();
+  }, [printDialogOpen]);
+
+  // تحميل أسماء عدد الأوجه من جدول الإعدادات
+  useEffect(() => {
+    const loadFacesLabels = async () => {
+      if (!printDialogOpen) return;
+
+      try {
+        const { data, error } = await supabase
+          .from('billboard_faces')
+          .select('face_count, name, is_active');
+
+        if (error) throw error;
+
+        const map: Record<number, string> = {};
+        (data || [])
+          .filter((r) => r && (r as any).face_count != null && (r as any).name)
+          .filter((r) => (r as any).is_active !== false)
+          .forEach((r) => {
+            const count = Number((r as any).face_count);
+            if (Number.isFinite(count)) map[count] = String((r as any).name);
+          });
+
+        setBillboardFacesLabels(map);
+      } catch (e) {
+        console.error('Error loading billboard faces labels:', e);
+      }
+    };
+
+    loadFacesLabels();
   }, [printDialogOpen]);
 
   // حفظ الإعدادات
@@ -220,22 +252,32 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
 
   // تحويل اللوحات للتنسيق المطلوب - نفس التنسيق المستخدم في طباعة العقد
   const prepareBillboardsData = (billboards: any[]): BillboardRowData[] => {
-    return billboards.map((b) => ({
-      id: String(b.ID || b.id || ''),
-      billboardName: b.Billboard_Name || b.billboard_name || '',
-      image: showImages ? (b.Image_URL || b.image_url || '') : '',
-      municipality: b.Municipality || b.municipality || '',
-      district: b.District || b.district || '',
-      landmark: b.Nearest_Landmark || b.nearest_landmark || '',
-      size: b.Size || b.size || '',
-      level: b.Level || b.level || '',
-      faces: b.Faces_Count || b.faces_count || b.faces || '1',
-      price: b.Price ? `${Number(b.Price).toLocaleString()}` : '',
-      rent_end_date: b.Rent_End_Date || b.rent_end_date || '',
-      mapLink: b.GPS_Link || b.GPS_Coordinates 
-        ? `https://www.google.com/maps?q=${b.GPS_Coordinates || ''}` 
-        : '',
-    }));
+    return billboards.map((b) => {
+      const facesRaw = b.Faces_Count ?? b.faces_count ?? b.faces ?? '1';
+      const facesNum = Number(facesRaw);
+      const facesLabel = Number.isFinite(facesNum) ? billboardFacesLabels[facesNum] : undefined;
+
+      return {
+        id: String(b.ID || b.id || ''),
+        billboardName: b.Billboard_Name || b.billboard_name || '',
+        image: showImages ? (b.Image_URL || b.image_url || '') : '',
+        municipality: b.Municipality || b.municipality || '',
+        district: b.District || b.district || '',
+        landmark: b.Nearest_Landmark || b.nearest_landmark || '',
+        size: b.Size || b.size || '',
+        level: b.Level || b.level || '',
+        // ✅ عرض عدد الأوجه كنص من إعدادات billboard_faces إذا توفر
+        faces: facesLabel || String(facesRaw ?? ''),
+        price: b.Price ? `${Number(b.Price).toLocaleString()}` : '',
+        rent_end_date: b.Rent_End_Date || b.rent_end_date || '',
+        // ✅ مدة/أيام إذا كانت متوفرة في بيانات اللوحة
+        duration_days: String(b.Days_Count ?? b.duration_days ?? b.durationDays ?? ''),
+        mapLink:
+          b.GPS_Link || b.GPS_Coordinates
+            ? `https://www.google.com/maps?q=${b.GPS_Coordinates || ''}`
+            : '',
+      };
+    });
   };
 
   const { printMultiplePages } = useContractPrint();
@@ -256,23 +298,33 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
       const tableBgUrl = bgUrl === '' ? '' : (bgUrl || templateTableBackgroundUrl || '/bgc2.svg');
 
       // ✅ صفحات HTML بحجم التصميم (2480x3508) مثل معاينة إعدادات قالب العقد
+      // ✅ نمرر false دائماً لـ showTableTerm لأن هذه طباعة لوحات مستقلة بدون بنود العقد
       const pages = renderAllBillboardsTablePagesPreviewLike(
         billboardsData,
         settings,
         tableBgUrl,
         settings.tableSettings?.maxRows || 12,
-        showTableTerm
+        false // لا نظهر عنوان البند والخط الذهبي في طباعة اللوحات
       ).map((pageHtml) => {
-        if (!showLogo) return pageHtml;
+        let finalHtml = pageHtml;
 
-        // إضافة شعار كـ overlay بدون تغيير تخطيط الصفحة
-        const logoHtml = `
-          <div style="position:absolute; top:120px; right:120px; z-index:1000;">
-            <img src="/logofaresgold.svg" alt="شعار الفارس" style="height:95px; width:auto;" onerror="this.style.display='none'" />
-          </div>
-        `;
+        // ✅ إزالة عنوان البند/الخط الذهبي إذا كان يظهر لأي سبب (احتياط)
+        finalHtml = finalHtml.replace(
+          /<div\s+style="\s*text-align:\s*center;[\s\S]*?<\/div>\s*(?=<table)/,
+          ''
+        );
+        
+        if (showLogo) {
+          // إضافة شعار كـ overlay بدون تغيير تخطيط الصفحة
+          const logoHtml = `
+            <div style="position:absolute; top:120px; right:120px; z-index:1000;">
+              <img src="/logofaresgold.svg" alt="شعار الفارس" style="height:95px; width:auto;" onerror="this.style.display='none'" />
+            </div>
+          `;
+          finalHtml = finalHtml.replace(/<div[^>]*class="[^"]*contract-preview-container[^"]*"[^>]*>/, (match) => `${match}${logoHtml}`);
+        }
 
-        return pageHtml.replace(/<div[^>]*class=\"[^\"]*contract-preview-container[^\"]*\"[^>]*>/, (match) => `${match}${logoHtml}`);
+        return finalHtml;
       });
 
       if (pages.length === 0) {

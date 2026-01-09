@@ -273,7 +273,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     img.src = imageUrl;
   };
   
-  // جلب أول صورة تصميم من مهام التركيب عبر اللوحات المشتركة
+  // جلب أول صورة تصميم من مهام التركيب المرتبطة بهذا العقد فقط
   useEffect(() => {
     const fetchDesignImage = async () => {
       const rawContractNumber =
@@ -284,31 +284,164 @@ export const ContractCard: React.FC<ContractCardProps> = ({
 
       let foundImage: string | null = null;
 
-      // جلب billboard_ids من العقد
-      const { data: contractData } = await supabase
-        .from('Contract')
-        .select('billboard_ids')
-        .eq('Contract_Number', contractNumber)
-        .single();
+      // ✅ 1. البحث عن التصاميم من مهام التركيب المرتبطة بهذا العقد مباشرة (contract_id)
+      const { data: tasks } = await supabase
+        .from('installation_tasks')
+        .select('id')
+        .eq('contract_id', contractNumber);
 
-      if (contractData?.billboard_ids) {
-        // تحويل النص إلى مصفوفة أرقام
-        const billboardIds = contractData.billboard_ids
-          .split(',')
-          .map((id: string) => parseInt(id.trim(), 10))
-          .filter((id: number) => !isNaN(id));
+      if (tasks && tasks.length > 0) {
+        const taskIds = tasks.map(t => t.id);
+        const { data: items } = await supabase
+          .from('installation_task_items')
+          .select('design_face_a, design_face_b')
+          .in('task_id', taskIds)
+          .or('design_face_a.not.is.null,design_face_b.not.is.null')
+          .limit(1);
 
-        if (billboardIds.length > 0) {
-          // البحث عن تصميم في installation_task_items للوحات هذا العقد
+        if (items && items.length > 0) {
+          foundImage = items[0].design_face_a || items[0].design_face_b;
+        }
+      }
+
+      // ✅ 2. البحث في المهام المدمجة (contract_ids يحتوي على هذا العقد)
+      if (!foundImage) {
+        const { data: combinedTasks } = await supabase
+          .from('installation_tasks')
+          .select('id')
+          .contains('contract_ids', [contractNumber]);
+
+        if (combinedTasks && combinedTasks.length > 0) {
+          const taskIds = combinedTasks.map(t => t.id);
           const { data: items } = await supabase
             .from('installation_task_items')
             .select('design_face_a, design_face_b')
-            .in('billboard_id', billboardIds)
+            .in('task_id', taskIds)
             .or('design_face_a.not.is.null,design_face_b.not.is.null')
             .limit(1);
 
           if (items && items.length > 0) {
             foundImage = items[0].design_face_a || items[0].design_face_b;
+          }
+        }
+      }
+
+      // ✅ 3. البحث عبر billboard_ids - جلب التصاميم من المهام التي تحتوي على لوحات هذا العقد
+      // مهم: بعض المهام تكون "مدمجة" فعلياً لكن contract_ids قد لا تُحفظ بشكل صحيح،
+      // لذلك نستنتج المهمة الأقرب لهذا العقد عبر أكبر تداخل (overlap) في لوحات العقد.
+      if (!foundImage) {
+        const { data: contractData } = await supabase
+          .from('Contract')
+          .select('billboard_ids')
+          .eq('Contract_Number', contractNumber)
+          .single();
+
+        if (contractData?.billboard_ids) {
+          const billboardIds = contractData.billboard_ids
+            .split(',')
+            .map((id: string) => parseInt(id.trim(), 10))
+            .filter((id: number) => !isNaN(id));
+
+          if (billboardIds.length > 0) {
+            const { data: items } = await supabase
+              .from('installation_task_items')
+              .select('task_id, billboard_id, design_face_a, design_face_b')
+              .in('billboard_id', billboardIds)
+              // ملاحظة: بعض السجلات تخزن "" بدل NULL، لذلك نفلتر محلياً
+              .limit(2000);
+
+            const usableItems = (items ?? []).filter((it: any) => {
+              const img = (it?.design_face_a || it?.design_face_b || '') as string;
+              return typeof img === 'string' && img.trim().length > 0;
+            });
+
+            if (usableItems.length > 0) {
+              // نجمع النتائج حسب task_id ونحسب عدد اللوحات المختلفة التي لها تصميم داخل نفس المهمة
+              const buckets = new Map<string, { billboards: Set<number>; sampleImage: string | null }>();
+
+              for (const it of usableItems as any[]) {
+                const taskId = String(it.task_id);
+                const bbId = Number(it.billboard_id);
+                const img = (it.design_face_a || it.design_face_b || null) as string | null;
+
+                if (!buckets.has(taskId)) {
+                  buckets.set(taskId, { billboards: new Set<number>(), sampleImage: null });
+                }
+
+                const bucket = buckets.get(taskId)!;
+                if (Number.isFinite(bbId)) bucket.billboards.add(bbId);
+                if (!bucket.sampleImage && typeof img === 'string' && img.trim()) {
+                  bucket.sampleImage = img;
+                }
+              }
+
+              let best: { taskId: string; overlap: number; image: string | null } | null = null;
+              for (const [taskId, bucket] of buckets.entries()) {
+                const overlap = bucket.billboards.size;
+                if (!best || overlap > best.overlap) {
+                  best = { taskId, overlap, image: bucket.sampleImage };
+                }
+              }
+
+              if (best?.image) {
+                const { data: taskMeta } = await supabase
+                  .from('installation_tasks')
+                  .select('contract_id, contract_ids')
+                  .eq('id', best.taskId)
+                  .maybeSingle();
+
+                const directRelated =
+                  !!taskMeta &&
+                  (taskMeta.contract_id === contractNumber ||
+                    (Array.isArray(taskMeta.contract_ids) && taskMeta.contract_ids.includes(contractNumber)));
+
+                // إذا لم تكن مرتبطة مباشرة، نعتبرها مرتبطة إذا كان التداخل كبيراً بما يكفي
+                // (لتجنب التقاط تصميم قديم بسبب لوحة واحدة مشتركة فقط)
+                const inferredRelated = billboardIds.length <= 1 ? best.overlap >= 1 : best.overlap >= 2;
+
+                if (directRelated || inferredRelated) {
+                  foundImage = best.image;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // ✅ 4. بديل أخير: البحث في design_data المحفوظة في العقد
+      if (!foundImage) {
+        const { data: contractData } = await supabase
+          .from('Contract')
+          .select('design_data')
+          .eq('Contract_Number', contractNumber)
+          .single();
+
+        if (contractData?.design_data) {
+          try {
+            const designData =
+              typeof contractData.design_data === 'string'
+                ? JSON.parse(contractData.design_data)
+                : contractData.design_data;
+
+            if (Array.isArray(designData)) {
+              for (const d of designData) {
+                const img =
+                  d?.designFaceA ||
+                  d?.designFaceB ||
+                  d?.faceA ||
+                  d?.faceB ||
+                  d?.design_face_a ||
+                  d?.design_face_b ||
+                  null;
+
+                if (typeof img === 'string' && img.trim()) {
+                  foundImage = img;
+                  break;
+                }
+              }
+            }
+          } catch (e) {
+            // تجاهل أخطاء التحليل
           }
         }
       }
