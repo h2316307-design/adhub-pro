@@ -212,20 +212,17 @@ export function usePrintCustomization() {
 
   // جلب الإعدادات من قاعدة البيانات
   const fetchSettings = useCallback(async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const { data, error } = await supabase
         .from('billboard_print_customization')
         .select('*')
         .eq('setting_key', 'default')
-        .single();
+        .maybeSingle();
 
       if (error) {
-        if (error.code === 'PGRST116') {
-          console.log('No customization settings found, using defaults');
-        } else {
-          console.error('Error fetching settings:', error);
-        }
+        console.error('Error fetching settings:', error);
+        setLoading(false);
         return;
       }
 
@@ -233,11 +230,11 @@ export function usePrintCustomization() {
         // دمج البيانات مع الإعدادات الافتراضية للحقول الجديدة
         setSettings({ ...defaultSettings, ...data } as PrintCustomizationSettings);
       }
+      // إذا لم توجد بيانات، نستخدم الإعدادات الافتراضية (تم تعيينها بالفعل)
     } catch (error) {
       console.error('Error in fetchSettings:', error);
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, []);
 
   // حفظ الإعدادات في قاعدة البيانات

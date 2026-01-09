@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { MapPin, Navigation, Image as ImageIcon, CheckCircle2, CalendarIcon, PaintBucket, Printer, RotateCcw, Palette, Box, DollarSign, Trash2, Pencil, Plus, AlertTriangle } from "lucide-react";
+import { MapPin, Navigation, Image as ImageIcon, CheckCircle2, CalendarIcon, PaintBucket, Printer, RotateCcw, Palette, Box, DollarSign, Trash2, Pencil, Plus, AlertTriangle, Lock, Unlock, Camera, Link2 } from "lucide-react";
 import { differenceInDays } from "date-fns";
 import { format } from "date-fns";
 import { ar } from "date-fns/locale";
@@ -64,6 +64,11 @@ export function BillboardTaskCard({
   const [editingDate, setEditingDate] = useState(item.installation_date || '');
   const [savingDate, setSavingDate] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const [isCustomerCostEditable, setIsCustomerCostEditable] = useState(false);
+  const [additionalCost, setAdditionalCost] = useState<number>(item.additional_cost || 0);
+  const [additionalCostNotes, setAdditionalCostNotes] = useState<string>(item.additional_cost_notes || '');
+  const [isAdditionalCostEditable, setIsAdditionalCostEditable] = useState(false);
+  const [savingAdditionalCost, setSavingAdditionalCost] = useState(false);
 
   // مزامنة اختيار التصميم مع بيانات العنصر (مهم عند التحديث الجماعي "توزيع التصاميم")
   useEffect(() => {
@@ -173,6 +178,30 @@ export function BillboardTaskCard({
       setCustomerInstallationCost(item.customer_installation_cost || 0);
     } finally {
       setSavingCost(false);
+    }
+  };
+
+  const handleAdditionalCostSave = async () => {
+    setSavingAdditionalCost(true);
+    try {
+      const { error } = await supabase
+        .from('installation_task_items')
+        .update({ 
+          additional_cost: additionalCost,
+          additional_cost_notes: additionalCostNotes || null
+        })
+        .eq('id', item.id);
+
+      if (error) throw error;
+      
+      toast.success('تم حفظ التكلفة الإضافية');
+      setIsAdditionalCostEditable(false);
+      onRefresh?.();
+    } catch (error) {
+      console.error('Error saving additional cost:', error);
+      toast.error('فشل في حفظ التكلفة الإضافية');
+    } finally {
+      setSavingAdditionalCost(false);
     }
   };
 
@@ -437,7 +466,7 @@ export function BillboardTaskCard({
           )}
 
           {/* عرض تكاليف التركيب - يظهر دائماً */}
-          <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800">
+          <div className="mt-2 pt-2 border-t border-green-200 dark:border-green-800 space-y-2">
             <div className="flex items-center justify-between gap-2 text-[10px]">
               <div className="flex items-center gap-1">
                 <DollarSign className="h-3 w-3 text-green-600 dark:text-green-400" />
@@ -458,11 +487,93 @@ export function BillboardTaskCard({
               )}
             </div>
             {customerInstallationCost > 0 && (
-              <div className="flex items-center justify-between gap-2 text-[10px] mt-1">
+              <div className="flex items-center justify-between gap-2 text-[10px]">
                 <span className="font-semibold text-green-700 dark:text-green-400">للزبون:</span>
                 <span className="font-bold text-green-800 dark:text-green-200">
                   {customerInstallationCost.toLocaleString('ar-LY')} د.ل
                 </span>
+              </div>
+            )}
+            {(additionalCost > 0 || isAdditionalCostEditable) && (
+              <div className="flex items-center justify-between gap-2 text-[10px]">
+                <span className="font-semibold text-amber-600 dark:text-amber-400">تكاليف إضافية:</span>
+                <span className="font-bold text-amber-700 dark:text-amber-300">
+                  {additionalCost.toLocaleString('ar-LY')} د.ل
+                </span>
+              </div>
+            )}
+            
+            {/* زر التكاليف الإضافية للوحات المكتملة */}
+            <div className="flex items-center gap-2">
+              <Button
+                variant={isAdditionalCostEditable ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-[10px] flex-1"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isAdditionalCostEditable) {
+                    handleAdditionalCostSave();
+                  } else {
+                    setIsAdditionalCostEditable(true);
+                  }
+                }}
+                disabled={savingAdditionalCost}
+              >
+                {savingAdditionalCost ? (
+                  'جاري الحفظ...'
+                ) : isAdditionalCostEditable ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3 ml-1" />
+                    حفظ
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3 w-3 ml-1" />
+                    تكاليف إضافية
+                  </>
+                )}
+              </Button>
+              {isAdditionalCostEditable && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[10px]"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsAdditionalCostEditable(false);
+                    setAdditionalCost(item.additional_cost || 0);
+                    setAdditionalCostNotes(item.additional_cost_notes || '');
+                  }}
+                >
+                  إلغاء
+                </Button>
+              )}
+            </div>
+
+            {isAdditionalCostEditable && (
+              <div className="space-y-2 p-2 bg-amber-50 dark:bg-amber-950/30 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-medium text-amber-700 dark:text-amber-300">المبلغ الإضافي</Label>
+                  <Input
+                    type="number"
+                    value={additionalCost}
+                    onChange={(e) => setAdditionalCost(Number(e.target.value))}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-7 text-xs"
+                    placeholder="0"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-medium text-amber-700 dark:text-amber-300">ملاحظات</Label>
+                  <Input
+                    type="text"
+                    value={additionalCostNotes}
+                    onChange={(e) => setAdditionalCostNotes(e.target.value)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="h-7 text-xs"
+                    placeholder="سبب التكلفة الإضافية..."
+                  />
+                </div>
               </div>
             )}
           </div>
@@ -784,37 +895,75 @@ export function BillboardTaskCard({
               {hasCutout ? 'مجسم ✓' : 'مجسم'}
             </button>
             
-            {/* تكلفة التركيب */}
-            <div className="flex-1 flex items-center gap-1.5 text-[10px]">
-              <span className="text-muted-foreground">التكلفة:</span>
-              {installationPrice > 0 ? (
-                <span className="font-bold text-green-600">{installationPrice.toLocaleString('ar-LY')}</span>
-              ) : (
-                <span className="text-amber-500">-</span>
+            {/* تكلفة التركيب والزبون */}
+            <div className="flex-1 flex items-center gap-2 text-[10px]">
+              <div className="flex items-center gap-1">
+                <span className="text-muted-foreground">الشركة:</span>
+                {installationPrice > 0 ? (
+                  <span className="font-bold text-green-600">{installationPrice.toLocaleString('ar-LY')}</span>
+                ) : (
+                  <span className="text-amber-500">-</span>
+                )}
+              </div>
+              {customerInstallationCost > 0 && (
+                <div className="flex items-center gap-1">
+                  <span className="text-muted-foreground">الزبون:</span>
+                  <span className="font-bold text-blue-600">{customerInstallationCost.toLocaleString('ar-LY')}</span>
+                </div>
               )}
             </div>
           </div>
           
-          {/* إدخال المبلغ للزبون */}
-          <div onClick={(e) => e.stopPropagation()} className="relative">
-            <Input
-              id={`customer-cost-${item.id}`}
-              type="number"
-              min="0"
-              step="0.01"
-              value={customerInstallationCost === 0 ? '' : customerInstallationCost}
-              onChange={(e) => {
-                const val = e.target.value;
-                setCustomerInstallationCost(val === '' ? 0 : Number(val));
-              }}
-              onBlur={handleCustomerCostBlur}
-              disabled={savingCost}
-              className="h-7 text-xs font-medium pl-16 bg-primary/5 border-primary/20 focus:border-primary"
-              placeholder="المبلغ للزبون"
-            />
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[9px] text-muted-foreground">
-              <DollarSign className="h-3 w-3" />
-              د.ل
+          {/* إدخال المبلغ للزبون مع زر القفل */}
+          <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={isCustomerCostEditable ? "default" : "outline"}
+                size="sm"
+                className={`h-7 px-2 text-[10px] gap-1 ${isCustomerCostEditable ? 'bg-primary' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsCustomerCostEditable(!isCustomerCostEditable);
+                }}
+              >
+                {isCustomerCostEditable ? (
+                  <>
+                    <Unlock className="h-3 w-3" />
+                    مفتوح
+                  </>
+                ) : (
+                  <>
+                    <Lock className="h-3 w-3" />
+                    تعديل السعر
+                  </>
+                )}
+              </Button>
+              <div className="flex-1 relative">
+                <Input
+                  id={`customer-cost-${item.id}`}
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={customerInstallationCost === 0 ? '' : customerInstallationCost}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setCustomerInstallationCost(val === '' ? 0 : Number(val));
+                  }}
+                  onBlur={handleCustomerCostBlur}
+                  disabled={!isCustomerCostEditable || savingCost}
+                  className={`h-7 text-xs font-medium pl-12 transition-all ${
+                    isCustomerCostEditable 
+                      ? 'bg-primary/10 border-primary focus:border-primary ring-1 ring-primary/20' 
+                      : 'bg-muted/30 border-muted cursor-not-allowed'
+                  }`}
+                  placeholder="سعر الزبون"
+                />
+                <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[9px] text-muted-foreground">
+                  <DollarSign className="h-3 w-3" />
+                  د.ل
+                </div>
+              </div>
             </div>
           </div>
           
@@ -833,6 +982,91 @@ export function BillboardTaskCard({
               {customerInstallationCost < installationPrice && ' خسارة'}
             </div>
           )}
+
+          {/* تكاليف إضافية */}
+          <div className="pt-2 border-t border-dashed border-border/50">
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant={isAdditionalCostEditable ? "default" : "ghost"}
+                size="sm"
+                className={`h-6 px-2 text-[9px] gap-1 ${
+                  isAdditionalCostEditable ? 'bg-amber-500 hover:bg-amber-600' : 'text-amber-600 hover:bg-amber-50'
+                }`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (isAdditionalCostEditable) {
+                    handleAdditionalCostSave();
+                  } else {
+                    setIsAdditionalCostEditable(true);
+                  }
+                }}
+                disabled={savingAdditionalCost}
+              >
+                {savingAdditionalCost ? (
+                  'جاري الحفظ...'
+                ) : isAdditionalCostEditable ? (
+                  <>
+                    <CheckCircle2 className="h-3 w-3" />
+                    حفظ
+                  </>
+                ) : (
+                  <>
+                    <Plus className="h-3 w-3" />
+                    تكاليف إضافية
+                  </>
+                )}
+              </Button>
+              
+              {additionalCost > 0 && !isAdditionalCostEditable && (
+                <Badge variant="outline" className="text-[9px] bg-amber-50 text-amber-700 border-amber-200">
+                  +{additionalCost.toLocaleString('ar-LY')} د.ل
+                </Badge>
+              )}
+            </div>
+            
+            {isAdditionalCostEditable && (
+              <div className="mt-2 space-y-2 p-2 bg-amber-50/50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={additionalCost === 0 ? '' : additionalCost}
+                    onChange={(e) => setAdditionalCost(e.target.value === '' ? 0 : Number(e.target.value))}
+                    className="h-7 text-xs pl-12 bg-white dark:bg-gray-900"
+                    placeholder="المبلغ الإضافي"
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[9px] text-muted-foreground">
+                    د.ل
+                  </div>
+                </div>
+                <Input
+                  type="text"
+                  value={additionalCostNotes}
+                  onChange={(e) => setAdditionalCostNotes(e.target.value)}
+                  className="h-7 text-xs bg-white dark:bg-gray-900"
+                  placeholder="سبب التكلفة الإضافية..."
+                  onClick={(e) => e.stopPropagation()}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full h-6 text-[9px] text-muted-foreground"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsAdditionalCostEditable(false);
+                    setAdditionalCost(item.additional_cost || 0);
+                    setAdditionalCostNotes(item.additional_cost_notes || '');
+                  }}
+                >
+                  إلغاء
+                </Button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

@@ -217,7 +217,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
     fetchContractInfo();
   }, [task.installation_task_id, task.contract_id, task.print_task_id]);
 
-  // ✅ حساب تكلفة التركيب من جدول المقاسات (installation_price)
+  // ✅ حساب تكلفة التركيب من جدول المقاسات (installation_price) + التكاليف الإضافية
   useEffect(() => {
     const calculateInstallCost = async () => {
       if (!task.installation_task_id) {
@@ -226,10 +226,10 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
       }
 
       try {
-        // جلب بيانات اللوحات من installation_task_items
+        // جلب بيانات اللوحات من installation_task_items مع التكاليف الإضافية
         const { data: installItems } = await supabase
           .from('installation_task_items')
-          .select('billboard:billboards!installation_task_items_billboard_id_fkey(Size)')
+          .select('billboard:billboards!installation_task_items_billboard_id_fkey(Size, Faces_Count), additional_cost')
           .eq('task_id', task.installation_task_id);
 
         if (!installItems || installItems.length === 0) {
@@ -247,11 +247,21 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           sizesMap[s.name] = s.installation_price || 0;
         });
 
-        // حساب إجمالي تكلفة التركيب
+        // حساب إجمالي تكلفة التركيب + التكاليف الإضافية
         let total = 0;
         installItems.forEach((item: any) => {
           const billboardSize = item.billboard?.Size;
-          total += sizesMap[billboardSize] || 0;
+          const facesCount = item.billboard?.Faces_Count || 2;
+          let installPrice = sizesMap[billboardSize] || 0;
+          
+          // نصف السعر للوحات ذات وجه واحد
+          if (facesCount === 1) {
+            installPrice = installPrice / 2;
+          }
+          
+          total += installPrice;
+          // إضافة التكاليف الإضافية
+          total += item.additional_cost || 0;
         });
 
         setCalculatedInstallCost(total);
@@ -545,24 +555,13 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           </div>
         )}
 
-        {/* تحليل الربحية - استخدام تكلفة التركيب المحسوبة من المقاسات */}
-        {(() => {
-          // تكلفة الشركة = تكلفة التركيب من المقاسات + تكلفة الطباعة + تكلفة القص
-          const companyTotalCalculated = calculatedInstallCost + (task.company_print_cost || 0) + (task.company_cutout_cost || 0);
-          const netProfitCalculated = (task.customer_total || 0) - companyTotalCalculated;
-          const profitPercentageCalculated = companyTotalCalculated > 0 
-            ? ((netProfitCalculated / companyTotalCalculated) * 100) 
-            : 0;
-
-          return (
-            <CompositeProfitCard
-              customerTotal={task.customer_total}
-              companyTotal={companyTotalCalculated}
-              netProfit={netProfitCalculated}
-              profitPercentage={profitPercentageCalculated}
-            />
-          );
-        })()}
+        {/* تحليل الربحية - استخدام القيم المخزنة من قاعدة البيانات */}
+        <CompositeProfitCard
+          customerTotal={task.customer_total || 0}
+          companyTotal={task.company_total || 0}
+          netProfit={task.net_profit || 0}
+          profitPercentage={task.profit_percentage || 0}
+        />
 
         {/* ملاحظات */}
         {task.notes && (

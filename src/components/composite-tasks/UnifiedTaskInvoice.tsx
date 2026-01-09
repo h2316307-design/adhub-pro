@@ -220,7 +220,7 @@ export function UnifiedTaskInvoice({
         if (task.installation_task_id) {
           const { data: installItems } = await supabase
             .from('installation_task_items')
-            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, design_face_a, design_face_b, has_cutout)')
+            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, Faces_Count, design_face_a, design_face_b, has_cutout)')
             .eq('task_id', task.installation_task_id);
 
           if (installItems && installItems.length > 0) {
@@ -316,9 +316,19 @@ export function UnifiedTaskInvoice({
               if (invoiceType === 'print_vendor') {
                 printCostPerFace = areaPerFace * pricePerMeter;
               } else if (invoiceType === 'installation_team') {
-                // ✅ استخدام installation_price مباشرة من جدول المقاسات (بدون نسبة)
+                // ✅ استخدام installation_price مباشرة من جدول المقاسات + التكاليف الإضافية
                 const baseInstallPrice = sizeInfo.installationPrice || 0;
-                installCostPerFace = baseInstallPrice / facesCountForBillboard;
+                const additionalCostForItem = item.additional_cost || 0;
+                const facesCount = item.billboard?.Faces_Count || 2;
+                
+                // نصف السعر للوحات ذات وجه واحد
+                let adjustedInstallPrice = baseInstallPrice;
+                if (facesCount === 1) {
+                  adjustedInstallPrice = baseInstallPrice / 2;
+                }
+                
+                // إضافة التكاليف الإضافية للوحة (موزعة على الأوجه)
+                installCostPerFace = (adjustedInstallPrice + additionalCostForItem) / facesCountForBillboard;
               } else if (invoiceType === 'cutout_vendor') {
                 cutoutCostPerFace = hasCutout ? (cutoutCostPerCutoutBillboard / facesCountForBillboard) : 0;
               }

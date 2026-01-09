@@ -204,6 +204,36 @@ export function EnhancedAddInstallationTaskDialog({
     ).slice(0, 20);
   }, [customers, customerSearchTerm, customerAdTypeSearch, allContracts]);
 
+  // Fetch installation tasks count for contracts
+  const { data: contractTasksInfo = {} } = useQuery({
+    queryKey: ['contract-installation-tasks-info', selectedCustomerId],
+    enabled: !!selectedCustomerId && open,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('installation_tasks')
+        .select('contract_id, created_at')
+        .not('contract_id', 'is', null);
+      
+      if (error) throw error;
+      
+      // Group by contract_id
+      const tasksByContract: Record<number, { count: number; lastDate: string | null }> = {};
+      (data || []).forEach(task => {
+        if (task.contract_id) {
+          if (!tasksByContract[task.contract_id]) {
+            tasksByContract[task.contract_id] = { count: 0, lastDate: null };
+          }
+          tasksByContract[task.contract_id].count++;
+          if (!tasksByContract[task.contract_id].lastDate || task.created_at > tasksByContract[task.contract_id].lastDate!) {
+            tasksByContract[task.contract_id].lastDate = task.created_at;
+          }
+        }
+      });
+      
+      return tasksByContract;
+    },
+  });
+
   // Fetch contracts for selected customer
   const { data: customerContracts = [], isLoading: loadingContracts } = useQuery({
     queryKey: ['customer-contracts-dialog', selectedCustomerId, taskType],
@@ -697,6 +727,19 @@ export function EnhancedAddInstallationTaskDialog({
                     <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 p-1">
                       {filteredContracts.map(contract => {
                         const isSelected = selectedContractIds.includes(contract.Contract_Number);
+                        const taskInfo = contractTasksInfo[contract.Contract_Number];
+                        const hasExistingTasks = taskInfo && taskInfo.count > 0;
+                        
+                        // Format date properly - DD/MM/YYYY
+                        const formatDate = (dateStr: string | null) => {
+                          if (!dateStr) return '';
+                          const date = new Date(dateStr);
+                          const day = date.getDate().toString().padStart(2, '0');
+                          const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                          const year = date.getFullYear();
+                          return `${day}/${month}/${year}`;
+                        };
+                        
                         return (
                           <button
                             key={contract.Contract_Number}
@@ -706,7 +749,9 @@ export function EnhancedAddInstallationTaskDialog({
                               "p-3 rounded-xl border-2 text-right transition-all",
                               isSelected
                                 ? "border-primary bg-primary/5"
-                                : "border-border hover:border-primary/50"
+                                : hasExistingTasks
+                                  ? "border-amber-500/50 bg-amber-50/50 dark:bg-amber-950/20 hover:border-amber-500"
+                                  : "border-border hover:border-primary/50"
                             )}
                           >
                             <div className="flex items-center gap-2 mb-1">
@@ -723,10 +768,24 @@ export function EnhancedAddInstallationTaskDialog({
                               {contract['Contract Date'] && (
                                 <span className="flex items-center gap-1">
                                   <Calendar className="h-3 w-3" />
-                                  {new Date(contract['Contract Date']).toLocaleDateString('ar-LY')}
+                                  {formatDate(contract['Contract Date'])}
                                 </span>
                               )}
                             </div>
+                            {/* Installation tasks info */}
+                            {hasExistingTasks && (
+                              <div className="mt-2 pt-2 border-t border-amber-200 dark:border-amber-800">
+                                <div className="flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400">
+                                  <AlertTriangle className="h-3 w-3" />
+                                  <span>مدخل {taskInfo.count} {taskInfo.count === 1 ? 'مرة' : 'مرات'}</span>
+                                </div>
+                                {taskInfo.lastDate && (
+                                  <div className="text-[10px] text-amber-600 dark:text-amber-500 mt-0.5">
+                                    آخر إدخال: {formatDate(taskInfo.lastDate)}
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </button>
                         );
                       })}

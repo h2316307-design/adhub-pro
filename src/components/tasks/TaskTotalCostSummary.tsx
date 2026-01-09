@@ -21,6 +21,8 @@ interface TaskItem {
   billboard_id: number;
   customer_installation_cost: number;
   has_cutout?: boolean;
+  additional_cost?: number;
+  additional_cost_notes?: string | null;
 }
 
 interface Billboard {
@@ -96,6 +98,10 @@ export function TaskTotalCostSummary({
 
   const totalCustomerPaid = taskItems.reduce((sum, item) => {
     return sum + (item.customer_installation_cost || 0);
+  }, 0);
+
+  const totalAdditionalCost = taskItems.reduce((sum, item) => {
+    return sum + (item.additional_cost || 0);
   }, 0);
 
   const difference = totalCustomerPaid - totalInstallationCost;
@@ -300,20 +306,25 @@ export function TaskTotalCostSummary({
               </CardTitle>
               <div className="flex items-center gap-3">
                 {/* ملخص سريع */}
-                <div className="flex items-center gap-2 text-xs">
+                <div className="flex items-center gap-2 text-xs flex-wrap">
                   <Badge variant="outline" className="font-mono">
                     {taskItems.length} لوحة
                   </Badge>
                   <Badge variant="outline" className="bg-green-500/10 text-green-700 border-green-300">
-                    {totalInstallationCost.toLocaleString('ar-LY')} د.ل
+                    الشركة: {totalInstallationCost.toLocaleString('ar-LY')} د.ل
                   </Badge>
+                  {totalAdditionalCost > 0 && (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-300">
+                      إضافية: +{totalAdditionalCost.toLocaleString('ar-LY')} د.ل
+                    </Badge>
+                  )}
                   {totalCustomerPaid === 0 ? (
                     <Badge variant="secondary" className="bg-purple-500/10 text-purple-700 border-purple-300">
                       مجاني
                     </Badge>
                   ) : (
                     <Badge variant="secondary" className="bg-blue-500/10 text-blue-700 border-blue-300">
-                      للزبون: {totalCustomerPaid.toLocaleString('ar-LY')} د.ل
+                      الزبون: {totalCustomerPaid.toLocaleString('ar-LY')} د.ل
                     </Badge>
                   )}
                 </div>
@@ -330,7 +341,7 @@ export function TaskTotalCostSummary({
         <CollapsibleContent>
           <CardContent className="pt-0 pb-4 px-4 space-y-4">
             {/* الإحصائيات */}
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-5 gap-2">
               <div className="p-2 bg-muted/50 rounded-lg text-center">
                 <Hash className="h-3 w-3 mx-auto text-muted-foreground mb-1" />
                 <div className="font-bold text-lg">{taskItems.length}</div>
@@ -339,15 +350,30 @@ export function TaskTotalCostSummary({
               <div className="p-2 bg-muted/50 rounded-lg text-center">
                 <Ruler className="h-3 w-3 mx-auto text-muted-foreground mb-1" />
                 <div className="font-bold text-lg">{totalArea.toFixed(0)}</div>
-                <div className="text-[10px] text-muted-foreground">م² ({totalAreaWithFaces.toFixed(0)} مع الأوجه)</div>
+                <div className="text-[10px] text-muted-foreground">م²</div>
               </div>
               <div className="p-2 bg-green-100 dark:bg-green-900/30 rounded-lg text-center">
                 <DollarSign className="h-3 w-3 mx-auto text-green-600 mb-1" />
                 <div className="font-bold text-lg text-green-700 dark:text-green-300">
                   {totalInstallationCost.toLocaleString('ar-LY')}
                 </div>
-                <div className="text-[10px] text-green-600 dark:text-green-400">تكلفة التركيب</div>
+                <div className="text-[10px] text-green-600 dark:text-green-400">الشركة</div>
               </div>
+              {totalAdditionalCost > 0 ? (
+                <div className="p-2 bg-amber-100 dark:bg-amber-900/30 rounded-lg text-center">
+                  <Box className="h-3 w-3 mx-auto text-amber-600 mb-1" />
+                  <div className="font-bold text-lg text-amber-700 dark:text-amber-300">
+                    +{totalAdditionalCost.toLocaleString('ar-LY')}
+                  </div>
+                  <div className="text-[10px] text-amber-600 dark:text-amber-400">إضافية</div>
+                </div>
+              ) : (
+                <div className="p-2 bg-muted/30 rounded-lg text-center">
+                  <Box className="h-3 w-3 mx-auto text-muted-foreground mb-1" />
+                  <div className="font-bold text-lg text-muted-foreground">0</div>
+                  <div className="text-[10px] text-muted-foreground">إضافية</div>
+                </div>
+              )}
               <div className={`p-2 rounded-lg text-center ${
                 totalCustomerPaid === 0 
                   ? 'bg-purple-100 dark:bg-purple-900/30'
@@ -367,7 +393,7 @@ export function TaskTotalCostSummary({
                   totalCustomerPaid === 0 
                     ? 'text-purple-600 dark:text-purple-400'
                     : 'text-blue-600 dark:text-blue-400'
-                }`}>للزبون</div>
+                }`}>الزبون</div>
               </div>
             </div>
 

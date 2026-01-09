@@ -163,7 +163,7 @@ export function PrintAllContractBillboardsDialog({
     setSelectedTeamIds(new Set());
   };
 
-  // ترتيب اللوحات حسب المقاس ثم البلدية ثم المستوى
+  // ترتيب اللوحات حسب المقاس ثم البلدية ثم المستوى (متماثل مع ContractPDFDialog)
   const sortBillboardsBySize = async (items: any[]) => {
     try {
       // جلب بيانات الترتيب من جميع الجداول
@@ -173,45 +173,32 @@ export function PrintAllContractBillboardsDialog({
         supabase.from('billboard_levels').select('level_code, sort_order').order('sort_order', { ascending: true })
       ]);
       
-      const sizes = sizesRes.data || [];
-      const municipalities = municipalitiesRes.data || [];
-      const levels = levelsRes.data || [];
+      const sizesData = sizesRes.data || [];
+      const municipalitiesData = municipalitiesRes.data || [];
+      const levelsData = levelsRes.data || [];
       
-      const sizeOrderMap = new Map<string, number>();
-      sizes.forEach((s: any) => {
-        sizeOrderMap.set(s.name, s.sort_order ?? 999);
+      // ربط كل لوحة ببيانات الترتيب (نفس منطق ContractPDFDialog)
+      const itemsWithSortRanks = items.map((item) => {
+        const billboard = billboards[item.billboard_id];
+        const sizeObj = sizesData.find(sz => sz.name === billboard?.Size);
+        const municipalityObj = municipalitiesData.find(m => m.name === billboard?.Municipality);
+        const levelObj = levelsData.find(l => l.level_code === billboard?.Level);
+        return {
+          ...item,
+          size_order: sizeObj?.sort_order ?? 999,
+          municipality_order: municipalityObj?.sort_order ?? 999,
+          level_order: levelObj?.sort_order ?? 999,
+        };
       });
       
-      const municipalityOrderMap = new Map<string, number>();
-      municipalities.forEach((m: any) => {
-        municipalityOrderMap.set(m.name, m.sort_order ?? 999);
-      });
-      
-      const levelOrderMap = new Map<string, number>();
-      levels.forEach((l: any) => {
-        levelOrderMap.set(l.level_code, l.sort_order ?? 999);
-      });
-      
-      return [...items].sort((a, b) => {
-        const billboardA = billboards[a.billboard_id];
-        const billboardB = billboards[b.billboard_id];
-        
-        // ترتيب حسب المقاس أولاً
-        const sizeOrderA = sizeOrderMap.get(billboardA?.Size) ?? 999;
-        const sizeOrderB = sizeOrderMap.get(billboardB?.Size) ?? 999;
-        if (sizeOrderA !== sizeOrderB) return sizeOrderA - sizeOrderB;
-        
-        // ثم حسب البلدية
-        const municipalityOrderA = municipalityOrderMap.get(billboardA?.Municipality) ?? 999;
-        const municipalityOrderB = municipalityOrderMap.get(billboardB?.Municipality) ?? 999;
-        if (municipalityOrderA !== municipalityOrderB) return municipalityOrderA - municipalityOrderB;
-        
-        // ثم حسب المستوى
-        const levelOrderA = levelOrderMap.get(billboardA?.Level) ?? 999;
-        const levelOrderB = levelOrderMap.get(billboardB?.Level) ?? 999;
-        return levelOrderA - levelOrderB;
+      // ترتيب اللوحات: المقاس أولاً، ثم البلدية، ثم المستوى
+      return itemsWithSortRanks.sort((a, b) => {
+        if (a.size_order !== b.size_order) return a.size_order - b.size_order;
+        if (a.municipality_order !== b.municipality_order) return a.municipality_order - b.municipality_order;
+        return a.level_order - b.level_order;
       });
     } catch (e) {
+      console.error('Error sorting billboards:', e);
       return items;
     }
   };

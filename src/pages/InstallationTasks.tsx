@@ -28,7 +28,10 @@ import {
   Edit,
   ArrowRight,
   FileText,
-  Layers
+  Layers,
+  Camera,
+  Link2,
+  Sparkles
 } from 'lucide-react';
 import { BillboardTaskCard } from '@/components/tasks/BillboardTaskCard';
 import { TaskDesignManager } from '@/components/tasks/TaskDesignManager';
@@ -74,6 +77,8 @@ interface InstallationTaskItem {
   selected_design_id: string | null;
   has_cutout: boolean | null;
   customer_installation_cost: number;
+  additional_cost?: number;
+  additional_cost_notes?: string | null;
 }
 
 interface TaskDesign {
@@ -1242,174 +1247,176 @@ export default function InstallationTasks() {
             return (
               <Collapsible key={teamId} defaultOpen>
                 <Card className="overflow-hidden">
-                  <CollapsibleTrigger className="w-full">
-                     <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                       <div className="flex items-center justify-between">
-                         <div className="flex items-center gap-3">
-                           <div className="relative">
-                             <Users className="h-6 w-6 text-primary" />
-                             {teamCompletionPercentage === 100 && (
-                               <CheckCircle2 className="h-3 w-3 text-green-500 absolute -top-1 -right-1" />
-                             )}
-                           </div>
-                           <div className="text-right">
-                             <CardTitle className="text-lg flex items-center gap-2">
-                               {team?.team_name || 'فريق غير محدد'}
-                               {teamCompletionPercentage === 100 && (
-                                 <Badge className="bg-green-500 text-white text-xs">مكتمل</Badge>
-                               )}
-                             </CardTitle>
-                             {/* ملخص الفريق */}
-                             <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
-                               <span className="flex items-center gap-1">
-                                 <Package className="h-3.5 w-3.5" />
-                                 {teamTasks.length} مهمة
-                               </span>
-                               <span className="text-muted-foreground/50">|</span>
-                               <span>{teamItems.length} لوحة</span>
-                               <span className="text-muted-foreground/50">|</span>
-                               <span className="text-green-600 dark:text-green-400">
-                                 {completedItemsCount} مكتملة
-                               </span>
-                               {pendingItemsCount > 0 && (
-                                 <>
-                                   <span className="text-muted-foreground/50">|</span>
-                                   <span className="text-orange-600 dark:text-orange-400">
-                                     {pendingItemsCount} معلقة
-                                   </span>
-                                 </>
-                               )}
-                               {fullyCompletedTasks > 0 && (
-                                 <>
-                                   <span className="text-muted-foreground/50">|</span>
-                                   <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
-                                     {fullyCompletedTasks}/{teamTasks.length} مهام مكتملة
-                                   </Badge>
-                                 </>
-                               )}
-                               {teamTotalInstallCost > 0 && (
-                                 <>
-                                   <span className="text-muted-foreground/50">|</span>
-                                   <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
-                                     التكلفة: {teamTotalInstallCost.toLocaleString('ar-LY')} د.ل
-                                   </Badge>
-                                 </>
-                               )}
-                             </div>
-                             {/* شريط تقدم الفريق */}
-                             <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
-                               <div 
-                                 className={`h-full transition-all duration-500 rounded-full ${
-                                   teamCompletionPercentage === 100 
-                                     ? 'bg-gradient-to-r from-green-400 to-emerald-500' 
-                                     : teamCompletionPercentage > 0 
-                                       ? 'bg-gradient-to-r from-orange-400 to-amber-500'
-                                       : 'bg-muted-foreground/20'
-                                 }`}
-                                 style={{ width: `${teamCompletionPercentage}%` }}
-                               />
-                             </div>
-                           </div>
-                         </div>
-                          <div className="flex items-center gap-2">
-                            {/* زر تحديد/إلغاء تحديد جميع المهام */}
-                            {(() => {
-                              const allTeamTaskIds = teamTasks.map(t => t.id);
-                              const allSelected = allTeamTaskIds.every(id => selectedTasksForPrint.has(id));
-                              const someSelected = allTeamTaskIds.some(id => selectedTasksForPrint.has(id));
-                              return (
-                                <Button
-                                  variant={allSelected ? "default" : "outline"}
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedTasksForPrint(prev => {
-                                      const newSet = new Set(prev);
-                                      if (allSelected) {
-                                        allTeamTaskIds.forEach(id => newSet.delete(id));
-                                      } else {
-                                        allTeamTaskIds.forEach(id => newSet.add(id));
-                                      }
-                                      return newSet;
-                                    });
-                                  }}
-                                  className="text-xs"
-                                >
-                                  <CheckCircle2 className={`h-3 w-3 mr-1 ${allSelected ? 'text-white' : ''}`} />
-                                  {allSelected ? 'إلغاء التحديد' : someSelected ? `تحديد الكل (${allTeamTaskIds.length})` : `تحديد الكل (${allTeamTaskIds.length})`}
-                                </Button>
-                              );
-                            })()}
-                            {/* زر طباعة المحدد للفريق */}
-                            {(() => {
-                              const selectedInTeam = teamTasks.filter(t => selectedTasksForPrint.has(t.id));
-                              if (selectedInTeam.length === 0) return null;
-                              return (
-                                <Button
-                                  variant="default"
-                                  size="sm"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMultiTaskPrintDialogOpen(true);
-                                  }}
-                                  className="text-xs bg-blue-600 hover:bg-blue-700"
-                                >
-                                  <Printer className="h-3 w-3 mr-1" />
-                                  طباعة المحدد ({selectedInTeam.length})
-                                </Button>
-                              );
-                            })()}
-                            {/* زر دمج المهام */}
+                  <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
+                    <div className="flex items-center justify-between">
+                      <CollapsibleTrigger className="flex items-center gap-3 flex-1">
+                        <div className="relative">
+                          <Users className="h-6 w-6 text-primary" />
+                          {teamCompletionPercentage === 100 && (
+                            <CheckCircle2 className="h-3 w-3 text-green-500 absolute -top-1 -right-1" />
+                          )}
+                        </div>
+                        <div className="text-right flex-1">
+                          <CardTitle className="text-lg flex items-center gap-2">
+                            {team?.team_name || 'فريق غير محدد'}
+                            {teamCompletionPercentage === 100 && (
+                              <Badge className="bg-green-500 text-white text-xs">مكتمل</Badge>
+                            )}
+                          </CardTitle>
+                          {/* ملخص الفريق */}
+                          <div className="flex items-center gap-3 text-sm text-muted-foreground mt-1 flex-wrap">
+                            <span className="flex items-center gap-1">
+                              <Package className="h-3.5 w-3.5" />
+                              {teamTasks.length} مهمة
+                            </span>
+                            <span className="text-muted-foreground/50">|</span>
+                            <span>{teamItems.length} لوحة</span>
+                            <span className="text-muted-foreground/50">|</span>
+                            <span className="text-green-600 dark:text-green-400">
+                              {completedItemsCount} مكتملة
+                            </span>
+                            {pendingItemsCount > 0 && (
+                              <>
+                                <span className="text-muted-foreground/50">|</span>
+                                <span className="text-orange-600 dark:text-orange-400">
+                                  {pendingItemsCount} معلقة
+                                </span>
+                              </>
+                            )}
+                            {fullyCompletedTasks > 0 && (
+                              <>
+                                <span className="text-muted-foreground/50">|</span>
+                                <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                                  {fullyCompletedTasks}/{teamTasks.length} مهام مكتملة
+                                </Badge>
+                              </>
+                            )}
+                            {teamTotalInstallCost > 0 && (
+                              <>
+                                <span className="text-muted-foreground/50">|</span>
+                                <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                                  التكلفة: {teamTotalInstallCost.toLocaleString('ar-LY')} د.ل
+                                </Badge>
+                              </>
+                            )}
+                          </div>
+                          {/* شريط تقدم الفريق */}
+                          <div className="w-full h-1.5 bg-muted rounded-full mt-2 overflow-hidden">
+                            <div 
+                              className={`h-full transition-all duration-500 rounded-full ${
+                                teamCompletionPercentage === 100 
+                                  ? 'bg-gradient-to-r from-green-400 to-emerald-500' 
+                                  : teamCompletionPercentage > 0 
+                                    ? 'bg-gradient-to-r from-orange-400 to-amber-500'
+                                    : 'bg-muted-foreground/20'
+                              }`}
+                              style={{ width: `${teamCompletionPercentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      </CollapsibleTrigger>
+                      <div className="flex items-center gap-2">
+                        {/* زر تحديد/إلغاء تحديد جميع المهام */}
+                        {(() => {
+                          const allTeamTaskIds = teamTasks.map(t => t.id);
+                          const allSelected = allTeamTaskIds.every(id => selectedTasksForPrint.has(id));
+                          const someSelected = allTeamTaskIds.some(id => selectedTasksForPrint.has(id));
+                          return (
                             <Button
-                              variant="outline"
+                              variant={allSelected ? "default" : "outline"}
                               size="sm"
                               onClick={(e) => {
                                 e.stopPropagation();
-                                // Group tasks by customer
-                                const customerGroups: Record<string, any[]> = {};
-                                teamTasks.forEach(task => {
-                                  const contract = contractById[task.contract_id];
-                                  const customerId = contract?.customer_id || 'unknown';
-                                  if (!customerGroups[customerId]) {
-                                    customerGroups[customerId] = [];
+                                setSelectedTasksForPrint(prev => {
+                                  const newSet = new Set(prev);
+                                  if (allSelected) {
+                                    allTeamTaskIds.forEach(id => newSet.delete(id));
+                                  } else {
+                                    allTeamTaskIds.forEach(id => newSet.add(id));
                                   }
-                                  const taskItems = allTaskItems.filter(i => i.task_id === task.id);
-                                   customerGroups[customerId].push({
-                                     id: task.id,
-                                     contract_id: task.contract_id,
-                                     customer_name: contract?.['Customer Name'] || 'غير محدد',
-                                     billboard_count: taskItems.length,
-                                     task_type: task.task_type,
-                                     ad_type: contract?.['Ad Type'] || ''
-                                   });
+                                  return newSet;
                                 });
-                                
-                                // Find customers with multiple tasks
-                                const customersWithMultipleTasks = Object.entries(customerGroups)
-                                  .filter(([_, tasks]) => tasks.length > 1);
-                                
-                                if (customersWithMultipleTasks.length === 0) {
-                                  toast.error('لا يوجد زبائن لديهم أكثر من مهمة في هذا الفريق');
-                                  return;
-                                }
-                                
-                                // For simplicity, take the first customer with multiple tasks
-                                const [customerId, tasks] = customersWithMultipleTasks[0];
-                                setSelectedTeamForMerge({ id: teamId, name: team?.team_name || 'فريق غير محدد' });
-                                setSelectedCustomerForMerge(customerId);
-                                setTasksToMerge(tasks);
-                                setMergeDialogOpen(true);
                               }}
                               className="text-xs"
                             >
-                              <Merge className="h-3 w-3 mr-1" />
-                              دمج المهام
+                              <CheckCircle2 className={`h-3 w-3 mr-1 ${allSelected ? 'text-white' : ''}`} />
+                              {allSelected ? 'إلغاء التحديد' : someSelected ? `تحديد الكل (${allTeamTaskIds.length})` : `تحديد الكل (${allTeamTaskIds.length})`}
                             </Button>
+                          );
+                        })()}
+                        {/* زر طباعة المحدد للفريق */}
+                        {(() => {
+                          const selectedInTeam = teamTasks.filter(t => selectedTasksForPrint.has(t.id));
+                          if (selectedInTeam.length === 0) return null;
+                          return (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setMultiTaskPrintDialogOpen(true);
+                              }}
+                              className="text-xs bg-blue-600 hover:bg-blue-700"
+                            >
+                              <Printer className="h-3 w-3 mr-1" />
+                              طباعة المحدد ({selectedInTeam.length})
+                            </Button>
+                          );
+                        })()}
+                        {/* زر دمج المهام */}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            // Group tasks by customer
+                            const customerGroups: Record<string, any[]> = {};
+                            teamTasks.forEach(task => {
+                              const contract = contractById[task.contract_id];
+                              const customerId = contract?.customer_id || 'unknown';
+                              if (!customerGroups[customerId]) {
+                                customerGroups[customerId] = [];
+                              }
+                              const taskItems = allTaskItems.filter(i => i.task_id === task.id);
+                              customerGroups[customerId].push({
+                                id: task.id,
+                                contract_id: task.contract_id,
+                                customer_name: contract?.['Customer Name'] || 'غير محدد',
+                                billboard_count: taskItems.length,
+                                task_type: task.task_type,
+                                ad_type: contract?.['Ad Type'] || ''
+                              });
+                            });
+                            
+                            // Find customers with multiple tasks
+                            const customersWithMultipleTasks = Object.entries(customerGroups)
+                              .filter(([_, tasks]) => tasks.length > 1);
+                            
+                            if (customersWithMultipleTasks.length === 0) {
+                              toast.error('لا يوجد زبائن لديهم أكثر من مهمة في هذا الفريق');
+                              return;
+                            }
+                            
+                            // For simplicity, take the first customer with multiple tasks
+                            const [customerId, tasks] = customersWithMultipleTasks[0];
+                            setSelectedTeamForMerge({ id: teamId, name: team?.team_name || 'فريق غير محدد' });
+                            setSelectedCustomerForMerge(customerId);
+                            setTasksToMerge(tasks);
+                            setMergeDialogOpen(true);
+                          }}
+                          className="text-xs"
+                        >
+                          <Merge className="h-3 w-3 mr-1" />
+                          دمج المهام
+                        </Button>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="p-1">
                             <ChevronDown className="h-5 w-5 text-muted-foreground transition-transform duration-200" />
-                          </div>
-                       </div>
-                     </CardHeader>
-                  </CollapsibleTrigger>
+                          </Button>
+                        </CollapsibleTrigger>
+                      </div>
+                    </div>
+                  </CardHeader>
                   <CollapsibleContent>
                     <CardContent className="space-y-4 pt-0">
                       {teamTasks.map(task => {
@@ -1515,8 +1522,13 @@ export default function InstallationTasks() {
                                  {contract['Ad Type']}
                                </Badge>
                              )}
-                             {task.task_type === 'reinstallation' && (
+                             {task.task_type === 'reinstallation' ? (
                                <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
+                             ) : (
+                               <Badge className="bg-green-600 text-white text-xs gap-1">
+                                 <Sparkles className="h-3 w-3" />
+                                 تركيب جديد
+                               </Badge>
                              )}
                            </>
                          )}
@@ -1524,7 +1536,7 @@ export default function InstallationTasks() {
                            {contract?.['Customer Name'] || 'غير محدد'}
                          </span>
                        </div>
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
                                         <span>{taskItems.length} لوحة</span>
                                         
                                         {/* حالة الإكتمال */}
@@ -1544,11 +1556,38 @@ export default function InstallationTasks() {
                                           </Badge>
                                         )}
                                         
+                                        {/* تكلفة الشركة */}
                                         {totalInstallCost > 0 && (
-                                          <Badge variant="outline" className="bg-blue-50/80 text-blue-700 border-blue-200 backdrop-blur-sm">
-                                            تكلفة التركيب: {totalInstallCost.toLocaleString('ar-LY')} د.ل
+                                          <Badge variant="outline" className="bg-green-50/80 text-green-700 border-green-200 backdrop-blur-sm">
+                                            الشركة: {totalInstallCost.toLocaleString('ar-LY')} د.ل
                                           </Badge>
                                         )}
+                                        
+                                        {/* التكاليف الإضافية */}
+                                        {(() => {
+                                          const additionalTotal = taskItems.reduce((sum, item) => sum + (item.additional_cost || 0), 0);
+                                          if (additionalTotal > 0) {
+                                            return (
+                                              <Badge variant="outline" className="bg-amber-50/80 text-amber-700 border-amber-200 backdrop-blur-sm">
+                                                إضافية: +{additionalTotal.toLocaleString('ar-LY')} د.ل
+                                              </Badge>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
+                                        
+                                        {/* تكلفة الزبون */}
+                                        {(() => {
+                                          const customerTotal = taskItems.reduce((sum, item) => sum + (item.customer_installation_cost || 0), 0);
+                                          if (customerTotal > 0) {
+                                            return (
+                                              <Badge variant="outline" className="bg-blue-50/80 text-blue-700 border-blue-200 backdrop-blur-sm">
+                                                الزبون: {customerTotal.toLocaleString('ar-LY')} د.ل
+                                              </Badge>
+                                            );
+                                          }
+                                          return null;
+                                        })()}
                                       </div>
                                     </div>
                                   </div>
@@ -1625,17 +1664,15 @@ export default function InstallationTasks() {
                                       <ArrowRight className="h-4 w-4 mr-2" />
                                       نقل لوحات
                                     </Button>
-                                    {/* زر طباعة جميع لوحات العقد */}
+                                    {/* زر طباعة جميع لوحات المهمة */}
                                     <Button
                                       variant="outline"
                                       size="sm"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedContractForPrint({
-                                          contractNumber: task.contract_id,
-                                          customerName: contract?.['Customer Name'] || 'غير محدد'
-                                        });
-                                        setPrintAllDialogOpen(true);
+                                        // تحديد المهمة الحالية فقط وفتح نافذة الطباعة
+                                        setSelectedTasksForPrint(new Set([task.id]));
+                                        setMultiTaskPrintDialogOpen(true);
                                       }}
                                     >
                                       <FileText className="h-4 w-4 mr-2" />
@@ -2164,66 +2201,109 @@ export default function InstallationTasks() {
         />
       )}
 
-      {/* Add Installed Image Dialog */}
+      {/* Add Installed Image Dialog - Improved UI */}
       <Dialog open={imageDialogOpen} onOpenChange={setImageDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>إضافة صور التركيب</DialogTitle>
-            <p className="text-sm text-muted-foreground">أضف صور التركيب للوجه الأمامي والخلفي لتظهر في الطباعة فوق التصاميم</p>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5 text-primary" />
+              إضافة صور التركيب
+            </DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              أدخل روابط صور التركيب للوجهين الأمامي والخلفي
+            </p>
           </DialogHeader>
-          <div className="space-y-6">
-            {/* صورة التركيب - الوجه الأمامي */}
-            <div className="space-y-2">
-              <Label htmlFor="installedImageFaceA" className="text-base font-semibold">صورة التركيب - الوجه الأمامي</Label>
-              <Input
-                id="installedImageFaceA"
-                value={installedImageFaceAUrl}
-                onChange={(e) => setInstalledImageFaceAUrl(e.target.value)}
-                placeholder="https://..."
-                dir="ltr"
-              />
+          <div className="space-y-4">
+            {/* الوجه الأمامي */}
+            <div className="p-4 rounded-lg border-2 border-dashed border-green-300 dark:border-green-700 bg-green-50/50 dark:bg-green-950/20 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-green-500" />
+                <Label htmlFor="installedImageFaceA" className="font-bold text-green-700 dark:text-green-300">
+                  الوجه الأمامي
+                </Label>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Link2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="installedImageFaceA"
+                    value={installedImageFaceAUrl}
+                    onChange={(e) => setInstalledImageFaceAUrl(e.target.value)}
+                    placeholder="الصق رابط صورة الوجه الأمامي هنا..."
+                    dir="ltr"
+                    className="pr-10 font-mono text-sm"
+                  />
+                </div>
+                {installedImageFaceAUrl && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setInstalledImageFaceAUrl('')}
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               {installedImageFaceAUrl && (
-                <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-green-500/30 bg-muted">
-                  <div className="absolute top-2 right-2 bg-green-600 text-white px-2 py-1 rounded text-xs font-bold">
-                    الوجه الأمامي
-                  </div>
+                <div className="relative aspect-video rounded-lg overflow-hidden border bg-white dark:bg-gray-900">
                   <img
                     src={installedImageFaceAUrl}
-                    alt="معاينة صورة التركيب - الوجه الأمامي"
+                    alt="معاينة الوجه الأمامي"
                     className="w-full h-full object-contain"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.src = '/placeholder.svg';
                     }}
                   />
+                  <Badge className="absolute top-2 right-2 bg-green-600">الوجه الأمامي</Badge>
                 </div>
               )}
             </div>
 
-            {/* صورة التركيب - الوجه الخلفي */}
-            <div className="space-y-2">
-              <Label htmlFor="installedImageFaceB" className="text-base font-semibold">صورة التركيب - الوجه الخلفي</Label>
-              <Input
-                id="installedImageFaceB"
-                value={installedImageFaceBUrl}
-                onChange={(e) => setInstalledImageFaceBUrl(e.target.value)}
-                placeholder="https://..."
-                dir="ltr"
-              />
+            {/* الوجه الخلفي */}
+            <div className="p-4 rounded-lg border-2 border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/50 dark:bg-blue-950/20 space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full bg-blue-500" />
+                <Label htmlFor="installedImageFaceB" className="font-bold text-blue-700 dark:text-blue-300">
+                  الوجه الخلفي (اختياري)
+                </Label>
+              </div>
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <Link2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="installedImageFaceB"
+                    value={installedImageFaceBUrl}
+                    onChange={(e) => setInstalledImageFaceBUrl(e.target.value)}
+                    placeholder="الصق رابط صورة الوجه الخلفي هنا..."
+                    dir="ltr"
+                    className="pr-10 font-mono text-sm"
+                  />
+                </div>
+                {installedImageFaceBUrl && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setInstalledImageFaceBUrl('')}
+                    className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
               {installedImageFaceBUrl && (
-                <div className="relative aspect-video rounded-lg overflow-hidden border-2 border-blue-500/30 bg-muted">
-                  <div className="absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded text-xs font-bold">
-                    الوجه الخلفي
-                  </div>
+                <div className="relative aspect-video rounded-lg overflow-hidden border bg-white dark:bg-gray-900">
                   <img
                     src={installedImageFaceBUrl}
-                    alt="معاينة صورة التركيب - الوجه الخلفي"
+                    alt="معاينة الوجه الخلفي"
                     className="w-full h-full object-contain"
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.src = '/placeholder.svg';
                     }}
                   />
+                  <Badge className="absolute top-2 right-2 bg-blue-600">الوجه الخلفي</Badge>
                 </div>
               )}
             </div>
@@ -2257,9 +2337,11 @@ export default function InstallationTasks() {
                     toast.error('فشل في حفظ صور التركيب');
                   }
                 }}
-                className="flex-1"
+                className="flex-1 gap-2"
+                disabled={!installedImageFaceAUrl && !installedImageFaceBUrl}
               >
-                حفظ
+                <CheckCircle2 className="h-4 w-4" />
+                حفظ الصور
               </Button>
               <Button
                 variant="outline"

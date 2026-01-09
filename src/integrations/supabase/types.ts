@@ -2694,6 +2694,8 @@ export type Database = {
       }
       installation_task_items: {
         Row: {
+          additional_cost: number | null
+          additional_cost_notes: string | null
           billboard_id: number
           completed_at: string | null
           created_at: string
@@ -2712,6 +2714,8 @@ export type Database = {
           task_id: string
         }
         Insert: {
+          additional_cost?: number | null
+          additional_cost_notes?: string | null
           billboard_id: number
           completed_at?: string | null
           created_at?: string
@@ -2730,6 +2734,8 @@ export type Database = {
           task_id: string
         }
         Update: {
+          additional_cost?: number | null
+          additional_cost_notes?: string | null
           billboard_id?: number
           completed_at?: string | null
           created_at?: string
