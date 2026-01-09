@@ -36,7 +36,8 @@ const InteractiveMap = lazy(() => import('@/components/InteractiveMap'));
 export default function Billboards() {
   const navigate = useNavigate();
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 16;
+  const [gridColumns, setGridColumns] = useState(5); // عدد الكروت في الصف
+  const PAGE_SIZE = gridColumns * 4; // 4 صفوف
 
   // Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -1000,15 +1001,40 @@ export default function Billboards() {
         </Card>
       </Collapsible>
 
-      {/* Top Pagination */}
+      {/* Top Pagination with Grid Control */}
       {sortedFilteredBillboards.length > 0 && (
-        <div className="flex justify-center mb-4">
+        <div className="flex items-center justify-between mb-4 gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">عدد الكروت:</span>
+            <div className="flex gap-1">
+              {[3, 4, 5, 6].map(cols => (
+                <Button
+                  key={cols}
+                  size="sm"
+                  variant={gridColumns === cols ? "default" : "outline"}
+                  onClick={() => {
+                    setGridColumns(cols);
+                    setCurrentPage(1);
+                  }}
+                  className="w-9 h-9 p-0"
+                >
+                  {cols}
+                </Button>
+              ))}
+            </div>
+          </div>
           <PaginationControls />
+          <div className="w-[120px]" /> {/* Spacer for balance */}
         </div>
       )}
 
       {/* Billboard Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className={`grid gap-6 ${
+        gridColumns === 3 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' :
+        gridColumns === 4 ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4' :
+        gridColumns === 5 ? 'grid-cols-1 md:grid-cols-3 lg:grid-cols-5' :
+        'grid-cols-1 md:grid-cols-3 lg:grid-cols-6'
+      }`}>
         {pagedBillboards.map((billboard, idx) => {
           const keyVal = String((billboard as any).id ?? (billboard as any).ID ?? `${(billboard as any).Billboard_Name ?? 'bb'}-${startIndex + idx}`);
           const hasContract = hasActiveContract(billboard);

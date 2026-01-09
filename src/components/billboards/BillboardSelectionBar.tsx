@@ -8,12 +8,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { X, Printer, CheckSquare, Square, Loader2, Image as ImageIcon, Settings, Camera, CameraOff, ImageOff, DollarSign, Tag, Percent, Calculator, Save, RotateCcw, FileDown } from 'lucide-react';
+import { X, Printer, CheckSquare, Square, Loader2, Image as ImageIcon, Settings, Camera, CameraOff, ImageOff, DollarSign, Tag, Percent, Calculator, Save, RotateCcw, FileDown, Users } from 'lucide-react';
 import { toast } from 'sonner';
 import { renderAllBillboardsTablePagesPreviewLike, BillboardRowData } from '@/lib/contractTableRenderer';
 import { useContractTemplateSettings, DEFAULT_SECTION_SETTINGS } from '@/hooks/useContractTemplateSettings';
 import { useContractPrint } from '@/hooks/useContractPrint';
 import { supabase } from '@/integrations/supabase/client';
+import { getCustomerCategories, getPriceFor, getDailyPriceFor, type CustomerType } from '@/services/pricingService';
 
 interface BillboardSelectionBarProps {
   selectedBillboards: any[];
@@ -43,6 +44,7 @@ interface PrintSettings {
   selectedBackground: string;
   customBackgroundUrl: string;
   selectedPeriod: string;
+  selectedCustomerCategory: string;
   discounts: { [level: string]: { type: 'percentage' | 'fixed'; value: number } };
 }
 
@@ -54,17 +56,19 @@ const DEFAULT_PRINT_SETTINGS: PrintSettings = {
   backgroundType: 'preset',
   selectedBackground: 'template',
   customBackgroundUrl: '',
-  selectedPeriod: 'monthly',
+  selectedPeriod: '1',
+  selectedCustomerCategory: 'عادي',
   discounts: {},
 };
 
-// فترات الإيجار
+// فترات الإيجار (تتوافق مع جدول الأسعار)
 const RENTAL_PERIODS = [
-  { value: 'daily', label: 'يومي' },
-  { value: 'monthly', label: 'شهري' },
-  { value: 'quarterly', label: 'ربع سنوي' },
-  { value: 'semi-annual', label: 'نصف سنوي' },
-  { value: 'annual', label: 'سنوي' },
+  { value: 'daily', label: 'يومي', months: 0 },
+  { value: '1', label: 'شهر', months: 1 },
+  { value: '2', label: 'شهرين', months: 2 },
+  { value: '3', label: '3 شهور', months: 3 },
+  { value: '6', label: '6 شهور', months: 6 },
+  { value: '12', label: 'سنة', months: 12 },
 ];
 
 export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
@@ -87,7 +91,10 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
   const [selectedBackground, setSelectedBackground] = useState('template');
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('');
   const [backgroundType, setBackgroundType] = useState<'preset' | 'custom'>('preset');
-  const [selectedPeriod, setSelectedPeriod] = useState('monthly');
+  const [selectedPeriod, setSelectedPeriod] = useState('1');
+  const [selectedCustomerCategory, setSelectedCustomerCategory] = useState<CustomerType>('عادي');
+  const [customerCategories, setCustomerCategories] = useState<CustomerType[]>(['عادي', 'المدينة', 'مسوق', 'شركات']);
+  const [billboardPrices, setBillboardPrices] = useState<Record<string, number | null>>({});
   const [discounts, setDiscounts] = useState<{ [level: string]: { type: 'percentage' | 'fixed'; value: number } }>({});
 
   // أسماء عدد الأوجه (من جدول الإعدادات billboard_faces)
@@ -136,7 +143,8 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
           setBackgroundType(savedSettings.backgroundType ?? 'preset');
           setSelectedBackground(savedSettings.selectedBackground ?? 'template');
           setCustomBackgroundUrl(savedSettings.customBackgroundUrl ?? '');
-          setSelectedPeriod(savedSettings.selectedPeriod ?? 'monthly');
+          setSelectedPeriod(savedSettings.selectedPeriod ?? '1');
+          setSelectedCustomerCategory((savedSettings.selectedCustomerCategory as CustomerType) ?? 'عادي');
           setDiscounts(savedSettings.discounts ?? {});
         }
       } catch (error) {
@@ -179,6 +187,67 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
     loadFacesLabels();
   }, [printDialogOpen]);
 
+  // تحميل فئات العملاء من جدول الأسعار
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!printDialogOpen) return;
+      try {
+        const categories = await getCustomerCategories();
+        if (categories.length > 0) {
+          setCustomerCategories(categories);
+        }
+      } catch (e) {
+        console.error('Error loading customer categories:', e);
+      }
+    };
+    loadCategories();
+  }, [printDialogOpen]);
+
+  // جلب الأسعار عند تغيير الفئة أو المدة
+  useEffect(() => {
+    const loadPrices = async () => {
+      if (!showPricing || selectedBillboards.length === 0) {
+        setBillboardPrices({});
+        return;
+      }
+
+      const prices: Record<string, number | null> = {};
+      const period = RENTAL_PERIODS.find(p => p.value === selectedPeriod);
+      const months = period?.months || 1;
+
+      for (const billboard of selectedBillboards) {
+        const id = String(billboard.ID || billboard.id || '');
+        const size = billboard.Size || billboard.size || '';
+        const level = billboard.Level || billboard.level || 'A';
+
+        let price: number | null = null;
+        if (selectedPeriod === 'daily') {
+          price = await getDailyPriceFor(size, level, selectedCustomerCategory);
+        } else {
+          price = await getPriceFor(size, level, selectedCustomerCategory, months);
+        }
+
+        // تطبيق التخفيض حسب الفئة
+        const levelKey = level.toUpperCase();
+        const discount = discounts[levelKey];
+        if (price !== null && discount && discount.value > 0) {
+          if (discount.type === 'percentage') {
+            price = price * (1 - discount.value / 100);
+          } else {
+            price = price - discount.value;
+          }
+          if (price < 0) price = 0;
+        }
+
+        prices[id] = price;
+      }
+
+      setBillboardPrices(prices);
+    };
+
+    loadPrices();
+  }, [showPricing, selectedPeriod, selectedCustomerCategory, selectedBillboards, discounts]);
+
   // حفظ الإعدادات
   const handleSaveSettings = async () => {
     setIsSaving(true);
@@ -192,6 +261,7 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
         selectedBackground,
         customBackgroundUrl,
         selectedPeriod,
+        selectedCustomerCategory,
         discounts,
       };
 
@@ -225,6 +295,7 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
     setSelectedBackground(DEFAULT_PRINT_SETTINGS.selectedBackground);
     setCustomBackgroundUrl(DEFAULT_PRINT_SETTINGS.customBackgroundUrl);
     setSelectedPeriod(DEFAULT_PRINT_SETTINGS.selectedPeriod);
+    setSelectedCustomerCategory(DEFAULT_PRINT_SETTINGS.selectedCustomerCategory as CustomerType);
     setDiscounts(DEFAULT_PRINT_SETTINGS.discounts);
     toast.info('تم إعادة تعيين الإعدادات');
   };
@@ -252,13 +323,23 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
 
   // تحويل اللوحات للتنسيق المطلوب - نفس التنسيق المستخدم في طباعة العقد
   const prepareBillboardsData = (billboards: any[]): BillboardRowData[] => {
+    const period = RENTAL_PERIODS.find(p => p.value === selectedPeriod);
+    const periodLabel = period?.label || '';
+
     return billboards.map((b) => {
       const facesRaw = b.Faces_Count ?? b.faces_count ?? b.faces ?? '1';
       const facesNum = Number(facesRaw);
       const facesLabel = Number.isFinite(facesNum) ? billboardFacesLabels[facesNum] : undefined;
+      const id = String(b.ID || b.id || '');
+      // استخدام اسم اللوحة (Billboard_Name) كـ "كود" بدلاً من الرقم
+      const billboardCode = b.Billboard_Name || b.billboard_name || id;
+      const calculatedPrice = showPricing ? billboardPrices[id] : null;
+      const priceStr = calculatedPrice !== null && calculatedPrice !== undefined 
+        ? `${Math.round(calculatedPrice).toLocaleString()}` 
+        : '';
 
       return {
-        id: String(b.ID || b.id || ''),
+        id: billboardCode,
         billboardName: b.Billboard_Name || b.billboard_name || '',
         image: showImages ? (b.Image_URL || b.image_url || '') : '',
         municipality: b.Municipality || b.municipality || '',
@@ -268,10 +349,11 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
         level: b.Level || b.level || '',
         // ✅ عرض عدد الأوجه كنص من إعدادات billboard_faces إذا توفر
         faces: facesLabel || String(facesRaw ?? ''),
-        price: b.Price ? `${Number(b.Price).toLocaleString()}` : '',
+        // ✅ السعر من جدول الأسعار إذا كانت الأسعار مفعلة
+        price: priceStr,
         rent_end_date: b.Rent_End_Date || b.rent_end_date || '',
-        // ✅ مدة/أيام إذا كانت متوفرة في بيانات اللوحة
-        duration_days: String(b.Days_Count ?? b.duration_days ?? b.durationDays ?? ''),
+        // ✅ مدة الإيجار المختارة إذا كانت الأسعار مفعلة
+        duration_days: showPricing ? periodLabel : '',
         mapLink:
           b.GPS_Link || b.GPS_Coordinates
             ? `https://www.google.com/maps?q=${b.GPS_Coordinates || ''}`
@@ -562,6 +644,29 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
                 {/* خيارات الأسعار التفصيلية */}
                 {showPricing && (
                   <div className="bg-muted/30 rounded-lg p-4 border border-border space-y-5">
+                    {/* اختيار فئة العميل */}
+                    <div>
+                      <Label className="text-sm font-bold mb-3 flex items-center gap-2">
+                        <Users className="w-4 h-4 text-primary" />
+                        فئة العميل:
+                      </Label>
+                      <Select
+                        value={selectedCustomerCategory}
+                        onValueChange={(v) => setSelectedCustomerCategory(v as CustomerType)}
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="اختر فئة العميل" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {customerCategories.map(category => (
+                            <SelectItem key={category} value={category}>
+                              {category}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
                     {/* اختيار المدة */}
                     <div>
                       <Label className="text-sm font-bold mb-3 block">مدة الإيجار:</Label>
