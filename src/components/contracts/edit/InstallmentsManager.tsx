@@ -392,11 +392,11 @@ export function InstallmentsManager({
                     <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
                       <div className="space-y-0.5">
                         <p className="text-xs text-muted-foreground">الدفعة الأولى</p>
-                        <p className="text-lg font-bold text-primary">{actualFirstPayment.toLocaleString('ar-LY')} د.ل</p>
+                        <p className="text-lg font-bold text-primary font-manrope">{actualFirstPayment.toLocaleString('ar-LY')} د.ل</p>
                       </div>
                       <div className="text-left space-y-0.5">
                         <p className="text-xs text-muted-foreground">المتبقي</p>
-                        <p className="text-lg font-bold text-foreground">{remainingAfterFirst.toLocaleString('ar-LY')} د.ل</p>
+                        <p className="text-lg font-bold text-foreground font-manrope">{remainingAfterFirst.toLocaleString('ar-LY')} د.ل</p>
                       </div>
                     </div>
                   )}
@@ -752,11 +752,11 @@ export function InstallmentsManager({
         )}>
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">إجمالي العقد</span>
-            <span className="font-bold text-lg">{finalTotal.toLocaleString('ar-LY')} د.ل</span>
+            <span className="font-bold text-lg font-manrope">{finalTotal.toLocaleString('ar-LY')} د.ل</span>
           </div>
           <div className="flex justify-between items-center">
             <span className="text-sm text-muted-foreground">مجموع الدفعات</span>
-            <span className="font-bold text-lg">{totalInstallments.toLocaleString('ar-LY')} د.ل</span>
+            <span className="font-bold text-lg font-manrope">{totalInstallments.toLocaleString('ar-LY')} د.ل</span>
           </div>
           <div className="border-t border-border/50 pt-2 flex justify-between items-center">
             <span className="text-sm font-medium">الفرق</span>
@@ -767,7 +767,7 @@ export function InstallmentsManager({
                 <AlertCircle className="h-5 w-5 text-amber-500" />
               )}
               <span className={cn(
-                "font-bold text-lg",
+                "font-bold text-lg font-manrope",
                 isBalanced ? "text-green-500" : "text-amber-500"
               )}>
                 {difference.toLocaleString('ar-LY')} د.ل

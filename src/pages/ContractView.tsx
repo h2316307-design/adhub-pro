@@ -395,7 +395,7 @@ export default function ContractView() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">اللوحات</p>
-                <p className="text-2xl font-bold">{billboards.length}</p>
+                <p className="text-2xl font-bold font-manrope">{billboards.length}</p>
               </div>
             </div>
           </CardContent>
@@ -409,7 +409,7 @@ export default function ContractView() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">المدفوع</p>
-                <p className="text-2xl font-bold text-green-600">{formatCurrency(paymentProgress.paid)}</p>
+                <p className="text-2xl font-bold text-green-600 font-manrope">{formatCurrency(paymentProgress.paid)}</p>
               </div>
             </div>
           </CardContent>
@@ -423,7 +423,7 @@ export default function ContractView() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">الأيام المتبقية</p>
-                <p className={`text-2xl font-bold ${daysRemaining < 0 ? 'text-destructive' : daysRemaining < 30 ? 'text-orange-500' : 'text-green-500'}`}>
+                <p className={`text-2xl font-bold font-manrope ${daysRemaining < 0 ? 'text-destructive' : daysRemaining < 30 ? 'text-orange-500' : 'text-green-500'}`}>
                   {daysRemaining < 0 ? Math.abs(daysRemaining) : daysRemaining}
                 </p>
               </div>
@@ -439,7 +439,7 @@ export default function ContractView() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">نسبة السداد</p>
-                <p className="text-2xl font-bold">{paymentProgress.percentage.toFixed(0)}%</p>
+                <p className="text-2xl font-bold font-manrope">{paymentProgress.percentage.toFixed(0)}%</p>
               </div>
             </div>
           </CardContent>
@@ -451,12 +451,12 @@ export default function ContractView() {
         <CardContent className="p-4">
           <div className="flex justify-between items-center mb-2">
             <span className="text-sm font-medium">تقدم السداد</span>
-            <span className="text-sm text-muted-foreground">
+            <span className="text-sm text-muted-foreground font-manrope">
               {formatCurrency(paymentProgress.paid)} / {formatCurrency(paymentProgress.total)} د.ل
             </span>
           </div>
           <Progress value={paymentProgress.percentage} className="h-3" />
-          <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground">
+          <div className="flex justify-between items-center mt-2 text-xs text-muted-foreground font-manrope">
             <span>المدفوع: {formatCurrency(paymentProgress.paid)} د.ل</span>
             <span>المتبقي: {formatCurrency(paymentProgress.remaining)} د.ل</span>
           </div>
@@ -481,7 +481,7 @@ export default function ContractView() {
                   <p className="font-semibold text-lg">{customerName || 'غير محدد'}</p>
                 </div>
                 {phone && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 font-manrope">
                     <Phone className="h-4 w-4 text-muted-foreground" />
                     <span dir="ltr">{phone}</span>
                   </div>
@@ -504,14 +504,14 @@ export default function ContractView() {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-muted-foreground">البداية</p>
-                    <p className="font-semibold">{formatDate(startDate)}</p>
+                    <p className="font-semibold font-manrope">{formatDate(startDate)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">النهاية</p>
-                    <p className="font-semibold">{formatDate(endDate)}</p>
+                    <p className="font-semibold font-manrope">{formatDate(endDate)}</p>
                   </div>
                 </div>
-                <div className={`p-2 rounded-lg text-center ${
+                <div className={`p-2 rounded-lg text-center font-manrope ${
                   daysRemaining < 0 ? 'bg-destructive/10 text-destructive' :
                   daysRemaining < 30 ? 'bg-orange-500/10 text-orange-600' :
                   'bg-green-500/10 text-green-600'
@@ -630,7 +630,7 @@ export default function ContractView() {
 
                           <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">السعر</span>
-                            <span className="font-semibold text-primary">{formatCurrency(billboard.price)} د.ل</span>
+                            <span className="font-semibold text-primary font-manrope">{formatCurrency(billboard.price)} د.ل</span>
                           </div>
                           
                           {/* Design Preview Thumbnails */}
@@ -712,7 +712,7 @@ export default function ContractView() {
                         </div>
                         <div className="text-left">
                           <p className="text-sm text-muted-foreground">{billboard.size}</p>
-                          <p className="font-semibold text-primary">{formatCurrency(billboard.price)} د.ل</p>
+                          <p className="font-semibold text-primary font-manrope">{formatCurrency(billboard.price)} د.ل</p>
                         </div>
                       </div>
                     );
@@ -743,7 +743,7 @@ export default function ContractView() {
                 <CardContent className="space-y-3 pt-0">
                   <div className="flex justify-between items-center py-2">
                     <span className="text-muted-foreground">الإيجار</span>
-                    <span className="font-semibold text-green-600">{formatCurrency(rentCost)} د.ل</span>
+                    <span className="font-semibold text-green-600 font-manrope">{formatCurrency(rentCost)} د.ل</span>
                   </div>
                   
                   {installationCost > 0 && (
@@ -752,7 +752,7 @@ export default function ContractView() {
                         <Wrench className="h-3 w-3" />
                         التركيب
                       </span>
-                      <span className="font-medium text-orange-500">{formatCurrency(installationCost)} د.ل</span>
+                      <span className="font-medium text-orange-500 font-manrope">{formatCurrency(installationCost)} د.ل</span>
                     </div>
                   )}
                   
@@ -762,7 +762,7 @@ export default function ContractView() {
                         <PaintBucket className="h-3 w-3" />
                         الطباعة
                       </span>
-                      <span className="font-medium text-purple-500">{formatCurrency(printCost)} د.ل</span>
+                      <span className="font-medium text-purple-500 font-manrope">{formatCurrency(printCost)} د.ل</span>
                     </div>
                   )}
                   
@@ -772,20 +772,20 @@ export default function ContractView() {
                         <Percent className="h-3 w-3" />
                         رسوم التشغيل
                       </span>
-                      <span className="font-medium text-blue-500">{formatCurrency(operatingFee)} د.ل</span>
+                      <span className="font-medium text-blue-500 font-manrope">{formatCurrency(operatingFee)} د.ل</span>
                     </div>
                   )}
                   
                   {discount > 0 && (
                     <div className="flex justify-between items-center py-2 border-t text-destructive">
                       <span>الخصم</span>
-                      <span className="font-medium">-{formatCurrency(discount)} د.ل</span>
+                      <span className="font-medium font-manrope">-{formatCurrency(discount)} د.ل</span>
                     </div>
                   )}
                   
                   <div className="flex justify-between items-center py-3 border-t-2 border-primary/30 bg-primary/5 -mx-6 px-6">
                     <span className="font-bold text-lg">الإجمالي</span>
-                    <span className="font-bold text-2xl text-primary">{formatCurrency(totalCost)} د.ل</span>
+                    <span className="font-bold text-2xl text-primary font-manrope">{formatCurrency(totalCost)} د.ل</span>
                   </div>
                 </CardContent>
               </CollapsibleContent>
@@ -803,16 +803,16 @@ export default function ContractView() {
             <CardContent className="space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">المدفوع</span>
-                <span className="font-semibold text-green-600">{formatCurrency(paymentProgress.paid)} د.ل</span>
+                <span className="font-semibold text-green-600 font-manrope">{formatCurrency(paymentProgress.paid)} د.ل</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">المتبقي</span>
-                <span className={`font-semibold ${paymentProgress.remaining > 0 ? 'text-destructive' : 'text-green-600'}`}>
+                <span className={`font-semibold font-manrope ${paymentProgress.remaining > 0 ? 'text-destructive' : 'text-green-600'}`}>
                   {formatCurrency(paymentProgress.remaining)} د.ل
                 </span>
               </div>
               <Progress value={paymentProgress.percentage} className="h-2" />
-              <p className="text-center text-sm text-muted-foreground">
+              <p className="text-center text-sm text-muted-foreground font-manrope">
                 {paymentProgress.percentage.toFixed(0)}% مكتمل
               </p>
             </CardContent>
@@ -829,11 +829,11 @@ export default function ContractView() {
             <CardContent className="space-y-3 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">رقم العقد</span>
-                <span className="font-mono font-semibold">#{contractNumber}</span>
+                <span className="font-mono font-semibold font-manrope">#{contractNumber}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">تاريخ الإنشاء</span>
-                <span>{formatDate(contract.created_at || '')}</span>
+                <span className="font-manrope">{formatDate(contract.created_at || '')}</span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">الحالة</span>

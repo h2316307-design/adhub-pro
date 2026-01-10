@@ -129,7 +129,7 @@ export function ContractDatesForm({
                   </Tooltip>
                 </TooltipProvider>
               </div>
-              <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full">
+              <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-1 rounded-full font-manrope">
                 {use30DayMonth ? `${durationMonths * 30} يوم` : 'أيام فعلية'}
               </span>
             </div>
@@ -205,7 +205,7 @@ export function ContractDatesForm({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <span className="text-xs text-muted-foreground">تاريخ الانتهاء</span>
-              <div className="font-bold text-base text-foreground">
+              <div className="font-bold text-base text-foreground font-manrope">
                 {calculatedEndDate ? new Date(calculatedEndDate).toLocaleDateString('ar-LY', { 
                   year: 'numeric', 
                   month: 'long', 
@@ -215,7 +215,7 @@ export function ContractDatesForm({
             </div>
             <div className="space-y-1 text-left">
               <span className="text-xs text-muted-foreground">إجمالي الأيام</span>
-              <div className="font-bold text-base text-emerald-600">
+              <div className="font-bold text-base text-emerald-600 font-manrope">
                 {totalDays} يوم
               </div>
             </div>

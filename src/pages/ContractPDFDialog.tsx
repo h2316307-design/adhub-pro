@@ -3716,6 +3716,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
           installationCost: contractDetails.installationCost,
           duration: contractDetails.duration,
           discount: discountInfo ? `بعد خصم ${discountInfo.text}` : '', // ✅ تمرير نص الخصم
+          installationEnabled: installationEnabled, // ✅ تمرير حالة التركيب
+          printCostEnabled: printCostEnabled, // ✅ تمرير حالة الطباعة
         },
         paymentsHtml: paymentsText, // استخدام النسخة النظيفة بدون HTML للطباعة
       });

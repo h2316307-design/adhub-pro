@@ -174,7 +174,7 @@ export function CostSummaryCard({
         <div className="p-4 rounded-xl bg-gradient-to-r from-muted/80 to-muted/50 border border-border">
           <div className="flex items-center justify-between">
             <span className="text-sm text-muted-foreground font-medium">التقدير التلقائي للإيجار</span>
-            <span className="font-bold text-lg text-primary">{(estimatedTotal || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
+            <span className="font-bold text-lg text-primary font-manrope">{(estimatedTotal || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
           </div>
         </div>
 
@@ -341,7 +341,7 @@ export function CostSummaryCard({
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">تكلفة التركيب:</span>
-                  <span className="font-bold text-orange-600">{installationCost.toLocaleString('ar-LY')} {currencySymbol}</span>
+                  <span className="font-bold text-orange-600 font-manrope">{installationCost.toLocaleString('ar-LY')} {currencySymbol}</span>
                 </div>
                 {includeInstallationInPrice ? (
                   <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
@@ -384,7 +384,7 @@ export function CostSummaryCard({
                 </div>
                 <div className="flex justify-between items-center text-sm">
                   <span className="text-muted-foreground">تكلفة الطباعة:</span>
-                  <span className="font-bold text-blue-600">{printCost.toLocaleString('ar-LY')} {currencySymbol}</span>
+                  <span className="font-bold text-blue-600 font-manrope">{printCost.toLocaleString('ar-LY')} {currencySymbol}</span>
                 </div>
                 {includePrintInPrice ? (
                   <div className="flex items-center gap-2 p-2 bg-green-500/10 rounded-lg border border-green-500/20">
@@ -481,7 +481,7 @@ export function CostSummaryCard({
                 </div>
                 <div className="flex justify-between items-center">
                   <span className="text-sm text-foreground">إجمالي الإيجار</span>
-                  <span className="font-bold text-lg">{(baseTotal || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
+                  <span className="font-bold text-lg font-manrope">{(baseTotal || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
                 </div>
               </div>
               
@@ -497,11 +497,11 @@ export function CostSummaryCard({
                       <Minus className="h-3 w-3" />
                       خصم {baseTotal > 0 ? ((discountAmount / baseTotal) * 100).toFixed(1) : 0}%
                     </span>
-                    <span className="font-bold text-lg text-red-600">-{(discountAmount || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
+                    <span className="font-bold text-lg text-red-600 font-manrope">-{(discountAmount || 0).toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>
                   <div className="flex justify-between items-center mt-2 pt-2 border-t border-red-500/20">
                     <span className="text-xs text-muted-foreground">= بعد الخصم</span>
-                    <span className="font-semibold text-sm">{rentalAfterDiscount.toLocaleString('ar-LY')} {currencySymbol}</span>
+                    <span className="font-semibold text-sm font-manrope">{rentalAfterDiscount.toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>
                 </div>
               )}
@@ -532,7 +532,7 @@ export function CostSummaryCard({
                       {includeInstallationInPrice ? 'مخصوم (مجاني للعميل)' : 'يضاف للعميل'}
                     </span>
                     <span className={cn(
-                      "font-bold text-lg",
+                      "font-bold text-lg font-manrope",
                       includeInstallationInPrice ? "text-green-600" : "text-orange-600"
                     )}>
                       {includeInstallationInPrice ? '-' : '+'}{(installationCost || 0).toLocaleString('ar-LY')} {currencySymbol}
@@ -567,7 +567,7 @@ export function CostSummaryCard({
                       {includePrintInPrice ? 'مخصومة (مجانية للعميل)' : 'تضاف للعميل'}
                     </span>
                     <span className={cn(
-                      "font-bold text-lg",
+                      "font-bold text-lg font-manrope",
                       includePrintInPrice ? "text-green-600" : "text-blue-600"
                     )}>
                       {includePrintInPrice ? '-' : '+'}{(printCost || 0).toLocaleString('ar-LY')} {currencySymbol}
@@ -588,7 +588,7 @@ export function CostSummaryCard({
                       <Minus className="h-3 w-3" />
                       مخصوم من صافي الإيجار
                     </span>
-                    <span className="font-bold text-lg text-amber-600">-{totalFriendCosts.toLocaleString('ar-LY')} {currencySymbol}</span>
+                    <span className="font-bold text-lg text-amber-600 font-manrope">-{totalFriendCosts.toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>
                 </div>
               )}
@@ -598,11 +598,11 @@ export function CostSummaryCard({
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <span className="text-xs text-muted-foreground block mb-1">صافي الإيجار (للشركة)</span>
-                    <span className="font-bold text-primary">{netRental.toLocaleString('ar-LY')} {currencySymbol}</span>
+                    <span className="font-bold text-primary font-manrope">{netRental.toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>
                   <div className="text-left">
                     <span className="text-xs text-muted-foreground block mb-1">رسوم التشغيل ({operatingFeeRate}%)</span>
-                    <span className="font-bold text-purple-600">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
+                    <span className="font-bold text-purple-600 font-manrope">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
                   </div>
                 </div>
               </div>
@@ -632,7 +632,7 @@ export function CostSummaryCard({
                 </Tooltip>
               </TooltipProvider>
             </div>
-            <span className="text-2xl font-bold text-primary">{netRental.toLocaleString('ar-LY')} {currencySymbol}</span>
+            <span className="text-2xl font-bold text-primary font-manrope">{netRental.toLocaleString('ar-LY')} {currencySymbol}</span>
           </div>
           
           {/* Operating Fee from Net Rental */}
@@ -641,7 +641,7 @@ export function CostSummaryCard({
               <DollarSign className="h-3 w-3" />
               رسوم التشغيل ({operatingFeeRate}% من الصافي)
             </span>
-            <span className="font-semibold text-purple-600">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
+            <span className="font-semibold text-purple-600 font-manrope">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
           </div>
         </div>
 
@@ -649,7 +649,7 @@ export function CostSummaryCard({
         <div className="p-5 rounded-2xl bg-gradient-to-br from-green-500/15 via-emerald-500/10 to-teal-500/5 border-2 border-green-500/40 shadow-lg">
           <div className="flex justify-between items-center mb-1">
             <span className="font-bold text-lg text-foreground">الإجمالي للعميل</span>
-            <span className="text-3xl font-bold text-green-600">{adjustedFinalTotal.toLocaleString('ar-LY')} {currencySymbol}</span>
+            <span className="text-3xl font-bold text-green-600 font-manrope">{adjustedFinalTotal.toLocaleString('ar-LY')} {currencySymbol}</span>
           </div>
           <p className="text-xs text-muted-foreground">
             {includeInstallationInPrice && installationCost > 0 && '(التركيب مجاني) '}
@@ -663,11 +663,11 @@ export function CostSummaryCard({
         <div className="grid grid-cols-2 gap-3">
           <div className="p-4 rounded-xl bg-green-500/10 border-2 border-green-500/30 text-center">
             <p className="text-xs text-muted-foreground mb-1">المدفوع</p>
-            <p className="font-bold text-lg text-green-600 dark:text-green-400">{totalPaid.toLocaleString('ar-LY')}</p>
+            <p className="font-bold text-lg text-green-600 dark:text-green-400 font-manrope">{totalPaid.toLocaleString('ar-LY')}</p>
           </div>
           <div className="p-4 rounded-xl bg-red-500/10 border-2 border-red-500/30 text-center">
             <p className="text-xs text-muted-foreground mb-1">المتبقي</p>
-            <p className="font-bold text-lg text-red-600 dark:text-red-400">{remaining.toLocaleString('ar-LY')}</p>
+            <p className="font-bold text-lg text-red-600 dark:text-red-400 font-manrope">{remaining.toLocaleString('ar-LY')}</p>
           </div>
         </div>
 

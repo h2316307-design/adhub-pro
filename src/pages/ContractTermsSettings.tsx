@@ -1456,7 +1456,7 @@ export default function ContractTermsSettings() {
                           style={{ cursor: 'pointer' }}
                           onClick={() => setSelectedSection('header')}
                         >
-                          عقد إيجار مواقع إعلانية رقم: {SAMPLE_CONTRACT_DATA.contractNumber} سنة {SAMPLE_CONTRACT_DATA.year}
+                          عقد إيجار مواقع إعلانية رقم: {previewContractData.contractNumber} سنة {previewContractData.year}
                         </text>
                       )}
                       
@@ -1487,12 +1487,13 @@ export default function ContractTermsSettings() {
                           fontWeight="bold" 
                           fontSize={sectionSettings.adType.fontSize} 
                           fill="#1a1a2e" 
-                          textAnchor={sectionSettings.adType.textAlign || 'end'}
+                          textAnchor="start"
                           dominantBaseline="middle"
-                          style={{ cursor: 'pointer' }}
+                          style={{ cursor: 'pointer', unicodeBidi: 'plaintext' }}
                           onClick={() => setSelectedSection('adType')}
+                          direction="rtl"
                         >
-                          نوع الإعلان: {SAMPLE_CONTRACT_DATA.adType}
+                          نوع الإعلان: {previewContractData.adType}
                         </text>
                       )}
 
@@ -1538,7 +1539,7 @@ export default function ContractTermsSettings() {
                             textAnchor={sectionSettings.secondParty.textAlign || 'end'}
                             dominantBaseline="middle"
                           >
-                            الطرف الثاني: {SAMPLE_CONTRACT_DATA.company}
+                            الطرف الثاني: {previewContractData.company}
                           </text>
                         </g>
                       )}
@@ -1556,7 +1557,7 @@ export default function ContractTermsSettings() {
                             dominantBaseline="middle"
                             direction="rtl"
                           >
-                            يمثلها السيد {SAMPLE_CONTRACT_DATA.customerName} - هاتف: <tspan direction="ltr" unicodeBidi="embed">{SAMPLE_CONTRACT_DATA.customerPhone}</tspan>
+                            يمثلها السيد {previewContractData.customerName} - هاتف: <tspan direction="ltr" unicodeBidi="embed">{previewContractData.customerPhone}</tspan>
                           </text>
                         </g>
                       )}

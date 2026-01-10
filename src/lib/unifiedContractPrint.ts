@@ -130,6 +130,8 @@ export interface UnifiedPrintOptions {
     installationCost: string;
     duration: string;
     discount?: string; // نص الخصم (مثلاً: "بعد خصم 5000 دينار ليبي")
+    installationEnabled?: boolean; // هل التركيب مفعل
+    printCostEnabled?: boolean; // هل الطباعة مفعلة
   };
   paymentsHtml: string;
 }
@@ -215,6 +217,23 @@ function replaceVariables(
   // نص الخصم - إذا لم يكن موجوداً نتركه فارغاً
   const discountText = contractDetails.discount || '';
   
+  // ✅ بناء نص شامل الطباعة والتركيب
+  const installationEnabled = contractDetails.installationEnabled !== false;
+  const printCostEnabled = contractDetails.printCostEnabled === true;
+  
+  const inclusionParts: string[] = [];
+  if (installationEnabled) {
+    inclusionParts.push('شامل التركيب');
+  } else {
+    inclusionParts.push('غير شامل التركيب');
+  }
+  if (printCostEnabled) {
+    inclusionParts.push('شامل الطباعة');
+  } else {
+    inclusionParts.push('غير شامل الطباعة');
+  }
+  const inclusionText = inclusionParts.join(' و');
+  
   return text
     .replace(/{duration}/g, contractData.duration)
     .replace(/{startDate}/g, contractData.startDate)
@@ -224,7 +243,8 @@ function replaceVariables(
     .replace(/{totalAmount}/g, contractDetails.finalTotal)
     .replace(/{currency}/g, currencyInfo.writtenName)
     .replace(/{billboardsCount}/g, String(billboardsCount))
-    .replace(/{discount}/g, discountText) // ✅ استبدال متغير الخصم
+    .replace(/{discount}/g, discountText)
+    .replace(/{inclusionText}/g, inclusionText) // ✅ استبدال متغير شامل/غير شامل
     // NOTE: paymentsHtml may contain <br> etc. We keep it as-is for wrapping,
     // but it MUST be escaped at render time inside SVG text.
     .replace(/{payments}/g, paymentsHtml);
@@ -343,7 +363,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
         >التاريخ: ${contractData.startDate}</text>
       ` : ''}
       
-       <!-- نوع الإعلان - جديد -->
+       <!-- نوع الإعلان - متطابق مع المعاينة في ContractTermsSettings -->
        ${settings.adType?.visible ? `
          <text 
            x="${settings.adType.x}" 
@@ -352,8 +372,10 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
            font-weight="bold" 
            font-size="${settings.adType.fontSize}" 
            fill="#1a1a2e" 
-           text-anchor="${settings.adType.textAlign || 'end'}"
+           text-anchor="start"
            dominant-baseline="middle"
+           direction="rtl"
+           style="unicode-bidi: plaintext;"
          >${escapeSvgText(`نوع الإعلان: ${contractData.adType || 'غير محدد'}`)}</text>
        ` : ''}
        

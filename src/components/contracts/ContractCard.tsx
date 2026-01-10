@@ -547,7 +547,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
 
   return (
     <Card 
-      className={`group relative overflow-hidden transition-all duration-300 hover:shadow-lg ${getCardStyle()} ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
+      className={`group relative overflow-hidden transition-all duration-300 hover:shadow-lg flex flex-col ${getCardStyle()} ${isSelected ? 'ring-2 ring-primary ring-offset-2' : ''}`}
       style={cardStyle}
     >
       {/* Checkbox للاختيار - في أعلى اليمين فوق كل شيء */}
@@ -571,70 +571,59 @@ export const ContractCard: React.FC<ContractCardProps> = ({
         </div>
       )}
       
-      {/* صورة التصميم إذا متوفرة */}
-      {designImage && (
-        <>
-          <div 
-            className="relative h-32 w-full overflow-hidden bg-muted cursor-pointer group/design"
-            onClick={() => setShowDesignFullscreen(true)}
-          >
-            <img 
-              src={designImage} 
-              alt="تصميم الإعلان" 
-              className="w-full h-full object-cover transition-transform duration-300 group-hover/design:scale-105"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-            <div className="absolute inset-0 bg-black/0 group-hover/design:bg-black/20 transition-colors duration-300 flex items-center justify-center">
-              <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover/design:opacity-100 transition-opacity duration-300" />
-            </div>
-            <div className="absolute top-2 left-2">
-              <Badge
-                variant="secondary"
-                className="gap-1 border-0"
-                style={
-                  dominantHsl
-                    ? {
-                        backgroundColor: `hsl(${dominantHsl} / 0.92)`,
-                        color: 'hsl(var(--primary-foreground))',
-                      }
-                    : {
-                        backgroundColor: 'hsl(var(--foreground) / 0.6)',
-                        color: 'hsl(var(--primary-foreground))',
-                      }
-                }
-              >
-                <ImageIcon className="h-3 w-3" />
-                تصميم متوفر
-              </Badge>
-            </div>
-          </div>
-          
-          {/* Fullscreen Design Modal */}
-          {showDesignFullscreen && (
+      {/* منطقة الصورة - ارتفاع ثابت دائماً للحفاظ على التنسيق */}
+      <div className="h-32 w-full overflow-hidden bg-muted/30 flex-shrink-0">
+        {designImage ? (
+          <>
             <div 
-              className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
-              onClick={() => setShowDesignFullscreen(false)}
+              className="relative h-full w-full cursor-pointer group/design"
+              onClick={() => setShowDesignFullscreen(true)}
             >
-              <button
-                onClick={() => setShowDesignFullscreen(false)}
-                className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
-              >
-                <X className="h-6 w-6 text-white" />
-              </button>
               <img 
                 src={designImage} 
-                alt="تصميم الإعلان - عرض كامل" 
-                className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
+                alt="تصميم الإعلان" 
+                className="w-full h-full object-cover transition-transform duration-300 group-hover/design:scale-105"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
               />
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
-                عقد #{contractNumber} - {contract.customer_name}
+              <div className="absolute inset-0 bg-black/0 group-hover/design:bg-black/20 transition-colors duration-300 flex items-center justify-center">
+                <Maximize2 className="h-8 w-8 text-white opacity-0 group-hover/design:opacity-100 transition-opacity duration-300" />
               </div>
             </div>
-          )}
-        </>
+          </>
+        ) : (
+          <div className="h-full w-full flex items-center justify-center">
+            <div className="text-center text-muted-foreground/50">
+              <ImageIcon className="h-8 w-8 mx-auto mb-1 opacity-30" />
+              <span className="text-xs">بدون تصميم</span>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Fullscreen Design Modal */}
+      {showDesignFullscreen && designImage && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setShowDesignFullscreen(false)}
+        >
+          <button
+            onClick={() => setShowDesignFullscreen(false)}
+            className="absolute top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 transition-colors"
+          >
+            <X className="h-6 w-6 text-white" />
+          </button>
+          <img 
+            src={designImage} 
+            alt="تصميم الإعلان - عرض كامل" 
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/70 text-sm">
+            عقد #{contractNumber} - {contract.customer_name}
+          </div>
+        </div>
       )}
       
       {/* شريط الحالة العلوي */}

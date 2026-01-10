@@ -645,18 +645,18 @@ export function SelectedBillboardsCard({
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
                 {/* إجمالي اللوحات */}
                 <div className="bg-background/80 backdrop-blur rounded-lg p-3 border border-border text-center">
-                  <div className="text-2xl font-bold text-primary">{sizeSummary.totalCount}</div>
+                  <div className="text-2xl font-bold text-primary font-manrope">{sizeSummary.totalCount}</div>
                   <div className="text-xs text-muted-foreground">إجمالي اللوحات</div>
                 </div>
                 {/* إجمالي الوجوه */}
                 <div className="bg-background/80 backdrop-blur rounded-lg p-3 border border-border text-center">
-                  <div className="text-2xl font-bold text-accent">{sizeSummary.totalFaces}</div>
+                  <div className="text-2xl font-bold text-accent font-manrope">{sizeSummary.totalFaces}</div>
                   <div className="text-xs text-muted-foreground">إجمالي الوجوه</div>
                 </div>
                 {/* تفاصيل كل مقاس */}
                 {sizeSummary.sizes.map(([size, data]) => (
                   <div key={size} className="bg-background/80 backdrop-blur rounded-lg p-3 border border-border text-center">
-                    <div className="text-lg font-bold text-foreground">{data.count}</div>
+                    <div className="text-lg font-bold text-foreground font-manrope">{data.count}</div>
                     <div className="text-xs text-muted-foreground">{size}</div>
                     <div className="text-[10px] text-primary/70">{data.faces} وجه</div>
                   </div>
@@ -674,7 +674,7 @@ export function SelectedBillboardsCard({
                     {/* الإيجار الأساسي */}
                     <div className="flex justify-between items-center text-sm">
                       <span className="text-muted-foreground">إجمالي الإيجار الأساسي</span>
-                      <span className="font-bold text-foreground">{costsSummary.totalBaseRental.toLocaleString('ar-LY')} {currencySymbol}</span>
+                      <span className="font-bold text-foreground font-manrope">{costsSummary.totalBaseRental.toLocaleString('ar-LY')} {currencySymbol}</span>
                     </div>
                     
                     {/* تكلفة الطباعة */}
@@ -684,7 +684,7 @@ export function SelectedBillboardsCard({
                           <Printer className="h-3.5 w-3.5" />
                           إجمالي تكلفة الطباعة
                         </span>
-                        <span className="font-bold text-blue-600">+ {costsSummary.totalPrintCost.toLocaleString('ar-LY')} {currencySymbol}</span>
+                        <span className="font-bold text-blue-600 font-manrope">+ {costsSummary.totalPrintCost.toLocaleString('ar-LY')} {currencySymbol}</span>
                       </div>
                     )}
                     
@@ -695,14 +695,14 @@ export function SelectedBillboardsCard({
                           <Wrench className="h-3.5 w-3.5" />
                           إجمالي تكلفة التركيب
                         </span>
-                        <span className="font-bold text-accent">+ {costsSummary.totalInstallCost.toLocaleString('ar-LY')} {currencySymbol}</span>
+                        <span className="font-bold text-accent font-manrope">+ {costsSummary.totalInstallCost.toLocaleString('ar-LY')} {currencySymbol}</span>
                       </div>
                     )}
                     
                     {/* الإجمالي الكلي */}
                     <div className="flex justify-between items-center text-base pt-2 border-t border-border mt-2">
                       <span className="font-bold text-primary">الإجمالي الكلي للوحات</span>
-                      <span className="font-bold text-xl text-primary">{costsSummary.grandTotal.toLocaleString('ar-LY')} {currencySymbol}</span>
+                      <span className="font-bold text-xl text-primary font-manrope">{costsSummary.grandTotal.toLocaleString('ar-LY')} {currencySymbol}</span>
                     </div>
                   </div>
                 </div>
@@ -886,11 +886,11 @@ export function SelectedBillboardsCard({
                       <div className="grid grid-cols-4 gap-2">
                         <div className="text-center bg-primary/10 border border-primary/20 rounded-lg py-2.5 px-1">
                           <div className="text-[10px] text-primary/70 mb-0.5 font-medium">الحجم</div>
-                          <div className="text-sm font-bold text-primary">{getDisplaySize(b)}</div>
+                          <div className="text-sm font-bold text-primary font-manrope">{getDisplaySize(b)}</div>
                         </div>
                         <div className="text-center bg-muted border border-border rounded-lg py-2.5 px-1">
                           <div className="text-[10px] text-muted-foreground mb-0.5 font-medium">الوجوه</div>
-                          <div className="text-sm font-bold text-foreground">{getFacesCount(b)}</div>
+                          <div className="text-sm font-bold text-foreground font-manrope">{getFacesCount(b)}</div>
                         </div>
                         <div className="text-center bg-muted border border-border rounded-lg py-2.5 px-1">
                           <div className="text-[10px] text-muted-foreground mb-0.5 font-medium">المدينة</div>
@@ -907,7 +907,7 @@ export function SelectedBillboardsCard({
                         {/* Base Rental */}
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium text-muted-foreground">الإيجار الأساسي</span>
-                          <span className="text-lg font-bold text-primary">{baseTotalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                          <span className="text-lg font-bold text-primary font-manrope">{baseTotalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
                         </div>
 
                         {/* Print Cost - Show when enabled and included in price (deducted from rental) */}
@@ -917,7 +917,7 @@ export function SelectedBillboardsCard({
                               <Printer className="h-3.5 w-3.5" />
                               طباعة مضمنة
                             </span>
-                            <span className="text-base font-bold text-orange-600">- {printCostForBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-base font-bold text-orange-600 font-manrope">- {printCostForBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -928,7 +928,7 @@ export function SelectedBillboardsCard({
                               <Printer className="h-3.5 w-3.5" />
                               تكلفة الطباعة
                             </span>
-                            <span className="text-base font-bold text-blue-600">+ {printCostForBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-base font-bold text-blue-600 font-manrope">+ {printCostForBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -939,7 +939,7 @@ export function SelectedBillboardsCard({
                               <Wrench className="h-3.5 w-3.5" />
                               تركيب مضمن
                             </span>
-                            <span className="text-base font-bold text-amber-600">- {installPrice.toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-base font-bold text-amber-600 font-manrope">- {installPrice.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -950,7 +950,7 @@ export function SelectedBillboardsCard({
                               <Wrench className="h-3.5 w-3.5" />
                               تكلفة التركيب
                             </span>
-                            <span className="text-base font-bold text-accent">+ {installPrice.toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-base font-bold text-accent font-manrope">+ {installPrice.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -958,7 +958,7 @@ export function SelectedBillboardsCard({
                         {hasIncludedCosts && (
                           <div className="flex justify-between items-center bg-green-500/10 rounded-lg px-3 py-2 -mx-1 border border-green-500/20">
                             <span className="text-sm font-bold text-green-600">صافي الإيجار</span>
-                            <span className="text-lg font-bold text-green-600">{netRentalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-lg font-bold text-green-600 font-manrope">{netRentalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -967,7 +967,7 @@ export function SelectedBillboardsCard({
                           (installationEnabled && !includeInstallationInPrice && installPrice > 0)) && (
                           <div className="flex justify-between items-center bg-primary/10 rounded-lg px-3 py-2 -mx-1 border border-primary/20">
                             <span className="text-sm font-bold text-primary">إجمالي اللوحة</span>
-                            <span className="text-lg font-bold text-primary">{totalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-lg font-bold text-primary font-manrope">{totalForBoard.toLocaleString('ar-LY')} {currencySymbol}</span>
                           </div>
                         )}
                         
@@ -976,13 +976,13 @@ export function SelectedBillboardsCard({
                             {/* Discount */}
                             <div className="flex justify-between items-center bg-destructive/10 rounded-lg px-3 py-2 -mx-1">
                               <span className="text-sm font-medium text-destructive">الخصم</span>
-                              <span className="text-base font-bold text-destructive">- {discountPerBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
+                              <span className="text-base font-bold text-destructive font-manrope">- {discountPerBillboard.toLocaleString('ar-LY')} {currencySymbol}</span>
                             </div>
                             {/* Net */}
                             <div className="flex justify-between items-center bg-primary/10 rounded-lg px-3 py-2 -mx-1">
                               <span className="text-sm font-medium text-primary">الصافي بعد الخصم</span>
                               <div className="text-left">
-                                <span className="text-lg font-bold text-primary">
+                                <span className="text-lg font-bold text-primary font-manrope">
                                   {priceAfterDiscount.toLocaleString('ar-LY')} {currencySymbol}
                                 </span>
                                 <span className="text-xs text-primary/60 font-normal mr-1">
