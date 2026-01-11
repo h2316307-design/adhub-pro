@@ -5,14 +5,13 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Calendar, FileText, Receipt, Monitor, Clock, Plus, Eye, Package, ChevronDown, ChevronUp, TrendingUp, Users, PieChart, BarChart3, MapPin, Image as ImageIcon, X } from 'lucide-react';
+import { Calendar, FileText, Receipt, Monitor, Clock, Plus, Eye, Package, ChevronDown, ChevronUp, TrendingUp, Users, BarChart3, MapPin, Image as ImageIcon, AlertTriangle, Layers, Building2, RefreshCw, ArrowUpRight, Wallet, Target } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { format, differenceInDays, parseISO } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { OverduePaymentsAlert } from '@/components/billing/OverduePaymentsAlert';
-import { useNavigate } from 'react-router-dom';
-import { PieChart as RechartsPie, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { useNavigate, Link } from 'react-router-dom';
 
 interface LegacyContract {
   Contract_Number: number;
@@ -25,6 +24,7 @@ interface LegacyContract {
   customer_id: string;
   id: number;
   Total: number;
+  billboards_count: number;
 }
 
 interface Payment {
@@ -67,7 +67,6 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   
   // حالات الطي
-  const [quickActionsOpen, setQuickActionsOpen] = useState(true);
   const [chartsOpen, setChartsOpen] = useState(true);
   const [expiringSoonOpen, setExpiringSoonOpen] = useState(true);
   const [recentlyEndedOpen, setRecentlyEndedOpen] = useState(true);
@@ -79,7 +78,6 @@ export default function Dashboard() {
   const loadData = async () => {
     try {
       setLoading(true);
-      console.log('🔄 بدء تحميل بيانات لوحة الإدارة...');
 
       // تحميل العقود القديمة
       const { data: legacyData, error: legacyError } = await supabase
@@ -88,7 +86,7 @@ export default function Dashboard() {
         .order('Contract Date', { ascending: false });
 
       if (legacyError) {
-        console.error('❌ خطأ في تحميل العقود:', legacyError);
+        console.error('خطأ في تحميل العقود:', legacyError);
         toast.error(`فشل في تحميل العقود`);
       } else {
         setLegacyContracts(legacyData || []);
@@ -167,9 +165,8 @@ export default function Dashboard() {
 
       setRemovalTasks(removalTasksData || []);
 
-      console.log('🎉 تم الانتهاء من تحميل جميع البيانات');
     } catch (error) {
-      console.error('💥 خطأ عام في تحميل البيانات:', error);
+      console.error('خطأ عام في تحميل البيانات:', error);
       toast.error('حدث خطأ في تحميل البيانات');
     } finally {
       setLoading(false);
@@ -215,6 +212,7 @@ export default function Dashboard() {
         ad_type: contract['Ad Type'] || 'غير محدد',
         end_date: contract['End Date'] || '',
         total_amount: Number(contract['Total']) || 0,
+        billboards_count: contract.billboards_count || 0,
         source: 'legacy'
       }));
 
@@ -227,18 +225,16 @@ export default function Dashboard() {
     return sorted.slice(0, 10);
   }, [legacyContracts]);
 
-  // العقود المنتهية مؤخراً
+  // العقود المنتهية مؤخراً - 10 عقود
   const recentlyEndedContracts = useMemo(() => {
     const today = new Date();
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(today.getDate() - 30);
 
     const legacyEnded = legacyContracts
       .filter(contract => {
         try {
           if (!contract['End Date']) return false;
           const endDate = new Date(contract['End Date']);
-          return endDate < today && endDate >= thirtyDaysAgo;
+          return endDate < today;
         } catch (error) {
           return false;
         }
@@ -250,10 +246,11 @@ export default function Dashboard() {
         ad_type: contract['Ad Type'] || 'غير محدد',
         end_date: contract['End Date'] || '',
         total_amount: Number(contract['Total']) || 0,
+        billboards_count: contract.billboards_count || 0,
         days_ago: Math.abs(differenceInDays(new Date(contract['End Date']), today))
       }));
 
-    return legacyEnded.sort((a, b) => a.days_ago - b.days_ago).slice(0, 5);
+    return legacyEnded.sort((a, b) => a.days_ago - b.days_ago).slice(0, 10);
   }, [legacyContracts]);
 
   // آخر العقود المضافة
@@ -266,6 +263,7 @@ export default function Dashboard() {
         ad_type: contract['Ad Type'] || 'غير محدد',
         total_amount: Number(contract['Total']) || 0,
         created_at: contract['Contract Date'] || '',
+        billboards_count: contract.billboards_count || 0,
         date_for_sorting: new Date(contract['Contract Date'] || '1970-01-01').getTime(),
       }));
 
@@ -365,155 +363,335 @@ export default function Dashboard() {
 
   const formatDateSafe = (dateString: string) => {
     try {
-      return format(new Date(dateString), 'dd/MM/yyyy', { locale: ar });
+      const date = new Date(dateString);
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      return `${day}/${month}/${year}`;
     } catch (error) {
       return dateString;
     }
   };
 
+  // حساب إجمالي المبيعات
+  const totalSales = useMemo(() => {
+    return legacyContracts.reduce((sum, c) => sum + (Number(c['Total']) || 0), 0);
+  }, [legacyContracts]);
+
+  // حساب إجمالي المدفوعات
+  const totalPaymentsAmount = useMemo(() => {
+    return payments.reduce((sum, p) => sum + (p.amount || 0), 0);
+  }, [payments]);
+
   if (loading) {
     return (
-      <div className="expenses-loading">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">جاري تحميل بيانات الإدارة...</p>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="relative">
+            <div className="w-16 h-16 border-4 border-primary/30 rounded-full animate-spin border-t-primary mx-auto"></div>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <BarChart3 className="h-6 w-6 text-primary" />
+            </div>
+          </div>
+          <p className="text-foreground font-medium">جاري تحميل بيانات لوحة الإدارة...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="expenses-container">
+    <div className="space-y-6" dir="rtl">
       <OverduePaymentsAlert />
       
       {/* العنوان الرئيسي */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-primary">لوحة الإدارة</h1>
-          <p className="text-muted-foreground">نظرة شاملة على آخر التحديثات والعقود المهمة</p>
+          <h1 className="text-3xl font-black text-foreground">لوحة الإدارة</h1>
+          <p className="text-muted-foreground mt-1">نظرة شاملة على آخر التحديثات والعقود المهمة</p>
         </div>
-        <Button onClick={loadData} variant="outline" disabled={loading}>
-          تحديث البيانات
+        <Button 
+          onClick={loadData} 
+          variant="outline" 
+          disabled={loading}
+          className="gap-2"
+        >
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+          تحديث
         </Button>
       </div>
 
-      {/* إحصائيات سريعة */}
-      <div className="expenses-stats-grid">
-        <Card className="expenses-stat-card">
-          <div className="expenses-stat-content">
-            <div>
-              <p className="expenses-stat-text">إجمالي العقود</p>
-              <p className="expenses-stat-value font-manrope">{legacyContracts.length}</p>
+      {/* إحصائيات سريعة - تصميم جديد */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-gradient-to-br from-blue-500/10 to-blue-500/5 border-blue-500/20 hover:border-blue-500/40 transition-all hover:shadow-lg group">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">إجمالي العقود</p>
+                <p className="text-3xl font-black text-blue-600 dark:text-blue-400 font-manrope">{legacyContracts.length}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {totalSales.toLocaleString('ar-LY')} د.ل
+                </p>
+              </div>
+              <div className="p-3 bg-blue-500/10 rounded-xl group-hover:bg-blue-500/20 transition-colors">
+                <FileText className="h-6 w-6 text-blue-500" />
+              </div>
             </div>
-            <FileText className="expenses-stat-icon stat-blue" />
-          </div>
+          </CardContent>
         </Card>
         
-        <Card className="expenses-stat-card">
-          <div className="expenses-stat-content">
-            <div>
-              <p className="expenses-stat-text">العقود المنتهية قريباً</p>
-              <p className="expenses-stat-value stat-red font-manrope">{expiringContracts.length}</p>
+        <Card className="bg-gradient-to-br from-red-500/10 to-red-500/5 border-red-500/20 hover:border-red-500/40 transition-all hover:shadow-lg group">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">عقود منتهية</p>
+                <p className="text-3xl font-black text-red-600 dark:text-red-400 font-manrope">{recentlyEndedContracts.length}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  آخر 30 يوم
+                </p>
+              </div>
+              <div className="p-3 bg-red-500/10 rounded-xl group-hover:bg-red-500/20 transition-colors">
+                <AlertTriangle className="h-6 w-6 text-red-500" />
+              </div>
             </div>
-            <Clock className="expenses-stat-icon stat-red" />
-          </div>
+          </CardContent>
         </Card>
         
-        <Card className="expenses-stat-card">
-          <div className="expenses-stat-content">
-            <div>
-              <p className="expenses-stat-text">إجمالي المدفوعات</p>
-              <p className="expenses-stat-value font-manrope">{payments.length}</p>
+        <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20 hover:border-green-500/40 transition-all hover:shadow-lg group">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">إجمالي المدفوعات</p>
+                <p className="text-3xl font-black text-green-600 dark:text-green-400 font-manrope">{payments.length}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {totalPaymentsAmount.toLocaleString('ar-LY')} د.ل
+                </p>
+              </div>
+              <div className="p-3 bg-green-500/10 rounded-xl group-hover:bg-green-500/20 transition-colors">
+                <Wallet className="h-6 w-6 text-green-500" />
+              </div>
             </div>
-            <Receipt className="expenses-stat-icon stat-green" />
-          </div>
+          </CardContent>
         </Card>
         
-        <Card className="expenses-stat-card">
-          <div className="expenses-stat-content">
-            <div>
-              <p className="expenses-stat-text">إجمالي اللوحات</p>
-              <p className="expenses-stat-value font-manrope">{allBillboards.length}</p>
+        <Card className="bg-gradient-to-br from-purple-500/10 to-purple-500/5 border-purple-500/20 hover:border-purple-500/40 transition-all hover:shadow-lg group">
+          <CardContent className="p-6">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">إجمالي اللوحات</p>
+                <p className="text-3xl font-black text-purple-600 dark:text-purple-400 font-manrope">{allBillboards.length}</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  {billboardStatusData[0]?.value || 0} متاح
+                </p>
+              </div>
+              <div className="p-3 bg-purple-500/10 rounded-xl group-hover:bg-purple-500/20 transition-colors">
+                <Layers className="h-6 w-6 text-purple-500" />
+              </div>
             </div>
-            <Monitor className="expenses-stat-icon stat-purple" />
-          </div>
+          </CardContent>
         </Card>
       </div>
 
-      {/* الإجراءات السريعة - قابلة للطي */}
-      <Collapsible open={quickActionsOpen} onOpenChange={setQuickActionsOpen}>
-        <Card className="expenses-preview-card mb-6">
+      {/* الإجراءات السريعة */}
+      <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-3 text-lg">
+            <div className="p-2 bg-primary/10 rounded-lg">
+              <Target className="h-5 w-5 text-primary" />
+            </div>
+            الإجراءات السريعة
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Button onClick={() => navigate('/admin/contracts/new')} className="h-auto py-4 flex-col gap-2">
+              <Plus className="h-5 w-5" />
+              <span>إضافة عقد</span>
+            </Button>
+            <Button onClick={() => navigate('/admin/customers')} variant="outline" className="h-auto py-4 flex-col gap-2">
+              <Receipt className="h-5 w-5" />
+              <span>إضافة دفعة</span>
+            </Button>
+            <Button onClick={() => navigate('/admin/billboards')} variant="outline" className="h-auto py-4 flex-col gap-2">
+              <Monitor className="h-5 w-5" />
+              <span>إضافة لوحة</span>
+            </Button>
+            <Button onClick={() => navigate('/admin/reports')} variant="outline" className="h-auto py-4 flex-col gap-2">
+              <Eye className="h-5 w-5" />
+              <span>التقارير</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* آخر 10 عقود منتهية - قسم بارز */}
+      <Card className="border-red-500/30 bg-gradient-to-br from-red-500/5 to-transparent">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-3 text-lg">
+              <div className="p-2 bg-red-500/10 rounded-lg">
+                <AlertTriangle className="h-5 w-5 text-red-500" />
+              </div>
+              آخر 10 عقود منتهية
+            </CardTitle>
+            <Link to="/admin/contracts">
+              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
+                عرض الكل
+                <ArrowUpRight className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {recentlyEndedContracts.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-3 opacity-30" />
+              <p>لا توجد عقود منتهية</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+              {recentlyEndedContracts.map((contract) => (
+                <div 
+                  key={contract.id}
+                  className="group p-4 bg-card rounded-xl border border-border hover:border-red-500/30 hover:shadow-md transition-all cursor-pointer"
+                  onClick={() => navigate(`/admin/contracts/${contract.contract_number}`)}
+                >
+                  <div className="flex items-start justify-between mb-3">
+                    <Badge variant="outline" className="bg-red-500/10 text-red-500 border-red-500/30 font-manrope text-xs">
+                      #{contract.contract_number}
+                    </Badge>
+                    <Badge variant="secondary" className="text-xs">
+                      <Clock className="h-3 w-3 ml-1" />
+                      {contract.days_ago} يوم
+                    </Badge>
+                  </div>
+                  <h4 className="font-semibold text-sm text-foreground mb-1 truncate" title={contract.customer_name}>
+                    {contract.customer_name}
+                  </h4>
+                  <p className="text-xs text-muted-foreground mb-2 truncate">{contract.ad_type}</p>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      {formatDateSafe(contract.end_date)}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Layers className="h-3 w-3" />
+                      {contract.billboards_count || 0}
+                    </span>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <span className="text-sm font-bold text-primary font-manrope">
+                      {(contract.total_amount || 0).toLocaleString('ar-LY')} د.ل
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* العقود المنتهية قريباً */}
+      <Card className="border-orange-500/30 bg-gradient-to-br from-orange-500/5 to-transparent">
+        <CardHeader className="pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center gap-3 text-lg">
+              <div className="p-2 bg-orange-500/10 rounded-lg">
+                <Clock className="h-5 w-5 text-orange-500" />
+              </div>
+              عقود تنتهي خلال 30 يوم
+              <Badge variant="destructive" className="mr-2">{expiringContracts.length}</Badge>
+            </CardTitle>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {expiringContracts.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Clock className="h-12 w-12 mx-auto mb-2 opacity-30" />
+              <p>لا توجد عقود تنتهي قريباً</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+              {expiringContracts.map((contract) => {
+                const daysLeft = getDaysLeft(contract.end_date);
+                return (
+                  <div 
+                    key={contract.id}
+                    className="group p-4 bg-card rounded-xl border border-border hover:border-orange-500/30 hover:shadow-md transition-all cursor-pointer"
+                    onClick={() => navigate(`/admin/contracts/${contract.contract_number}`)}
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/30 font-manrope text-xs">
+                        #{contract.contract_number}
+                      </Badge>
+                      <Badge className={`text-xs ${getExpiryBadgeColor(daysLeft)}`}>
+                        {daysLeft === 0 ? 'اليوم' : `${daysLeft} يوم`}
+                      </Badge>
+                    </div>
+                    <h4 className="font-semibold text-sm text-foreground mb-1 truncate" title={contract.customer_name}>
+                      {contract.customer_name}
+                    </h4>
+                    <p className="text-xs text-muted-foreground mb-2 truncate">{contract.ad_type}</p>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="h-3 w-3" />
+                        {formatDateSafe(contract.end_date)}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Layers className="h-3 w-3" />
+                        {contract.billboards_count || 0}
+                      </span>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-border">
+                      <span className="text-sm font-bold text-primary font-manrope">
+                        {(contract.total_amount || 0).toLocaleString('ar-LY')} د.ل
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* إحصائيات اللوحات */}
+      <Collapsible open={chartsOpen} onOpenChange={setChartsOpen}>
+        <Card className="border-border">
           <CollapsibleTrigger asChild>
             <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
               <div className="flex items-center justify-between">
-                <CardTitle className="expenses-preview-title">الإجراءات السريعة</CardTitle>
-                {quickActionsOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
-              </div>
-            </CardHeader>
-          </CollapsibleTrigger>
-          <CollapsibleContent>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                <Button onClick={() => navigate('/admin/contracts/new')} className="expenses-action-btn">
-                  <Plus className="h-4 w-4" />
-                  إضافة عقد جديد
-                </Button>
-                <Button onClick={() => navigate('/admin/customers')} variant="outline" className="expenses-action-btn">
-                  <Receipt className="h-4 w-4" />
-                  إضافة دفعة جديدة
-                </Button>
-                <Button onClick={() => navigate('/admin/billboards')} variant="outline" className="expenses-action-btn">
-                  <Monitor className="h-4 w-4" />
-                  إضافة لوحة جديدة
-                </Button>
-                <Button onClick={() => navigate('/admin/reports')} variant="outline" className="expenses-action-btn">
-                  <Eye className="h-4 w-4" />
-                  عرض التقارير
-                </Button>
-              </div>
-            </CardContent>
-          </CollapsibleContent>
-        </Card>
-      </Collapsible>
-
-      {/* الرسوم البيانية - قابلة للطي */}
-      <Collapsible open={chartsOpen} onOpenChange={setChartsOpen}>
-        <Card className="mb-6 border border-border/50">
-          <CollapsibleTrigger asChild>
-            <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors border-b border-border/30">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
+                <CardTitle className="flex items-center gap-3 text-lg">
                   <div className="p-2 bg-primary/10 rounded-lg">
                     <BarChart3 className="h-5 w-5 text-primary" />
                   </div>
-                  <CardTitle className="text-lg">إحصائيات اللوحات</CardTitle>
-                </div>
+                  إحصائيات اللوحات
+                </CardTitle>
                 {chartsOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
               </div>
             </CardHeader>
           </CollapsibleTrigger>
           <CollapsibleContent>
-            <CardContent className="pt-6">
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <CardContent>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {/* حالة اللوحات */}
-                <div className="bg-gradient-to-br from-green-500/5 to-red-500/5 rounded-xl p-4 border border-border/30">
-                  <h4 className="font-bold text-center mb-4 text-foreground">حالة اللوحات</h4>
-                  <div className="flex items-center justify-center gap-6">
+                <div className="p-6 bg-muted/30 rounded-xl">
+                  <h4 className="font-bold text-center mb-6">حالة اللوحات</h4>
+                  <div className="flex items-center justify-center gap-8">
                     <div className="text-center">
                       <div className="w-20 h-20 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-green-500/30">
                         {billboardStatusData[0]?.value || 0}
                       </div>
-                      <p className="mt-2 text-sm font-medium text-green-600 dark:text-green-400">متاح</p>
+                      <p className="mt-3 text-sm font-medium text-green-600 dark:text-green-400">متاح</p>
                     </div>
                     <div className="text-3xl text-muted-foreground">/</div>
                     <div className="text-center">
                       <div className="w-20 h-20 rounded-full bg-red-500 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-red-500/30">
                         {billboardStatusData[1]?.value || 0}
                       </div>
-                      <p className="mt-2 text-sm font-medium text-red-600 dark:text-red-400">غير متاح</p>
+                      <p className="mt-3 text-sm font-medium text-red-600 dark:text-red-400">غير متاح</p>
                     </div>
                   </div>
-                  <div className="mt-4 bg-muted/50 rounded-full h-3 overflow-hidden">
+                  <div className="mt-6 bg-muted/50 rounded-full h-3 overflow-hidden">
                     <div 
                       className="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-500"
                       style={{ width: `${allBillboards.length > 0 ? ((billboardStatusData[0]?.value || 0) / allBillboards.length) * 100 : 0}%` }}
@@ -525,9 +703,9 @@ export default function Dashboard() {
                 </div>
 
                 {/* توزيع المقاسات */}
-                <div className="bg-gradient-to-br from-blue-500/5 to-purple-500/5 rounded-xl p-4 border border-border/30">
-                  <h4 className="font-bold text-center mb-4 text-foreground">توزيع المقاسات</h4>
-                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                <div className="p-6 bg-muted/30 rounded-xl">
+                  <h4 className="font-bold text-center mb-4">توزيع المقاسات</h4>
+                  <div className="space-y-2 max-h-52 overflow-y-auto">
                     {sizeDistributionData.map((item, index) => (
                       <div key={item.name} className="flex items-center gap-2">
                         <div className="w-16 text-xs text-right text-muted-foreground truncate">{item.name}</div>
@@ -547,9 +725,9 @@ export default function Dashboard() {
                 </div>
 
                 {/* توزيع البلديات */}
-                <div className="bg-gradient-to-br from-amber-500/5 to-orange-500/5 rounded-xl p-4 border border-border/30">
-                  <h4 className="font-bold text-center mb-4 text-foreground">توزيع البلديات</h4>
-                  <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto">
+                <div className="p-6 bg-muted/30 rounded-xl">
+                  <h4 className="font-bold text-center mb-4">توزيع البلديات</h4>
+                  <div className="grid grid-cols-2 gap-2 max-h-52 overflow-y-auto">
                     {municipalityData.map((item, index) => (
                       <div 
                         key={item.name} 
@@ -572,27 +750,27 @@ export default function Dashboard() {
       </Collapsible>
 
       {/* أفضل العملاء */}
-      <Card className="mb-6 border-l-4 border-l-yellow-500">
-        <CardHeader className="pb-3">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-yellow-50 dark:bg-yellow-950 rounded-lg">
-              <TrendingUp className="h-5 w-5 text-yellow-600 dark:text-yellow-400" />
+      <Card className="border-yellow-500/20">
+        <CardHeader className="pb-4">
+          <CardTitle className="flex items-center gap-3 text-lg">
+            <div className="p-2 bg-yellow-500/10 rounded-lg">
+              <TrendingUp className="h-5 w-5 text-yellow-600" />
             </div>
-            <CardTitle className="text-lg">أفضل 5 عملاء مبيعات</CardTitle>
-          </div>
+            أفضل 5 عملاء مبيعات
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
             {topCustomers.map((customer, index) => (
-              <div key={customer.name} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
-                <div className={`w-8 h-8 flex items-center justify-center rounded-full font-bold text-white ${
+              <div key={customer.name} className="flex items-center gap-3 p-4 bg-muted/30 rounded-xl hover:bg-muted/50 transition-colors">
+                <div className={`w-10 h-10 flex items-center justify-center rounded-full font-bold text-white shrink-0 ${
                   index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : index === 2 ? 'bg-amber-700' : 'bg-blue-500'
                 }`}>
                   {index + 1}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-sm truncate">{customer.name}</p>
-                  <p className="text-xs text-muted-foreground">{customer.total.toLocaleString()} د.ل</p>
+                  <p className="text-xs text-muted-foreground font-manrope">{customer.total.toLocaleString('ar-LY')} د.ل</p>
                 </div>
               </div>
             ))}
@@ -604,11 +782,11 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         
         {/* المهمات المتأخرة */}
-        <Card className="expenses-preview-card">
-          <CardHeader>
+        <Card>
+          <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <CardTitle className="expenses-preview-title">
-                <Clock className="inline-block ml-2 h-5 w-5" />
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Clock className="h-5 w-5 text-destructive" />
                 المهمات المتأخرة
               </CardTitle>
               <Badge variant="destructive">{overdueTasks.length}</Badge>
@@ -616,23 +794,20 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {overdueTasks.length === 0 ? (
-              <div className="expenses-empty-state">
-                <p>لا توجد مهمات متأخرة</p>
+              <div className="text-center py-8 text-muted-foreground">
+                <Clock className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد مهمات متأخرة</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {overdueTasks.map((task) => {
                   const daysOverdue = Math.abs(getDaysLeft(task.due_date));
                   return (
-                    <div key={task.id} className="expenses-preview-item">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <p className="font-medium text-foreground">{task.title}</p>
-                          <p className="text-xs text-muted-foreground">
-                            تأخر بـ {daysOverdue} {daysOverdue === 1 ? 'يوم' : 'أيام'}
-                          </p>
-                        </div>
-                      </div>
+                    <div key={task.id} className="p-3 bg-muted/30 rounded-lg">
+                      <p className="font-medium text-sm">{task.title}</p>
+                      <p className="text-xs text-destructive">
+                        تأخر بـ {daysOverdue} {daysOverdue === 1 ? 'يوم' : 'أيام'}
+                      </p>
                     </div>
                   );
                 })}
@@ -641,154 +816,43 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* العقود المنتهية قريباً - قابلة للطي */}
-        <Collapsible open={expiringSoonOpen} onOpenChange={setExpiringSoonOpen}>
-          <Card className="expenses-preview-card">
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="expenses-preview-title">
-                    <Clock className="inline-block ml-2 h-5 w-5" />
-                    العقود المنتهية قريباً
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="destructive">{expiringContracts.length}</Badge>
-                    {expiringSoonOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </div>
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent>
-                {expiringContracts.length === 0 ? (
-                  <div className="expenses-empty-state">
-                    <p>لا توجد عقود تنتهي قريباً</p>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {expiringContracts.map((contract) => {
-                      const daysLeft = getDaysLeft(contract.end_date);
-                      return (
-                        <div key={contract.id} className="expenses-preview-item">
-                          <div className="flex items-center justify-between">
-                            <div className="flex-1">
-                              <p className="font-medium text-foreground">{contract.contract_number}</p>
-                              <p className="text-sm text-muted-foreground">{contract.customer_name}</p>
-                              <p className="text-xs text-blue-400 font-medium">{contract.ad_type}</p>
-                              <p className="text-xs text-muted-foreground">
-                                ينتهي في: {formatDateSafe(contract.end_date)}
-                              </p>
-                            </div>
-                            <div className="text-left">
-                              <Badge className={getExpiryBadgeColor(daysLeft)}>
-                                {daysLeft === 0 ? 'ينتهي اليوم' : `${daysLeft} يوم`}
-                              </Badge>
-                              <p className="text-xs text-muted-foreground mt-1">
-                                {contract.total_amount.toLocaleString()} د.ل
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-
-        {/* العقود المنتهية مؤخراً */}
-        <Collapsible open={recentlyEndedOpen} onOpenChange={setRecentlyEndedOpen}>
-          <Card className="border-l-4 border-l-gray-500">
-            <CollapsibleTrigger asChild>
-              <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors pb-3">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="p-2 bg-gray-50 dark:bg-gray-950 rounded-lg">
-                      <Clock className="h-5 w-5 text-gray-600 dark:text-gray-400" />
-                    </div>
-                    <CardTitle className="text-lg">آخر عقود انتهت</CardTitle>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="secondary">{recentlyEndedContracts.length}</Badge>
-                    {recentlyEndedOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </div>
-                </div>
-              </CardHeader>
-            </CollapsibleTrigger>
-            <CollapsibleContent>
-              <CardContent>
-                {recentlyEndedContracts.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    <Clock className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                    <p className="text-sm">لا توجد عقود منتهية مؤخراً</p>
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {recentlyEndedContracts.map((contract) => (
-                      <div key={contract.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                        <div className="flex-1">
-                          <p className="font-semibold text-foreground">عقد #{contract.contract_number}</p>
-                          <p className="text-sm text-muted-foreground">{contract.customer_name}</p>
-                          <p className="text-xs text-blue-400">{contract.ad_type}</p>
-                        </div>
-                        <div className="text-left shrink-0">
-                          <Badge variant="secondary" className="text-xs">
-                            منذ {contract.days_ago} يوم
-                          </Badge>
-                          <p className="text-xs text-muted-foreground mt-1">
-                            {formatDateSafe(contract.end_date)}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </CollapsibleContent>
-          </Card>
-        </Collapsible>
-
         {/* آخر العقود المضافة */}
-        <Card className="border-l-4 border-l-green-500">
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-green-50 dark:bg-green-950 rounded-lg">
-                  <FileText className="h-5 w-5 text-green-600 dark:text-green-400" />
-                </div>
-                <CardTitle className="text-lg">آخر 5 عقود مضافة</CardTitle>
-              </div>
-              <Button size="sm" variant="outline" className="h-8" onClick={() => navigate('/admin/contracts/new')}>
-                <Plus className="h-3 w-3 ml-1" />
-                إضافة عقد
+              <CardTitle className="flex items-center gap-2 text-base">
+                <FileText className="h-5 w-5 text-green-500" />
+                آخر 5 عقود مضافة
+              </CardTitle>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => navigate('/admin/contracts/new')}>
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             {recentContracts.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <FileText className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">لا توجد عقود مضافة</p>
+                <FileText className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد عقود</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {recentContracts.map((contract) => (
-                  <div key={contract.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex-1">
-                      <p className="font-semibold text-foreground">عقد #{contract.contract_number}</p>
-                      <p className="text-sm text-muted-foreground">{contract.customer_name}</p>
-                      <p className="text-xs text-blue-400">{contract.ad_type}</p>
-                      <p className="text-xs text-muted-foreground mt-1">
+                  <div key={contract.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors cursor-pointer" onClick={() => navigate(`/admin/contracts/${contract.contract_number}`)}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">#{contract.contract_number}</p>
+                        <Badge variant="outline" className="text-xs">{contract.ad_type}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{contract.customer_name}</p>
+                      <p className="text-xs text-muted-foreground/70 flex items-center gap-1 mt-1">
+                        <Calendar className="w-3 h-3" />
                         {formatDateSafe(contract.created_at)}
                       </p>
                     </div>
-                    <div className="text-left shrink-0">
-                      <p className="text-base font-bold text-green-600 dark:text-green-400">
-                        {contract.total_amount?.toLocaleString() || 0} د.ل
-                      </p>
-                    </div>
+                    <p className="text-sm font-bold text-green-600 font-manrope shrink-0">
+                      {(contract.total_amount || 0).toLocaleString('ar-LY')}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -796,49 +860,42 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* آخر المدفوعات المضافة - مع رقم العقد */}
-        <Card className="border-l-4 border-l-purple-500">
+        {/* آخر المدفوعات */}
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-purple-50 dark:bg-purple-950 rounded-lg">
-                  <Receipt className="h-5 w-5 text-purple-600 dark:text-purple-400" />
-                </div>
-                <CardTitle className="text-lg">آخر 5 مدفوعات مضافة</CardTitle>
-              </div>
-              <Button size="sm" variant="outline" className="h-8" onClick={() => navigate('/admin/customers')}>
-                <Plus className="h-3 w-3 ml-1" />
-                إضافة دفعة
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Receipt className="h-5 w-5 text-purple-500" />
+                آخر 5 مدفوعات
+              </CardTitle>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => navigate('/admin/customers')}>
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             {recentPayments.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <Receipt className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">لا توجد مدفوعات مضافة</p>
+                <Receipt className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد مدفوعات</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {recentPayments.map((payment, index) => (
-                  <div key={`payment-${payment.id}-${index}`} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex-1">
-                      <p className="font-semibold text-foreground">{payment.customer_name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {payment.entry_type === 'receipt' ? 'إيصال' : 'دفعة حساب'}
-                        {payment.contract_number && (
-                          <span className="text-blue-400 mr-2">• عقد #{payment.contract_number}</span>
-                        )}
+                  <div key={`payment-${payment.id}-${index}`} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate">{payment.customer_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {payment.contract_number && `عقد #${payment.contract_number}`}
                       </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDateSafe(payment.created_at)}
+                      <p className="text-xs text-muted-foreground/70 flex items-center gap-1 mt-1">
+                        <Calendar className="w-3 h-3" />
+                        {formatDateSafe(payment.paid_at || payment.created_at)}
                       </p>
                     </div>
-                    <div className="text-left shrink-0">
-                      <p className="text-base font-bold text-purple-600 dark:text-purple-400">
-                        {payment.amount?.toLocaleString() || 0} د.ل
-                      </p>
-                    </div>
+                    <p className="text-sm font-bold text-purple-600 font-manrope shrink-0">
+                      {(payment.amount || 0).toLocaleString('ar-LY')}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -846,35 +903,31 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* آخر اللوحات المضافة - مع الصورة وأقرب نقطة دالة */}
-        <Card className="border-l-4 border-l-orange-500">
+        {/* آخر اللوحات */}
+        <Card className="md:col-span-2 lg:col-span-1">
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-orange-50 dark:bg-orange-950 rounded-lg">
-                  <Monitor className="h-5 w-5 text-orange-600 dark:text-orange-400" />
-                </div>
-                <CardTitle className="text-lg">آخر 10 لوحات مضافة</CardTitle>
-              </div>
-              <Button size="sm" variant="outline" className="h-8" onClick={() => navigate('/admin/billboards')}>
-                <Plus className="h-3 w-3 ml-1" />
-                إضافة لوحة
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Monitor className="h-5 w-5 text-orange-500" />
+                آخر 10 لوحات
+              </CardTitle>
+              <Button size="sm" variant="ghost" className="h-8" onClick={() => navigate('/admin/billboards')}>
+                <Plus className="h-4 w-4" />
               </Button>
             </div>
           </CardHeader>
           <CardContent>
             {recentBillboards.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <Monitor className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">لا توجد لوحات مضافة</p>
+                <Monitor className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد لوحات</p>
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 max-h-80 overflow-y-auto">
                 {recentBillboards.map((billboard, index) => (
                   <div key={`billboard-${billboard.ID}-${index}`} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                    {/* صورة اللوحة - قابلة للضغط */}
                     <div 
-                      className={`w-16 h-12 rounded-lg overflow-hidden bg-muted shrink-0 ${billboard.Image_URL ? 'cursor-pointer hover:ring-2 hover:ring-primary transition-all' : ''}`}
+                      className={`w-12 h-10 rounded-lg overflow-hidden bg-muted shrink-0 ${billboard.Image_URL ? 'cursor-pointer hover:ring-2 hover:ring-primary transition-all' : ''}`}
                       onClick={() => billboard.Image_URL && setSelectedImage({ url: billboard.Image_URL, name: billboard.Billboard_Name })}
                     >
                       {billboard.Image_URL ? (
@@ -885,28 +938,17 @@ export default function Dashboard() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-muted-foreground" />
+                          <ImageIcon className="w-5 h-5 text-muted-foreground" />
                         </div>
                       )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground truncate">{billboard.Billboard_Name}</p>
-                      <p className="text-sm text-muted-foreground">{billboard.Municipality}</p>
-                      {billboard.Nearest_Landmark && (
-                        <p className="text-xs text-blue-400 flex items-center gap-1">
-                          <MapPin className="w-3 h-3" />
-                          {billboard.Nearest_Landmark}
-                        </p>
-                      )}
+                      <p className="font-medium text-sm truncate">{billboard.Billboard_Name}</p>
+                      <p className="text-xs text-muted-foreground truncate">{billboard.Municipality}</p>
                     </div>
-                    <div className="text-left shrink-0 space-y-1">
-                      <Badge variant="outline" className="text-xs">
-                        {billboard.Size}
-                      </Badge>
-                      <Badge variant={billboard.Status === 'متاح' ? 'default' : 'secondary'} className="text-xs block">
-                        {billboard.Status}
-                      </Badge>
-                    </div>
+                    <Badge variant={billboard.Status === 'متاح' ? 'default' : 'secondary'} className="text-xs shrink-0">
+                      {billboard.Status}
+                    </Badge>
                   </div>
                 ))}
               </div>
@@ -914,47 +956,39 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* آخر مهام التركيب - مع اسم الفريق ونوع الإعلان */}
-        <Card className="border-l-4 border-l-blue-500">
+        {/* مهام التركيب */}
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-blue-50 dark:bg-blue-950 rounded-lg">
-                  <Package className="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                </div>
-                <CardTitle className="text-lg">آخر مهام التركيب</CardTitle>
-              </div>
-              <Badge variant="default" className="bg-blue-600">{installationTasks.length}</Badge>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Package className="h-5 w-5 text-blue-500" />
+                مهام التركيب
+              </CardTitle>
+              <Badge className="bg-blue-600">{installationTasks.length}</Badge>
             </div>
           </CardHeader>
           <CardContent>
             {installationTasks.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <Package className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">لا توجد مهام تركيب</p>
+                <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد مهام</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {installationTasks.map((task) => (
-                  <div key={task.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex-1">
-                      <p className="font-semibold text-foreground">عقد #{task.contract_id}</p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <div key={task.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">عقد #{task.contract_id}</p>
+                        <Badge variant="outline" className="text-xs">{getAdTypeFromContract(task.contract_id)}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{task.customer_name || 'غير محدد'}</p>
+                      <p className="text-xs text-muted-foreground/70 flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         {getTeamName(task.team_id)}
                       </p>
-                      <p className="text-xs text-blue-400">
-                        {getAdTypeFromContract(task.contract_id)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDateSafe(task.created_at)}
-                      </p>
                     </div>
-                    <Badge variant={
-                      task.status === 'completed' ? 'default' : 
-                      task.status === 'in_progress' ? 'secondary' : 
-                      'outline'
-                    } className="shrink-0">
+                    <Badge variant={task.status === 'completed' ? 'default' : task.status === 'in_progress' ? 'secondary' : 'outline'} className="text-xs shrink-0">
                       {task.status === 'pending' ? 'معلق' : task.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}
                     </Badge>
                   </div>
@@ -964,47 +998,39 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* آخر مهام الإزالة - مع اسم الفريق ونوع الإعلان */}
-        <Card className="border-l-4 border-l-red-500">
+        {/* مهام الإزالة */}
+        <Card>
           <CardHeader className="pb-3">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="p-2 bg-red-50 dark:bg-red-950 rounded-lg">
-                  <Package className="h-5 w-5 text-red-600 dark:text-red-400" />
-                </div>
-                <CardTitle className="text-lg">آخر مهام الإزالة</CardTitle>
-              </div>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <Package className="h-5 w-5 text-red-500" />
+                مهام الإزالة
+              </CardTitle>
               <Badge variant="destructive">{removalTasks.length}</Badge>
             </div>
           </CardHeader>
           <CardContent>
             {removalTasks.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                <Package className="h-12 w-12 mx-auto mb-2 opacity-30" />
-                <p className="text-sm">لا توجد مهام إزالة</p>
+                <Package className="h-10 w-10 mx-auto mb-2 opacity-30" />
+                <p className="text-sm">لا توجد مهام</p>
               </div>
             ) : (
               <div className="space-y-2">
                 {removalTasks.map((task) => (
-                  <div key={task.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-                    <div className="flex-1">
-                      <p className="font-semibold text-foreground">عقد #{task.contract_id}</p>
-                      <p className="text-sm text-muted-foreground flex items-center gap-1">
+                  <div key={task.id} className="flex items-center justify-between p-3 bg-muted/30 rounded-lg">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm">عقد #{task.contract_id}</p>
+                        <Badge variant="outline" className="text-xs">{getAdTypeFromContract(task.contract_id)}</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">{task.customer_name || 'غير محدد'}</p>
+                      <p className="text-xs text-muted-foreground/70 flex items-center gap-1">
                         <Users className="w-3 h-3" />
                         {getTeamName(task.team_id)}
                       </p>
-                      <p className="text-xs text-blue-400">
-                        {getAdTypeFromContract(task.contract_id)}
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        {formatDateSafe(task.created_at)}
-                      </p>
                     </div>
-                    <Badge variant={
-                      task.status === 'completed' ? 'default' : 
-                      task.status === 'in_progress' ? 'secondary' : 
-                      'outline'
-                    } className="shrink-0">
+                    <Badge variant={task.status === 'completed' ? 'default' : task.status === 'in_progress' ? 'secondary' : 'outline'} className="text-xs shrink-0">
                       {task.status === 'pending' ? 'معلق' : task.status === 'in_progress' ? 'قيد التنفيذ' : 'مكتمل'}
                     </Badge>
                   </div>
@@ -1019,9 +1045,7 @@ export default function Dashboard() {
       <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
         <DialogContent className="max-w-4xl p-0 overflow-hidden">
           <DialogHeader className="p-4 pb-2">
-            <DialogTitle className="flex items-center justify-between">
-              <span>{selectedImage?.name}</span>
-            </DialogTitle>
+            <DialogTitle>{selectedImage?.name}</DialogTitle>
           </DialogHeader>
           <div className="relative">
             {selectedImage && (

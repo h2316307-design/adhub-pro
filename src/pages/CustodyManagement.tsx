@@ -36,6 +36,10 @@ interface CustodyAccount {
   source_type: string | null;
   source_payment_id: string | null;
   employee?: Employee;
+  // معلومات الزبون والعقد من الدفعة المرتبطة
+  source_customer_name?: string | null;
+  source_contract_number?: number | null;
+  source_payment_date?: string | null;
 }
 
 interface CustodyTransaction {
@@ -155,7 +159,46 @@ export default function CustodyManagement() {
         `)
         .order('created_at', { ascending: false });
       
-      if (accountsData) setAccounts(accountsData as any);
+      if (accountsData) {
+        // جلب معلومات الزبون والعقد من الدفعات المرتبطة
+        const distributedPaymentIds = accountsData
+          .filter(a => a.source_type === 'distributed_payment' && a.source_payment_id)
+          .map(a => a.source_payment_id);
+        
+        let paymentInfoMap: Record<string, { customer_name: string | null; contract_number: number | null; paid_at: string | null }> = {};
+        
+        if (distributedPaymentIds.length > 0) {
+          const { data: paymentsData } = await supabase
+            .from('customer_payments')
+            .select('distributed_payment_id, customer_name, contract_number, paid_at')
+            .in('distributed_payment_id', distributedPaymentIds);
+          
+          if (paymentsData) {
+            paymentsData.forEach(p => {
+              if (p.distributed_payment_id && !paymentInfoMap[p.distributed_payment_id]) {
+                paymentInfoMap[p.distributed_payment_id] = {
+                  customer_name: p.customer_name,
+                  contract_number: p.contract_number,
+                  paid_at: p.paid_at
+                };
+              }
+            });
+          }
+        }
+        
+        // دمج المعلومات مع العهد
+        const enrichedAccounts = accountsData.map(account => {
+          const paymentInfo = account.source_payment_id ? paymentInfoMap[account.source_payment_id] : null;
+          return {
+            ...account,
+            source_customer_name: paymentInfo?.customer_name || null,
+            source_contract_number: paymentInfo?.contract_number || null,
+            source_payment_date: paymentInfo?.paid_at || null
+          };
+        });
+        
+        setAccounts(enrichedAccounts as any);
+      }
       
       // Load recent transactions
       const { data: transactionsData } = await supabase
@@ -805,10 +848,22 @@ export default function CustodyManagement() {
                                       </TableCell>
                                       <TableCell>
                                         {account.source_type === 'distributed_payment' ? (
-                                          <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
-                                            <CreditCard className="h-3 w-3 ml-1" />
-                                            دفعة موزعة
-                                          </Badge>
+                                          <div className="space-y-1">
+                                            <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
+                                              <CreditCard className="h-3 w-3 ml-1" />
+                                              دفعة موزعة
+                                            </Badge>
+                                            {(account.source_customer_name || account.source_contract_number) && (
+                                              <div className="text-xs text-muted-foreground">
+                                                {account.source_customer_name && (
+                                                  <div>الزبون: <span className="font-medium text-foreground">{account.source_customer_name}</span></div>
+                                                )}
+                                                {account.source_contract_number && (
+                                                  <div>العقد: <span className="font-medium text-foreground">#{account.source_contract_number}</span></div>
+                                                )}
+                                              </div>
+                                            )}
+                                          </div>
                                         ) : (
                                           <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
                                             يدوي
@@ -830,11 +885,16 @@ export default function CustodyManagement() {
                                         {account.current_balance.toLocaleString('ar-LY')} د.ل
                                       </TableCell>
                                     <TableCell>
-                                      {new Date(account.assigned_date).toLocaleDateString('ar-LY', {
-                                        year: 'numeric',
-                                        month: '2-digit',
-                                        day: '2-digit'
-                                      })}
+                                      {(() => {
+                                        const dateStr = account.source_type === 'distributed_payment' && account.source_payment_date 
+                                          ? account.source_payment_date 
+                                          : account.assigned_date;
+                                        const date = new Date(dateStr);
+                                        const day = date.getDate().toString().padStart(2, '0');
+                                        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                                        const year = date.getFullYear();
+                                        return `${day}/${month}/${year}`;
+                                      })()}
                                     </TableCell>
                                     <TableCell>
                                       <Badge variant={account.status === 'active' ? 'default' : 'secondary'}>
@@ -949,6 +1009,7 @@ export default function CustodyManagement() {
                     <TableHead className="text-right">رقم العهدة</TableHead>
                     <TableHead className="text-right">الموظف</TableHead>
                     <TableHead className="text-right">المصدر</TableHead>
+                    <TableHead className="text-right">الزبون / العقد</TableHead>
                     <TableHead className="text-right">المبلغ الأولي</TableHead>
                     <TableHead className="text-right">الرصيد الحالي</TableHead>
                     <TableHead className="text-right">تاريخ الاستلام</TableHead>
@@ -959,7 +1020,7 @@ export default function CustodyManagement() {
                 <TableBody>
                   {accounts.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                      <TableCell colSpan={9} className="text-center text-muted-foreground py-8">
                         لا توجد عهد مالية
                       </TableCell>
                     </TableRow>
@@ -983,12 +1044,33 @@ export default function CustodyManagement() {
                             </Badge>
                           )}
                         </TableCell>
+                        <TableCell>
+                          {account.source_type === 'distributed_payment' ? (
+                            <div className="text-sm">
+                              <div className="font-medium">{account.source_customer_name || '—'}</div>
+                              {account.source_contract_number && (
+                                <div className="text-xs text-muted-foreground">عقد رقم {account.source_contract_number}</div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
                         <TableCell>{account.initial_amount.toLocaleString('ar-LY')} د.ل</TableCell>
                         <TableCell className="font-bold">
                           {account.current_balance.toLocaleString('ar-LY')} د.ل
                         </TableCell>
                         <TableCell>
-                          {new Date(account.assigned_date).toLocaleDateString('ar-LY')}
+                          {(() => {
+                            const dateStr = account.source_type === 'distributed_payment' && account.source_payment_date 
+                              ? account.source_payment_date 
+                              : account.assigned_date;
+                            const date = new Date(dateStr);
+                            const day = date.getDate().toString().padStart(2, '0');
+                            const month = (date.getMonth() + 1).toString().padStart(2, '0');
+                            const year = date.getFullYear();
+                            return `${day}/${month}/${year}`;
+                          })()}
                         </TableCell>
                         <TableCell>
                           <Badge variant={account.status === 'active' ? 'default' : 'secondary'}>

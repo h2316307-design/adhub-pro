@@ -2085,6 +2085,7 @@ export default function CustomerBilling() {
                   <th>{customerType.supplierType === 'printer' ? 'اسم الزبون' : 'أرقام العقود'}</th>
                   <th>الإجمالي</th>
                   <th>الحالة</th>
+                  <th>الملاحظات</th>
                   <th>الإجراءات</th>
                 </tr>
               </thead>
@@ -2125,6 +2126,9 @@ export default function CustomerBilling() {
                             );
                           })()}
                         </div>
+                      </td>
+                      <td className="text-sm text-muted-foreground max-w-[150px] truncate" title={invoice.notes || ''}>
+                        {invoice.notes || '—'}
                       </td>
                       <td className="flex items-center justify-center gap-2 py-2">
                         {customerType.supplierType === 'printer' && (
@@ -2181,8 +2185,8 @@ export default function CustomerBilling() {
                     </tr>
                   ))
                 ) : (
-                  <tr className="expenses-table-row">
-                    <td colSpan={7} className="text-center text-muted-foreground py-6">
+                <tr className="expenses-table-row">
+                    <td colSpan={8} className="text-center text-muted-foreground py-6">
                       {customerType.supplierType === 'printer' 
                         ? 'لا توجد فواتير طباعة لهذه المطبعة.' 
                         : 'لا توجد فواتير طباعة محفوظة لهذا العميل.'}

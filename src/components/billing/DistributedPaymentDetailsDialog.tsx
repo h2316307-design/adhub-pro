@@ -1138,143 +1138,66 @@ export function DistributedPaymentDetailsDialog({
             </Table>
           </div>
 
-          {/* قسم الوسيط المحصل */}
-          <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10">
-            <div className="flex items-center gap-2 mb-4">
-              <Checkbox
-                id="viaIntermediary"
-                checked={viaIntermediary}
-                onCheckedChange={(checked) => setViaIntermediary(checked as boolean)}
-              />
-              <Label htmlFor="viaIntermediary" className="text-base font-bold text-primary cursor-pointer flex items-center gap-2">
-                <UserCheck className="h-5 w-5" />
-                القبض عن طريق وسيط
-              </Label>
-            </div>
+          {/* قسم الوسيط المحصل - يظهر فقط إذا كان مفعلاً في البيانات */}
+          {firstPayment.collected_via_intermediary && (
+            <div className="border rounded-lg p-4 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/20 dark:to-blue-900/10">
+              <div className="flex items-center gap-2 mb-4">
+                <UserCheck className="h-5 w-5 text-primary" />
+                <span className="text-base font-bold text-primary">
+                  القبض عن طريق وسيط
+                </span>
+              </div>
 
-            {viaIntermediary ? (
-              <div className="space-y-4 mt-4 border-t pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="collectorName" className="text-sm font-semibold">
-                      المحصل (المستلم من الزبون) <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="collectorName"
-                      value={collectorName}
-                      onChange={(e) => setCollectorName(e.target.value)}
-                      placeholder="اسم المحصل"
-                      className="bg-background"
-                    />
+              <div className="space-y-3 text-sm">
+                {firstPayment.collector_name && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">المحصل (المستلم من الزبون):</span>
+                    <span className="font-semibold">{firstPayment.collector_name}</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="receiverName" className="text-sm font-semibold">
-                      المسلم له <span className="text-red-500">*</span>
-                    </Label>
-                    <Input
-                      id="receiverName"
-                      value={receiverName}
-                      onChange={(e) => setReceiverName(e.target.value)}
-                      placeholder="اسم المستلم"
-                      className="bg-background"
-                    />
+                )}
+                {firstPayment.receiver_name && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">المسلم له:</span>
+                    <span className="font-semibold">{firstPayment.receiver_name}</span>
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="deliveryLocation" className="text-sm font-semibold">
-                    مكان التسليم <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="deliveryLocation"
-                    value={deliveryLocation}
-                    onChange={(e) => setDeliveryLocation(e.target.value)}
-                    placeholder="مكان تسليم المبلغ"
-                    className="bg-background"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="collectionDate" className="text-sm font-semibold">
-                    تاريخ القبض <span className="text-red-500">*</span>
-                  </Label>
-                  <Input
-                    id="collectionDate"
-                    type="date"
-                    value={collectionDate}
-                    onChange={(e) => setCollectionDate(e.target.value)}
-                    className="bg-background"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="paymentMethod" className="text-sm font-semibold">
-                      نوع الدفع
-                    </Label>
-                    <select
-                      id="paymentMethod"
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    >
-                      <option value="نقدي">نقدي</option>
-                      <option value="كاش">كاش</option>
-                      <option value="شيك">شيك</option>
-                      <option value="تحويل بنكي">تحويل بنكي</option>
-                    </select>
+                )}
+                {firstPayment.delivery_location && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">مكان التسليم:</span>
+                    <span className="font-semibold">{firstPayment.delivery_location}</span>
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="notes" className="text-sm font-semibold">
-                      ملاحظات
-                    </Label>
-                    <Input
-                      id="notes"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                      placeholder="ملاحظات إضافية"
-                      className="bg-background"
-                    />
+                )}
+                {firstPayment.collection_date && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">تاريخ القبض:</span>
+                    <span className="font-semibold">{new Date(firstPayment.collection_date).toLocaleDateString('ar-LY')}</span>
                   </div>
-                </div>
-                <div className="flex gap-2 pt-2">
+                )}
+                {firstPayment.notes && (
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">ملاحظات:</span>
+                    <span className="font-semibold">{firstPayment.notes}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* زر طباعة إيصال الوسيط */}
+              {firstPayment.collector_name && firstPayment.receiver_name && firstPayment.delivery_location && (
+                <div className="mt-4 pt-3 border-t">
                   <Button
-                    onClick={handleSaveIntermediaryData}
-                    disabled={saving}
-                    className="flex-1 bg-green-600 hover:bg-green-700"
+                    onClick={() => setIntermediaryPrintOpen(true)}
+                    className="w-full bg-blue-600 hover:bg-blue-700 gap-2"
                     size="sm"
                   >
-                    {saving ? 'جاري الحفظ...' : 'حفظ بيانات الوسيط'}
+                    <Printer className="h-4 w-4" />
+                    طباعة إيصال الوسيط
                   </Button>
-                  {collectorName && receiverName && deliveryLocation && (
-                    <Button
-                      onClick={() => setIntermediaryPrintOpen(true)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 gap-2"
-                      size="sm"
-                    >
-                      <Printer className="h-4 w-4" />
-                      طباعة إيصال الوسيط
-                    </Button>
-                  )}
                 </div>
-              </div>
-            ) : firstPayment.collected_via_intermediary ? (
-              // إظهار زر الحفظ عند إلغاء تفعيل الوسيط إذا كانت الدفعة مسجلة كوسيط سابقاً
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex items-center gap-2 p-3 bg-amber-50 dark:bg-amber-950/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                  <AlertCircle className="h-5 w-5 text-amber-600" />
-                  <span className="text-sm text-amber-700 dark:text-amber-400">
-                    هذه الدفعة مسجلة كقبض عن طريق وسيط. لإلغاء ذلك اضغط على زر الحفظ.
-                  </span>
-                </div>
-                <Button
-                  onClick={handleSaveIntermediaryData}
-                  disabled={saving}
-                  className="w-full mt-3 bg-amber-600 hover:bg-amber-700"
-                  size="sm"
-                >
-                  {saving ? 'جاري الحفظ...' : 'حفظ (إلغاء الوسيط)'}
-                </Button>
-              </div>
-            ) : null}
-          </div>
+              )}
+            </div>
+          )}
+
+          {/* لا يظهر أي شيء إذا لم يكن الوسيط مفعلاً - يمكن تفعيله من خلال وضع التعديل فقط */}
 
           {/* قسم تحويل إلى عهدة - منفصل */}
           {custodyInfo.length === 0 && (
