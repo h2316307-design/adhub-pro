@@ -22,9 +22,11 @@ interface PurchaseInvoice {
   customer_name: string;
   total_amount: number;
   paid_amount: number;
-  paid: boolean;
+  paid?: boolean;
+  locked?: boolean;
   invoice_name: string | null;
   notes: string | null;
+  used_as_payment?: number;
 }
 
 interface PurchaseInvoiceEditDialogProps {

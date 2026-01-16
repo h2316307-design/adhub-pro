@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Map, Satellite, Filter, X, CheckCircle, Circle } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 import type { Billboard } from '@/types';
 
 interface BillboardSelectionMapProps {
@@ -53,6 +54,22 @@ export function BillboardSelectionMap({
   const [filterSize, setFilterSize] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [showFilters, setShowFilters] = useState(false);
+  const [allSizes, setAllSizes] = useState<string[]>([]);
+
+  // جلب جميع المقاسات من قاعدة البيانات
+  useEffect(() => {
+    const loadSizes = async () => {
+      const { data, error } = await supabase
+        .from('sizes')
+        .select('name, sort_order')
+        .order('sort_order');
+      
+      if (!error && data) {
+        setAllSizes(data.map(s => s.name).filter(Boolean));
+      }
+    };
+    loadSizes();
+  }, []);
 
   // Get cities from all billboards (available + selected)
   const cities = useMemo(() => {
@@ -77,16 +94,15 @@ export function BillboardSelectionMap({
     return Array.from(municipalitySet).sort();
   }, [billboards, selectedIds]);
 
-  // Get sizes from all billboards (available + selected)
+  // استخدام المقاسات من قاعدة البيانات مع إضافة أي مقاسات موجودة في اللوحات
   const sizes = useMemo(() => {
-    const sizeSet = new Set<string>();
+    const sizeSet = new Set<string>(allSizes);
     billboards.forEach(b => {
-      if (b.Status === 'متاح' || selectedIds.includes(String(b.ID))) {
-        if (b.Size) sizeSet.add(b.Size);
-      }
+      if (b.Size) sizeSet.add(b.Size);
     });
-    return Array.from(sizeSet).sort();
-  }, [billboards, selectedIds]);
+    // ترتيب بحيث تكون مقاسات allSizes أولاً
+    return [...allSizes, ...Array.from(sizeSet).filter(s => !allSizes.includes(s))];
+  }, [billboards, allSizes]);
 
   // عرض اللوحات المتاحة + اللوحات المختارة (حتى لو كانت مؤجرة للعقد الحالي)
   const displayableBillboards = useMemo(() => {

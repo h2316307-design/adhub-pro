@@ -423,6 +423,53 @@ export default function CustomerBilling() {
       } else {
         setTotalDiscounts(0);
       }
+      // ✅ جلب فواتير المشتريات للزبون
+      let purchaseInvoicesData: any[] = [];
+      try {
+        if (customerId) {
+          const { data, error } = await supabase
+            .from('purchase_invoices')
+            .select('*')
+            .eq('customer_id', customerId)
+            .order('invoice_date', { ascending: false });
+          if (!error && data) purchaseInvoicesData = data;
+        } else if (customerName) {
+          const { data, error } = await supabase
+            .from('purchase_invoices')
+            .select('*')
+            .ilike('customer_name', `%${customerName}%`)
+            .order('invoice_date', { ascending: false });
+          if (!error && data) purchaseInvoicesData = data;
+        }
+      } catch (e) {
+        console.warn('Error loading purchase_invoices:', e);
+        purchaseInvoicesData = [];
+      }
+      setPurchaseInvoices(purchaseInvoicesData);
+
+      // ✅ جلب فواتير المبيعات للزبون
+      let salesInvoicesData: any[] = [];
+      try {
+        if (customerId) {
+          const { data, error } = await supabase
+            .from('sales_invoices')
+            .select('*')
+            .eq('customer_id', customerId)
+            .order('invoice_date', { ascending: false });
+          if (!error && data) salesInvoicesData = data;
+        } else if (customerName) {
+          const { data, error } = await supabase
+            .from('sales_invoices')
+            .select('*')
+            .ilike('customer_name', `%${customerName}%`)
+            .order('invoice_date', { ascending: false });
+          if (!error && data) salesInvoicesData = data;
+        }
+      } catch (e) {
+        console.warn('Error loading sales_invoices:', e);
+        salesInvoicesData = [];
+      }
+      setSalesInvoices(salesInvoicesData);
 
       try {
         const billboards = await fetchAllBillboards();
@@ -1494,15 +1541,38 @@ export default function CustomerBilling() {
         onDiscountChange={loadData}
       />
 
-      {/* ✅ قسم فواتير المشتريات */}
-      {purchaseInvoices.length > 0 && (
-        <PurchaseInvoicesSection
-          customerId={customerId}
-          customerName={customerName}
-          invoices={purchaseInvoices}
-          onRefresh={loadData}
-        />
-      )}
+      {/* ✅ قسم فواتير المشتريات - يظهر دائماً مع زر إضافة */}
+      <Card className="bg-card border-border mt-6">
+        <CardHeader className="border-b border-border pb-4 flex flex-row items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-primary">
+            <Receipt className="h-5 w-5" />
+            فواتير المشتريات ({purchaseInvoices.length})
+          </CardTitle>
+          <Button
+            onClick={() => setPurchaseInvoiceDialogOpen(true)}
+            className="bg-primary text-primary-foreground hover:bg-primary/90"
+          >
+            <Calculator className="h-4 w-4 ml-2" />
+            إضافة فاتورة مشتريات
+          </Button>
+        </CardHeader>
+        <CardContent className="pt-6">
+          {purchaseInvoices.length > 0 ? (
+            <PurchaseInvoicesSection
+              customerId={customerId}
+              customerName={customerName}
+              invoices={purchaseInvoices}
+              onRefresh={loadData}
+            />
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <Receipt className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>لا توجد فواتير مشتريات لهذا العميل</p>
+              <p className="text-sm mt-2">استخدم فواتير المشتريات لتسجيل الديون على العميل واستخدامها كدفعات</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* ✅ قسم إيجارات اللوحات من الشركات الصديقة */}
       {friendBillboardRentals.length > 0 && (

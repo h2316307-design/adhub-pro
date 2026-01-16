@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -67,6 +67,23 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
   durationDays,
   currencySymbol = 'د.ل'
 }) => {
+  const [allSizes, setAllSizes] = useState<string[]>([]);
+
+  // جلب جميع المقاسات من قاعدة البيانات
+  useEffect(() => {
+    const loadSizes = async () => {
+      const { data, error } = await supabase
+        .from('sizes')
+        .select('name, sort_order')
+        .order('sort_order');
+      
+      if (!error && data) {
+        setAllSizes(data.map(s => s.name).filter(Boolean));
+      }
+    };
+    loadSizes();
+  }, []);
+
   // دالة لوضع علامة على اللوحة أنها تحتاج إعادة تصوير
   const handleMarkForRephotography = async (billboard: Billboard, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -95,16 +112,21 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
     }
   };
 
-  // Derive cities and sizes from billboards
+  // Derive cities from billboards
   const cities = useMemo(
     () => Array.from(new Set(billboards.map((b) => b.city || (b as any).City))).filter(Boolean) as string[],
     [billboards]
   );
   
-  const sizes = useMemo(
-    () => Array.from(new Set(billboards.map((b) => b.size || (b as any).Size))).filter(Boolean) as string[],
-    [billboards]
-  );
+  // استخدام المقاسات من قاعدة البيانات مع إضافة أي مقاسات موجودة في اللوحات
+  const sizes = useMemo(() => {
+    const sizeSet = new Set<string>(allSizes);
+    billboards.forEach(b => {
+      const size = b.size || (b as any).Size;
+      if (size) sizeSet.add(size);
+    });
+    return [...allSizes, ...Array.from(sizeSet).filter(s => !allSizes.includes(s))];
+  }, [billboards, allSizes]);
 
   // Filter billboards
   const filtered = useMemo(() => {

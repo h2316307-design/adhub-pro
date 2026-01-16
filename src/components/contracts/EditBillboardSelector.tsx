@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -45,6 +45,22 @@ export function EditBillboardSelector({
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [allSizes, setAllSizes] = useState<string[]>([]);
+
+  // جلب جميع المقاسات من قاعدة البيانات
+  useEffect(() => {
+    const loadSizes = async () => {
+      const { data, error } = await supabase
+        .from('sizes')
+        .select('name, sort_order')
+        .order('sort_order');
+      
+      if (!error && data) {
+        setAllSizes(data.map(s => s.name).filter(Boolean));
+      }
+    };
+    loadSizes();
+  }, []);
 
   // Load billboards
   useEffect(() => {
@@ -54,7 +70,7 @@ export function EditBillboardSelector({
         const { data, error } = await supabase
           .from('billboards')
           .select('*')
-          .order('name');
+          .order('Billboard_Name');
 
         if (error) {
           console.error('Error loading billboards:', error);
@@ -64,21 +80,7 @@ export function EditBillboardSelector({
 
         if (data) {
           const formattedBillboards = data.map(billboard => {
-            // استخدام دالة isBillboardAvailable للتحقق من التوفر الفعلي
             const isAvailable = isBillboardAvailable(billboard);
-            
-            // Log للتحقق من حالة كل لوحة
-            if (billboard.ID === 489 || billboard.Billboard_Name?.includes('489')) {
-              console.log('🔍 Billboard 489 availability check:', {
-                id: billboard.ID,
-                name: billboard.Billboard_Name,
-                contractNumber: billboard.Contract_Number,
-                rentEndDate: billboard.Rent_End_Date,
-                status: billboard.Status,
-                isAvailable,
-                currentDate: new Date().toISOString()
-              });
-            }
             
             return {
               id: String(billboard.ID),
@@ -89,14 +91,10 @@ export function EditBillboardSelector({
               status: isAvailable ? 'available' : 'occupied',
               level: billboard.Level || '',
               image: billboard.image_name || '',
-              // احتفظ بالبيانات الأصلية للتحقق
               Contract_Number: billboard.Contract_Number,
               Rent_End_Date: billboard.Rent_End_Date
             };
           });
-          
-          console.log('✅ Loaded billboards:', formattedBillboards.length);
-          console.log('🔍 Billboard 489 in formatted list:', formattedBillboards.find(b => b.id === '489'));
           
           setBillboards(formattedBillboards);
         }
@@ -188,7 +186,15 @@ export function EditBillboardSelector({
   };
 
   const cities = Array.from(new Set(billboards.map(b => b.city))).filter(Boolean);
-  const sizes = Array.from(new Set(billboards.map(b => b.size))).filter(Boolean);
+  
+  // استخدام المقاسات من قاعدة البيانات مع إضافة أي مقاسات موجودة في اللوحات
+  const sizes = useMemo(() => {
+    const sizeSet = new Set<string>(allSizes);
+    billboards.forEach(b => {
+      if (b.size) sizeSet.add(b.size);
+    });
+    return [...allSizes, ...Array.from(sizeSet).filter(s => !allSizes.includes(s))];
+  }, [billboards, allSizes]);
 
   if (loading) {
     return (
