@@ -61,6 +61,9 @@ interface DistributedContract {
   total?: number | string | null;
   totalPaid?: number | string | null;
   remaining?: number | string | null;
+  // New fields for composite tasks and sales invoices
+  entityType?: 'contract' | 'composite_task' | 'sales_invoice' | 'printed_invoice';
+  compositeTaskType?: string; // 'طباعة_تركيب' | 'طباعة_قص_تركيب' | etc.
 }
 
 export interface PrintUnifiedReceiptOptions {
@@ -153,29 +156,51 @@ export async function printUnifiedReceipt(
   }
 
   if (isDistributed && distributedContracts.length > 0) {
-    // Distributed payment - show contracts + remaining per contract
+    // Distributed payment - show contracts/tasks/invoices + remaining
     columns = [
       { key: 'index', header: '#', width: '8%', align: 'center' },
-      { key: 'contractNumber', header: 'رقم العقد', width: '18%', align: 'center' },
-      { key: 'adType', header: 'نوع الإعلان', width: '32%', align: 'right' },
+      { key: 'reference', header: 'المرجع', width: '18%', align: 'center' },
+      { key: 'description', header: 'البيان', width: '32%', align: 'right' },
       { key: 'amount', header: 'المسدد', width: '20%', align: 'center' },
       { key: 'remaining', header: 'المتبقي', width: '22%', align: 'center' },
     ];
 
-    rows = distributedContracts.map((contract, index) => ({
-      index: index + 1,
-      contractNumber: contract.contractNumber,
-      adType: contract.adType || 'لوحة إعلانية',
-      amount: typeof contract.amount === 'number'
-        ? `${currency.symbol} ${formatArabicNumber(contract.amount)}`
-        : '—',
-      remaining:
-        contract.remaining === null || contract.remaining === undefined || contract.remaining === ''
-          ? '—'
-          : typeof contract.remaining === 'number'
-            ? `${currency.symbol} ${formatArabicNumber(contract.remaining)}`
-            : String(contract.remaining),
-    }));
+    rows = distributedContracts.map((contract, index) => {
+      // Determine reference and description based on entity type
+      let reference = contract.contractNumber;
+      let description = contract.adType || 'لوحة إعلانية';
+      
+      if (contract.entityType === 'composite_task') {
+        reference = 'مهمة';
+        // استخدم الوصف المبني من المكونات الفعلية (طباعة + قص + تركيب)
+        description = contract.compositeTaskType || contract.adType || 'مهمة مجمعة';
+      } else if (contract.entityType === 'sales_invoice') {
+        reference = 'فاتورة مبيعات';
+        // استخدم عنوان الفاتورة (invoice_name) أو الوصف المرسل
+        description = contract.adType || 'مبيعات';
+      } else if (contract.entityType === 'printed_invoice') {
+        reference = 'فاتورة طباعة';
+        description = contract.adType || 'طباعة';
+      } else {
+        // Default to contract
+        reference = `عقد ${contract.contractNumber}`;
+      }
+      
+      return {
+        index: index + 1,
+        reference,
+        description,
+        amount: typeof contract.amount === 'number'
+          ? `${currency.symbol} ${formatArabicNumber(contract.amount)}`
+          : '—',
+        remaining:
+          contract.remaining === null || contract.remaining === undefined || contract.remaining === ''
+            ? '—'
+            : typeof contract.remaining === 'number'
+              ? `${currency.symbol} ${formatArabicNumber(contract.remaining)}`
+              : String(contract.remaining),
+      };
+    });
   } else {
     // Single payment - show payment details as table
     columns = [
@@ -224,10 +249,19 @@ export async function printUnifiedReceipt(
     });
   }
 
-  // Statistics cards
-  const statisticsCards = isDistributed ? [
-    { label: 'عقد', value: distributedContracts.length, unit: '' },
-  ] : [];
+  // Statistics cards - count by entity type
+  const contractCount = distributedContracts.filter(c => !c.entityType || c.entityType === 'contract').length;
+  const compositeTaskCount = distributedContracts.filter(c => c.entityType === 'composite_task').length;
+  const salesInvoiceCount = distributedContracts.filter(c => c.entityType === 'sales_invoice').length;
+  const printedInvoiceCount = distributedContracts.filter(c => c.entityType === 'printed_invoice').length;
+  
+  const statisticsCards: { label: string; value: number; unit: string }[] = [];
+  if (isDistributed) {
+    if (contractCount > 0) statisticsCards.push({ label: 'عقد', value: contractCount, unit: '' });
+    if (compositeTaskCount > 0) statisticsCards.push({ label: 'مهمة', value: compositeTaskCount, unit: '' });
+    if (salesInvoiceCount > 0) statisticsCards.push({ label: 'فاتورة مبيعات', value: salesInvoiceCount, unit: '' });
+    if (printedInvoiceCount > 0) statisticsCards.push({ label: 'فاتورة طباعة', value: printedInvoiceCount, unit: '' });
+  }
 
   // Build notes (فقط المبلغ بالكلمات)
   const notesText = `المبلغ بالكلمات: فقط وقدره ${formatArabicNumber(payment.amount)} ${currency.writtenName} لا غير`;

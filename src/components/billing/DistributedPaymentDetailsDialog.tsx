@@ -1086,54 +1086,84 @@ export function DistributedPaymentDetailsDialog({
             </div>
           )}
 
-          {/* جدول العقود */}
+          {/* جدول المدفوعات */}
           <div className="border rounded-lg">
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="text-right">رقم العقد</TableHead>
+                  <TableHead className="text-right">المرجع</TableHead>
+                  <TableHead className="text-right">البيان</TableHead>
                   <TableHead className="text-right">المبلغ المدفوع</TableHead>
-                  <TableHead className="text-right">ملاحظات</TableHead>
                   <TableHead className="text-right">إجراءات</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {groupedPayments.map((payment) => (
-                  <TableRow key={payment.id}>
-                    <TableCell className="font-semibold text-lg">
-                      عقد رقم {payment.contract_number}
-                    </TableCell>
-                    <TableCell className="font-bold text-green-600 text-lg">
-                      {(Number(payment.amount) || 0).toLocaleString('ar-LY')} د.ل
-                    </TableCell>
-                    <TableCell className="text-muted-foreground max-w-xs truncate">
-                      {(() => {
-                        // تنظيف الملاحظات من التكرار ومعلومات البنوك المكررة
-                        const notes = payment.notes || '';
-                        // إزالة جميع تكرارات معلومات البنوك
-                        const cleanedNotes = notes
-                          .replace(/(من:\s*[^|]+\s*\|\s*إلى:\s*[^|]+\s*\|\s*)+/g, '')
-                          .replace(/من:\s*[^|]+\s*\|\s*إلى:\s*[^|]+/g, '')
-                          .replace(/\|\s*\|/g, '|')
-                          .replace(/^\s*\|\s*/g, '')
-                          .replace(/\s*\|\s*$/g, '')
-                          .trim();
-                        return cleanedNotes || '—';
-                      })()}
-                    </TableCell>
-                    <TableCell>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => onPrintIndividual(payment)}
-                        className="gap-2"
-                      >
-                        <Printer className="h-4 w-4" />
-                        طباعة إيصال العقد
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {groupedPayments.map((payment) => {
+                  // تحديد نوع الدفعة
+                  const getPaymentInfo = () => {
+                    if (payment.composite_task_id) {
+                      const taskTypeLabels: { [key: string]: string } = {
+                        'طباعة_تركيب': 'طباعة وتركيب',
+                        'طباعة_قص_تركيب': 'طباعة وقص وتركيب',
+                        'installation': 'تركيب',
+                        'print': 'طباعة'
+                      };
+                      return {
+                        reference: 'مهمة مجمعة',
+                        description: taskTypeLabels[payment.notes?.match(/نوع:\s*(\S+)/)?.[1] || ''] || 'مهمة مجمعة',
+                        icon: '🔧'
+                      };
+                    }
+                    if (payment.sales_invoice_id) {
+                      return {
+                        reference: 'فاتورة مبيعات',
+                        description: payment.notes || 'مبيعات',
+                        icon: '🧾'
+                      };
+                    }
+                    if (payment.printed_invoice_id) {
+                      return {
+                        reference: 'فاتورة طباعة',
+                        description: payment.notes || 'طباعة',
+                        icon: '🖨️'
+                      };
+                    }
+                    // Default: عقد
+                    return {
+                      reference: `عقد رقم ${payment.contract_number}`,
+                      description: 'لوحة إعلانية',
+                      icon: '📄'
+                    };
+                  };
+                  
+                  const paymentInfo = getPaymentInfo();
+                  
+                  return (
+                    <TableRow key={payment.id}>
+                      <TableCell className="font-semibold text-lg">
+                        <span className="ml-2">{paymentInfo.icon}</span>
+                        {paymentInfo.reference}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {paymentInfo.description}
+                      </TableCell>
+                      <TableCell className="font-bold text-green-600 text-lg">
+                        {(Number(payment.amount) || 0).toLocaleString('ar-LY')} د.ل
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => onPrintIndividual(payment)}
+                          className="gap-2"
+                        >
+                          <Printer className="h-4 w-4" />
+                          طباعة إيصال
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
@@ -1301,7 +1331,108 @@ export function DistributedPaymentDetailsDialog({
                     });
                   }
 
+                  // ✅ جلب بيانات المهام المجمعة وفواتير المبيعات
+                  const compositeTaskIds = groupedPayments
+                    .filter(p => p.composite_task_id)
+                    .map(p => p.composite_task_id as string);
+                  
+                  const salesInvoiceIds = groupedPayments
+                    .filter(p => p.sales_invoice_id)
+                    .map(p => p.sales_invoice_id as string);
+
+                  const printedInvoiceIds = groupedPayments
+                    .filter(p => p.printed_invoice_id)
+                    .map(p => p.printed_invoice_id as string);
+                  
+                  // جلب بيانات المهام المجمعة
+                  const compositeTaskMap: Record<string, any> = {};
+                  if (compositeTaskIds.length > 0) {
+                    const { data: tasksData } = await supabase
+                      .from('composite_tasks')
+                      .select('id, task_type, customer_total, paid_amount, installation_task_id, print_task_id, cutout_task_id')
+                      .in('id', compositeTaskIds);
+                    (tasksData || []).forEach((t: any) => {
+                      const remaining = (Number(t.customer_total) || 0) - (Number(t.paid_amount) || 0);
+                      compositeTaskMap[t.id] = { ...t, calculatedRemaining: Math.max(0, remaining) };
+                    });
+                  }
+                  
+                  // جلب بيانات فواتير المبيعات
+                  const salesInvoiceMap: Record<string, any> = {};
+                  if (salesInvoiceIds.length > 0) {
+                    const { data: invoicesData } = await supabase
+                      .from('sales_invoices')
+                      .select('id, invoice_number, invoice_name, total_amount, paid_amount, notes')
+                      .in('id', salesInvoiceIds);
+                    (invoicesData || []).forEach((i: any) => {
+                      const remaining = (Number(i.total_amount) || 0) - (Number(i.paid_amount) || 0);
+                      salesInvoiceMap[i.id] = { ...i, calculatedRemaining: Math.max(0, remaining) };
+                    });
+                  }
+
+                  // جلب بيانات فواتير الطباعة
+                  const printedInvoiceMap: Record<string, any> = {};
+                  if (printedInvoiceIds.length > 0) {
+                    const { data: invoicesData } = await supabase
+                      .from('printed_invoices')
+                      .select('id, invoice_number, total_amount, paid_amount, notes')
+                      .in('id', printedInvoiceIds);
+                    (invoicesData || []).forEach((i: any) => {
+                      const remaining = (Number(i.total_amount) || 0) - (Number(i.paid_amount) || 0);
+                      printedInvoiceMap[i.id] = { ...i, calculatedRemaining: Math.max(0, remaining) };
+                    });
+                  }
+
                   const distributedContracts = groupedPayments.map((p) => {
+                    // تحديد نوع الدفعة
+                    if (p.composite_task_id) {
+                      const task = compositeTaskMap[p.composite_task_id];
+                      // بناء وصف المهمة بناءً على المكونات الفعلية
+                      const components: string[] = [];
+                      if (task?.print_task_id) components.push('طباعة');
+                      if (task?.cutout_task_id) components.push('قص');
+                      if (task?.installation_task_id) components.push('تركيب');
+                      const taskDescription = components.length > 0 ? components.join(' + ') : 'مهمة مجمعة';
+                      
+                      return {
+                        contractNumber: '—',
+                        adType: taskDescription,
+                        amount: Number(p.amount) || 0,
+                        total: task?.customer_total ?? null,
+                        totalPaid: task?.paid_amount ?? null,
+                        remaining: task?.calculatedRemaining ?? null,
+                        entityType: 'composite_task' as const,
+                        compositeTaskType: taskDescription,
+                      };
+                    }
+                    
+                    if (p.sales_invoice_id) {
+                      const invoice = salesInvoiceMap[p.sales_invoice_id];
+                      return {
+                        contractNumber: invoice?.invoice_number || '—',
+                        adType: invoice?.invoice_name || invoice?.notes || 'مبيعات',
+                        amount: Number(p.amount) || 0,
+                        total: invoice?.total_amount ?? null,
+                        totalPaid: invoice?.paid_amount ?? null,
+                        remaining: invoice?.calculatedRemaining ?? null,
+                        entityType: 'sales_invoice' as const,
+                      };
+                    }
+
+                    if (p.printed_invoice_id) {
+                      const invoice = printedInvoiceMap[p.printed_invoice_id];
+                      return {
+                        contractNumber: invoice?.invoice_number || '—',
+                        adType: invoice?.notes || 'طباعة',
+                        amount: Number(p.amount) || 0,
+                        total: invoice?.total_amount ?? null,
+                        totalPaid: invoice?.paid_amount ?? null,
+                        remaining: invoice?.calculatedRemaining ?? null,
+                        entityType: 'printed_invoice' as const,
+                      };
+                    }
+                    
+                    // Default: عقد
                     const cn = p.contract_number ? Number(p.contract_number) : null;
                     const c = cn ? contractMap[cn] : null;
                     return {
@@ -1311,6 +1442,7 @@ export function DistributedPaymentDetailsDialog({
                       total: c?.Total ?? null,
                       totalPaid: c?.calculatedPaid ?? null,
                       remaining: c?.calculatedRemaining ?? null,
+                      entityType: 'contract' as const,
                     };
                   });
 
@@ -1382,7 +1514,7 @@ export function DistributedPaymentDetailsDialog({
                 size="lg"
               >
                 <FileText className="h-5 w-5" />
-                طباعة إيصال موحد لكل العقود
+                طباعة إيصال موحد
               </Button>
               {onEdit && (
                 <Button

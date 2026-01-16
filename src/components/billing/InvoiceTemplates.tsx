@@ -550,8 +550,12 @@ export interface PurchaseInvoiceData {
 export const generatePurchaseInvoiceHTML = async (data: PurchaseInvoiceData): Promise<string> => {
   const fontBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
   
-  // جلب الإعدادات المحفوظة
-  const styles = await getMergedInvoiceStylesAsync('purchase_invoice');
+  // ✅ استخدام نفس تصميم فاتورة المقاسات - ثيم أسود/رمادي رسمي
+  const PRIMARY_COLOR = '#000000';
+  const SECONDARY_COLOR = '#333333';
+  const BORDER_COLOR = '#000000';
+  const LOGO_URL = '/logofares.svg';
+  const LOGO_HEIGHT = '101px';
   
   const FIXED_ROWS = 10;
   const displayItems = [...(data.items || [])];
@@ -561,22 +565,17 @@ export const generatePurchaseInvoiceHTML = async (data: PurchaseInvoiceData): Pr
 
   const subtotal = (data.items || []).reduce((sum, item) => sum + (Number(item.total) || 0), 0);
   const discount = data.discount || 0;
-  const logoUrl = styles.logoPath || '/logofaresgold.svg';
-  const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${fontBaseUrl}${logoUrl}`;
-  
-  // استخدام الخلفية من الإعدادات
-  const bgImageUrl = styles.backgroundImage ? (styles.backgroundImage.startsWith('http') ? styles.backgroundImage : `${fontBaseUrl}${styles.backgroundImage}`) : '';
+  const totalQuantity = (data.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   const rowsHtml = displayItems.map((item, idx) => {
-    const rowBg = idx % 2 === 0 
-      ? hexToRgba(styles.tableRowEvenColor, styles.tableRowOpacity) 
-      : hexToRgba(styles.tableRowOddColor, styles.tableRowOpacity);
+    const rowBg = idx % 2 === 0 ? '#ffffff' : '#f5f5f5';
     return `
     <tr style="background:${rowBg}">
-      <td style="padding:12px 8px;text-align:right;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;color:${styles.tableTextColor}">${item.description || ''}</td>
-      <td style="padding:12px 8px;text-align:center;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;font-weight:600;color:${styles.tableTextColor}">${item.quantity || ''}</td>
-      <td style="padding:12px 8px;text-align:center;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;font-weight:600;color:${styles.tableTextColor}">${item.unitPrice ? (Number(item.unitPrice)).toLocaleString('ar-LY') : ''}</td>
-      <td style="padding:12px 8px;text-align:center;border:1px solid ${styles.tableBorderColor};font-size:${styles.bodyFontSize}px;font-weight:700;color:${styles.tableTextColor}">${item.total ? (Number(item.total)).toLocaleString('ar-LY') + ' د.ل' : ''}</td>
+      <td style="padding:4px 8px;text-align:center;border:1px solid ${BORDER_COLOR};font-size:10px;color:#000000">${item.description ? idx + 1 : ''}</td>
+      <td style="padding:4px 8px;text-align:right;border:1px solid ${BORDER_COLOR};font-size:10px;color:#000000">${item.description || ''}</td>
+      <td style="padding:4px 8px;text-align:center;border:1px solid ${BORDER_COLOR};font-size:10px;font-weight:600;color:#000000">${item.quantity || ''}</td>
+      <td style="padding:4px 8px;text-align:center;border:1px solid ${BORDER_COLOR};font-size:10px;font-weight:600;color:#000000">${item.unitPrice ? (Number(item.unitPrice)).toLocaleString('ar-LY') : ''}</td>
+      <td style="padding:4px 8px;text-align:center;border:1px solid ${BORDER_COLOR};font-size:10px;font-weight:700;color:#000000">${item.total ? (Number(item.total)).toLocaleString('ar-LY') + ' د.ل' : ''}</td>
     </tr>
   `;
   }).join('');
@@ -588,356 +587,374 @@ export const generatePurchaseInvoiceHTML = async (data: PurchaseInvoiceData): Pr
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>فاتورة مشتريات - ${data.invoiceNumber}</title>
   <style>
-    @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700&display=swap');
-    @font-face { font-family: 'Doran'; src: url('${fontBaseUrl}/Doran-Bold.otf') format('opentype'); font-weight: 700; }
     @font-face { font-family: 'Doran'; src: url('${fontBaseUrl}/Doran-Regular.otf') format('opentype'); font-weight: 400; }
+    @font-face { font-family: 'Doran'; src: url('${fontBaseUrl}/Doran-Bold.otf') format('opentype'); font-weight: 700; }
+    @font-face { font-family: 'Manrope'; src: url('${fontBaseUrl}/Manrope-Regular.otf') format('opentype'); font-weight: 400; }
+    @font-face { font-family: 'Manrope'; src: url('${fontBaseUrl}/Manrope-Bold.otf') format('opentype'); font-weight: 700; }
     
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    
-    html, body {
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      background: #ffffff;
-      color: ${styles.tableTextColor};
-      font-family: ${styles.fontFamily || 'Doran, Manrope, system-ui, sans-serif'};
-      direction: rtl;
+    * { 
+      margin: 0; 
+      padding: 0; 
+      box-sizing: border-box; 
+      -webkit-print-color-adjust: exact !important; 
+      print-color-adjust: exact !important; 
+      color-adjust: exact !important; 
     }
     
-    .unified-paper {
+    html, body { 
+      font-family: Doran, Cairo, Tajawal, sans-serif;
+      direction: rtl;
+      background: #ffffff !important;
+      color: #000000;
+      font-size: 10px;
+      line-height: 1.4;
+    }
+    
+    .measurements-container {
       width: 210mm;
       min-height: 297mm;
-      margin: 0 auto;
-      padding: ${styles.pageMarginTop}mm ${styles.pageMarginRight}mm ${styles.pageMarginBottom}mm ${styles.pageMarginLeft}mm;
+      padding: 10mm;
       background: #ffffff;
       position: relative;
-      display: flex;
-      flex-direction: column;
+      margin: 0 auto;
     }
     
-    .unified-bg-layer {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-      ${bgImageUrl ? `
-        background-image: url('${bgImageUrl}');
-        background-position: ${styles.backgroundPosX || 50}% ${styles.backgroundPosY || 50}%;
-        background-repeat: no-repeat;
-        background-size: ${styles.backgroundScale || 100}%;
-        opacity: ${(styles.backgroundOpacity || 10) / 100};
-      ` : ''}
-      pointer-events: none;
-      z-index: 0;
-    }
-    
-    .unified-content {
-      position: relative;
-      z-index: 1;
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    /* ===== UNIFIED HEADER ===== */
-    .unified-header {
+    /* Header Styles - مثل فاتورة المقاسات */
+    .measurements-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      margin-bottom: ${styles.headerMarginBottom || 20}px;
+      margin-bottom: 20px;
       padding-bottom: 15px;
-      border-bottom: 3px solid ${styles.primaryColor};
+      border-bottom: 2px solid ${PRIMARY_COLOR};
     }
     
-    .unified-header-left {
-      flex: 0 0 45%;
+    .measurements-header-title {
+      flex: 1;
       text-align: left;
       direction: ltr;
     }
     
-    .unified-invoice-title {
-      font-size: 26px;
-      font-weight: 700;
-      margin: 0 0 5px 0;
-      font-family: Manrope, sans-serif;
-      letter-spacing: 1px;
-      color: ${styles.secondaryColor};
-      text-transform: uppercase;
+    .measurements-title {
+      font-size: 22px;
+      font-weight: bold;
+      color: ${SECONDARY_COLOR};
+      font-family: 'Manrope', sans-serif;
+      letter-spacing: 2px;
+      margin: 0;
+      text-align: right;
     }
     
-    .unified-invoice-subtitle {
-      font-size: 16px;
-      font-weight: 600;
-      color: ${styles.primaryColor};
-      margin-bottom: 10px;
-    }
-    
-    .unified-invoice-meta {
+    .measurements-title-info {
       font-size: 11px;
-      color: ${styles.customerSectionTextColor};
-      line-height: 1.8;
-      padding: 8px 0;
+      color: ${SECONDARY_COLOR};
+      margin-top: 8px;
+      line-height: 1.6;
+      direction: rtl;
+      text-align: right;
     }
     
-    .unified-invoice-meta-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 4px;
-    }
-    
-    .unified-invoice-meta-label {
-      font-weight: 700;
-      color: ${styles.primaryColor};
-    }
-    
-    .unified-header-right {
-      flex: 0 0 50%;
+    .measurements-header-company {
+      flex: 1;
       display: flex;
       flex-direction: column;
       align-items: flex-end;
       gap: 8px;
     }
     
-    .unified-logo {
-      height: ${styles.logoSize}px;
+    .measurements-logo {
+      height: ${LOGO_HEIGHT};
       object-fit: contain;
+      flex-shrink: 0;
     }
     
-    .unified-company-info {
-      text-align: right;
-      line-height: 1.6;
-    }
-    
-    .unified-company-name {
-      font-size: 18px;
-      font-weight: 700;
-      color: ${styles.primaryColor};
-      margin-bottom: 2px;
-    }
-    
-    .unified-company-subtitle {
-      font-size: 13px;
-      color: ${styles.secondaryColor};
-      margin-bottom: 6px;
-    }
-    
-    .unified-contact-info {
-      font-size: 10px;
-      color: ${styles.customerSectionTextColor};
-    }
-    
-    /* ===== CUSTOMER SECTION ===== */
-    .unified-customer-section {
-      background: ${styles.customerSectionBgColor};
-      border-right: 4px solid ${styles.customerSectionBorderColor};
-      padding: 15px 20px;
-      margin-bottom: 20px;
-    }
-    
-    .unified-customer-title {
-      font-size: ${styles.headerFontSize}px;
-      font-weight: 700;
-      color: ${styles.customerSectionTitleColor};
-      margin-bottom: 10px;
-    }
-    
-    .unified-customer-details {
-      font-size: ${styles.bodyFontSize}px;
-      color: ${styles.customerSectionTextColor};
-      line-height: 1.8;
-    }
-    
-    /* ===== UNIFIED TABLE ===== */
-    .unified-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 0;
-      font-size: ${styles.bodyFontSize}px;
-    }
-    
-    .unified-table thead th {
-      background: ${styles.tableHeaderBgColor};
-      color: ${styles.tableHeaderTextColor};
-      padding: 12px 8px;
-      text-align: center;
-      font-weight: 700;
-      font-size: ${styles.headerFontSize}px;
-      border: 1px solid ${styles.tableBorderColor};
-    }
-    
-    .unified-table tbody td {
-      border: 1px solid ${styles.tableBorderColor};
-      padding: 10px 8px;
-      text-align: center;
-      vertical-align: middle;
-      color: ${styles.tableTextColor};
-    }
-    
-    /* ===== TOTALS INSIDE TABLE ===== */
-    .totals-row {
-      background: ${styles.subtotalBgColor} !important;
-    }
-    
-    .totals-row td {
-      padding: 12px 8px;
-      font-weight: 600;
-      color: ${styles.subtotalTextColor};
-    }
-    
-    .discount-row {
-      background: #fff5f5 !important;
-    }
-    
-    .discount-row td {
-      color: ${styles.discountTextColor || '#e74c3c'};
-    }
-    
-    .grand-total-row {
-      background: ${styles.totalBgColor} !important;
-    }
-    
-    .grand-total-row td {
-      padding: 15px 12px;
-      font-weight: 700;
-      font-size: ${styles.headerFontSize + 2}px;
-      color: ${styles.totalTextColor};
-    }
-    
-    /* ===== NOTES ===== */
-    .unified-notes {
-      margin-top: 20px;
-      padding: 15px;
-      background: ${styles.notesBgColor || '#f8f9fa'};
-      border: 1px solid ${styles.notesBorderColor || '#e9ecef'};
-      border-radius: 4px;
-      font-size: ${styles.bodyFontSize}px;
-      line-height: 1.8;
-      color: ${styles.notesTextColor || '#333333'};
-    }
-    
-    .unified-notes-title {
-      font-weight: 700;
-      color: ${styles.primaryColor};
-      margin-bottom: 8px;
-    }
-    
-    /* ===== UNIFIED FOOTER ===== */
-    .unified-footer {
-      margin-top: auto;
-      padding-top: 15px;
-      border-top: 2px solid ${styles.notesBorderColor || styles.primaryColor};
+    /* Customer Section - مثل فاتورة المقاسات */
+    .measurements-customer-section {
+      background: linear-gradient(135deg, #f5f5f5, #ffffff);
+      padding: 12px;
+      margin-bottom: 15px;
+      border-radius: 8px;
+      border-right: 5px solid ${SECONDARY_COLOR};
+      box-shadow: 0 2px 12px rgba(0,0,0,0.06);
       display: flex;
       justify-content: space-between;
       align-items: center;
-      font-size: 10px;
-      color: ${styles.footerTextColor || '#666666'};
     }
     
+    .measurements-customer-label {
+      font-size: 10px;
+      color: ${SECONDARY_COLOR};
+      opacity: 0.7;
+      margin-bottom: 4px;
+    }
+    
+    .measurements-customer-name {
+      font-size: 18px;
+      font-weight: bold;
+      color: ${PRIMARY_COLOR};
+    }
+    
+    .measurements-stats-cards {
+      display: flex;
+      gap: 24px;
+    }
+    
+    .measurements-stat-card {
+      text-align: center;
+    }
+    
+    .measurements-stat-value {
+      font-size: 26px;
+      font-weight: bold;
+      color: #000000;
+      font-family: 'Manrope', sans-serif;
+    }
+    
+    .measurements-stat-label {
+      font-size: 10px;
+      color: ${SECONDARY_COLOR};
+      opacity: 0.7;
+    }
+    
+    /* Table Styles - Full Grid Borders مثل فاتورة المقاسات */
+    .measurements-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+      page-break-inside: auto;
+    }
+    
+    .measurements-table thead tr {
+      background-color: #f0f0f0 !important;
+    }
+    
+    .measurements-table th {
+      padding: 4px 8px;
+      color: #000000;
+      border: 1px solid ${BORDER_COLOR};
+      text-align: center;
+      font-weight: bold;
+      font-size: 10px;
+    }
+    
+    .measurements-table td {
+      padding: 4px;
+      border: 1px solid ${BORDER_COLOR};
+      color: #000000;
+    }
+    
+    .measurements-table .even-row {
+      background-color: #f5f5f5;
+    }
+    
+    .measurements-table .odd-row {
+      background-color: #ffffff;
+    }
+    
+    /* Subtotal Row */
+    .measurements-table .subtotal-row {
+      background-color: #f5f5f5 !important;
+    }
+    
+    .measurements-table .subtotal-row td {
+      font-weight: bold;
+    }
+    
+    /* Grand Total Row - مثل فاتورة المقاسات */
+    .measurements-table .grand-total-row {
+      background-color: #1a1a1a !important;
+    }
+    
+    .measurements-table .grand-total-row td {
+      color: #ffffff;
+      font-weight: bold;
+      padding: 6px 4px;
+    }
+    
+    .measurements-table .grand-total-row .totals-label {
+      text-align: left;
+      font-size: 11px;
+    }
+    
+    .measurements-table .grand-total-row .totals-value {
+      text-align: center;
+      font-size: 11px;
+      font-family: 'Manrope', sans-serif;
+    }
+    
+    /* Discount Row */
+    .discount-row {
+      background-color: #fff5f5 !important;
+    }
+    .discount-row td {
+      color: #e74c3c;
+      font-weight: 600;
+    }
+    
+    /* Notes Section - مثل فاتورة المقاسات */
+    .measurements-notes {
+      margin-top: 10px;
+      padding: 8px;
+      background-color: #f5f5f5;
+      border: 1px solid #cccccc;
+      border-radius: 8px;
+    }
+    
+    .measurements-notes-title {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: ${SECONDARY_COLOR};
+    }
+    
+    .measurements-notes-content {
+      font-size: 9px;
+      color: ${SECONDARY_COLOR};
+      line-height: 1.6;
+    }
+    
+    /* Footer - مثل فاتورة المقاسات */
+    .measurements-footer {
+      margin-top: 12px;
+      padding: 8px 0;
+      border-top: 1px solid ${BORDER_COLOR};
+      text-align: center;
+      font-size: 9px;
+      color: #666666;
+    }
+    
+    /* Utility Classes */
+    .en-text {
+      font-family: 'Manrope', sans-serif;
+    }
+    
+    /* Print Media */
     @media print {
-      html, body { background: white; }
-      .unified-paper { 
-        margin: 0; 
-        border: none; 
-        box-shadow: none;
-        page-break-after: always;
+      @page { 
+        size: A4; 
+        margin: 10mm;
       }
-      @page { size: A4; margin: 0; }
       
-      * {
-        -webkit-print-color-adjust: exact !important;
-        print-color-adjust: exact !important;
+      * { 
+        -webkit-print-color-adjust: exact !important; 
+        print-color-adjust: exact !important; 
+        color-adjust: exact !important; 
+      }
+      
+      html, body { 
+        background: #ffffff !important; 
+        width: 100%;
+        height: 100%;
+      }
+      
+      .measurements-container {
+        width: 100%;
+        min-height: auto;
+        padding: 0;
+      }
+      
+      .measurements-table thead tr {
+        background-color: #f0f0f0 !important;
+      }
+      
+      .measurements-table .grand-total-row {
+        background-color: #1a1a1a !important;
+      }
+      
+      .measurements-customer-section,
+      .measurements-notes,
+      .measurements-footer {
+        page-break-inside: avoid;
+        break-inside: avoid;
+      }
+      
+      .measurements-table tr {
+        page-break-inside: avoid;
       }
     }
   </style>
 </head>
 <body>
-  <div class="unified-paper">
-    ${bgImageUrl ? '<div class="unified-bg-layer"></div>' : ''}
-    <div class="unified-content">
-      <!-- UNIFIED HEADER - RTL -->
-      <div class="unified-header" style="direction: rtl; display: flex; flex-direction: row-reverse; justify-content: space-between; align-items: flex-start; padding-bottom: 15px; border-bottom: 3px solid #D4AF37;">
-        <div class="unified-header-right" style="text-align: right;">
-          <img src="${fullLogoUrl}" alt="Logo" class="unified-logo" onerror="this.style.display='none'"/>
-          <div class="unified-company-info">
-            ${styles.companyName ? `<div class="unified-company-name" style="font-size: 22px; font-weight: 700; color: #D4AF37;">${styles.companyName}</div>` : ''}
-            ${styles.companySubtitle ? `<div class="unified-company-subtitle" style="font-size: 14px; color: #B8860B;">${styles.companySubtitle}</div>` : ''}
-            <div class="unified-contact-info" style="font-size: 10px;">
-              ${styles.companyAddress ? `<div>${styles.companyAddress}</div>` : ''}
-              ${styles.companyPhone ? `<div>هاتف: ${styles.companyPhone}</div>` : ''}
-            </div>
-          </div>
-        </div>
-        
-        <div class="unified-header-left" style="text-align: left;">
-          <h1 class="unified-invoice-title" style="font-size: 28px; font-weight: 700; color: #B8860B; text-transform: uppercase; letter-spacing: 2px;">PURCHASE INVOICE</h1>
-          <div class="unified-invoice-subtitle" style="font-size: 16px; font-weight: 600; color: #D4AF37; margin-bottom: 10px;">${data.invoiceName || 'فاتورة مشتريات'}</div>
-          <div class="unified-invoice-meta" style="direction: rtl; text-align: right; font-size: 12px;">
-            <div class="unified-invoice-meta-row" style="display: flex; gap: 8px; margin-bottom: 6px;">
-              <span class="unified-invoice-meta-label" style="font-weight: 700; color: #D4AF37;">رقم الفاتورة:</span>
-              <span style="color: #B8860B;">${data.invoiceNumber}</span>
-            </div>
-            <div class="unified-invoice-meta-row" style="display: flex; gap: 8px; margin-bottom: 6px;">
-              <span class="unified-invoice-meta-label" style="font-weight: 700; color: #D4AF37;">التاريخ:</span>
-              <span style="color: #B8860B;">${new Date(data.invoiceDate).toLocaleDateString('ar-LY', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-            </div>
-          </div>
+  <div class="measurements-container">
+    <!-- Header - مثل فاتورة المقاسات -->
+    <div class="measurements-header">
+      <!-- Title Side (Left in RTL) -->
+      <div class="measurements-header-title">
+        <h1 class="measurements-title">PURCHASE INVOICE</h1>
+        <div class="measurements-title-info">
+          رقم الفاتورة: <span class="en-text">${data.invoiceNumber}</span><br/>
+          التاريخ: <span class="en-text">${new Date(data.invoiceDate).toLocaleDateString('ar-LY', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
         </div>
       </div>
+
+      <!-- Company Side (Right in RTL) -->
+      <div class="measurements-header-company">
+        <img src="${fontBaseUrl}${LOGO_URL}" alt="Logo" class="measurements-logo" onerror="this.style.display='none'" />
+      </div>
+    </div>
+    
+    <!-- Customer Section - مثل فاتورة المقاسات -->
+    <div class="measurements-customer-section">
+      <div class="measurements-customer-info">
+        <div class="measurements-customer-label">المورد</div>
+        <div class="measurements-customer-name">${data.customerName}</div>
+      </div>
       
-      <!-- CUSTOMER SECTION -->
-      <div class="unified-customer-section">
-        <h3 class="unified-customer-title">بيانات الفاتورة</h3>
-        <div class="unified-customer-details">
-          <div><strong>العميل:</strong> ${data.customerName}</div>
-          <div><strong>طريقة الدفع:</strong> نقدي</div>
+      <div class="measurements-stats-cards">
+        <div class="measurements-stat-card">
+          <div class="measurements-stat-value">${totalQuantity}</div>
+          <div class="measurements-stat-label">إجمالي الكمية</div>
+        </div>
+        <div class="measurements-stat-card">
+          <div class="measurements-stat-value">${(data.items || []).length}</div>
+          <div class="measurements-stat-label">عدد الأصناف</div>
         </div>
       </div>
-      
-      <!-- UNIFIED TABLE WITH TOTALS -->
-      <table class="unified-table">
-        <thead>
-          <tr>
-            <th style="width:40%">البيان</th>
-            <th style="width:15%">الكمية</th>
-            <th style="width:20%">الفئة</th>
-            <th style="width:25%">السعر الإجمالي</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-          <!-- TOTALS ROWS -->
-          <tr class="totals-row">
-            <td colspan="2" style="text-align:right;font-weight:700;">إجمالي الكمية:</td>
-            <td colspan="2" style="font-weight:700;">${(data.items || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0)} قطعة</td>
-          </tr>
-          <tr class="totals-row">
-            <td colspan="3" style="text-align:left;font-weight:700;">المجموع الفرعي</td>
-            <td style="font-weight:700;">${subtotal.toLocaleString('ar-LY')} د.ل</td>
-          </tr>
-          ${discount > 0 ? `
-          <tr class="discount-row">
-            <td colspan="3" style="text-align:left;">التخفيض</td>
-            <td>- ${discount.toLocaleString('ar-LY')} د.ل</td>
-          </tr>
-          ` : ''}
-          <tr class="grand-total-row">
-            <td colspan="3" style="text-align:left;">المجموع الإجمالي</td>
-            <td>${data.totalAmount.toLocaleString('ar-LY')} د.ل</td>
-          </tr>
-        </tbody>
-      </table>
-      
-      <!-- NOTES -->
-      ${data.notes ? `
-      <div class="unified-notes">
-        <div class="unified-notes-title">ملاحظات</div>
-        <div>${data.notes}</div>
-      </div>
-      ` : ''}
-      
-      <!-- UNIFIED FOOTER -->
-      <div class="unified-footer">
-        <div>شكراً لتعاملكم معنا | Thank you for your business</div>
-        <div>صفحة 1 من 1</div>
-      </div>
+    </div>
+    
+    <!-- Table - مثل فاتورة المقاسات -->
+    <table class="measurements-table">
+      <thead>
+        <tr>
+          <th style="width:8%">م</th>
+          <th style="width:37%">البيان</th>
+          <th style="width:15%">الكمية</th>
+          <th style="width:20%">الفئة</th>
+          <th style="width:20%">الإجمالي</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rowsHtml}
+        <!-- Subtotal Row -->
+        <tr class="subtotal-row">
+          <td colspan="4" style="text-align:left;font-weight:700;padding:6px 4px;">المجموع الفرعي</td>
+          <td style="text-align:center;font-weight:700;padding:6px 4px;">${subtotal.toLocaleString('ar-LY')} د.ل</td>
+        </tr>
+        ${discount > 0 ? `
+        <!-- Discount Row -->
+        <tr class="discount-row">
+          <td colspan="4" style="text-align:left;padding:6px 4px;">التخفيض</td>
+          <td style="text-align:center;padding:6px 4px;">- ${discount.toLocaleString('ar-LY')} د.ل</td>
+        </tr>
+        ` : ''}
+        <!-- Grand Total Row -->
+        <tr class="grand-total-row">
+          <td colspan="4" class="totals-label">المجموع الإجمالي</td>
+          <td class="totals-value">${data.totalAmount.toLocaleString('ar-LY')} د.ل</td>
+        </tr>
+      </tbody>
+    </table>
+    
+    <!-- Notes Section -->
+    ${data.notes ? `
+    <div class="measurements-notes">
+      <div class="measurements-notes-title">ملاحظات</div>
+      <div class="measurements-notes-content">${data.notes}</div>
+    </div>
+    ` : ''}
+    
+    <!-- Footer -->
+    <div class="measurements-footer">
+      <div>صفحة 1</div>
     </div>
   </div>
   
