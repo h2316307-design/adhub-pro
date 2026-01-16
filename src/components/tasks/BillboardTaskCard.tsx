@@ -486,14 +486,12 @@ export function BillboardTaskCard({
                 </span>
               )}
             </div>
-            {customerInstallationCost > 0 && (
-              <div className="flex items-center justify-between gap-2 text-[10px]">
-                <span className="font-semibold text-green-700 dark:text-green-400">للزبون:</span>
-                <span className="font-bold text-green-800 dark:text-green-200">
-                  {customerInstallationCost.toLocaleString('ar-LY')} د.ل
-                </span>
-              </div>
-            )}
+            <div className="flex items-center justify-between gap-2 text-[10px]">
+              <span className="font-semibold text-green-700 dark:text-green-400">للزبون:</span>
+              <span className={`font-bold ${customerInstallationCost > 0 ? 'text-green-800 dark:text-green-200' : 'text-amber-600 dark:text-amber-400'}`}>
+                {customerInstallationCost > 0 ? `${customerInstallationCost.toLocaleString('ar-LY')} د.ل` : 'غير محدد'}
+              </span>
+            </div>
             {(additionalCost > 0 || isAdditionalCostEditable) && (
               <div className="flex items-center justify-between gap-2 text-[10px]">
                 <span className="font-semibold text-amber-600 dark:text-amber-400">تكاليف إضافية:</span>
