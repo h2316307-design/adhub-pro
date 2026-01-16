@@ -844,13 +844,17 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
     const size = b.size || 'غير محدد';
     sizeCounts[size] = (sizeCounts[size] || 0) + 1;
   });
+  // ✅ استبدال x بـ × (علامة الضرب العربية) لتجنب مشاكل اتجاه النص
+  // واستخدام LRI/PDI لعزل الأرقام والمقاسات
+  const LRI = '\u2066'; // Left-to-Right Isolate
+  const PDI = '\u2069'; // Pop Directional Isolate
   const sizesSummary = Object.entries(sizeCounts)
-    .map(([size, count]) => `${count} ${size}`)
+    .map(([size, count]) => `${LRI}${count} ${size.replace(/x/gi, '×')}${PDI}`)
     .join(' + ');
   
   // ✅ بناء العنوان مع الكود السنوي وتفاصيل المقاسات
-  const yearlyCodePart = contractData.yearlyCode ? ` (${contractData.yearlyCode})` : '';
-  const titleText = `${contractData.isOffer ? 'عرض سعر' : 'عقد'} #${contractData.contractNumber}${yearlyCodePart} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${sizesSummary || `${contractData.billboardsCount || 1} لوحة`} • ${contractData.currencyName || ''}`;
+  const yearlyCodePart = contractData.yearlyCode ? ` ${LRI}(${contractData.yearlyCode})${PDI}` : '';
+  const titleText = `${contractData.isOffer ? 'عرض سعر' : 'عقد'} ${LRI}#${contractData.contractNumber}${PDI}${yearlyCodePart} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${sizesSummary || `${contractData.billboardsCount || 1} لوحة`} • ${contractData.currencyName || ''}`;
   
   return `
     <!DOCTYPE html>

@@ -195,6 +195,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
   const [previewHTML, setPreviewHTML] = useState('');
   const [previewTitle, setPreviewTitle] = useState('');
   const [yearlyContractCode, setYearlyContractCode] = useState('');
+  const [sizesSummary, setSizesSummary] = useState<{size: string; count: number}[]>([]);
   
   // WhatsApp sending
   const { sendMessage, loading: sendingWhatsApp } = useSendWhatsApp();
@@ -306,6 +307,58 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       loadSortingData();
     }
   }, [open]);
+
+  // ✅ حساب ملخص المقاسات عند فتح الحوار
+  useEffect(() => {
+    const calculateSizesSummary = async () => {
+      if (!open || !contract) return;
+      
+      try {
+        // جلب بيانات اللوحات
+        const billboardIds = contract?.billboard_ids;
+        let billboards: any[] = [];
+        
+        if (billboardIds) {
+          const idsArray = typeof billboardIds === 'string' 
+            ? billboardIds.split(',').map(id => id.trim()).filter(Boolean)
+            : Array.isArray(billboardIds) ? billboardIds : [];
+          
+          if (idsArray.length > 0) {
+            const { data } = await supabase
+              .from('billboards')
+              .select('Size')
+              .in('ID', idsArray);
+            
+            if (data) billboards = data;
+          }
+        }
+        
+        // إذا لم نجد لوحات، استخدم البيانات المحفوظة
+        if (billboards.length === 0 && contract?.billboards) {
+          billboards = Array.isArray(contract.billboards) ? contract.billboards : [];
+        }
+        
+        // حساب ملخص المقاسات
+        const sizeCounts: Record<string, number> = {};
+        billboards.forEach((b: any) => {
+          const size = b.Size || b.size || 'غير محدد';
+          sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+        });
+        
+        const summary = Object.entries(sizeCounts).map(([size, count]) => ({
+          size: size.replace(/x/gi, '×'),
+          count
+        }));
+        
+        setSizesSummary(summary);
+      } catch (error) {
+        console.error('Error calculating sizes summary:', error);
+        setSizesSummary([]);
+      }
+    };
+    
+    calculateSizesSummary();
+  }, [open, contract]);
 
   // ✅ REFACTORED: Get currency information from contract
   const getCurrencyInfo = () => {
@@ -3880,6 +3933,25 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                             <span className="text-muted-foreground text-[10px]">{p.dueDate}</span>
                           )}
                         </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* ✅ ملخص المقاسات */}
+                {sizesSummary.length > 0 && (
+                  <div className="rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200/50 dark:border-blue-800/50 p-2.5">
+                    <p className="text-xs text-muted-foreground mb-2">المقاسات ({sizesSummary.reduce((sum, s) => sum + s.count, 0)} لوحة)</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sizesSummary.map((item, i) => (
+                        <span 
+                          key={i} 
+                          className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white dark:bg-gray-800 text-xs font-medium shadow-sm border"
+                        >
+                          <span className="text-primary font-bold">{item.count}</span>
+                          <span className="text-muted-foreground">×</span>
+                          <span dir="ltr">{item.size}</span>
+                        </span>
                       ))}
                     </div>
                   </div>
