@@ -73,6 +73,7 @@ export interface PaymentRow {
   printed_invoice_id?: string | null; // ✅ ربط مع فاتورة طباعة
   sales_invoice_id?: string | null; // ✅ ربط مع فاتورة مبيعات
   purchase_invoice_id?: string | null; // ✅ ربط مع فاتورة مشتريات
+  composite_task_id?: string | null; // ✅ ربط مع مهمة مجمعة
   collected_via_intermediary?: boolean; // هل تم القبض عن طريق وسيط
   collector_name?: string | null; // اسم المحصل (الذي استلم من الزبون)
   receiver_name?: string | null; // اسم المسلم له (المدير)
@@ -86,6 +87,8 @@ export interface PaymentRow {
   source_bank?: string | null; // المصرف المحول منه
   destination_bank?: string | null; // المصرف المحول إليه
   transfer_reference?: string | null; // رقم العملية التحويلية
+  // ✅ حقول إضافية لعرض البيان
+  statement_description?: string | null; // البيان/الوصف
 }
 
 export interface PrintedInvoiceRow {

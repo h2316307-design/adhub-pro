@@ -614,15 +614,14 @@ export function BillboardTaskCard({
 
   return (
     <div
-      className={`group min-w-0 w-full overflow-hidden relative rounded-xl border-2 transition-all duration-300 cursor-pointer ${
+      className={`group min-w-0 w-full overflow-hidden relative rounded-2xl border-2 transition-all duration-300 ${
         isSelected
-          ? "border-primary bg-gradient-to-br from-primary/10 to-primary/5 shadow-xl ring-2 ring-primary/40"
-          : "border-border/50 bg-card hover:border-primary/60 hover:shadow-lg"
+          ? "border-primary bg-gradient-to-br from-primary/10 to-primary/5 shadow-2xl ring-2 ring-primary/40"
+          : "border-border/50 bg-card hover:border-primary/60 hover:shadow-xl"
       }`}
-      onClick={() => onSelectionChange(!isSelected)}
     >
-      {/* صورة اللوحة الرئيسية */}
-      <div className="relative aspect-[4/3] overflow-hidden">
+      {/* صورة اللوحة الرئيسية - كبيرة وواضحة */}
+      <div className="relative aspect-[3/2] overflow-hidden rounded-t-xl">
         {billboard?.Image_URL ? (
           <img
             src={billboard.Image_URL}
@@ -635,24 +634,24 @@ export function BillboardTaskCard({
           />
         ) : (
           <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-muted to-muted/50">
-            <ImageIcon className="h-12 w-12 text-muted-foreground/30" />
+            <ImageIcon className="h-16 w-16 text-muted-foreground/30" />
           </div>
         )}
         
-        {/* تدرج شفاف */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
-        
-        {/* Checkbox */}
-        <div className="absolute top-2 left-2 z-10">
+        {/* Checkbox - في الزاوية */}
+        <div 
+          className="absolute top-2 right-2 z-10"
+          onClick={(e) => e.stopPropagation()}
+        >
           <Checkbox
             checked={isSelected}
             onCheckedChange={(checked) => onSelectionChange(checked as boolean)}
-            className="h-5 w-5 border-2 shadow-lg bg-white/90 backdrop-blur-sm data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            className="h-6 w-6 border-2 shadow-lg bg-white/95 backdrop-blur-sm data-[state=checked]:bg-primary data-[state=checked]:border-primary cursor-pointer"
           />
         </div>
 
-        {/* أزرار العمليات */}
-        <div className="absolute top-2 right-2 z-10 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+        {/* أزرار العمليات - صغيرة */}
+        <div className="absolute top-2 left-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {onDelete && (
             <button
               onClick={(e) => {
@@ -661,10 +660,10 @@ export function BillboardTaskCard({
                   onDelete();
                 }
               }}
-              className="h-7 w-7 rounded-lg bg-red-600/90 backdrop-blur-sm hover:bg-red-700 flex items-center justify-center shadow-lg transition-all hover:scale-110"
-              title="حذف اللوحة"
+              className="h-6 w-6 rounded-md bg-red-600/90 hover:bg-red-700 flex items-center justify-center shadow transition-all"
+              title="حذف"
             >
-              <Trash2 className="h-3.5 w-3.5 text-white" />
+              <Trash2 className="h-3 w-3 text-white" />
             </button>
           )}
           {onEditDesign && (
@@ -673,10 +672,10 @@ export function BillboardTaskCard({
                 e.stopPropagation();
                 onEditDesign();
               }}
-              className="h-7 w-7 rounded-lg bg-accent/90 backdrop-blur-sm hover:bg-accent flex items-center justify-center shadow-lg transition-all hover:scale-110"
-              title="تخصيص التصاميم"
+              className="h-6 w-6 rounded-md bg-accent/90 hover:bg-accent flex items-center justify-center shadow transition-all"
+              title="تصميم"
             >
-              <PaintBucket className="h-3.5 w-3.5 text-white" />
+              <PaintBucket className="h-3 w-3 text-white" />
             </button>
           )}
           {onPrint && (
@@ -685,77 +684,87 @@ export function BillboardTaskCard({
                 e.stopPropagation();
                 onPrint();
               }}
-              className="h-7 w-7 rounded-lg bg-primary/90 backdrop-blur-sm hover:bg-primary flex items-center justify-center shadow-lg transition-all hover:scale-110"
-              title="طباعة اللوحة"
+              className="h-6 w-6 rounded-md bg-primary/90 hover:bg-primary flex items-center justify-center shadow transition-all"
+              title="طباعة"
             >
-              <Printer className="h-3.5 w-3.5 text-white" />
+              <Printer className="h-3 w-3 text-white" />
             </button>
           )}
         </div>
 
         {/* مؤشر التأخير */}
         {isDelayed && (
-          <div className="absolute top-2 left-10 bg-gradient-to-r from-red-600 to-red-700 text-white px-2.5 py-1 rounded-lg flex items-center gap-1.5 shadow-lg animate-pulse">
-            <AlertTriangle className="h-3.5 w-3.5" />
-            <span className="text-[10px] font-bold">متأخر {delayDays} يوم</span>
+          <div className="absolute bottom-2 left-2 bg-red-600 text-white px-2 py-0.5 rounded flex items-center gap-1 shadow text-[10px]">
+            <AlertTriangle className="h-3 w-3" />
+            <span className="font-bold">متأخر {delayDays} يوم</span>
           </div>
         )}
         
-        {/* رقم اللوحة والمقاس */}
-        <div className="absolute bottom-2 right-2 left-2 flex items-end justify-between">
-          <div className="flex items-center gap-1.5">
-            <Badge className="text-[11px] px-2.5 py-1 font-bold bg-primary text-primary-foreground border-0 shadow-lg">
-              {billboard?.Size}
-            </Badge>
-            {billboard?.Faces_Count && (
-              <Badge className="text-[10px] px-2 py-0.5 font-semibold bg-accent text-accent-foreground border-0 shadow-md">
-                {billboard.Faces_Count === 1 ? 'وجه' : `${billboard.Faces_Count} أوجه`}
-              </Badge>
-            )}
-          </div>
-          <div className="bg-foreground/90 backdrop-blur-sm px-2.5 py-1 rounded-lg shadow-lg">
-            <span className="font-bold text-xs text-background">#{billboard?.ID}</span>
+        {/* رقم اللوحة فقط */}
+        <div className="absolute bottom-2 right-2">
+          <div className="bg-black/70 backdrop-blur-sm px-2 py-1 rounded shadow">
+            <span className="font-bold text-xs text-white">#{billboard?.ID}</span>
           </div>
         </div>
       </div>
 
       {/* محتوى الكرت */}
-      <div className="p-3 space-y-2.5">
-        {/* اسم اللوحة */}
-        <p className="font-bold text-sm line-clamp-1 group-hover:text-primary transition-colors">
-          {billboard?.Billboard_Name || `لوحة #${billboard?.ID}`}
-        </p>
-        
-        {/* الموقع */}
-        <div className="flex items-center gap-2 text-xs p-2 bg-muted/50 rounded-lg">
-          <MapPin className="h-4 w-4 text-primary flex-shrink-0" />
-          <div className="flex-1 min-w-0">
-            <span className="font-semibold block truncate">{billboard?.Municipality || 'غير محدد'}</span>
-            {billboard?.District && (
-              <span className="text-[10px] text-muted-foreground truncate block">{billboard.District}</span>
+      <div className="p-3 space-y-2">
+        {/* اسم اللوحة والحجم */}
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-bold text-sm line-clamp-1 flex-1">
+            {billboard?.Billboard_Name || `لوحة #${billboard?.ID}`}
+          </h3>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            <Badge className="text-[10px] px-2 py-0.5 font-bold bg-primary text-primary-foreground">
+              {billboard?.Size}
+            </Badge>
+            {billboard?.Faces_Count && (
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">
+                {billboard.Faces_Count} وجه
+              </Badge>
             )}
           </div>
         </div>
         
-        {billboard?.Nearest_Landmark && (
-          <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-            <Navigation className="h-3 w-3 flex-shrink-0" />
-            <span className="line-clamp-1">{billboard.Nearest_Landmark}</span>
-          </div>
+        {/* الموقع - مختصر */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <MapPin className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+          <span className="truncate">{billboard?.Municipality || 'غير محدد'}</span>
+          {billboard?.District && (
+            <>
+              <span>-</span>
+              <span className="truncate">{billboard.District}</span>
+            </>
+          )}
+        </div>
+        
+        {/* GPS */}
+        {billboard?.GPS_Link && (
+          <a
+            href={billboard.GPS_Link}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={(e) => e.stopPropagation()}
+            className="flex items-center gap-1.5 text-xs text-primary hover:underline"
+          >
+            <Navigation className="h-3 w-3" />
+            عرض الموقع
+          </a>
         )}
         
-        {/* عرض صورة التصميم المحفوظة في العنصر - يظهر دائماً إذا كان هناك تصميم محفوظ */}
+        {/* عرض صورة التصميم المحفوظة في العنصر */}
         {(item.design_face_a || item.design_face_b) && (
-          <div className="mt-2 p-2 bg-accent/10 rounded-lg border border-accent/20">
-            <p className="text-[10px] font-semibold text-accent mb-1.5 flex items-center gap-1">
-              <PaintBucket className="h-3 w-3" />
+          <div className="p-3 bg-accent/10 rounded-xl border border-accent/20">
+            <p className="text-xs font-semibold text-accent mb-2 flex items-center gap-1.5">
+              <PaintBucket className="h-4 w-4" />
               التصميم المحفوظ
             </p>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-3">
               {item.design_face_a && (
-                <div className="space-y-1">
-                  <div className="text-[9px] text-center text-muted-foreground font-medium">الوجه الأمامي</div>
-                  <div className="relative aspect-video rounded overflow-hidden bg-white dark:bg-gray-900 border-2 border-accent/30 shadow-sm">
+                <div className="space-y-1.5">
+                  <div className="text-xs text-center text-muted-foreground font-medium">الوجه الأمامي</div>
+                  <div className="relative aspect-video rounded-lg overflow-hidden bg-white dark:bg-gray-900 border-2 border-accent/30 shadow-sm">
                     <img
                       src={item.design_face_a}
                       alt="الوجه الأمامي"
@@ -769,9 +778,9 @@ export function BillboardTaskCard({
                 </div>
               )}
               {item.design_face_b && (
-                <div className="space-y-1">
-                  <div className="text-[9px] text-center text-muted-foreground font-medium">الوجه الخلفي</div>
-                  <div className="relative aspect-video rounded overflow-hidden bg-white dark:bg-gray-900 border-2 border-accent/30 shadow-sm">
+                <div className="space-y-1.5">
+                  <div className="text-xs text-center text-muted-foreground font-medium">الوجه الخلفي</div>
+                  <div className="relative aspect-video rounded-lg overflow-hidden bg-white dark:bg-gray-900 border-2 border-accent/30 shadow-sm">
                     <img
                       src={item.design_face_b}
                       alt="الوجه الخلفي"
@@ -790,10 +799,10 @@ export function BillboardTaskCard({
         
         {/* قسم اختيار التصميم - يظهر فقط إذا كان هناك تصاميم */}
         {taskDesigns.length > 0 && (
-          <div className="mt-3 pt-2 border-t border-border">
-            <div className="space-y-2">
-              <Label htmlFor={`design-${item.id}`} className="text-xs font-semibold flex items-center gap-1">
-                <Palette className="h-3 w-3 text-primary" />
+          <div className="pt-3 border-t border-border">
+            <div className="space-y-3">
+              <Label htmlFor={`design-${item.id}`} className="text-sm font-semibold flex items-center gap-1.5">
+                <Palette className="h-4 w-4 text-primary" />
                 اختر التصميم للوحة: ({taskDesigns.length} متاح)
               </Label>
               <Select 
@@ -803,13 +812,13 @@ export function BillboardTaskCard({
               >
                 <SelectTrigger 
                   id={`design-${item.id}`} 
-                  className="h-8 text-xs"
+                  className="h-10 text-sm"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <SelectValue>
                     {selectedDesign ? (
-                      <div className="flex items-center gap-1.5">
-                        <Palette className="h-3 w-3 text-primary" />
+                      <div className="flex items-center gap-2">
+                        <Palette className="h-4 w-4 text-primary" />
                         <span className="font-medium">{selectedDesign.design_name}</span>
                       </div>
                     ) : (
@@ -822,7 +831,7 @@ export function BillboardTaskCard({
                   {taskDesigns.map((design) => (
                     <SelectItem key={design.id} value={design.id}>
                       <div className="flex items-center gap-2">
-                        <Palette className="h-3 w-3" />
+                        <Palette className="h-4 w-4" />
                         <span className="font-medium">{design.design_name}</span>
                       </div>
                     </SelectItem>
@@ -832,15 +841,15 @@ export function BillboardTaskCard({
               
               {/* عرض معاينة التصميم المختار */}
               {selectedDesign && (
-                <div className="mt-2 p-2 bg-primary/5 rounded-lg border border-primary/20">
-                  <p className="text-[10px] font-semibold text-primary mb-1.5 flex items-center gap-1">
-                    <PaintBucket className="h-3 w-3" />
+                <div className="p-3 bg-primary/5 rounded-xl border border-primary/20">
+                  <p className="text-xs font-semibold text-primary mb-2 flex items-center gap-1.5">
+                    <PaintBucket className="h-4 w-4" />
                     {selectedDesign.design_name}
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <div className="text-[9px] text-center text-muted-foreground font-medium">الوجه الأمامي</div>
-                      <div className="relative aspect-video rounded overflow-hidden bg-white dark:bg-gray-900 border-2 border-primary/30 shadow-sm">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <div className="text-xs text-center text-muted-foreground font-medium">الوجه الأمامي</div>
+                      <div className="relative aspect-video rounded-lg overflow-hidden bg-white dark:bg-gray-900 border-2 border-primary/30 shadow-sm">
                         <img
                           src={selectedDesign.design_face_a_url}
                           alt="الوجه الأمامي"
@@ -853,9 +862,9 @@ export function BillboardTaskCard({
                       </div>
                     </div>
                     {selectedDesign.design_face_b_url && (
-                      <div className="space-y-1">
-                        <div className="text-[9px] text-center text-muted-foreground font-medium">الوجه الخلفي</div>
-                        <div className="relative aspect-video rounded overflow-hidden bg-white dark:bg-gray-900 border-2 border-primary/30 shadow-sm">
+                      <div className="space-y-1.5">
+                        <div className="text-xs text-center text-muted-foreground font-medium">الوجه الخلفي</div>
+                        <div className="relative aspect-video rounded-lg overflow-hidden bg-white dark:bg-gray-900 border-2 border-primary/30 shadow-sm">
                           <img
                             src={selectedDesign.design_face_b_url}
                             alt="الوجه الخلفي"
@@ -876,52 +885,52 @@ export function BillboardTaskCard({
         )}
 
         {/* قسم الإعدادات السريعة - مجسم وتكلفة */}
-        <div className="mt-3 pt-2 border-t border-border space-y-2">
+        <div className="pt-3 border-t border-border space-y-3">
           {/* صف المجسم والتكلفة */}
-          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between gap-3 flex-wrap" onClick={(e) => e.stopPropagation()}>
             {/* خيار المجسم */}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 handleCutoutChange(!hasCutout);
               }}
-              className={`flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-semibold transition-all ${
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all ${
                 hasCutout 
                   ? 'bg-accent/20 text-accent border border-accent/40' 
                   : 'bg-muted/50 text-muted-foreground border border-transparent hover:border-accent/30 hover:bg-accent/10'
               }`}
             >
-              <Box className="h-3 w-3" />
+              <Box className="h-4 w-4" />
               {hasCutout ? 'مجسم ✓' : 'مجسم'}
             </button>
             
             {/* تكلفة التركيب والزبون */}
-            <div className="flex-1 flex items-center gap-2 text-[10px]">
-              <div className="flex items-center gap-1">
+            <div className="flex items-center gap-4 text-xs">
+              <div className="flex items-center gap-1.5 bg-green-50 dark:bg-green-900/20 px-3 py-1.5 rounded-lg">
                 <span className="text-muted-foreground">الشركة:</span>
                 {installationPrice > 0 ? (
-                  <span className="font-bold text-green-600">{installationPrice.toLocaleString('ar-LY')}</span>
+                  <span className="font-bold text-green-600 dark:text-green-400">{installationPrice.toLocaleString('ar-LY')} د.ل</span>
                 ) : (
                   <span className="text-amber-500">-</span>
                 )}
               </div>
               {customerInstallationCost > 0 && (
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1.5 bg-blue-50 dark:bg-blue-900/20 px-3 py-1.5 rounded-lg">
                   <span className="text-muted-foreground">الزبون:</span>
-                  <span className="font-bold text-blue-600">{customerInstallationCost.toLocaleString('ar-LY')}</span>
+                  <span className="font-bold text-blue-600 dark:text-blue-400">{customerInstallationCost.toLocaleString('ar-LY')} د.ل</span>
                 </div>
               )}
             </div>
           </div>
           
           {/* إدخال المبلغ للزبون مع زر القفل */}
-          <div onClick={(e) => e.stopPropagation()} className="space-y-1.5">
-            <div className="flex items-center gap-2">
+          <div onClick={(e) => e.stopPropagation()} className="space-y-2">
+            <div className="flex items-center gap-3">
               <Button
                 type="button"
                 variant={isCustomerCostEditable ? "default" : "outline"}
                 size="sm"
-                className={`h-7 px-2 text-[10px] gap-1 ${isCustomerCostEditable ? 'bg-primary' : ''}`}
+                className={`h-9 px-3 text-xs gap-1.5 ${isCustomerCostEditable ? 'bg-primary' : ''}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   setIsCustomerCostEditable(!isCustomerCostEditable);
@@ -929,12 +938,12 @@ export function BillboardTaskCard({
               >
                 {isCustomerCostEditable ? (
                   <>
-                    <Unlock className="h-3 w-3" />
+                    <Unlock className="h-4 w-4" />
                     مفتوح
                   </>
                 ) : (
                   <>
-                    <Lock className="h-3 w-3" />
+                    <Lock className="h-4 w-4" />
                     تعديل السعر
                   </>
                 )}
@@ -952,15 +961,15 @@ export function BillboardTaskCard({
                   }}
                   onBlur={handleCustomerCostBlur}
                   disabled={!isCustomerCostEditable || savingCost}
-                  className={`h-7 text-xs font-medium pl-12 transition-all ${
+                  className={`h-9 text-sm font-medium pl-14 transition-all ${
                     isCustomerCostEditable 
                       ? 'bg-primary/10 border-primary focus:border-primary ring-1 ring-primary/20' 
                       : 'bg-muted/30 border-muted cursor-not-allowed'
                   }`}
                   placeholder="سعر الزبون"
                 />
-                <div className="absolute left-2 top-1/2 -translate-y-1/2 flex items-center gap-0.5 text-[9px] text-muted-foreground">
-                  <DollarSign className="h-3 w-3" />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2 flex items-center gap-1 text-xs text-muted-foreground">
+                  <DollarSign className="h-4 w-4" />
                   د.ل
                 </div>
               </div>
@@ -969,7 +978,7 @@ export function BillboardTaskCard({
           
           {/* الفرق */}
           {customerInstallationCost > 0 && installationPrice > 0 && (
-            <div className={`text-[10px] text-center py-1 px-2 rounded font-medium ${
+            <div className={`text-sm text-center py-2 px-3 rounded-xl font-semibold ${
               (customerInstallationCost - installationPrice) > 0 
                 ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' 
                 : (customerInstallationCost - installationPrice) < 0

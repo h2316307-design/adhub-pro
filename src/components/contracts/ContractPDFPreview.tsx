@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '@/components/ui/button';
 import * as UIDialog from '@/components/ui/dialog';
 import { Printer, X } from 'lucide-react';
+import DOMPurify from 'dompurify';
 
 interface ContractPDFPreviewProps {
   open: boolean;
@@ -11,10 +12,20 @@ interface ContractPDFPreviewProps {
 }
 
 export function ContractPDFPreview({ open, onOpenChange, title, html }: ContractPDFPreviewProps) {
+  // Sanitize HTML to prevent XSS attacks
+  const sanitizedHtml = React.useMemo(() => {
+    return DOMPurify.sanitize(html, {
+      ADD_TAGS: ['style', 'link'],
+      ADD_ATTR: ['target', 'rel', 'dir', 'lang'],
+      WHOLE_DOCUMENT: true,
+      RETURN_DOM: false,
+    });
+  }, [html]);
+
   const handlePrint = () => {
     const printWindow = window.open('', '_blank');
     if (printWindow) {
-      printWindow.document.write(html);
+      printWindow.document.write(sanitizedHtml);
       printWindow.document.close();
       printWindow.focus();
       printWindow.print();
@@ -49,10 +60,11 @@ export function ContractPDFPreview({ open, onOpenChange, title, html }: Contract
           <div className="flex-1 overflow-auto bg-muted/30 p-4">
             <div className="mx-auto bg-white shadow-2xl rounded-lg overflow-hidden" style={{ width: '210mm', minHeight: '297mm' }}>
               <iframe
-                srcDoc={html}
+                srcDoc={sanitizedHtml}
                 className="w-full border-0"
                 style={{ height: '297mm' }}
                 title="PDF Preview"
+                sandbox="allow-same-origin"
               />
             </div>
           </div>

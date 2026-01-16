@@ -164,30 +164,51 @@ const formatExpiryDate = (dateStr: string | null): string => {
 // Simplified high-performance pin SVG - cached by size
 const pinCache = new Map<string, string>();
 
-const createPinSvg = (size: string, status: string): string => {
-  const cacheKey = `${size}-${status}`;
+const createPinSvg = (size: string, status: string, isSelected: boolean = false): string => {
+  const cacheKey = `${size}-${status}-${isSelected}`;
   if (pinCache.has(cacheKey)) return pinCache.get(cacheKey)!;
   
   const colors = getSizeColor(size);
   const statusColor = status === "متاح" ? "#10b981" : status === "قريباً" ? "#f59e0b" : "#ef4444";
   const displaySize = size.length > 6 ? size.substring(0, 5) + ".." : size;
+  const selectedStroke = isSelected ? '#d4af37' : colors.border;
+  const strokeWidth = isSelected ? 3 : 2;
   
+  // تصميم محسّن مع checkbox أكبر وأوضح فوق الـ pin
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="52" height="64" viewBox="0 0 52 64">
-      <g>
+    <svg xmlns="http://www.w3.org/2000/svg" width="56" height="90" viewBox="0 0 56 90">
+      <defs>
+        <filter id="shadow-${cacheKey}" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/>
+        </filter>
+      </defs>
+      <g filter="url(#shadow-${cacheKey})">
+        <!-- Checkbox container - أكبر وأوضح -->
+        <rect x="14" y="2" width="28" height="24" rx="6" 
+              fill="${isSelected ? '#d4af37' : '#ffffff'}" 
+              stroke="${isSelected ? '#1a1a2e' : '#888888'}" 
+              stroke-width="2.5"/>
+        ${isSelected ? `
+          <!-- Checkmark -->
+          <path d="M21 14 l5 5 l10 -10" fill="none" stroke="#1a1a2e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        ` : `
+          <!-- Empty checkbox hint -->
+          <rect x="22" y="10" width="12" height="8" rx="2" fill="#e0e0e0" opacity="0.5"/>
+        `}
         <!-- Pin shadow -->
-        <ellipse cx="26" cy="60" rx="10" ry="3" fill="rgba(0,0,0,0.3)"/>
+        <ellipse cx="28" cy="86" rx="12" ry="3" fill="rgba(0,0,0,0.35)"/>
         <!-- Pin body -->
-        <path d="M26 2C14.954 2 6 10.954 6 22c0 12 20 38 20 38s20-26 20-38C46 10.954 37.046 2 26 2z"
-              fill="${colors.bg}" stroke="${colors.border}" stroke-width="2"/>
-        <!-- Inner circle -->
-        <circle cx="26" cy="22" r="14" fill="#1a1a2e" stroke="${colors.border}" stroke-width="1.5"/>
-        <!-- Status dot -->
-        <circle cx="26" cy="22" r="5" fill="${statusColor}"/>
-        <!-- Size label background -->
-        <rect x="4" y="42" width="44" height="16" rx="4" fill="#1a1a2e" stroke="${colors.border}" stroke-width="1"/>
+        <path d="M28 28C15.954 28 7 36.954 7 48c0 14 21 38 21 38s21-24 21-38C49 36.954 40.046 28 28 28z"
+              fill="${colors.bg}" stroke="${selectedStroke}" stroke-width="${strokeWidth}"/>
+        <!-- Inner circle with glow effect -->
+        <circle cx="28" cy="48" r="15" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1.5"/>
+        <!-- Status dot with pulse effect for available -->
+        <circle cx="28" cy="48" r="6" fill="${statusColor}"/>
+        ${status === "متاح" ? `<circle cx="28" cy="48" r="8" fill="none" stroke="${statusColor}" stroke-width="1" opacity="0.5"/>` : ''}
+        <!-- Size label background - أكبر -->
+        <rect x="4" y="68" width="48" height="18" rx="5" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1"/>
         <!-- Size text -->
-        <text x="26" y="53" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="${colors.bg}">${displaySize}</text>
+        <text x="28" y="80" text-anchor="middle" font-family="Arial,sans-serif" font-size="10" font-weight="bold" fill="${colors.bg}">${displaySize}</text>
       </g>
     </svg>
   `;
@@ -545,37 +566,18 @@ export default function OpenStreetBillboardsMap({ billboards, className, onReady
 
       // Create icon with selection indicator (always visible like a checkbox)
       const createIcon = (selected: boolean) => {
+        // استخدام SVG مع الـ checkbox المدمج
         const iconHtml = `
-          <div style="position: relative; cursor: pointer;">
-            ${createPinSvg(size, status)}
-            <div style="
-              position: absolute;
-              top: -8px;
-              right: -8px;
-              width: 24px;
-              height: 24px;
-              background: ${selected ? '#22c55e' : 'rgba(255,255,255,0.25)'};
-              border-radius: 50%;
-              display: flex;
-              align-items: center;
-              justify-content: center;
-              border: 2px solid white;
-              box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-            ">
-              ${selected ? `
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3">
-                  <polyline points="20,6 9,17 4,12"/>
-                </svg>
-              ` : ''}
-            </div>
+          <div style="position: relative; cursor: pointer;" title="انقر للتحديد">
+            ${createPinSvg(size, status, selected)}
           </div>
         `;
         return L.divIcon({
           html: iconHtml,
           className: "custom-marker-icon" + (selected ? " selected" : ""),
-          iconSize: [52, 64],
-          iconAnchor: [26, 60],
-          popupAnchor: [0, -55],
+          iconSize: [56, 90],
+          iconAnchor: [28, 86],
+          popupAnchor: [0, -80],
         });
       };
 

@@ -246,6 +246,56 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
       const isDistributedPayment = !!distributedContractsMatch;
       const distributedContracts = distributedContractsMatch ? distributedContractsMatch[2].split(',').map((c: string) => c.trim()) : [];
 
+      // ✅ تحديد نوع الدفعة ومصدرها
+      const isCompositeTaskPayment = !!(payment as any).composite_task_id;
+      const isSalesInvoicePayment = !!(payment as any).sales_invoice_id;
+      const isPrintedInvoicePayment = !!(payment as any).printed_invoice_id;
+      
+      // جلب بيانات المهمة المجمعة
+      let compositeTaskInfo: { task_type?: string; customer_total?: number } | null = null;
+      if (isCompositeTaskPayment) {
+        try {
+          const { data } = await supabase
+            .from('composite_tasks')
+            .select('task_type, customer_total, contract_id')
+            .eq('id', (payment as any).composite_task_id)
+            .single();
+          compositeTaskInfo = data;
+        } catch (e) {
+          console.error('Error fetching composite task:', e);
+        }
+      }
+
+      // جلب بيانات فاتورة المبيعات
+      let salesInvoiceInfo: { invoice_number?: string; notes?: string; total_amount?: number } | null = null;
+      if (isSalesInvoicePayment) {
+        try {
+          const { data } = await supabase
+            .from('sales_invoices')
+            .select('invoice_number, notes, total_amount')
+            .eq('id', (payment as any).sales_invoice_id)
+            .single();
+          salesInvoiceInfo = data;
+        } catch (e) {
+          console.error('Error fetching sales invoice:', e);
+        }
+      }
+
+      // جلب بيانات فاتورة الطباعة
+      let printedInvoiceInfo: { invoice_number?: string; total_amount?: number; printer_name?: string } | null = null;
+      if (isPrintedInvoicePayment) {
+        try {
+          const { data } = await supabase
+            .from('printed_invoices')
+            .select('invoice_number, total_amount, printer_name')
+            .eq('id', (payment as any).printed_invoice_id)
+            .single();
+          printedInvoiceInfo = data;
+        } catch (e) {
+          console.error('Error fetching printed invoice:', e);
+        }
+      }
+
       // جلب بيانات العقود لنوع الإعلان
       let contractsData: { [key: string]: string } = {};
       if (isDistributedPayment && distributedContracts.length > 0) {
@@ -264,6 +314,29 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
           console.error('Error fetching contracts data:', e);
         }
       }
+
+      // ✅ تحديد البيان/الوصف للدفعة
+      const getPaymentDescription = () => {
+        if (isDistributedPayment) return `دفعة موزعة على ${distributedContracts.length} عقود`;
+        if (isCompositeTaskPayment && compositeTaskInfo) {
+          const taskTypeLabels: { [key: string]: string } = {
+            'طباعة_تركيب': 'مهمة طباعة وتركيب',
+            'طباعة_قص_تركيب': 'مهمة طباعة وقص وتركيب',
+            'installation': 'مهمة تركيب',
+            'print': 'مهمة طباعة'
+          };
+          return taskTypeLabels[compositeTaskInfo.task_type || ''] || 'مهمة مجمعة';
+        }
+        if (isSalesInvoicePayment && salesInvoiceInfo) {
+          return `فاتورة مبيعات${salesInvoiceInfo.invoice_number ? ` رقم ${salesInvoiceInfo.invoice_number}` : ''}${salesInvoiceInfo.notes ? ` - ${salesInvoiceInfo.notes}` : ''}`;
+        }
+        if (isPrintedInvoicePayment && printedInvoiceInfo) {
+          return `فاتورة طباعة${printedInvoiceInfo.invoice_number ? ` رقم ${printedInvoiceInfo.invoice_number}` : ''}${printedInvoiceInfo.printer_name ? ` - ${printedInvoiceInfo.printer_name}` : ''}`;
+        }
+        if (payment.contract_number) return `عقد رقم ${payment.contract_number}`;
+        if (payment.entry_type === 'account_payment') return 'دفعة على الحساب العام';
+        return 'دفعة';
+      };
 
       // استخراج الملاحظات الأصلية بدون معلومات التوزيع والتكرارات
       let cleanNotes = payment.notes || '';
@@ -654,9 +727,33 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
                   ${paymentDate}
                 </div>
                 <div>
-                  <strong>رقم العقد:</strong><br>
-                  ${isDistributedPayment ? `موزعة على ${distributedContracts.length} عقود` : (payment.contract_number || 'غير محدد')}
+                  <strong>البيان:</strong><br>
+                  ${getPaymentDescription()}
                 </div>
+                ${payment.contract_number && !isDistributedPayment && !isCompositeTaskPayment && !isSalesInvoicePayment && !isPrintedInvoicePayment ? `
+                <div>
+                  <strong>رقم العقد:</strong><br>
+                  ${payment.contract_number}
+                </div>
+                ` : ''}
+                ${isCompositeTaskPayment && compositeTaskInfo ? `
+                <div>
+                  <strong>إجمالي المهمة:</strong><br>
+                  ${formatArabicNumber(compositeTaskInfo.customer_total || 0)} ${currencyInfo.symbol}
+                </div>
+                ` : ''}
+                ${isSalesInvoicePayment && salesInvoiceInfo ? `
+                <div>
+                  <strong>إجمالي الفاتورة:</strong><br>
+                  ${formatArabicNumber(salesInvoiceInfo.total_amount || 0)} ${currencyInfo.symbol}
+                </div>
+                ` : ''}
+                ${isPrintedInvoicePayment && printedInvoiceInfo ? `
+                <div>
+                  <strong>إجمالي فاتورة الطباعة:</strong><br>
+                  ${formatArabicNumber(printedInvoiceInfo.total_amount || 0)} ${currencyInfo.symbol}
+                </div>
+                ` : ''}
                 ${payment.reference ? `
                 <div>
                   <strong>المرجع / رقم الشيك:</strong><br>

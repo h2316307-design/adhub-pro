@@ -61,13 +61,18 @@ export default function SelectableBillboardsMap({
   }, [provider]);
 
   // Filter billboards if showOnlyAvailable is true
+  // ✅ إبقاء اللوحات المختارة ظاهرة حتى لو كانت غير متاحة
   const displayedBillboards = useMemo(() => {
     if (!showOnlyAvailable) return billboards;
     return billboards.filter(b => {
+      const billboardId = String((b as any).ID || (b as any).id || '');
+      // إبقاء اللوحات المختارة ظاهرة دائماً
+      if (selectedBillboards?.has(billboardId)) return true;
+      
       const status = String((b as any).Status || (b as any).status || '').toLowerCase();
       return status === 'متاح' || status === 'available' || status === '';
     });
-  }, [billboards, showOnlyAvailable]);
+  }, [billboards, showOnlyAvailable, selectedBillboards]);
 
   // Count available and selected
   const availableCount = useMemo(() => {

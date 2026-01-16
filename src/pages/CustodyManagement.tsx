@@ -714,10 +714,6 @@ export default function CustodyManagement() {
             <DollarSign className="h-4 w-4" />
             الحركات
           </TabsTrigger>
-          <TabsTrigger value="expenses" className="gap-2">
-            <TrendingDown className="h-4 w-4" />
-            المصروفات
-          </TabsTrigger>
         </TabsList>
 
         {/* By Employee Tab */}
@@ -846,20 +842,26 @@ export default function CustodyManagement() {
                                           <span className="text-muted-foreground">—</span>
                                         )}
                                       </TableCell>
-                                      <TableCell>
+                                      <TableCell className="min-w-[200px]">
                                         {account.source_type === 'distributed_payment' ? (
-                                          <div className="space-y-1">
+                                          <div className="space-y-1.5 bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200 dark:border-amber-800">
                                             <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
                                               <CreditCard className="h-3 w-3 ml-1" />
                                               دفعة موزعة
                                             </Badge>
                                             {(account.source_customer_name || account.source_contract_number) && (
-                                              <div className="text-xs text-muted-foreground">
+                                              <div className="text-sm space-y-0.5">
                                                 {account.source_customer_name && (
-                                                  <div>الزبون: <span className="font-medium text-foreground">{account.source_customer_name}</span></div>
+                                                  <div className="flex items-center gap-1">
+                                                    <span className="text-muted-foreground">الزبون:</span>
+                                                    <span className="font-semibold text-foreground">{account.source_customer_name}</span>
+                                                  </div>
                                                 )}
                                                 {account.source_contract_number && (
-                                                  <div>العقد: <span className="font-medium text-foreground">#{account.source_contract_number}</span></div>
+                                                  <div className="flex items-center gap-1">
+                                                    <span className="text-muted-foreground">العقد:</span>
+                                                    <span className="font-semibold font-manrope text-primary">#{account.source_contract_number}</span>
+                                                  </div>
                                                 )}
                                               </div>
                                             )}
@@ -881,8 +883,17 @@ export default function CustodyManagement() {
                                           <span className="text-muted-foreground">—</span>
                                         )}
                                       </TableCell>
-                                      <TableCell className="font-bold">
-                                        {account.current_balance.toLocaleString('ar-LY')} د.ل
+                                      <TableCell>
+                                        {account.current_balance <= 0 ? (
+                                          <Badge className="bg-green-600 text-white gap-1">
+                                            <CheckCircle className="h-3 w-3" />
+                                            مكتمل
+                                          </Badge>
+                                        ) : (
+                                          <span className="font-bold font-manrope text-amber-600">
+                                            {account.current_balance.toLocaleString('ar-LY')} د.ل
+                                          </span>
+                                        )}
                                       </TableCell>
                                     <TableCell>
                                       {(() => {
@@ -918,7 +929,14 @@ export default function CustodyManagement() {
                                               variant="outline"
                                               size="sm"
                                               className="gap-1 text-red-600 border-red-600 hover:bg-red-50"
-                                              onClick={() => handleOpenExpenseForAccount(account)}
+                                              onClick={() => {
+                                                // ✅ منع إضافة مصروف إذا كان رصيد العهدة مكتمل/صفر
+                                                if ((Number(account.current_balance) || 0) <= 0) {
+                                                  toast.error('لا يمكن إضافة مصروف لعهدة رصيدها مكتمل/صفر');
+                                                  return;
+                                                }
+                                                handleOpenExpenseForAccount(account);
+                                              }}
                                             >
                                               <TrendingDown className="h-3 w-3" />
                                               مصروف
@@ -1032,24 +1050,29 @@ export default function CustodyManagement() {
                       >
                         <TableCell className="font-medium">{account.account_number}</TableCell>
                         <TableCell>{(account.employee as any)?.name || '-'}</TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[180px]">
                           {account.source_type === 'distributed_payment' ? (
-                            <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300">
-                              <CreditCard className="h-3 w-3 ml-1" />
-                              دفعة موزعة
-                            </Badge>
+                            <div className="bg-amber-50 dark:bg-amber-950/30 p-2 rounded-lg border border-amber-200 dark:border-amber-800">
+                              <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 mb-1">
+                                <CreditCard className="h-3 w-3 ml-1" />
+                                دفعة موزعة
+                              </Badge>
+                            </div>
                           ) : (
                             <Badge variant="outline" className="bg-blue-100 text-blue-700 border-blue-300">
                               يدوي
                             </Badge>
                           )}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="min-w-[160px]">
                           {account.source_type === 'distributed_payment' ? (
-                            <div className="text-sm">
-                              <div className="font-medium">{account.source_customer_name || '—'}</div>
+                            <div className="text-sm space-y-0.5">
+                              <div className="font-semibold">{account.source_customer_name || '—'}</div>
                               {account.source_contract_number && (
-                                <div className="text-xs text-muted-foreground">عقد رقم {account.source_contract_number}</div>
+                                <div className="text-xs">
+                                  <span className="text-muted-foreground">عقد </span>
+                                  <span className="font-manrope font-bold text-primary">#{account.source_contract_number}</span>
+                                </div>
                               )}
                             </div>
                           ) : (
@@ -1057,8 +1080,17 @@ export default function CustodyManagement() {
                           )}
                         </TableCell>
                         <TableCell>{account.initial_amount.toLocaleString('ar-LY')} د.ل</TableCell>
-                        <TableCell className="font-bold">
-                          {account.current_balance.toLocaleString('ar-LY')} د.ل
+                        <TableCell>
+                          {account.current_balance <= 0 ? (
+                            <Badge className="bg-green-600 text-white gap-1">
+                              <CheckCircle className="h-3 w-3" />
+                              مكتمل
+                            </Badge>
+                          ) : (
+                            <span className="font-bold font-manrope text-amber-600">
+                              {account.current_balance.toLocaleString('ar-LY')} د.ل
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           {(() => {
@@ -1130,7 +1162,7 @@ export default function CustodyManagement() {
           </Card>
         </TabsContent>
 
-        {/* Transactions Tab */}
+        {/* Transactions Tab - Combined with Expenses, Grouped by Account */}
         <TabsContent value="transactions">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
@@ -1138,185 +1170,242 @@ export default function CustodyManagement() {
                 <TrendingUp className="h-5 w-5" />
                 حركات العهدة
               </CardTitle>
-              <Button onClick={() => setTransactionDialogOpen(true)} size="sm" className="gap-2">
-                <Plus className="h-4 w-4" />
-                إضافة حركة
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={() => {
+                  resetExpenseForm();
+                  setExpenseDialogOpen(true);
+                }} size="sm" className="gap-2" variant="destructive">
+                  <Plus className="h-4 w-4" />
+                  إضافة مصروف
+                </Button>
+                <Button onClick={() => setTransactionDialogOpen(true)} size="sm" className="gap-2">
+                  <Plus className="h-4 w-4" />
+                  إضافة حركة
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <div className="rounded-lg border border-border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-right font-semibold">التاريخ</TableHead>
-                      <TableHead className="text-right font-semibold">العهدة</TableHead>
-                      <TableHead className="text-right font-semibold">نوع الحركة</TableHead>
-                      <TableHead className="text-right font-semibold">المبلغ</TableHead>
-                      <TableHead className="text-right font-semibold">المستلم</TableHead>
-                      <TableHead className="text-right font-semibold">الوصف</TableHead>
-                      <TableHead className="text-right font-semibold">رقم الإيصال</TableHead>
-                      <TableHead className="text-right font-semibold">الإجراءات</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
-                          <div className="flex flex-col items-center gap-2">
-                            <DollarSign className="h-8 w-8 text-muted-foreground/50" />
-                            <span>لا توجد حركات مسجلة</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      transactions.map((transaction) => (
-                        <TableRow key={transaction.id} className="hover:bg-muted/30 transition-colors">
-                          <TableCell>
-                            {new Date(transaction.transaction_date).toLocaleDateString('ar-LY')}
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs text-muted-foreground">
-                              {getAccountInfo(transaction.custody_account_id, accounts)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant={transaction.transaction_type === 'deposit' ? 'default' : 'destructive'}
-                              className={transaction.transaction_type === 'deposit' ? 'bg-green-600' : ''}
-                            >
-                              {transaction.transaction_type === 'deposit' ? (
-                                <><TrendingUp className="h-3 w-3 ml-1" /> إيداع</>
-                              ) : (
-                                <><TrendingDown className="h-3 w-3 ml-1" /> سحب</>
-                              )}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className={`font-bold ${transaction.transaction_type === 'deposit' ? 'text-green-600' : 'text-red-600'}`}>
-                            {transaction.transaction_type === 'deposit' ? '+' : '-'}
-                            {transaction.amount.toLocaleString('ar-LY')} د.ل
-                          </TableCell>
-                          <TableCell>{transaction.receiver_name || '-'}</TableCell>
-                          <TableCell className="max-w-[200px] truncate">{transaction.description || '-'}</TableCell>
-                          <TableCell>{transaction.receipt_number || '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="gap-1 text-purple-600 border-purple-300 hover:bg-purple-50"
-                                onClick={() => handleEditTransaction(transaction)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
-                                onClick={() => handleDeleteTransaction(transaction)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+              {(() => {
+                // دمج الحركات والمصروفات وتجميعها حسب العهدة
+                type CombinedMovement = {
+                  id: string;
+                  date: string;
+                  created_at: string;
+                  type: 'transaction' | 'expense';
+                  transactionType?: string;
+                  amount: number;
+                  description: string;
+                  receipt_number: string | null;
+                  custody_account_id: string;
+                  expense_category?: string;
+                  vendor_name?: string | null;
+                  receiver_name?: string | null;
+                  original: CustodyTransaction | CustodyExpense;
+                };
 
-        {/* Expenses Tab */}
-        <TabsContent value="expenses">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <TrendingDown className="h-5 w-5 text-red-600" />
-                مصروفات العهدة
-              </CardTitle>
-              <Button onClick={() => {
-                resetExpenseForm();
-                setExpenseDialogOpen(true);
-              }} size="sm" className="gap-2" variant="destructive">
-                <Plus className="h-4 w-4" />
-                إضافة مصروف
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <div className="rounded-lg border border-border overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      <TableHead className="text-right font-semibold">التاريخ</TableHead>
-                      <TableHead className="text-right font-semibold">العهدة</TableHead>
-                      <TableHead className="text-right font-semibold">الفئة</TableHead>
-                      <TableHead className="text-right font-semibold">المبلغ</TableHead>
-                      <TableHead className="text-right font-semibold">الوصف</TableHead>
-                      <TableHead className="text-right font-semibold">المورد</TableHead>
-                      <TableHead className="text-right font-semibold">رقم الإيصال</TableHead>
-                      <TableHead className="text-right font-semibold">الإجراءات</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {expenses.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center text-muted-foreground py-12">
-                          <div className="flex flex-col items-center gap-2">
-                            <Receipt className="h-8 w-8 text-muted-foreground/50" />
-                            <span>لا توجد مصروفات مسجلة</span>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      expenses.map((expense) => (
-                        <TableRow key={expense.id} className="hover:bg-muted/30 transition-colors">
-                          <TableCell>
-                            {new Date(expense.expense_date).toLocaleDateString('ar-LY')}
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-xs text-muted-foreground">
-                              {getAccountInfo(expense.custody_account_id, accounts)}
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                              {expense.expense_category || 'عام'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-bold text-red-600">
-                            -{expense.amount.toLocaleString('ar-LY')} د.ل
-                          </TableCell>
-                          <TableCell className="max-w-[200px] truncate">{expense.description}</TableCell>
-                          <TableCell>{expense.vendor_name || '-'}</TableCell>
-                          <TableCell>{expense.receipt_number || '-'}</TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="gap-1 text-purple-600 border-purple-300 hover:bg-purple-50"
-                                onClick={() => handleEditExpense(expense)}
-                              >
-                                <Pencil className="h-3 w-3" />
-                              </Button>
-                              <Button 
-                                variant="outline" 
-                                size="sm"
-                                className="gap-1 text-red-600 border-red-300 hover:bg-red-50"
-                                onClick={() => handleDeleteExpense(expense)}
-                              >
-                                <Trash2 className="h-3 w-3" />
-                              </Button>
+                const allMovements: CombinedMovement[] = [
+                  ...transactions.map(t => ({
+                    id: t.id,
+                    date: t.transaction_date,
+                    created_at: t.transaction_date, // استخدام التاريخ كبديل
+                    type: 'transaction' as const,
+                    transactionType: t.transaction_type,
+                    amount: t.amount,
+                    description: t.description || '-',
+                    receipt_number: t.receipt_number,
+                    custody_account_id: t.custody_account_id,
+                    receiver_name: t.receiver_name,
+                    original: t
+                  })),
+                  ...expenses.map(e => ({
+                    id: e.id,
+                    date: e.expense_date,
+                    created_at: e.expense_date,
+                    type: 'expense' as const,
+                    transactionType: 'expense',
+                    amount: e.amount,
+                    description: e.description,
+                    receipt_number: e.receipt_number,
+                    custody_account_id: e.custody_account_id,
+                    expense_category: e.expense_category,
+                    vendor_name: e.vendor_name,
+                    original: e
+                  }))
+                ];
+
+                // تجميع الحركات حسب العهدة
+                const groupedByAccount = allMovements.reduce((groups, movement) => {
+                  const accountId = movement.custody_account_id;
+                  if (!groups[accountId]) {
+                    groups[accountId] = [];
+                  }
+                  groups[accountId].push(movement);
+                  return groups;
+                }, {} as Record<string, CombinedMovement[]>);
+
+                // ترتيب الحركات داخل كل مجموعة تنازلياً حسب التاريخ
+                Object.keys(groupedByAccount).forEach(accountId => {
+                  groupedByAccount[accountId].sort((a, b) => 
+                    new Date(b.date).getTime() - new Date(a.date).getTime()
+                  );
+                });
+
+                // ترتيب المجموعات حسب أحدث حركة
+                const sortedAccountIds = Object.keys(groupedByAccount).sort((a, b) => {
+                  const aLatest = groupedByAccount[a][0]?.date || '';
+                  const bLatest = groupedByAccount[b][0]?.date || '';
+                  return new Date(bLatest).getTime() - new Date(aLatest).getTime();
+                });
+
+                if (allMovements.length === 0) {
+                  return (
+                    <div className="text-center text-muted-foreground py-12">
+                      <div className="flex flex-col items-center gap-2">
+                        <DollarSign className="h-8 w-8 text-muted-foreground/50" />
+                        <span>لا توجد حركات مسجلة</span>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-6">
+                    {sortedAccountIds.map(accountId => {
+                      const account = accounts.find(a => a.id === accountId);
+                      const movements = groupedByAccount[accountId];
+                      const totalDeposits = movements
+                        .filter(m => m.transactionType === 'deposit')
+                        .reduce((sum, m) => sum + m.amount, 0);
+                      const totalWithdrawals = movements
+                        .filter(m => m.transactionType === 'withdrawal' || m.type === 'expense')
+                        .reduce((sum, m) => sum + m.amount, 0);
+
+                      return (
+                        <Card key={accountId} className="border-2">
+                          <CardHeader className="pb-2 bg-muted/30">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                                  <Wallet className="h-5 w-5 text-primary" />
+                                </div>
+                                <div>
+                                  <CardTitle className="text-base">
+                                    {account?.custody_name || account?.account_number || 'عهدة غير معروفة'}
+                                  </CardTitle>
+                                  <p className="text-sm text-muted-foreground">
+                                    {account?.employee?.name || 'موظف غير محدد'} • {account?.account_number}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm">
+                                <div className="text-center">
+                                  <p className="text-xs text-muted-foreground">إجمالي الإيداعات</p>
+                                  <p className="font-bold text-green-600 font-manrope">+{totalDeposits.toLocaleString('ar-LY')}</p>
+                                </div>
+                                <div className="text-center">
+                                  <p className="text-xs text-muted-foreground">إجمالي السحب/المصروفات</p>
+                                  <p className="font-bold text-red-600 font-manrope">-{totalWithdrawals.toLocaleString('ar-LY')}</p>
+                                </div>
+                                <Badge variant="outline">{movements.length} حركة</Badge>
+                              </div>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
+                          </CardHeader>
+                          <CardContent className="p-0">
+                            <div className="rounded-lg overflow-hidden">
+                              <Table>
+                                <TableHeader>
+                                  <TableRow className="bg-muted/50">
+                                    <TableHead className="text-right font-semibold w-28">التاريخ</TableHead>
+                                    <TableHead className="text-right font-semibold w-24">النوع</TableHead>
+                                    <TableHead className="text-right font-semibold w-32">المبلغ</TableHead>
+                                    <TableHead className="text-right font-semibold">الوصف</TableHead>
+                                    <TableHead className="text-right font-semibold w-28">الفئة/المستلم</TableHead>
+                                    <TableHead className="text-right font-semibold w-24">الإيصال</TableHead>
+                                    <TableHead className="text-right font-semibold w-20">الإجراءات</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {movements.map((movement) => (
+                                    <TableRow key={`${movement.type}-${movement.id}`} className="hover:bg-muted/30 transition-colors">
+                                      <TableCell className="font-manrope text-sm">
+                                        {movement.date.split('-').reverse().join('/')}
+                                      </TableCell>
+                                      <TableCell>
+                                        {movement.type === 'expense' ? (
+                                          <Badge variant="destructive" className="gap-1">
+                                            <Receipt className="h-3 w-3" /> مصروف
+                                          </Badge>
+                                        ) : movement.transactionType === 'deposit' ? (
+                                          <Badge className="bg-green-600 gap-1">
+                                            <TrendingUp className="h-3 w-3" /> إيداع
+                                          </Badge>
+                                        ) : (
+                                          <Badge variant="destructive" className="gap-1">
+                                            <TrendingDown className="h-3 w-3" /> سحب
+                                          </Badge>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className={`font-bold font-manrope ${
+                                        movement.transactionType === 'deposit' ? 'text-green-600' : 'text-red-600'
+                                      }`}>
+                                        {movement.transactionType === 'deposit' ? '+' : '-'}
+                                        {movement.amount.toLocaleString('ar-LY')} د.ل
+                                      </TableCell>
+                                      <TableCell className="max-w-[250px] truncate">{movement.description}</TableCell>
+                                      <TableCell>
+                                        {movement.type === 'expense' ? (
+                                          <Badge variant="outline" className="text-xs bg-red-50 text-red-700 border-red-200">
+                                            {movement.expense_category || 'عام'}
+                                          </Badge>
+                                        ) : (
+                                          <span className="text-sm">{movement.receiver_name || '-'}</span>
+                                        )}
+                                      </TableCell>
+                                      <TableCell className="font-manrope text-xs">{movement.receipt_number || '-'}</TableCell>
+                                      <TableCell>
+                                        <div className="flex gap-1">
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            className="gap-1 text-purple-600 border-purple-300 hover:bg-purple-50 h-7 w-7 p-0"
+                                            onClick={() => {
+                                              if (movement.type === 'expense') {
+                                                handleEditExpense(movement.original as CustodyExpense);
+                                              } else {
+                                                handleEditTransaction(movement.original as CustodyTransaction);
+                                              }
+                                            }}
+                                          >
+                                            <Pencil className="h-3 w-3" />
+                                          </Button>
+                                          <Button 
+                                            variant="outline" 
+                                            size="sm"
+                                            className="gap-1 text-red-600 border-red-300 hover:bg-red-50 h-7 w-7 p-0"
+                                            onClick={() => {
+                                              if (movement.type === 'expense') {
+                                                handleDeleteExpense(movement.original as CustodyExpense);
+                                              } else {
+                                                handleDeleteTransaction(movement.original as CustodyTransaction);
+                                              }
+                                            }}
+                                          >
+                                            <Trash2 className="h-3 w-3" />
+                                          </Button>
+                                        </div>
+                                      </TableCell>
+                                    </TableRow>
+                                  ))}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </CardContent>
           </Card>
         </TabsContent>
@@ -1534,7 +1623,8 @@ export default function CustodyManagement() {
                 <SelectContent>
                   {accounts.filter(acc => acc.status === 'active').map((acc) => (
                     <SelectItem key={acc.id} value={acc.id}>
-                      {acc.account_number} - {(acc.employee as any)?.name}
+                      {acc.account_number} - {(acc.employee as any)?.name} 
+                      {acc.current_balance <= 0 && <span className="text-red-500 mr-2">(رصيد: {acc.current_balance})</span>}
                     </SelectItem>
                   ))}
                 </SelectContent>

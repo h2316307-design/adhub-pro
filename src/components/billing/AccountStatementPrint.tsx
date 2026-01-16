@@ -75,6 +75,8 @@ export interface PrintAccountStatementOptions {
 interface FilterResult {
   filteredTransactions: Transaction[];
   openingBalance: number;
+  previousTransactions: Transaction[]; // آخر المعاملات المساهمة في الرصيد الافتتاحي
+  referencedContracts: Transaction[]; // العقود المرجعية للدفعات في الفترة
 }
 
 function filterTransactionsByDateRange(
@@ -84,7 +86,7 @@ function filterTransactionsByDateRange(
 ): FilterResult {
   // If no dates provided, return all transactions
   if (!startDate && !endDate) {
-    return { filteredTransactions: transactions, openingBalance: 0 };
+    return { filteredTransactions: transactions, openingBalance: 0, previousTransactions: [], referencedContracts: [] };
   }
 
   const start = startDate ? new Date(startDate) : null;
@@ -101,6 +103,9 @@ function filterTransactionsByDateRange(
   // Calculate opening balance from transactions BEFORE the start date
   let openingBalance = 0;
   const filteredTransactions: Transaction[] = [];
+  const allPreviousTransactions: Transaction[] = []; // جميع المعاملات السابقة
+  const contractsBeforeRange: Map<string, Transaction> = new Map(); // العقود قبل النطاق
+  const paymentsInRange: Transaction[] = []; // الدفعات في النطاق
 
   for (const transaction of transactions) {
     const transactionDate = new Date(transaction.date);
@@ -109,17 +114,50 @@ function filterTransactionsByDateRange(
     if (start && transactionDate < start) {
       // Transaction is BEFORE our range - add to opening balance
       openingBalance += transaction.debit - transaction.credit;
+      allPreviousTransactions.push(transaction);
+      
+      // حفظ العقود السابقة للمرجع
+      if (transaction.type === 'contract') {
+        const contractRef = transaction.reference;
+        contractsBeforeRange.set(contractRef, transaction);
+      }
     } else if (
       (!start || transactionDate >= start) &&
       (!end || transactionDate <= end)
     ) {
       // Transaction is WITHIN our range
       filteredTransactions.push(transaction);
+      
+      // تتبع الدفعات في النطاق
+      if (transaction.type === 'payment' || transaction.type === 'receipt' || 
+          transaction.type === 'credit' || transaction.credit > 0) {
+        paymentsInRange.push(transaction);
+      }
     }
     // Transactions after end date are ignored
   }
 
-  return { filteredTransactions, openingBalance };
+  // البحث عن العقود المرجعية للدفعات في الفترة
+  const referencedContracts: Transaction[] = [];
+  const addedContractRefs = new Set<string>();
+  
+  for (const payment of paymentsInRange) {
+    // استخراج رقم العقد من المرجع
+    const contractRef = payment.reference;
+    if (contractRef && contractRef.startsWith('عقد-') && !addedContractRefs.has(contractRef)) {
+      // البحث عن العقد في المعاملات السابقة
+      const contract = contractsBeforeRange.get(contractRef);
+      if (contract) {
+        referencedContracts.push(contract);
+        addedContractRefs.add(contractRef);
+      }
+    }
+  }
+
+  // الحصول على آخر 5 معاملات سابقة (الأحدث) لعرضها كمصدر للرصيد
+  const previousTransactions = allPreviousTransactions.slice(-5);
+
+  return { filteredTransactions, openingBalance, previousTransactions, referencedContracts };
 }
 
 function recalculateStatistics(
@@ -153,12 +191,93 @@ function recalculateStatistics(
 function mapTransactionsToTableRows(
   transactions: Transaction[],
   currency: Currency,
-  openingBalance: number
+  openingBalance: number,
+  previousTransactions: Transaction[] = [],
+  referencedContracts: Transaction[] = []
 ): Record<string, any>[] {
   const rows: Record<string, any>[] = [];
 
-  // Add opening balance row if exists
-  if (openingBalance !== 0) {
+  // ✅ إضافة العقود المرجعية للدفعات في الفترة (عقود قديمة لها دفعات في النطاق)
+  if (referencedContracts.length > 0) {
+    rows.push({
+      index: '📋',
+      date: '',
+      description: '═══ عقود مرجعية (خارج النطاق لكن لها دفعات في الفترة) ═══',
+      reference: '',
+      debit: '',
+      credit: '',
+      balance: '',
+      notes: '',
+      isSeparator: true,
+    });
+
+    referencedContracts.forEach((contract) => {
+      rows.push({
+        index: `⟵`,
+        date: formatDate(contract.date),
+        description: `[مرجع] ${contract.description}`,
+        reference: contract.reference,
+        debit: contract.debit > 0 ? `${currency.symbol} ${formatArabicNumber(contract.debit)}` : '—',
+        credit: contract.credit > 0 ? `${currency.symbol} ${formatArabicNumber(contract.credit)}` : '—',
+        balance: '(ضمن الرصيد السابق)',
+        notes: 'عقد قديم',
+        isHighlighted: true,
+      });
+    });
+
+    rows.push({
+      index: '',
+      date: '',
+      description: '═══════════════════════════════════════',
+      reference: '',
+      debit: '',
+      credit: '',
+      balance: '',
+      notes: '',
+      isSeparator: true,
+    });
+  }
+
+  // إضافة آخر المعاملات السابقة التي ساهمت في الرصيد الافتتاحي
+  if (previousTransactions.length > 0 && openingBalance !== 0) {
+    // حساب الرصيد التشغيلي للمعاملات السابقة
+    let prevRunningBalance = openingBalance;
+    // نحتاج حساب الرصيد بشكل عكسي للمعاملات السابقة
+    for (let i = previousTransactions.length - 1; i >= 0; i--) {
+      prevRunningBalance -= (previousTransactions[i].debit - previousTransactions[i].credit);
+    }
+
+    previousTransactions.forEach((transaction, index) => {
+      prevRunningBalance += transaction.debit - transaction.credit;
+      rows.push({
+        index: `◄`,
+        date: formatDate(transaction.date),
+        description: `[سابق] ${transaction.description}`,
+        reference: transaction.reference,
+        debit: transaction.debit > 0 ? `${currency.symbol} ${formatArabicNumber(transaction.debit)}` : '—',
+        credit: transaction.credit > 0 ? `${currency.symbol} ${formatArabicNumber(transaction.credit)}` : '—',
+        balance: index === previousTransactions.length - 1 
+          ? `${currency.symbol} ${formatArabicNumber(openingBalance)}`
+          : `${currency.symbol} ${formatArabicNumber(prevRunningBalance)}`,
+        notes: '(خارج النطاق)',
+        isHighlighted: true,
+      });
+    });
+
+    // صف فاصل للرصيد المرحل
+    rows.push({
+      index: '═',
+      date: '═══',
+      description: '══════ نهاية الحركات السابقة ══════',
+      reference: '═══',
+      debit: '═══',
+      credit: '═══',
+      balance: `رصيد مُرحّل: ${currency.symbol} ${formatArabicNumber(openingBalance)}`,
+      notes: '',
+      isSeparator: true,
+    });
+  } else if (openingBalance !== 0) {
+    // إذا لم تكن هناك معاملات سابقة لعرضها لكن هناك رصيد
     rows.push({
       index: '—',
       date: '—',
@@ -256,7 +375,7 @@ export async function printAccountStatement(
   const { customerData, transactions, statistics, currency, startDate, endDate } = options;
 
   // ✅ STEP 1: Filter transactions by date range
-  const { filteredTransactions, openingBalance } = filterTransactionsByDateRange(
+  const { filteredTransactions, openingBalance, previousTransactions, referencedContracts } = filterTransactionsByDateRange(
     transactions,
     startDate,
     endDate
@@ -311,7 +430,7 @@ export async function printAccountStatement(
     documentData,
     partyData,
     columns: getStatementTableColumns(),
-    rows: mapTransactionsToTableRows(filteredTransactions, currency, openingBalance),
+    rows: mapTransactionsToTableRows(filteredTransactions, currency, openingBalance, previousTransactions, referencedContracts),
     totals: getStatementTotals(filteredStatistics, currency, openingBalance),
     totalsTitle: 'ملخص الرصيد',
     notes: `الرصيد بالكلمات: ${formatArabicNumber(Math.abs(filteredStatistics.balance))} ${currency.writtenName} ${filteredStatistics.balance < 0 ? '(رصيد دائن)' : filteredStatistics.balance === 0 ? '(مسدد بالكامل)' : ''}`,

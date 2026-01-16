@@ -44,6 +44,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
 import { RemovalStatsDialog } from '@/components/reports/RemovalStatsDialog';
 import { UnifiedPrintAllDialog, BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
+import { ExpiredContractsAlert, AddRemovalTaskDialog, RemovalTaskCard, ManualRemovalTaskDialog, RemovalTaskItemCard } from '@/components/removal';
+import { Progress } from '@/components/ui/progress';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface RemovalTask {
   id: string;
@@ -918,6 +921,41 @@ export default function RemovalTasks() {
     },
   });
 
+  // التراجع عن إزالة لوحة
+  const undoRemovalMutation = useMutation({
+    mutationFn: async (itemId: string) => {
+      const { error } = await supabase
+        .from('removal_task_items')
+        .update({
+          status: 'pending',
+          completed_at: null,
+          removal_date: null,
+          notes: null,
+          removed_image_url: null
+        })
+        .eq('id', itemId);
+      
+      if (error) throw error;
+      
+      // تحديث حالة المهمة إذا لزم الأمر
+      const item = allTaskItems.find(i => i.id === itemId);
+      if (item) {
+        await supabase
+          .from('removal_tasks')
+          .update({ status: 'pending' })
+          .eq('id', item.task_id);
+      }
+    },
+    onSuccess: () => {
+      toast.success('تم التراجع عن الإزالة بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['removal-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all-removal-task-items'] });
+    },
+    onError: (error: any) => {
+      toast.error('فشل التراجع: ' + error.message);
+    },
+  });
+
   // حساب عدد المهام المكررة
   const duplicateTasksCount = useMemo(() => {
     const taskGroups: Record<string, number> = {};
@@ -1358,6 +1396,24 @@ export default function RemovalTasks() {
     setSelectedTasks(newSet);
   };
 
+  // حساب IDs العقود الموجودة في مهام (بما في ذلك المكتملة) - يجب أن تكون قبل أي return
+  const existingTaskContractIds = useMemo(() => {
+    return new Set(
+      tasks.flatMap(t => t.contract_ids || [t.contract_id])
+    );
+  }, [tasks]);
+
+  const existingTaskBillboardIds = useMemo(() => {
+    return new Set(
+      allTaskItems
+        .filter(item => {
+          const task = taskById[item.task_id];
+          return task && (task.status === 'pending' || task.status === 'in_progress');
+        })
+        .map(item => item.billboard_id)
+    );
+  }, [allTaskItems, taskById]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -1371,6 +1427,16 @@ export default function RemovalTasks() {
 
   return (
     <div className="container mx-auto p-6 pb-16 space-y-6" dir="rtl">
+      {/* تنبيه العقود المنتهية */}
+      <ExpiredContractsAlert
+        teams={teams}
+        existingTaskContractIds={existingTaskContractIds}
+        onTaskCreated={() => {
+          queryClient.invalidateQueries({ queryKey: ['removal-tasks'] });
+          queryClient.invalidateQueries({ queryKey: ['all-removal-task-items'] });
+        }}
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">مهام إزالة الدعاية</h1>
@@ -1600,63 +1666,110 @@ export default function RemovalTasks() {
         </div>
       </Card>
 
-      {/* Completion Actions */}
-      {selectedItems.size > 0 && (
-        <Card className="p-4 bg-primary/10">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4 flex-1">
-              <Badge variant="default" className="text-lg px-4 py-2">
-                {selectedItems.size} لوحة محددة
-              </Badge>
-              
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" className="gap-2">
-                    <CalendarIcon className="h-4 w-4" />
-                    {removalDate ? format(removalDate, 'PPP', { locale: ar }) : 'اختر تاريخ الإزالة'}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={removalDate}
-                    onSelect={setRemovalDate}
-                    locale={ar}
-                  />
-                </PopoverContent>
-              </Popover>
+      {/* Fixed Bottom Selection Bar */}
+      <AnimatePresence>
+        {selectedItems.size > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
+          >
+            <Card className="bg-gradient-to-r from-primary to-primary/80 text-white px-6 py-4 shadow-2xl rounded-2xl border-0">
+              <div className="flex items-center gap-4">
+                <Badge variant="secondary" className="bg-white text-primary text-lg px-4 py-2">
+                  {selectedItems.size} لوحة محددة
+                </Badge>
 
-              <Textarea
-                placeholder="ملاحظات الإزالة..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                className="max-w-md"
-                rows={2}
-              />
-            </div>
+                {/* زر تحديد كل لوحات العقد */}
+                {(() => {
+                  // البحث عن العقد الحالي من أول لوحة محددة
+                  const firstSelectedItemId = Array.from(selectedItems)[0];
+                  const selectedItem = allTaskItems.find(item => item.id === firstSelectedItemId);
+                  if (!selectedItem) return null;
+                  
+                  const currentTask = tasks.find(t => t.id === selectedItem.task_id);
+                  if (!currentTask) return null;
+                  
+                  // جلب كل اللوحات في هذا العقد
+                  const contractItems = allTaskItems.filter(item => {
+                    const itemTask = tasks.find(t => t.id === item.task_id);
+                    return itemTask?.contract_id === currentTask.contract_id && item.status === 'pending';
+                  });
+                  
+                  const allSelected = contractItems.every(item => selectedItems.has(item.id));
+                  
+                  return (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="gap-2 bg-white/20 hover:bg-white/30 text-white border-0"
+                      onClick={() => {
+                        const newSet = new Set(selectedItems);
+                        if (allSelected) {
+                          contractItems.forEach(item => newSet.delete(item.id));
+                        } else {
+                          contractItems.forEach(item => newSet.add(item.id));
+                        }
+                        setSelectedItems(newSet);
+                      }}
+                    >
+                      {allSelected ? (
+                        <>
+                          <X className="h-4 w-4" />
+                          إلغاء تحديد العقد
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4" />
+                          تحديد كل العقد ({contractItems.length})
+                        </>
+                      )}
+                    </Button>
+                  );
+                })()}
+                
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="secondary" className="gap-2 bg-white/20 hover:bg-white/30 text-white border-0">
+                      <CalendarIcon className="h-4 w-4" />
+                      {removalDate ? format(removalDate, 'dd MMM yyyy', { locale: ar }) : 'تاريخ الإزالة'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={removalDate}
+                      onSelect={setRemovalDate}
+                      locale={ar}
+                    />
+                  </PopoverContent>
+                </Popover>
 
-            <div className="flex gap-2">
-              <Button
-                onClick={() => completeItemsMutation.mutate()}
-                disabled={completeItemsMutation.isPending}
-                className="gap-2"
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                تأكيد الإزالة
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setSelectedItems(new Set());
-                  setNotes('');
-                }}
-              >
-                <X className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </Card>
-      )}
+                <Button
+                  onClick={() => completeItemsMutation.mutate()}
+                  disabled={completeItemsMutation.isPending}
+                  className="gap-2 bg-white text-primary hover:bg-white/90"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  تأكيد الإزالة
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20"
+                  onClick={() => {
+                    setSelectedItems(new Set());
+                    setNotes('');
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Tasks List with Tabs */}
       <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="w-full">
@@ -1918,370 +2031,78 @@ export default function RemovalTasks() {
                     </CollapsibleTrigger>
 
                     <CollapsibleContent>
-                      <div className="px-4 pb-4">
-                        <Accordion type="multiple" className="space-y-2">
-                    {teamTasks.map((task) => {
-                      const taskItems = itemsByTask[task.id] || [];
-                      const contract = contractByNumber[task.contract_id];
-                      const pendingCount = taskItems.filter(i => i.status === 'pending').length;
-                      const completedCount = taskItems.filter(i => i.status === 'completed').length;
-                      const completionPercentage = taskItems.length > 0 ? Math.round((completedCount / taskItems.length) * 100) : 0;
-                      const isFullyCompleted = taskItems.length > 0 && completedCount === taskItems.length;
-                      const isPartiallyCompleted = completedCount > 0 && pendingCount > 0;
-
-                      return (
-                        <AccordionItem 
-                          key={task.id} 
-                          value={task.id} 
-                          className={`border rounded-lg overflow-hidden transition-all ${
-                            isFullyCompleted 
-                              ? 'border-green-400 bg-gradient-to-r from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20' 
-                              : isPartiallyCompleted 
-                                ? 'border-orange-400 bg-gradient-to-r from-orange-50 to-orange-100/50 dark:from-orange-950/30 dark:to-orange-900/20'
-                                : ''
-                          }`}
-                        >
-                          {/* شريط حالة المهمة */}
-                          <div className={`h-1 w-full ${
-                            isFullyCompleted 
-                              ? 'bg-gradient-to-r from-green-400 to-green-500' 
-                              : isPartiallyCompleted 
-                                ? 'bg-gradient-to-r from-orange-400 to-orange-500'
-                                : 'bg-muted'
-                          }`}>
-                            {isPartiallyCompleted && (
-                              <div 
-                                className="h-full bg-gradient-to-r from-green-400 to-green-500 transition-all duration-300"
-                                style={{ width: `${completionPercentage}%` }}
-                              />
-                            )}
-                          </div>
-                          <AccordionTrigger className="px-4 hover:no-underline">
-                            <div className="flex items-center justify-between w-full">
-                              <div className="flex items-center gap-3">
-                                {/* Checkbox للطباعة */}
-                                {pendingCount > 0 && (
-                                  <div 
-                                    className="flex items-center gap-1 bg-primary/10 px-2 py-1 rounded"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedTasksForPrint.has(task.id)}
-                                      onChange={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTasksForPrint(prev => {
-                                          const newSet = new Set(prev);
-                                          if (newSet.has(task.id)) {
-                                            newSet.delete(task.id);
-                                          } else {
-                                            newSet.add(task.id);
-                                          }
-                                          return newSet;
-                                        });
-                                      }}
-                                      className="w-4 h-4 accent-primary"
-                                    />
-                                    <Printer className="h-3 w-3 text-primary" />
-                                  </div>
-                                )}
-                                {/* Checkbox للدمج */}
-                                <Checkbox
-                                  checked={selectedTasks.has(task.id)}
-                                  onCheckedChange={() => toggleTaskSelection(task.id)}
-                                  onClick={(e) => e.stopPropagation()}
-                                />
-                                {/* صورة التصميم الكبيرة */}
-                                {(() => {
-                                  const designItem = taskItems.find(item => item.design_face_a || item.design_face_b);
-                                  const designImage = designItem?.design_face_a || designItem?.design_face_b;
-                                  return designImage ? (
-                                    <div className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-red-400 shadow-lg flex-shrink-0 group">
-                                      <img
-                                        src={designImage}
-                                        alt="التصميم"
-                                        className="w-full h-full object-cover transition-transform group-hover:scale-110"
-                                        onError={(e) => {
-                                          (e.target as HTMLImageElement).style.display = 'none';
-                                        }}
-                                      />
-                                      <div className="absolute inset-0 bg-gradient-to-t from-red-900/80 via-transparent to-transparent" />
-                                      <div className="absolute bottom-1 left-1 right-1">
-                                        <span className="text-[9px] text-white font-bold bg-red-600/90 px-1.5 py-0.5 rounded">للإزالة</span>
-                                      </div>
-                                    </div>
-                                  ) : null;
-                                })()}
-                                <div className="text-right">
-                                  <div className="flex items-center gap-2">
-                                    <span className="font-semibold">عقد #{task.contract_id}</span>
-                                    {isFullyCompleted ? (
-                                      <Badge className="bg-gradient-to-r from-green-500 to-green-600 text-white gap-1">
-                                        <CheckCircle2 className="h-3 w-3" />
-                                        مكتملة بالكامل
-                                      </Badge>
-                                    ) : isPartiallyCompleted ? (
-                                      <Badge className="bg-gradient-to-r from-orange-500 to-orange-600 text-white gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        {completedCount}/{taskItems.length} ({completionPercentage}%)
-                                      </Badge>
-                                    ) : (
-                                      <Badge variant="secondary" className="gap-1">
-                                        <Clock className="h-3 w-3" />
-                                        لم تبدأ بعد
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <p className="text-sm text-muted-foreground">
-                                    {contract?.['Customer Name']} - {contract?.['Ad Type']}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    تاريخ الإنتهاء: {contract?.['End Date'] ? format(new Date(contract['End Date']), 'PPP', { locale: ar }) : 'غير محدد'}
-                                  </p>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-4">
-                                <div className="text-sm">
-                                  <Badge variant="secondary" className="mr-2">
-                                    {taskItems.length} لوحة
-                                  </Badge>
-                                  <Badge variant="default" className="mr-2 bg-green-600">
-                                    {completedCount} مُزال
-                                  </Badge>
-                                  {pendingCount > 0 && (
-                                    <Badge variant="destructive">
-                                      {pendingCount} معلق
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="flex gap-2">
-                                  {/* زر طباعة موحد - نفس طريقة طباعة الكل */}
-                                  {pendingCount > 0 && (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        
-                                        // Get pending items for this task
-                                        const pendingTaskItems = taskItems.filter(i => i.status === 'pending');
-                                        
-                                        // Create print items with contract info
-                                        const items: BillboardPrintItem[] = pendingTaskItems.map(item => {
-                                          const team = teamById[task.team_id || ''];
-                                          
-                                          return {
-                                            id: item.id,
-                                            billboard_id: item.billboard_id,
-                                            design_face_a: item.design_face_a || null,
-                                            design_face_b: item.design_face_b || null,
-                                            installed_image_face_a_url: item.installed_image_url || null,
-                                            team_id: task.team_id,
-                                            contract_number: contract?.Contract_Number || task.contract_id,
-                                            ad_type: contract?.['Ad Type'] || null,
-                                          };
-                                        });
-                                        
-                                        const team = teamById[task.team_id || ''];
-                                        setUnifiedPrintData({
-                                          teamId: task.team_id || '',
-                                          teamName: team?.team_name || 'فريق غير محدد',
-                                          items,
-                                          billboards: billboardById,
-                                          teams: teamById,
-                                        });
-                                        setUnifiedPrintDialogOpen(true);
-                                      }}
-                                      className="gap-1"
-                                    >
-                                      <Printer className="h-4 w-4" />
-                                      طباعة ({pendingCount})
-                                    </Button>
-                                  )}
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (confirm('هل أنت متأكد من حذف هذه المهمة؟')) {
-                                        deleteTaskMutation.mutate(task.id);
-                                      }
-                                    }}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </AccordionTrigger>
-                          <AccordionContent className="px-4 pt-4">
-                            <div className="space-y-3">
-                              <div className="flex items-center justify-between mb-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => toggleSelectAll(task.id)}
-                                  className="gap-2"
-                                >
-                                  {taskItems.filter(i => i.status === 'pending').every(item => selectedItems.has(item.id)) ? (
-                                    <>
-                                      <Square className="h-4 w-4" />
-                                      إلغاء التحديد
-                                    </>
-                                  ) : (
-                                    <>
-                                      <CheckSquare className="h-4 w-4" />
-                                      تحديد الكل
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
-
-                               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                 {taskItems.map((item) => {
-                                   const billboard = billboardById[item.billboard_id];
-                                   if (!billboard) return null;
-
-                                   return (
-                                     <Card
-                                       key={item.id}
-                                       className={`p-3 transition-all ${
-                                         item.status === 'completed'
-                                           ? 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-800'
-                                           : selectedItems.has(item.id)
-                                           ? 'bg-primary/10 border-primary'
-                                           : 'hover:border-primary/50'
-                                       }`}
-                                     >
-                                       <div className="space-y-3">
-                                         <div className="flex items-start gap-3">
-                                           {item.status === 'pending' && (
-                                             <Checkbox
-                                               checked={selectedItems.has(item.id)}
-                                               onCheckedChange={(checked) => {
-                                                 const newSet = new Set(selectedItems);
-                                                 if (checked) {
-                                                   newSet.add(item.id);
-                                                   setSelectedTeamId(task.id);
-                                                 } else {
-                                                   newSet.delete(item.id);
-                                                 }
-                                                 setSelectedItems(newSet);
-                                               }}
-                                             />
-                                           )}
-                                           
-                                           <div className="flex-1 min-w-0">
-                                             <div className="flex items-center gap-2 mb-2">
-                                               <h4 className="font-semibold text-base truncate">
-                                                 {billboard.Billboard_Name || `لوحة #${billboard.ID}`}
-                                               </h4>
-                                               {item.status === 'completed' ? (
-                                                 <Badge variant="default" className="gap-1 bg-green-600">
-                                                   <CheckCircle2 className="h-3 w-3" />
-                                                   مكتمل
-                                                 </Badge>
-                                               ) : (
-                                                 <Badge variant="secondary" className="gap-1">
-                                                   <Clock className="h-3 w-3" />
-                                                   معلق
-                                                 </Badge>
-                                               )}
-                                             </div>
-                                             
-                                             <div className="space-y-1 text-sm text-muted-foreground">
-                                               <p className="flex items-center gap-1">
-                                                 <MapPin className="h-3 w-3" />
-                                                 {billboard.Municipality} - {billboard.District}
-                                               </p>
-                                               <p className="truncate">{billboard.Nearest_Landmark}</p>
-                                               <p>المقاس: {billboard.Size} | الوجوه: {billboard.Faces_Count}</p>
-                                             </div>
-
-                                             {item.status === 'completed' && (
-                                               <div className="mt-2 p-2 bg-green-100 dark:bg-green-900/30 rounded text-xs">
-                                                 <p className="font-medium text-green-800 dark:text-green-200">
-                                                   تم الإزالة: {item.removal_date ? format(new Date(item.removal_date), 'dd/MM/yyyy', { locale: ar }) : 'غير محدد'}
-                                                 </p>
-                                                 {item.notes && (
-                                                   <p className="text-green-700 dark:text-green-300 mt-1">
-                                                     {item.notes}
-                                                   </p>
-                                                 )}
-                                               </div>
-                                             )}
-                                           </div>
-                                         </div>
-
-                                         <div className="grid grid-cols-2 gap-2">
-                                           {billboard.Image_URL && (
-                                             <div className="space-y-1">
-                                               <p className="text-xs font-medium">صورة اللوحة</p>
-                                               <img
-                                                 src={billboard.Image_URL}
-                                                 alt={billboard.Billboard_Name}
-                                                 className="w-full h-24 object-cover rounded border"
-                                               />
-                                             </div>
-                                           )}
-                                           
-                                           {item.design_face_a && (
-                                             <div className="space-y-1">
-                                               <p className="text-xs font-medium">التصميم - وجه أ</p>
-                                               <img
-                                                 src={item.design_face_a}
-                                                 alt="التصميم"
-                                                 className="w-full h-24 object-cover rounded border"
-                                               />
-                                             </div>
-                                           )}
-                                           
-                                           {item.design_face_b && (
-                                             <div className="space-y-1">
-                                               <p className="text-xs font-medium">التصميم - وجه ب</p>
-                                               <img
-                                                 src={item.design_face_b}
-                                                 alt="التصميم"
-                                                 className="w-full h-24 object-cover rounded border"
-                                               />
-                                             </div>
-                                           )}
-                                           
-                                           {item.removed_image_url && (
-                                             <div className="space-y-1">
-                                               <p className="text-xs font-medium text-red-600">صورة بعد الإزالة</p>
-                                               <img
-                                                 src={item.removed_image_url}
-                                                 alt="بعد الإزالة"
-                                                 className="w-full h-24 object-cover rounded border border-red-300"
-                                               />
-                                             </div>
-                                           )}
-                                         </div>
-
-                                         {billboard.GPS_Coordinates && (
-                                           <Button
-                                             size="sm"
-                                             variant="outline"
-                                             onClick={() => window.open(`https://www.google.com/maps?q=${billboard.GPS_Coordinates}`, '_blank')}
-                                             className="w-full gap-1"
-                                           >
-                                             <Navigation className="h-4 w-4" />
-                                             فتح الموقع في الخريطة
-                                           </Button>
-                                         )}
-                                       </div>
-                                     </Card>
-                                   );
-                                 })}
-                               </div>
-                            </div>
-                          </AccordionContent>
-                        </AccordionItem>
-                      );
-                    })}
-                        </Accordion>
+                      <div className="p-4 space-y-4">
+                        {teamTasks.filter(task => {
+                          // فلترة المهام التي بها عناصر pending فقط
+                          const items = itemsByTask[task.id] || [];
+                          return items.some(item => item.status === 'pending');
+                        }).map((task) => {
+                          const taskItems = itemsByTask[task.id] || [];
+                          const contract = contractByNumber[task.contract_id];
+                          
+                          return (
+                            <RemovalTaskCard
+                              key={task.id}
+                              task={task}
+                              taskItems={taskItems}
+                              contract={contract}
+                              team={team}
+                              billboardById={billboardById}
+                              selectedItems={selectedItems}
+                              selectedTasksForPrint={selectedTasksForPrint}
+                              selectedTasks={selectedTasks}
+                              onToggleItem={(itemId, taskId) => {
+                                const newSet = new Set(selectedItems);
+                                if (newSet.has(itemId)) {
+                                  newSet.delete(itemId);
+                                } else {
+                                  newSet.add(itemId);
+                                  setSelectedTeamId(taskId);
+                                }
+                                setSelectedItems(newSet);
+                              }}
+                              onToggleSelectAll={(taskId) => toggleSelectAll(taskId)}
+                              onToggleTaskForPrint={(taskId) => {
+                                setSelectedTasksForPrint(prev => {
+                                  const newSet = new Set(prev);
+                                  if (newSet.has(taskId)) {
+                                    newSet.delete(taskId);
+                                  } else {
+                                    newSet.add(taskId);
+                                  }
+                                  return newSet;
+                                });
+                              }}
+                              onToggleTaskSelection={(taskId) => toggleTaskSelection(taskId)}
+                              onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
+                              onUndoRemoval={(itemId) => undoRemovalMutation.mutate(itemId)}
+                              onPrint={(task, items) => {
+                                const printItems: BillboardPrintItem[] = items.map(item => {
+                                  const billboard = billboardById[item.billboard_id];
+                                  return {
+                                    id: item.id,
+                                    billboard_id: item.billboard_id,
+                                    design_face_a: item.design_face_a || null,
+                                    design_face_b: item.design_face_b || null,
+                                    installed_image_face_a_url: item.installed_image_url || null,
+                                    team_id: task.team_id,
+                                    contract_number: task.contract_id,
+                                    ad_type: contract?.['Ad Type'] || null,
+                                  };
+                                });
+                                
+                                setUnifiedPrintData({
+                                  teamId: task.team_id,
+                                  teamName: team.team_name,
+                                  items: printItems,
+                                  billboards: billboardById,
+                                  teams: teamById,
+                                });
+                                setUnifiedPrintDialogOpen(true);
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     </CollapsibleContent>
                   </Card>
@@ -2351,66 +2172,75 @@ export default function RemovalTasks() {
                       </CollapsibleTrigger>
 
                       <CollapsibleContent>
-                        <div className="px-4 pb-4">
-                          <Accordion type="multiple" className="space-y-2">
-                            {teamTasks.map((task) => {
-                              const taskItems = itemsByTask[task.id] || [];
-                              const completedItems = taskItems.filter(i => i.status === 'completed');
-                              
-                              if (completedItems.length === 0) return null;
-                              
-                              const contract = contractByNumber[task.contract_id];
+                        <div className="p-4 space-y-4">
+                          {teamTasks.map((task) => {
+                            const taskItems = itemsByTask[task.id] || [];
+                            const completedItems = taskItems.filter(i => i.status === 'completed');
+                            
+                            if (completedItems.length === 0) return null;
+                            
+                            const contract = contractByNumber[task.contract_id];
 
-                              return (
-                                <AccordionItem key={task.id} value={task.id} className="border rounded-lg bg-green-50 dark:bg-green-950/20">
-                                  <AccordionTrigger className="px-4 hover:no-underline">
-                                    <div className="flex items-center justify-between w-full">
-                                      <div className="flex items-center gap-3">
-                                        <div className="text-right">
-                                          <div className="flex items-center gap-2">
-                                            <span className="font-semibold">عقد #{task.contract_id}</span>
-                                            {getStatusBadge('completed')}
-                                          </div>
-                                          <p className="text-sm text-muted-foreground">
-                                            {contract?.['Customer Name']} - {contract?.['Ad Type']}
-                                          </p>
-                                        </div>
-                                      </div>
-                                      <div className="flex items-center gap-4">
-                                        <Badge variant="default" className="bg-green-600">
-                                          {completedItems.length} لوحة مكتملة
-                                        </Badge>
-                                      </div>
-                                    </div>
-                                  </AccordionTrigger>
-                                  <AccordionContent className="px-4 pt-4">
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                                      {completedItems.map((item) => {
-                                        const billboard = billboardById[item.billboard_id];
-                                        if (!billboard) return null;
-
-                                        return (
-                                          <Card key={item.id} className="p-3 bg-white dark:bg-card border-green-300">
-                                            <div className="space-y-2">
-                                              <h4 className="font-semibold text-base">
-                                                {billboard.Billboard_Name || `لوحة #${billboard.ID}`}
-                                              </h4>
-                                              <div className="text-sm text-muted-foreground">
-                                                <p>{billboard.Municipality} - {billboard.District}</p>
-                                                <p className="text-green-600 font-medium">
-                                                  تم الإزالة: {item.removal_date ? format(new Date(item.removal_date), 'dd/MM/yyyy', { locale: ar }) : 'غير محدد'}
-                                                </p>
-                                              </div>
-                                            </div>
-                                          </Card>
-                                        );
-                                      })}
-                                    </div>
-                                  </AccordionContent>
-                                </AccordionItem>
-                              );
-                            })}
-                          </Accordion>
+                            return (
+                              <RemovalTaskCard
+                                key={task.id}
+                                task={task}
+                                taskItems={taskItems}
+                                contract={contract}
+                                team={team}
+                                billboardById={billboardById}
+                                selectedItems={selectedItems}
+                                selectedTasksForPrint={selectedTasksForPrint}
+                                selectedTasks={selectedTasks}
+                                onToggleItem={(itemId, taskId) => {
+                                  const newSet = new Set(selectedItems);
+                                  if (newSet.has(itemId)) {
+                                    newSet.delete(itemId);
+                                  } else {
+                                    newSet.add(itemId);
+                                    setSelectedTeamId(taskId);
+                                  }
+                                  setSelectedItems(newSet);
+                                }}
+                                onToggleSelectAll={(taskId) => toggleSelectAll(taskId)}
+                                onToggleTaskForPrint={(taskId) => {
+                                  setSelectedTasksForPrint(prev => {
+                                    const newSet = new Set(prev);
+                                    if (newSet.has(taskId)) {
+                                      newSet.delete(taskId);
+                                    } else {
+                                      newSet.add(taskId);
+                                    }
+                                    return newSet;
+                                  });
+                                }}
+                                onToggleTaskSelection={(taskId) => toggleTaskSelection(taskId)}
+                                onDelete={(taskId) => deleteTaskMutation.mutate(taskId)}
+                                onUndoRemoval={(itemId) => undoRemovalMutation.mutate(itemId)}
+                                onPrint={(task, items) => {
+                                  const printItems: BillboardPrintItem[] = items.map(item => ({
+                                    id: item.id,
+                                    billboard_id: item.billboard_id,
+                                    design_face_a: item.design_face_a || null,
+                                    design_face_b: item.design_face_b || null,
+                                    installed_image_face_a_url: item.installed_image_url || null,
+                                    team_id: task.team_id,
+                                    contract_number: task.contract_id,
+                                    ad_type: contract?.['Ad Type'] || null,
+                                  }));
+                                  
+                                  setUnifiedPrintData({
+                                    teamId: task.team_id,
+                                    teamName: team.team_name,
+                                    items: printItems,
+                                    billboards: billboardById,
+                                    teams: teamById,
+                                  });
+                                  setUnifiedPrintDialogOpen(true);
+                                }}
+                              />
+                            );
+                          })}
                         </div>
                       </CollapsibleContent>
                     </Card>
@@ -2733,6 +2563,14 @@ export default function RemovalTasks() {
           title={`طباعة لوحات الإزالة - ${unifiedPrintData.teamName}`}
         />
       )}
+
+      {/* Manual Removal Task Dialog */}
+      <ManualRemovalTaskDialog
+        open={manualOpen}
+        onOpenChange={setManualOpen}
+        teams={teams}
+        existingTaskBillboardIds={existingTaskBillboardIds}
+      />
     </div>
   );
 }

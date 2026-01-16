@@ -128,6 +128,16 @@ const formatPercent = (value: number): string => {
   });
 };
 
+interface RecentPayment {
+  id: string;
+  contract_number: string;
+  customer_name: string;
+  amount: number;
+  paid_at: string;
+  fee_rate: number;
+  fee_amount: number;
+}
+
 export default function OperatingExpenses() {
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<Contract[]>([]);
@@ -135,6 +145,7 @@ export default function OperatingExpenses() {
   const [closures, setClosures] = useState<PeriodClosure[]>([]);
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [recentPayments, setRecentPayments] = useState<RecentPayment[]>([]);
   
   // Dialog states
   const [withdrawalOpen, setWithdrawalOpen] = useState(false);
@@ -186,10 +197,12 @@ export default function OperatingExpenses() {
         try {
           const { data: paymentsData } = await (supabase as any)
             .from('customer_payments')
-            .select('contract_number, amount, entry_type')
-            .order('created_at', { ascending: true });
+            .select('id, contract_number, amount, entry_type, paid_at, customer_name')
+            .order('paid_at', { ascending: false });
 
           const paidByContract: Record<string, number> = {};
+          const validPayments: any[] = [];
+          
           (paymentsData || []).forEach((p: any) => {
             const type = String(p.entry_type || '');
             // ✅ احتساب جميع أنواع الدفعات: receipt, account_payment, payment
@@ -197,8 +210,31 @@ export default function OperatingExpenses() {
               const key = String(p.contract_number || '');
               if (!key) return; // تجاهل الدفعات العامة بدون رقم عقد
               paidByContract[key] = (paidByContract[key] || 0) + (Number(p.amount) || 0);
+              validPayments.push(p);
             }
           });
+
+          // جلب آخر 10 دفعات مع حساب النسبة لكل منها
+          const contractFeeRates: Record<string, number> = {};
+          mappedContracts.forEach(c => {
+            contractFeeRates[c.contract_number] = c.feePercent;
+          });
+
+          const recentPaymentsList = validPayments.slice(0, 10).map(p => {
+            const feeRate = contractFeeRates[String(p.contract_number)] || 0;
+            const amount = Number(p.amount) || 0;
+            const feeAmount = Math.round(amount * (feeRate / 100));
+            return {
+              id: p.id,
+              contract_number: String(p.contract_number),
+              customer_name: p.customer_name || '',
+              amount,
+              paid_at: p.paid_at,
+              fee_rate: feeRate,
+              fee_amount: feeAmount
+            };
+          });
+          setRecentPayments(recentPaymentsList);
 
           // تحديث العقود بقيم المدفوع المحسوبة وإعادة حساب النسبة والمتجمع للنسبة
           mappedContracts = mappedContracts.map((c) => {
@@ -688,7 +724,7 @@ export default function OperatingExpenses() {
             <div className="expenses-stat-content">
               <div>
                 <p className="expenses-stat-text">إجمالي العقود</p>
-                <p className="expenses-stat-value">{totals.totalContracts}</p>
+                <p className="expenses-stat-value font-manrope font-semibold">{totals.totalContracts}</p>
               </div>
               <Calculator className="expenses-stat-icon stat-blue" />
             </div>
@@ -700,7 +736,7 @@ export default function OperatingExpenses() {
             <div className="expenses-stat-content">
               <div>
                 <p className="expenses-stat-text">المجموع العام</p>
-                <p className="expenses-stat-value">{totals.poolTotal.toLocaleString()} د.ل</p>
+                <p className="expenses-stat-value font-manrope font-semibold">{totals.poolTotal.toLocaleString()} د.ل</p>
               </div>
               <TrendingUp className="expenses-stat-icon stat-green" />
             </div>
@@ -712,7 +748,7 @@ export default function OperatingExpenses() {
             <div className="expenses-stat-content">
               <div>
                 <p className="expenses-stat-text">المسحوب</p>
-                <p className="expenses-stat-value">{totals.totalWithdrawn.toLocaleString()} د.ل</p>
+                <p className="expenses-stat-value font-manrope font-semibold">{totals.totalWithdrawn.toLocaleString()} د.ل</p>
               </div>
               <TrendingDown className="expenses-stat-icon stat-red" />
             </div>
@@ -724,13 +760,61 @@ export default function OperatingExpenses() {
             <div className="expenses-stat-content">
               <div>
                 <p className="expenses-stat-text">الرصيد المتبقي</p>
-                <p className="expenses-stat-value">{totals.remainingPool.toLocaleString()} د.ل</p>
+                <p className="expenses-stat-value font-manrope font-semibold">{totals.remainingPool.toLocaleString()} د.ل</p>
               </div>
               <DollarSign className="expenses-stat-icon stat-purple" />
             </div>
           </CardContent>
         </Card>
       </div>
+
+      {/* Recent Payments - آخر 10 دفعات زادت الرصيد */}
+      {recentPayments.length > 0 && (
+        <Card className="mt-4">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-green-600" />
+              آخر 10 مدفوعات زادت رصيد مستحقات التشغيل
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="text-right">رقم العقد</TableHead>
+                    <TableHead className="text-right">اسم العميل</TableHead>
+                    <TableHead className="text-right">تاريخ الدفع</TableHead>
+                    <TableHead className="text-right">مبلغ الدفعة</TableHead>
+                    <TableHead className="text-right">النسبة %</TableHead>
+                    <TableHead className="text-right">الزيادة في المستحقات</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {recentPayments.map((payment) => (
+                    <TableRow key={payment.id}>
+                      <TableCell className="text-right font-manrope font-semibold">{payment.contract_number}</TableCell>
+                      <TableCell className="text-right">{payment.customer_name || '—'}</TableCell>
+                      <TableCell className="text-right font-manrope">
+                        {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('ar-LY') : '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-manrope font-semibold text-green-600">
+                        {payment.amount.toLocaleString()} د.ل
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="secondary" className="font-manrope">{payment.fee_rate}%</Badge>
+                      </TableCell>
+                      <TableCell className="text-right font-manrope font-bold text-primary">
+                        +{payment.fee_amount.toLocaleString()} د.ل
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Action Buttons */}
       <div className="expenses-actions">
@@ -874,30 +958,30 @@ export default function OperatingExpenses() {
                       key={id} 
                       className={rowClassName}
                     >
-                      <TableCell className="expenses-contract-number text-right">{contract.contract_number}</TableCell>
+                      <TableCell className="expenses-contract-number text-right font-manrope font-semibold">{contract.contract_number}</TableCell>
                       <TableCell className="text-right">{contract.customer_name}</TableCell>
                       <TableCell className="text-right">{contract.ad_type || '—'}</TableCell>
-                      <TableCell className="text-right">{contract.start_date ? new Date(contract.start_date).toLocaleDateString('ar-LY') : '—'}</TableCell>
+                      <TableCell className="text-right font-manrope">{contract.start_date ? new Date(contract.start_date).toLocaleDateString('ar-LY') : '—'}</TableCell>
                       <TableCell className="text-right">
-                        <Badge variant="secondary">{formattedPercent}%</Badge>
+                        <Badge variant="secondary" className="font-manrope">{formattedPercent}%</Badge>
                       </TableCell>
-                      <TableCell className="text-right">{formattedRentCost} د.ل</TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formattedInstallPrint} د.ل</TableCell>
-                      <TableCell className="text-right font-bold">{formattedTotal} د.ل</TableCell>
-                      <TableCell className="text-right font-medium text-green-600">{formattedPaid} د.ل</TableCell>
+                      <TableCell className="text-right font-manrope font-semibold">{formattedRentCost} د.ل</TableCell>
+                      <TableCell className="text-right text-muted-foreground font-manrope">{formattedInstallPrint} د.ل</TableCell>
+                      <TableCell className="text-right font-bold font-manrope">{formattedTotal} د.ل</TableCell>
+                      <TableCell className="text-right font-semibold text-green-600 font-manrope">{formattedPaid} د.ل</TableCell>
                       <TableCell className="text-right">
                         <Badge 
                           variant={isFullyPaid ? "default" : isPartialPaid ? "secondary" : "outline"}
-                          className={
+                          className={`font-manrope ${
                             isFullyPaid ? 'bg-green-600 hover:bg-green-700' : 
                             isPartialPaid ? 'bg-orange-500 hover:bg-orange-600 text-white' : ''
-                          }
+                          }`}
                         >
                           {formattedCollectionPct}%
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-right text-muted-foreground">{formattedFullFee} د.ل</TableCell>
-                      <TableCell className={`text-right font-semibold ${
+                      <TableCell className="text-right text-muted-foreground font-manrope">{formattedFullFee} د.ل</TableCell>
+                      <TableCell className={`text-right font-semibold font-manrope ${
                         excluded || closed ? 'expenses-amount-excluded' : 
                         (contract.collectedFeeAmount > 0 && contract.total_amount > 100) ? 'text-red-600 dark:text-red-500' : 
                         'expenses-amount-calculated'

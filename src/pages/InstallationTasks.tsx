@@ -31,8 +31,14 @@ import {
   Layers,
   Camera,
   Link2,
-  Sparkles
+  Sparkles,
+  X
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Calendar } from '@/components/ui/calendar';
+import { ar } from 'date-fns/locale';
+import { format } from 'date-fns';
 import { BillboardTaskCard } from '@/components/tasks/BillboardTaskCard';
 import { TaskDesignManager } from '@/components/tasks/TaskDesignManager';
 import { BulkDesignAssigner } from '@/components/tasks/BulkDesignAssigner';
@@ -47,6 +53,7 @@ import { PrintAllContractBillboardsDialog } from '@/components/tasks/PrintAllCon
 import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
 import { TaskCardWrapper } from '@/components/tasks/TaskCardWrapper';
 import { EnhancedAddInstallationTaskDialog } from '@/components/installation/EnhancedAddInstallationTaskDialog';
+import { MobileTaskCard } from '@/components/installation/MobileTaskCard';
 
 interface InstallationTask {
   id: string;
@@ -133,7 +140,7 @@ export default function InstallationTasks() {
   
   // Print all contract billboards dialog
   const [printAllDialogOpen, setPrintAllDialogOpen] = useState(false);
-  const [selectedContractForPrint, setSelectedContractForPrint] = useState<{ contractNumber: number; customerName: string } | null>(null);
+  const [selectedContractForPrint, setSelectedContractForPrint] = useState<{ contractNumber: number; customerName: string; adType?: string } | null>(null);
   
   // Print settings dialog state
   const [printSettingsDialogTaskId, setPrintSettingsDialogTaskId] = useState<string | null>(null);
@@ -142,15 +149,16 @@ export default function InstallationTasks() {
   const [createCompositeDialogOpen, setCreateCompositeDialogOpen] = useState(false);
   const [selectedTaskForComposite, setSelectedTaskForComposite] = useState<{ taskId: string; contractId: number; customerName: string; customerId: string | null } | null>(null);
   
-  // Bulk date assignment (keep for backward compatibility)
-  const [bulkDateDialogOpen, setBulkDateDialogOpen] = useState(false);
+  // Bulk date assignment
   const [selectedItemsForDate, setSelectedItemsForDate] = useState<string[]>([]);
-  const [bulkInstallationDate, setBulkInstallationDate] = useState<string>('');
   const [selectedTaskIdForBulk, setSelectedTaskIdForBulk] = useState<string | null>(null);
   
   // Multi-task selection for bulk printing
   const [selectedTasksForPrint, setSelectedTasksForPrint] = useState<Set<string>>(new Set());
   const [multiTaskPrintDialogOpen, setMultiTaskPrintDialogOpen] = useState(false);
+  
+  // Floating selection bar date
+  const [floatingInstallationDate, setFloatingInstallationDate] = useState<Date | undefined>(undefined);
   
   // Handle completion of multiple billboards
   const handleCompleteMultiple = async (result: 'completed' | 'not_completed', notes: string, reason?: string, installationDate?: string) => {
@@ -654,9 +662,26 @@ export default function InstallationTasks() {
     
     let filteredTasks = tasks;
     
-    // Apply filters
-    if (filterStatus !== 'all') {
-      filteredTasks = filteredTasks.filter(t => t.status === filterStatus);
+    // Apply filters based on actual completion of items, not task.status
+    if (filterStatus !== 'all' && allTaskItems.length > 0) {
+      filteredTasks = filteredTasks.filter(t => {
+        const taskItems = allTaskItems.filter(item => item.task_id === t.id);
+        
+        // إذا لم يكن هناك عناصر للمهمة، اعتبرها غير مكتملة
+        if (taskItems.length === 0) {
+          return filterStatus === 'pending';
+        }
+        
+        const completedItems = taskItems.filter(item => item.status === 'completed').length;
+        const isFullyCompleted = completedItems === taskItems.length;
+        
+        if (filterStatus === 'completed') {
+          return isFullyCompleted;
+        } else if (filterStatus === 'pending') {
+          return !isFullyCompleted;
+        }
+        return true;
+      });
     }
     if (filterTeam !== 'all') {
       filteredTasks = filteredTasks.filter(t => t.team_id === filterTeam);
@@ -1154,15 +1179,49 @@ export default function InstallationTasks() {
 
       {/* Filters */}
       <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="search">بحث</Label>
+        <CardContent className="p-4 space-y-4">
+          {/* Status Filter Buttons */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-medium text-muted-foreground">الحالة:</span>
+            <div className="flex gap-1.5">
+              <Button
+                variant={filterStatus === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterStatus('all')}
+                className="h-8"
+              >
+                الكل
+              </Button>
+              <Button
+                variant={filterStatus === 'pending' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterStatus('pending')}
+                className={`h-8 ${filterStatus === 'pending' ? 'bg-amber-600 hover:bg-amber-700' : 'text-amber-600 border-amber-300 hover:bg-amber-50'}`}
+              >
+                <Clock className="h-3.5 w-3.5 ml-1" />
+                غير مكتملة
+              </Button>
+              <Button
+                variant={filterStatus === 'completed' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setFilterStatus('completed')}
+                className={`h-8 ${filterStatus === 'completed' ? 'bg-emerald-600 hover:bg-emerald-700' : 'text-emerald-600 border-emerald-300 hover:bg-emerald-50'}`}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 ml-1" />
+                مكتملة
+              </Button>
+            </div>
+          </div>
+          
+          {/* Search and Team Filter */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="md:col-span-2">
+              <Label htmlFor="search" className="text-xs text-muted-foreground">بحث</Label>
               <div className="relative">
                 <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="search"
-                  placeholder="رقم العقد، العميل، رقم اللوحة، المدينة..."
+                  placeholder="رقم العقد، اسم العميل، رقم اللوحة، المنطقة..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pr-10"
@@ -1170,27 +1229,13 @@ export default function InstallationTasks() {
               </div>
             </div>
             <div>
-              <Label htmlFor="filter-status">الحالة</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger id="filter-status">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  <SelectItem value="pending">معلقة</SelectItem>
-                  <SelectItem value="in_progress">قيد التنفيذ</SelectItem>
-                  <SelectItem value="completed">مكتملة</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="filter-team">الفريق</Label>
+              <Label htmlFor="filter-team" className="text-xs text-muted-foreground">الفريق</Label>
               <Select value={filterTeam} onValueChange={setFilterTeam}>
                 <SelectTrigger id="filter-team">
-                  <SelectValue />
+                  <SelectValue placeholder="جميع الفرق" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
+                  <SelectItem value="all">جميع الفرق</SelectItem>
                   {teams.map(team => (
                     <SelectItem key={team.id} value={team.id}>
                       {team.team_name}
@@ -1198,11 +1243,6 @@ export default function InstallationTasks() {
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-            <div className="flex items-end">
-              <Button variant="outline" onClick={handleRefreshAll} className="w-full">
-                تحديث
-              </Button>
             </div>
           </div>
         </CardContent>
@@ -1449,628 +1489,298 @@ export default function InstallationTasks() {
                         const designImage = designItem?.design_face_a || designItem?.design_face_b;
                         
                         return (
-                          <Collapsible key={task.id}>
-                            <TaskCardWrapper 
-                              designImage={designImage}
-                              isCompleted={isFullyCompleted}
-                              isPartiallyCompleted={isPartiallyCompleted}
-                              completionPercentage={completionPercentage}
-                            >
-                              <CardHeader className="space-y-0 relative z-10 py-3">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    {/* Checkbox لتحديد المهمة */}
-                                    <div 
-                                      onClick={(e) => e.stopPropagation()}
-                                      className="flex items-center"
-                                    >
-                                      <input
-                                        type="checkbox"
-                                        checked={selectedTasksForPrint.has(task.id)}
-                                        onChange={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedTasksForPrint(prev => {
-                                            const newSet = new Set(prev);
-                                            if (newSet.has(task.id)) {
-                                              newSet.delete(task.id);
-                                            } else {
-                                              newSet.add(task.id);
-                                            }
-                                            return newSet;
-                                          });
-                                        }}
-                                        className="h-5 w-5 rounded border-2 border-primary text-primary focus:ring-primary cursor-pointer"
-                                      />
-                                    </div>
-                                    <div className="text-right space-y-1">
-                       <div className="flex items-center gap-2 flex-wrap">
-                         {/* عرض جميع العقود للمهام المدمجة */}
-                         {isMergedTask ? (
-                           <>
-                             {taskContractIds.map((contractId: number, index: number) => {
-                               const mergedContract = contractById[contractId];
-                               return (
-                                 <div key={contractId} className="flex items-center gap-1">
-                                   <Badge variant="outline" className="font-bold bg-primary/10">
-                                     #{contractId}
-                                   </Badge>
-                                   {mergedContract?.['Ad Type'] && (
-                                     <Badge variant="secondary" className="text-xs">
-                                       {mergedContract['Ad Type']}
-                                     </Badge>
-                                   )}
-                                   {index < taskContractIds.length - 1 && (
-                                     <span className="text-muted-foreground mx-1">+</span>
-                                   )}
-                                 </div>
-                               );
-                             })}
-                             <Badge className="bg-orange-500 text-white text-xs">مدمجة</Badge>
-                             {task.task_type === 'reinstallation' ? (
-                               <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
-                             ) : (
-                               <Badge className="bg-green-600 text-white text-xs">تركيب جديد</Badge>
-                             )}
-                           </>
-                         ) : (
-                           <>
-                             <Badge variant="outline" className="font-bold">
-                               #{task.contract_id}
-                             </Badge>
-                             {contract?.['Ad Type'] && (
-                               <Badge variant="secondary">
-                                 {contract['Ad Type']}
-                               </Badge>
-                             )}
-                             {task.task_type === 'reinstallation' ? (
-                               <Badge className="bg-amber-600 text-white text-xs">إعادة تركيب</Badge>
-                             ) : (
-                               <Badge className="bg-green-600 text-white text-xs gap-1">
-                                 <Sparkles className="h-3 w-3" />
-                                 تركيب جديد
-                               </Badge>
-                             )}
-                           </>
-                         )}
-                         <span className="font-bold">
-                           {contract?.['Customer Name'] || 'غير محدد'}
-                         </span>
-                       </div>
-                                      <div className="flex items-center gap-2 text-sm text-muted-foreground flex-wrap">
-                                        <span>{taskItems.length} لوحة</span>
-                                        
-                                        {/* حالة الإكتمال */}
-                                        {isFullyCompleted ? (
-                                          <Badge className="bg-gradient-to-r from-green-500 to-emerald-500 text-white shadow-md shadow-green-500/30 gap-1">
-                                            <CheckCircle2 className="h-3 w-3" />
-                                            مكتملة بالكامل
-                                          </Badge>
-                                        ) : isPartiallyCompleted ? (
-                                          <Badge className="bg-gradient-to-r from-orange-400 to-amber-500 text-white shadow-md shadow-orange-400/30 gap-1">
-                                            <Clock className="h-3 w-3" />
-                                            {completedItems}/{taskItems.length} ({completionPercentage}%)
-                                          </Badge>
-                                        ) : (
-                                          <Badge variant="outline" className="text-muted-foreground">
-                                            لم تبدأ بعد
-                                          </Badge>
-                                        )}
-                                        
-                                        {/* تكلفة الشركة */}
-                                        {totalInstallCost > 0 && (
-                                          <Badge variant="outline" className="bg-green-50/80 text-green-700 border-green-200 backdrop-blur-sm">
-                                            الشركة: {totalInstallCost.toLocaleString('ar-LY')} د.ل
-                                          </Badge>
-                                        )}
-                                        
-                                        {/* التكاليف الإضافية */}
-                                        {(() => {
-                                          const additionalTotal = taskItems.reduce((sum, item) => sum + (item.additional_cost || 0), 0);
-                                          if (additionalTotal > 0) {
-                                            return (
-                                              <Badge variant="outline" className="bg-amber-50/80 text-amber-700 border-amber-200 backdrop-blur-sm">
-                                                إضافية: +{additionalTotal.toLocaleString('ar-LY')} د.ل
-                                              </Badge>
-                                            );
-                                          }
-                                          return null;
-                                        })()}
-                                        
-                                        {/* تكلفة الزبون */}
-                                        {(() => {
-                                          const customerTotal = taskItems.reduce((sum, item) => sum + (item.customer_installation_cost || 0), 0);
-                                          if (customerTotal > 0) {
-                                            return (
-                                              <Badge variant="outline" className="bg-blue-50/80 text-blue-700 border-blue-200 backdrop-blur-sm">
-                                                الزبون: {customerTotal.toLocaleString('ar-LY')} د.ل
-                                              </Badge>
-                                            );
-                                          }
-                                          return null;
-                                        })()}
-                                      </div>
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTaskForDesign(task.id);
-                                        setDesignDialogOpen(true);
-                                      }}
-                                    >
-                                      <PaintBucket className="h-4 w-4 mr-2" />
-                                      إدارة التصاميم
-                                    </Button>
-                                    {/* زر توزيع التصاميم - يظهر دائمًا */}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className={`${taskDesigns.length === 0 ? 'border-dashed border-muted-foreground/50 text-muted-foreground' : 'bg-primary/10 border-primary/30'}`}
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (taskDesigns.length === 0) {
-                                          toast.info('يرجى إضافة تصاميم أولاً من زر "إدارة التصاميم"');
-                                          setSelectedTaskForDesign(task.id);
-                                          setDesignDialogOpen(true);
+                          <MobileTaskCard
+                            key={task.id}
+                            task={task}
+                            contract={contract}
+                            contractById={contractById}
+                            team={team}
+                            taskItems={taskItems}
+                            taskDesigns={taskDesigns}
+                            isSelected={selectedTasksForPrint.has(task.id)}
+                            designImage={designImage}
+                            installationPricingByBillboard={installationPricingByBillboard}
+                            onToggleSelect={() => {
+                              setSelectedTasksForPrint(prev => {
+                                const newSet = new Set(prev);
+                                if (newSet.has(task.id)) {
+                                  newSet.delete(task.id);
+                                } else {
+                                  newSet.add(task.id);
+                                }
+                                return newSet;
+                              });
+                            }}
+                            onManageDesigns={() => {
+                              setSelectedTaskForDesign(task.id);
+                              setDesignDialogOpen(true);
+                            }}
+                            onDistributeDesigns={() => {
+                              if (taskDesigns.length === 0) {
+                                toast.info('يرجى إضافة تصاميم أولاً من زر "إدارة التصاميم"');
+                                setSelectedTaskForDesign(task.id);
+                                setDesignDialogOpen(true);
+                                return;
+                              }
+                              setSelectedTaskForDesign(task.id);
+                              setBulkDesignDialogOpen(true);
+                            }}
+                            onEditTaskType={() => {
+                              setSelectedTaskForEdit({
+                                id: task.id,
+                                taskType: task.task_type || 'installation'
+                              });
+                              setEditTaskTypeDialogOpen(true);
+                            }}
+                            onTransferBillboards={() => {
+                              setSelectedTaskForTransfer({
+                                taskId: task.id,
+                                teamId: task.team_id,
+                                teamName: team?.team_name || 'غير محدد',
+                                contractId: task.contract_id
+                              });
+                              setTransferDialogOpen(true);
+                            }}
+                            onPrintAll={() => {
+                              const contractInfo = contractById[task.contract_id] as any;
+                              setSelectedContractForPrint({
+                                contractNumber: task.contract_id,
+                                customerName: contractInfo?.['Customer Name'] || 'غير محدد',
+                                adType: contractInfo?.['Ad Type'] || ''
+                              });
+                              setPrintAllDialogOpen(true);
+                            }}
+                            onDelete={() => {
+                              if (window.confirm('هل أنت متأكد من حذف مهمة التركيب؟ سيتم حذف جميع البيانات المرتبطة بها.')) {
+                                deleteTaskMutation.mutate(task.id);
+                              }
+                            }}
+                            onCreatePrintTask={() => {
+                              setSelectedTaskForPrint(task.id);
+                              setCreatePrintTaskDialogOpen(true);
+                            }}
+                            onCompleteBillboards={() => {
+                              setSelectedTaskIdForCompletion(task.id);
+                              setSelectedItemsForCompletion([]);
+                              setShowCompletionDialog(true);
+                            }}
+                            onSetInstallationDate={() => {
+                              // اختيار جميع اللوحات غير المكتملة في المهمة
+                              const pendingItems = taskItems.filter(i => i.status !== 'completed');
+                              setSelectedTaskIdForBulk(task.id);
+                              setSelectedItemsForDate(pendingItems.map(i => i.id));
+                            }}
+                            onNavigateToPrint={() => {
+                              window.location.href = '/admin/print-tasks';
+                            }}
+                            onNavigateToCutout={() => {
+                              window.location.href = '/admin/cutout-tasks';
+                            }}
+                            onCreateCompositeTask={task.task_type === 'reinstallation' ? () => {
+                              setSelectedTaskForComposite({
+                                taskId: task.id,
+                                contractId: task.contract_id,
+                                customerName: contract?.['Customer Name'] || 'غير محدد',
+                                customerId: contract?.customer_id || null
+                              });
+                              setCreateCompositeDialogOpen(true);
+                            } : undefined}
+                            onUnmerge={isMergedTask ? async () => {
+                              if (confirm('هل تريد التراجع عن دمج هذه المهمة؟ سيتم إنشاء مهام منفصلة لكل عقد.')) {
+                                try {
+                                  const { data: items, error: itemsError } = await supabase
+                                    .from('installation_task_items')
+                                    .select('*')
+                                    .eq('task_id', task.id);
+                                  
+                                  if (itemsError) throw itemsError;
+                                  
+                                  const itemsByContract: Record<number, any[]> = {};
+                                  items?.forEach(item => {
+                                    const billboard = billboardById[item.billboard_id];
+                                    const contractId = billboard?.Contract_Number;
+                                    if (contractId) {
+                                      if (!itemsByContract[contractId]) itemsByContract[contractId] = [];
+                                      itemsByContract[contractId].push(item);
+                                    }
+                                  });
+                                  
+                                  const { error: deleteItemsError } = await supabase
+                                    .from('installation_task_items')
+                                    .delete()
+                                    .eq('task_id', task.id);
+                                  
+                                  if (deleteItemsError) throw deleteItemsError;
+                                  
+                                  const { error: deleteTaskError } = await supabase
+                                    .from('installation_tasks')
+                                    .delete()
+                                    .eq('id', task.id);
+                                  
+                                  if (deleteTaskError) throw deleteTaskError;
+                                  
+                                  for (const [contractId, contractItems] of Object.entries(itemsByContract)) {
+                                    const { data: newTask, error: taskError } = await supabase
+                                      .from('installation_tasks')
+                                      .insert({
+                                        contract_id: Number(contractId),
+                                        team_id: task.team_id,
+                                        status: 'pending'
+                                      })
+                                      .select()
+                                      .single();
+                                    
+                                    if (taskError) throw taskError;
+                                    
+                                    const updates = contractItems.map(item => {
+                                      const { id, created_at, ...itemWithoutId } = item;
+                                      return {
+                                        ...itemWithoutId,
+                                        task_id: newTask.id
+                                      };
+                                    });
+                                    
+                                    const { error: insertError } = await supabase
+                                      .from('installation_task_items')
+                                      .insert(updates);
+                                    
+                                    if (insertError) throw insertError;
+                                  }
+                                  
+                                  toast.success(`تم التراجع عن الدمج وإنشاء ${Object.keys(itemsByContract).length} مهمة منفصلة`);
+                                  handleRefreshAll();
+                                } catch (error: any) {
+                                  console.error('Error unmerging task:', error);
+                                  toast.error('فشل في التراجع عن الدمج: ' + error.message);
+                                }
+                              }
+                            } : undefined}
+                            onDeletePrintTask={task.print_task_id ? async () => {
+                              if (confirm('هل أنت متأكد من حذف مهمة الطباعة؟')) {
+                                try {
+                                  const { error: itemsError } = await supabase
+                                    .from('print_task_items')
+                                    .delete()
+                                    .eq('task_id', task.print_task_id);
+                                  
+                                  if (itemsError) throw itemsError;
+                                  
+                                  const { error: taskError } = await supabase
+                                    .from('print_tasks')
+                                    .delete()
+                                    .eq('id', task.print_task_id);
+                                  
+                                  if (taskError) throw taskError;
+                                  
+                                  const { error: updateError } = await supabase
+                                    .from('installation_tasks')
+                                    .update({ print_task_id: null })
+                                    .eq('id', task.id);
+                                  
+                                  if (updateError) throw updateError;
+                                  
+                                  toast.success('تم حذف مهمة الطباعة بنجاح');
+                                  queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
+                                  queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+                                } catch (error) {
+                                  console.error('Error deleting print task:', error);
+                                  toast.error('فشل في حذف مهمة الطباعة');
+                                }
+                              }
+                            } : undefined}
+                          >
+                            {/* محتوى الكرت القابل للطي */}
+                            <div className="p-4 space-y-4">
+                              {/* ملخص تكاليف المهمة */}
+                              <TaskTotalCostSummary
+                                taskId={task.id}
+                                taskItems={taskItems}
+                                installationPrices={installationPricingByBillboard}
+                                billboards={billboardById}
+                                onRefresh={refetchTaskItems}
+                              />
+                              
+                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+                                {taskItems.map(item => {
+                                  const billboard = billboardById[item.billboard_id];
+                                  const installationPrice = installationPricingByBillboard[item.billboard_id] || 0;
+                                  return (
+                                    <BillboardTaskCard
+                                      key={item.id}
+                                      item={item}
+                                      billboard={billboard}
+                                      installationPrice={installationPrice}
+                                      isSelected={
+                                        selectedItemsForCompletion.includes(item.id) || 
+                                        selectedItemsForDate.includes(item.id)
+                                      }
+                                      isCompleted={item.status === 'completed'}
+                                      taskDesigns={taskDesigns}
+                                      onDelete={item.status !== 'completed' ? async () => {
+                                        try {
+                                          const { error } = await supabase
+                                            .from('installation_task_items')
+                                            .delete()
+                                            .eq('id', item.id);
+                                          
+                                          if (error) throw error;
+                                          
+                                          toast.success('تم حذف اللوحة من المهمة');
+                                          refetchTaskItems();
+                                        } catch (error: any) {
+                                          console.error('Error deleting item:', error);
+                                          toast.error('فشل في حذف اللوحة: ' + error.message);
+                                        }
+                                      } : undefined}
+                                      onSelectionChange={(checked) => {
+                                        if (item.status === 'completed') {
+                                          toast.info('هذه اللوحة مكتملة بالفعل');
                                           return;
                                         }
-                                        setSelectedTaskForDesign(task.id);
-                                        setBulkDesignDialogOpen(true);
-                                      }}
-                                    >
-                                      <Layers className="h-4 w-4 mr-2" />
-                                      توزيع التصاميم
-                                      {taskDesigns.length === 0 && (
-                                        <Badge variant="outline" className="mr-2 text-[9px] px-1.5 py-0 font-normal">
-                                          أضف تصاميم
-                                        </Badge>
-                                      )}
-                                    </Button>
-                                    {/* ✅ تم إلغاء أزرار (طباعة) و(طباعة منفصلة) حسب الطلب */}
-                                    {/* زر تعديل نوع المهمة */}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTaskForEdit({
-                                          id: task.id,
-                                          taskType: task.task_type || 'installation'
-                                        });
-                                        setEditTaskTypeDialogOpen(true);
-                                      }}
-                                    >
-                                      <Edit className="h-4 w-4 mr-2" />
-                                      تعديل النوع
-                                    </Button>
-                                    {/* زر نقل اللوحات */}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        setSelectedTaskForTransfer({
-                                          taskId: task.id,
-                                          teamId: task.team_id,
-                                          teamName: team?.team_name || 'غير محدد',
-                                          contractId: task.contract_id
-                                        });
-                                        setTransferDialogOpen(true);
-                                      }}
-                                    >
-                                      <ArrowRight className="h-4 w-4 mr-2" />
-                                      نقل لوحات
-                                    </Button>
-                                    {/* زر طباعة جميع لوحات المهمة */}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        // تحديد المهمة الحالية فقط وفتح نافذة الطباعة
-                                        setSelectedTasksForPrint(new Set([task.id]));
-                                        setMultiTaskPrintDialogOpen(true);
-                                      }}
-                                    >
-                                      <FileText className="h-4 w-4 mr-2" />
-                                      طباعة الكل
-                                    </Button>
-                                    <Button
-                                      variant="destructive"
-                                      size="sm"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        if (window.confirm('هل أنت متأكد من حذف مهمة التركيب؟ سيتم حذف جميع البيانات المرتبطة بها.')) {
-                                          deleteTaskMutation.mutate(task.id);
+                                        
+                                        if (showCompletionDialog && selectedTaskIdForCompletion === task.id) {
+                                          if (checked) {
+                                            setSelectedItemsForCompletion(prev => [...prev, item.id]);
+                                          } else {
+                                            setSelectedItemsForCompletion(prev => prev.filter(id => id !== item.id));
+                                          }
+                                        } else {
+                                          // التحديد العام للشريط العائم
+                                          if (checked) {
+                                            setSelectedItemsForDate(prev => [...prev, item.id]);
+                                            if (!selectedTaskIdForBulk) {
+                                              setSelectedTaskIdForBulk(task.id);
+                                            }
+                                          } else {
+                                            setSelectedItemsForDate(prev => prev.filter(id => id !== item.id));
+                                          }
                                         }
                                       }}
-                                    >
-                                      <Trash2 className="h-4 w-4 mr-2" />
-                                      حذف
-                                    </Button>
-                                    
-                                    {/* أزرار مهام الطباعة والمجسمات */}
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                      {/* مهمة الطباعة */}
-                                      {task.print_tasks ? (
-                                        <Badge 
-                                          variant={
-                                            task.print_tasks.status === 'completed' ? 'default' : 
-                                            task.print_tasks.status === 'in_progress' ? 'secondary' : 
-                                            'destructive'
-                                          }
-                                          className={`cursor-pointer ${
-                                            task.print_tasks.status === 'completed' ? 'bg-green-500 hover:bg-green-600' : 
-                                            task.print_tasks.status === 'in_progress' ? 'bg-orange-500 hover:bg-orange-600' : 
-                                            'bg-red-500 hover:bg-red-600'
-                                          }`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.location.href = '/admin/print-tasks';
-                                          }}
-                                        >
-                                          <Printer className="h-3 w-3 ml-1" />
-                                          طباعة ({
-                                            task.print_tasks.status === 'completed' ? 'مكتملة' : 
-                                            task.print_tasks.status === 'in_progress' ? 'قيد التنفيذ' : 
-                                            'معلقة'
-                                          })
-                                        </Badge>
-                                      ) : null}
-
-                                      {/* مهمة المجسمات */}
-                                      {task.cutout_tasks ? (
-                                        <Badge 
-                                          variant={
-                                            task.cutout_tasks.status === 'completed' ? 'default' : 
-                                            task.cutout_tasks.status === 'in_progress' ? 'secondary' : 
-                                            'destructive'
-                                          }
-                                          className={`cursor-pointer ${
-                                            task.cutout_tasks.status === 'completed' ? 'bg-green-500 hover:bg-green-600' : 
-                                            task.cutout_tasks.status === 'in_progress' ? 'bg-orange-500 hover:bg-orange-600' : 
-                                            'bg-red-500 hover:bg-red-600'
-                                          }`}
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            window.location.href = '/admin/cutout-tasks';
-                                          }}
-                                        >
-                                          <Package className="h-3 w-3 ml-1" />
-                                          مجسمات ({
-                                            task.cutout_tasks.status === 'completed' ? 'مكتملة' : 
-                                            task.cutout_tasks.status === 'in_progress' ? 'قيد التنفيذ' : 
-                                            'معلقة'
-                                          })
-                                        </Badge>
-                                      ) : null}
-                                      
-                                      {/* زر إنشاء مهام جديد */}
-                                      {!task.print_tasks && !task.cutout_tasks && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="bg-primary/10"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedTaskForPrint(task.id);
-                                            setCreatePrintTaskDialogOpen(true);
-                                          }}
-                                        >
-                                          <Printer className="h-4 w-4 mr-2" />
-                                          إنشاء مهام
-                                        </Button>
-                                      )}
-                                      
-                                      {/* زر حذف مهمة الطباعة */}
-                                      {task.print_task_id && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="border-red-500 text-red-500 hover:bg-red-50"
-                                          onClick={async (e) => {
-                                            e.stopPropagation();
-                                            if (confirm('هل أنت متأكد من حذف مهمة الطباعة؟')) {
-                                              try {
-                                                // Delete print task items first
-                                                const { error: itemsError } = await supabase
-                                                  .from('print_task_items')
-                                                  .delete()
-                                                  .eq('task_id', task.print_task_id);
-                                                
-                                                if (itemsError) throw itemsError;
-                                                
-                                                // Delete print task
-                                                const { error: taskError } = await supabase
-                                                  .from('print_tasks')
-                                                  .delete()
-                                                  .eq('id', task.print_task_id);
-                                                
-                                                if (taskError) throw taskError;
-                                                
-                                                // Update installation task
-                                                const { error: updateError } = await supabase
-                                                  .from('installation_tasks')
-                                                  .update({ print_task_id: null })
-                                                  .eq('id', task.id);
-                                                
-                                                if (updateError) throw updateError;
-                                                
-                                                toast.success('تم حذف مهمة الطباعة بنجاح');
-                                                queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
-                                                queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
-                                              } catch (error) {
-                                                console.error('Error deleting print task:', error);
-                                                toast.error('فشل في حذف مهمة الطباعة');
-                                              }
-                                            }
-                                          }}
-                                        >
-                                          <Trash2 className="h-4 w-4 mr-2" />
-                                          حذف مهمة الطباعة
-                                        </Button>
-                                      )}
-                                      
-                                      {/* زر إنشاء مهمة مجمعة للتركيب فقط - لإعادة التركيب */}
-                                      {task.task_type === 'reinstallation' && (
-                                        <Button
-                                          variant="outline"
-                                          size="sm"
-                                          className="bg-amber-50 border-amber-500 text-amber-700 hover:bg-amber-100"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            setSelectedTaskForComposite({
-                                              taskId: task.id,
-                                              contractId: task.contract_id,
-                                              customerName: contract?.['Customer Name'] || 'غير محدد',
-                                              customerId: contract?.customer_id || null
-                                            });
-                                            setCreateCompositeDialogOpen(true);
-                                          }}
-                                        >
-                                          <Plus className="h-4 w-4 mr-2" />
-                                          مهمة مجمعة
-                                        </Button>
-                                      )}
-                                    </div>
-                                  {taskItems.filter(i => i.status !== 'completed').length > 0 && (
-                                    <>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          setSelectedTaskIdForCompletion(task.id);
-                                          setSelectedItemsForCompletion([]);
-                                          setShowCompletionDialog(true);
-                                        }}
-                                      >
-                                        <CheckCircle2 className="h-4 w-4 ml-2" />
-                                        إكمال اللوحات
-                                      </Button>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => {
-                                          setSelectedTaskIdForBulk(task.id);
-                                          setSelectedItemsForDate([]);
-                                          setBulkInstallationDate('');
-                                          setBulkDateDialogOpen(true);
-                                        }}
-                                      >
-                                        <CalendarIcon className="h-4 w-4 ml-2" />
-                                        تحديد تاريخ تركيب
-                                      </Button>
-                                    </>
-                                   )}
-                                   {isMergedTask && (
-                                     <Button
-                                       variant="outline"
-                                       size="sm"
-                                       className="text-orange-600 hover:text-orange-700"
-                                       onClick={async (e) => {
-                                         e.stopPropagation();
-                                         if (confirm('هل تريد التراجع عن دمج هذه المهمة؟ سيتم إنشاء مهام منفصلة لكل عقد.')) {
-                                           try {
-                                             // Get all items
-                                             const { data: items, error: itemsError } = await supabase
-                                               .from('installation_task_items')
-                                               .select('*')
-                                               .eq('task_id', task.id);
-                                             
-                                             if (itemsError) throw itemsError;
-                                             
-                                             // Group items by contract
-                                             const itemsByContract: Record<number, any[]> = {};
-                                             items?.forEach(item => {
-                                               const billboard = billboardById[item.billboard_id];
-                                               const contractId = billboard?.Contract_Number;
-                                               if (contractId) {
-                                                 if (!itemsByContract[contractId]) itemsByContract[contractId] = [];
-                                                 itemsByContract[contractId].push(item);
-                                               }
-                                             });
-                                             
-                                             // Delete items from merged task
-                                             const { error: deleteItemsError } = await supabase
-                                               .from('installation_task_items')
-                                               .delete()
-                                               .eq('task_id', task.id);
-                                             
-                                             if (deleteItemsError) throw deleteItemsError;
-                                             
-                                             // Delete merged task
-                                             const { error: deleteTaskError } = await supabase
-                                               .from('installation_tasks')
-                                               .delete()
-                                               .eq('id', task.id);
-                                             
-                                             if (deleteTaskError) throw deleteTaskError;
-                                             
-                                             // Create new tasks for each contract
-                                             for (const [contractId, contractItems] of Object.entries(itemsByContract)) {
-                                               const { data: newTask, error: taskError } = await supabase
-                                                 .from('installation_tasks')
-                                                 .insert({
-                                                   contract_id: Number(contractId),
-                                                   team_id: task.team_id,
-                                                   status: 'pending'
-                                                 })
-                                                 .select()
-                                                 .single();
-                                               
-                                               if (taskError) throw taskError;
-                                               
-                                               // Add items to new task
-                                               const updates = contractItems.map(item => {
-                                                 const { id, created_at, ...itemWithoutId } = item;
-                                                 return {
-                                                   ...itemWithoutId,
-                                                   task_id: newTask.id
-                                                 };
-                                               });
-                                               
-                                               const { error: insertError } = await supabase
-                                                 .from('installation_task_items')
-                                                 .insert(updates);
-                                               
-                                               if (insertError) throw insertError;
-                                             }
-                                             
-                                             toast.success(`تم التراجع عن الدمج وإنشاء ${Object.keys(itemsByContract).length} مهمة منفصلة`);
-                                             handleRefreshAll();
-                                           } catch (error: any) {
-                                             console.error('Error unmerging task:', error);
-                                             toast.error('فشل في التراجع عن الدمج: ' + error.message);
-                                           }
-                                         }
-                                       }}
-                                     >
-                                       <RotateCcw className="h-4 w-4 mr-2" />
-                                       التراجع عن الدمج
-                                     </Button>
-                                   )}
-                                   <Button
-                                       variant="outline"
-                                       size="sm"
-                                       className="text-destructive hover:text-destructive"
-                                       onClick={(e) => {
-                                         e.stopPropagation();
-                                         if (confirm('هل أنت متأكد من حذف هذه المهمة؟')) {
-                                           deleteTaskMutation.mutate(task.id);
-                                         }
-                                       }}
-                                     >
-                                       <Trash2 className="h-4 w-4 mr-2" />
-                                       حذف
-                                     </Button>
-                                    <CollapsibleTrigger asChild>
-                                      <Button variant="ghost" size="sm">
-                                        <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                                      </Button>
-                                    </CollapsibleTrigger>
-                                  </div>
-                                </div>
-                              </CardHeader>
-                              <CollapsibleContent>
-                                <CardContent className="pt-0 space-y-4">
-                                  {/* ملخص تكاليف المهمة */}
-                                  <TaskTotalCostSummary
-                                    taskId={task.id}
-                                    taskItems={taskItems}
-                                    installationPrices={installationPricingByBillboard}
-                                    billboards={billboardById}
-                                    onRefresh={refetchTaskItems}
-                                  />
-                                  
-                                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                                    {taskItems.map(item => {
-                                      const billboard = billboardById[item.billboard_id];
-                                      const installationPrice = installationPricingByBillboard[item.billboard_id] || 0;
-                                      return (
-                                         <BillboardTaskCard
-                                          key={item.id}
-                                          item={item}
-                                          billboard={billboard}
-                                          installationPrice={installationPrice}
-                                           isSelected={
-                                             selectedItemsForCompletion.includes(item.id) || 
-                                             selectedItemsForDate.includes(item.id)
-                                           }
-                                           isCompleted={item.status === 'completed'}
-                                           taskDesigns={taskDesigns}
-                                           onDelete={item.status !== 'completed' ? async () => {
-                                             try {
-                                               const { error } = await supabase
-                                                 .from('installation_task_items')
-                                                 .delete()
-                                                 .eq('id', item.id);
-                                               
-                                               if (error) throw error;
-                                               
-                                               toast.success('تم حذف اللوحة من المهمة');
-                                               refetchTaskItems();
-                                             } catch (error: any) {
-                                               console.error('Error deleting item:', error);
-                                               toast.error('فشل في حذف اللوحة: ' + error.message);
-                                             }
-                                           } : undefined}
-                                            onSelectionChange={(checked) => {
-                                              // التحديد فقط - لا يتم فتح النافذة أو الإكمال تلقائياً
-                                              if (item.status === 'completed') {
-                                                toast.info('هذه اللوحة مكتملة بالفعل');
-                                                return;
-                                              }
-                                              
-                                              // التحديد للـ completion dialog
-                                              if (showCompletionDialog && selectedTaskIdForCompletion === task.id) {
-                                                if (checked) {
-                                                  setSelectedItemsForCompletion(prev => [...prev, item.id]);
-                                                } else {
-                                                  setSelectedItemsForCompletion(prev => prev.filter(id => id !== item.id));
-                                                }
-                                              }
-                                              // التحديد للـ date dialog  
-                                              else if (bulkDateDialogOpen && selectedTaskIdForBulk === task.id) {
-                                                if (checked) {
-                                                  setSelectedItemsForDate(prev => [...prev, item.id]);
-                                                  if (!selectedTaskIdForBulk) {
-                                                    setSelectedTaskIdForBulk(task.id);
-                                                  }
-                                                } else {
-                                                  setSelectedItemsForDate(prev => prev.filter(id => id !== item.id));
-                                                }
-                                              }
-                                            }}
-                                          onUncomplete={item.status === 'completed' ? () => {
-                                            uncompleteItemMutation.mutate({ itemId: item.id, taskId: task.id });
-                                          } : undefined}
-                                          onEditDesign={() => {
-                                            setSelectedTaskForDesign(item.task_id);
-                                            setDesignDialogOpen(true);
-                                          }}
-                                          onPrint={() => {
-                                            setPrintTaskId(item.task_id);
-                                            setPrintDialogOpen(true);
-                                          }}
-                                          onAddInstalledImage={() => {
-                                            setSelectedItemForImage(item);
-                                            setInstalledImageUrl(item.installed_image_url || '');
-                                            setInstalledImageFaceAUrl(item.installed_image_face_a_url || '');
-                                            setInstalledImageFaceBUrl(item.installed_image_face_b_url || '');
-                                            setImageDialogOpen(true);
-                                          }}
-                                          onRefresh={refetchTaskItems}
-                                        />
-                                      );
-                                    })}
-                                  </div>
-                                </CardContent>
-                              </CollapsibleContent>
-                            </TaskCardWrapper>
-                          </Collapsible>
+                                      onUncomplete={item.status === 'completed' ? () => {
+                                        uncompleteItemMutation.mutate({ itemId: item.id, taskId: task.id });
+                                      } : undefined}
+                                      onEditDesign={() => {
+                                        setSelectedTaskForDesign(item.task_id);
+                                        setDesignDialogOpen(true);
+                                      }}
+                                      onPrint={() => {
+                                        setPrintTaskId(item.task_id);
+                                        setPrintDialogOpen(true);
+                                      }}
+                                      onAddInstalledImage={() => {
+                                        setSelectedItemForImage(item);
+                                        setInstalledImageUrl(item.installed_image_url || '');
+                                        setInstalledImageFaceAUrl(item.installed_image_face_a_url || '');
+                                        setInstalledImageFaceBUrl(item.installed_image_face_b_url || '');
+                                        setImageDialogOpen(true);
+                                      }}
+                                      onRefresh={refetchTaskItems}
+                                    />
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </MobileTaskCard>
                         );
                       })}
                     </CardContent>
@@ -2081,6 +1791,137 @@ export default function InstallationTasks() {
           })
         )}
       </div>
+
+      {/* Floating Selection Bar for Installation Date */}
+      <AnimatePresence>
+        {selectedItemsForDate.length > 0 && (
+          <motion.div
+            initial={{ y: 100, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 100, opacity: 0 }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50"
+          >
+            <Card className="bg-gradient-to-r from-primary to-primary/80 text-white px-6 py-4 shadow-2xl rounded-2xl border-0">
+              <div className="flex items-center gap-4 flex-wrap justify-center">
+                <Badge variant="secondary" className="bg-white text-primary text-lg px-4 py-2">
+                  {selectedItemsForDate.length} لوحة محددة
+                </Badge>
+
+                {/* زر تحديد كل لوحات العقد */}
+                {(() => {
+                  // البحث عن العقد الحالي من أول لوحة محددة
+                  const firstSelectedItemId = selectedItemsForDate[0];
+                  const selectedItem = allTaskItems.find(item => item.id === firstSelectedItemId);
+                  if (!selectedItem) return null;
+                  
+                  const currentTask = tasks.find(t => t.id === selectedItem.task_id);
+                  if (!currentTask) return null;
+                  
+                  // جلب كل اللوحات في هذا العقد
+                  const contractItems = allTaskItems.filter(item => {
+                    const itemTask = tasks.find(t => t.id === item.task_id);
+                    return itemTask?.contract_id === currentTask.contract_id && item.status !== 'completed';
+                  });
+                  
+                  const allSelected = contractItems.every(item => selectedItemsForDate.includes(item.id));
+                  
+                  return (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="gap-2 bg-white/20 hover:bg-white/30 text-white border-0"
+                      onClick={() => {
+                        if (allSelected) {
+                          setSelectedItemsForDate([]);
+                        } else {
+                          setSelectedItemsForDate(contractItems.map(item => item.id));
+                        }
+                      }}
+                    >
+                      {allSelected ? (
+                        <>
+                          <X className="h-4 w-4" />
+                          إلغاء تحديد العقد
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="h-4 w-4" />
+                          تحديد كل العقد ({contractItems.length})
+                        </>
+                      )}
+                    </Button>
+                  );
+                })()}
+
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="secondary" className="gap-2 bg-white/20 hover:bg-white/30 text-white border-0">
+                      <CalendarIcon className="h-4 w-4" />
+                      {floatingInstallationDate ? format(floatingInstallationDate, 'dd MMM yyyy', { locale: ar }) : 'تاريخ التركيب'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="center">
+                    <Calendar
+                      mode="single"
+                      selected={floatingInstallationDate}
+                      onSelect={setFloatingInstallationDate}
+                      locale={ar}
+                    />
+                  </PopoverContent>
+                </Popover>
+
+                <Button
+                  onClick={async () => {
+                    if (!floatingInstallationDate || selectedItemsForDate.length === 0) {
+                      toast.error('يرجى تحديد التاريخ واللوحات');
+                      return;
+                    }
+
+                    try {
+                      const { error } = await supabase
+                        .from('installation_task_items')
+                        .update({ 
+                          installation_date: format(floatingInstallationDate, 'yyyy-MM-dd'),
+                          status: 'completed'
+                        })
+                        .in('id', selectedItemsForDate);
+
+                      if (error) throw error;
+
+                      toast.success(`تم تحديد تاريخ التركيب لـ ${selectedItemsForDate.length} لوحة`);
+                      setSelectedItemsForDate([]);
+                      setFloatingInstallationDate(undefined);
+                      setSelectedTaskIdForBulk(null);
+                      refetchTaskItems();
+                    } catch (error) {
+                      console.error('Error:', error);
+                      toast.error('فشل في تحديد تاريخ التركيب');
+                    }
+                  }}
+                  disabled={!floatingInstallationDate || selectedItemsForDate.length === 0}
+                  className="gap-2 bg-white text-primary hover:bg-white/90"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  تأكيد التركيب
+                </Button>
+
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-white hover:bg-white/20"
+                  onClick={() => {
+                    setSelectedItemsForDate([]);
+                    setFloatingInstallationDate(undefined);
+                    setSelectedTaskIdForBulk(null);
+                  }}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            </Card>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Add Task Dialog - Enhanced Version */}
       <EnhancedAddInstallationTaskDialog
@@ -2360,105 +2201,6 @@ export default function InstallationTasks() {
         </DialogContent>
       </Dialog>
 
-      {/* Bulk Date Assignment Dialog */}
-      <Dialog open={bulkDateDialogOpen} onOpenChange={setBulkDateDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>تحديد تاريخ التركيب</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              حدد اللوحات التي تريد تعيين تاريخ تركيب لها
-            </p>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="bulkInstallationDate">تاريخ التركيب</Label>
-              <Input
-                id="bulkInstallationDate"
-                type="date"
-                value={bulkInstallationDate}
-                onChange={(e) => setBulkInstallationDate(e.target.value)}
-              />
-            </div>
-            <div className="text-sm">
-              <p className="font-semibold mb-2">
-                اللوحات المحددة: {selectedItemsForDate.length}
-              </p>
-              {selectedItemsForDate.length === 0 && (
-                <p className="text-muted-foreground">
-                  قم بتحديد اللوحات من القائمة أعلاه
-                </p>
-              )}
-            </div>
-            <div className="flex gap-2 justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setBulkDateDialogOpen(false);
-                  setSelectedItemsForDate([]);
-                  setBulkInstallationDate('');
-                  setSelectedTaskIdForBulk(null);
-                }}
-              >
-                إلغاء
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => {
-                  if (!selectedTaskIdForBulk) return;
-                  const taskItems = allTaskItems.filter(i => 
-                    i.task_id === selectedTaskIdForBulk && i.status !== 'completed'
-                  );
-                  setSelectedItemsForDate(taskItems.map(i => i.id));
-                }}
-              >
-                تحديد الكل
-              </Button>
-              <Button
-                onClick={async () => {
-                  if (!bulkInstallationDate || selectedItemsForDate.length === 0) {
-                    toast.error('يرجى تحديد التاريخ واللوحات');
-                    return;
-                  }
-
-                  try {
-                    const { error } = await supabase
-                      .from('installation_task_items')
-                      .update({ 
-                        installation_date: bulkInstallationDate,
-                        status: 'completed'
-                      })
-                      .in('id', selectedItemsForDate);
-
-                    if (error) throw error;
-
-                    toast.success(`تم تحديد تاريخ التركيب لـ ${selectedItemsForDate.length} لوحة`);
-                    setBulkDateDialogOpen(false);
-                    setSelectedItemsForDate([]);
-                    setBulkInstallationDate('');
-                    setSelectedTaskIdForBulk(null);
-                    refetchTaskItems();
-                  } catch (error) {
-                    console.error('Error:', error);
-                    toast.error('فشل في تحديد تاريخ التركيب');
-                  }
-                }}
-                disabled={!bulkInstallationDate || selectedItemsForDate.length === 0}
-              >
-                حفظ التاريخ ({selectedItemsForDate.length})
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Task Completion Dialog */}
-      <TaskCompletionDialog
-        open={showCompletionDialog}
-        onOpenChange={setShowCompletionDialog}
-        onComplete={handleCompleteMultiple}
-        selectedCount={selectedItemsForCompletion.length}
-      />
-
       {/* Merge Tasks Dialog */}
       {selectedTeamForMerge && (
         <MergeTeamTasksDialog
@@ -2518,8 +2260,17 @@ export default function InstallationTasks() {
           onOpenChange={setPrintAllDialogOpen}
           contractNumber={selectedContractForPrint.contractNumber}
           customerName={selectedContractForPrint.customerName}
-          allTaskItems={allTaskItems}
-          tasks={tasks}
+          allTaskItems={allTaskItems.filter(item => {
+            // فلترة عناصر المهام التي تنتمي للعقد المحدد فقط
+            const itemTask = tasks.find(t => t.id === item.task_id);
+            if (!itemTask) return false;
+            return itemTask.contract_id === selectedContractForPrint.contractNumber || 
+                   (itemTask.contract_ids && itemTask.contract_ids.includes(selectedContractForPrint.contractNumber));
+          })}
+          tasks={tasks.filter(t => 
+            t.contract_id === selectedContractForPrint.contractNumber || 
+            (t.contract_ids && t.contract_ids.includes(selectedContractForPrint.contractNumber))
+          )}
           billboards={billboardById}
           teams={teamById}
           designsByTask={designsByTask}

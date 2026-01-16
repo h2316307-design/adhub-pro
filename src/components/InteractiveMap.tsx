@@ -89,39 +89,45 @@ const getSizeColor = (size: string): { bg: string, border: string, text: string 
   return sizeColorMap[size]
 }
 
-// Create pin SVG matching OpenStreetMap style - with size label at bottom
+// Create pin SVG - بدون checkbox
 const createPinIcon = (size: string, status: string, isSelected: boolean = false) => {
   const colors = getSizeColor(size)
   const statusColor = status === "متاح" ? "#10b981" : status === "قريباً" ? "#f59e0b" : "#ef4444"
   const displaySize = size.length > 6 ? size.substring(0, 5) + ".." : size
 
-  // Matching OpenStreet pin dimensions
-  const width = 52
-  const height = 64
+  const width = 50
+  const height = 70
 
   const selectedStroke = isSelected ? '#d4af37' : colors.border
   const strokeWidth = isSelected ? 3 : 2
+  const selectedGlow = isSelected ? `<circle cx="25" cy="35" r="22" fill="none" stroke="#d4af37" stroke-width="2" opacity="0.6"/>` : ''
 
   const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 52 64">
-      <g>
+    <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 50 70">
+      <defs>
+        <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+          <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.4"/>
+        </filter>
+      </defs>
+      <g filter="url(#shadow)">
         <!-- Pin shadow -->
-        <ellipse cx="26" cy="60" rx="10" ry="3" fill="rgba(0,0,0,0.3)"/>
+        <ellipse cx="25" cy="66" rx="10" ry="3" fill="rgba(0,0,0,0.35)"/>
+        ${selectedGlow}
         <!-- Pin body -->
-        <path d="M26 2C14.954 2 6 10.954 6 22c0 12 20 38 20 38s20-26 20-38C46 10.954 37.046 2 26 2z"
+        <path d="M25 4C14.507 4 6 12.507 6 23c0 12 19 42 19 42s19-30 19-42C44 12.507 35.493 4 25 4z"
               fill="${colors.bg}" stroke="${selectedStroke}" stroke-width="${strokeWidth}"/>
         <!-- Inner circle -->
-        <circle cx="26" cy="22" r="14" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1.5"/>
+        <circle cx="25" cy="23" r="12" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1.5"/>
         <!-- Status dot -->
-        <circle cx="26" cy="22" r="5" fill="${statusColor}"/>
-        <!-- Size label background -->
-        <rect x="4" y="42" width="44" height="16" rx="4" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1"/>
-        <!-- Size text -->
-        <text x="26" y="53" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="${colors.bg}">${displaySize}</text>
+        <circle cx="25" cy="23" r="5" fill="${statusColor}"/>
+        ${status === "متاح" ? `<circle cx="25" cy="23" r="7" fill="none" stroke="${statusColor}" stroke-width="1" opacity="0.5"/>` : ''}
+        <!-- Size label -->
+        <rect x="5" y="50" width="40" height="16" rx="4" fill="#1a1a2e" stroke="${selectedStroke}" stroke-width="1"/>
+        <text x="25" y="61" text-anchor="middle" font-family="Arial,sans-serif" font-size="9" font-weight="bold" fill="${colors.bg}">${displaySize}</text>
         ${isSelected ? `
-          <!-- Selected checkmark -->
-          <circle cx="42" cy="10" r="8" fill="#d4af37" stroke="#1a1a2e" stroke-width="2"/>
-          <path d="M38 10 l3 3 l5 -5" fill="none" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <!-- Selection indicator -->
+          <circle cx="40" cy="8" r="7" fill="#d4af37" stroke="#1a1a2e" stroke-width="1.5"/>
+          <path d="M36 8 l3 3 l5 -5" fill="none" stroke="#1a1a2e" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         ` : ''}
       </g>
     </svg>
@@ -606,13 +612,23 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
         `,
       })
 
+      // ✅ النقرة الواحدة = فتح الكرت
       marker.addListener("click", () => {
-        // Close any previously open InfoWindow
         if (currentInfoWindow) {
           currentInfoWindow.close()
         }
         currentInfoWindow = infoWindow
         infoWindow.open(map, marker)
+      })
+      
+      // ✅ النقر المزدوج = تبديل التحديد
+      marker.addListener("dblclick", () => {
+        if (onToggleSelection) {
+          onToggleSelection(billboardId)
+          if (mapInstanceRef.current) {
+            setTimeout(() => addBillboardMarkers(mapInstanceRef.current), 50)
+          }
+        }
       })
 
       if (isSelected) {

@@ -319,41 +319,6 @@ export default function CustomerBilling() {
         console.warn('Error loading printed_invoices:', e);
         printedInvoicesData = [];
       }
-      setPrintedInvoices(printedInvoicesData || []);
-
-      // ✅ Load purchase invoices (فواتير المشتريات من الزبون)
-      let purchaseInvoicesData: any[] = [];
-      try {
-        if (customerId) {
-          const { data, error } = await supabase
-            .from('purchase_invoices')
-            .select('*')
-            .eq('customer_id', customerId)
-            .order('created_at', { ascending: false });
-          if (!error && data) purchaseInvoicesData = data;
-        }
-      } catch (e) {
-        console.warn('Error loading purchase_invoices:', e);
-        purchaseInvoicesData = [];
-      }
-      setPurchaseInvoices(purchaseInvoicesData || []);
-
-      // ✅ Load sales invoices (فواتير المبيعات للزبون)
-      let salesInvoicesData: any[] = [];
-      try {
-        if (customerId) {
-          const { data, error } = await supabase
-            .from('sales_invoices')
-            .select('*')
-            .eq('customer_id', customerId)
-            .order('created_at', { ascending: false });
-          if (!error && data) salesInvoicesData = data;
-        }
-      } catch (e) {
-        console.warn('Error loading sales_invoices:', e);
-        salesInvoicesData = [];
-      }
-      setSalesInvoices(salesInvoicesData || []);
 
       // ✅ تحميل المهام المجمعة للزبون
       let compositeTasksData: any[] = [];
@@ -371,6 +336,50 @@ export default function CustomerBilling() {
         compositeTasksData = [];
       }
       setCompositeTasks(compositeTasksData || []);
+
+      // ✅ FIX: منع تكرار احتساب الطباعة عند وجود مهمة مجمعة
+      // 1) استبعاد فواتير invoice_type=composite_task من قسم فواتير الطباعة
+      // 2) استبعاد أي فاتورة طباعة مرتبطة بـ print_task ضمن composite_task (حتى لا تُحسب مرة مع المهمة المجمعة ومرة كفاتورة طباعة)
+      try {
+        const excludedInvoiceIds = new Set<string>();
+
+        // فواتير المهام المجمعة الموحدة
+        (compositeTasksData || [])
+          .map((t: any) => t.combined_invoice_id)
+          .filter(Boolean)
+          .forEach((id: string) => excludedInvoiceIds.add(id));
+
+        // فواتير الطباعة الناتجة من print_tasks المرتبطة بالمهمة المجمعة
+        const printTaskIds = (compositeTasksData || [])
+          .map((t: any) => t.print_task_id)
+          .filter(Boolean);
+
+        if (printTaskIds.length > 0) {
+          const { data: printTasksWithInvoices } = await supabase
+            .from('print_tasks')
+            .select('id, invoice_id')
+            .in('id', printTaskIds);
+
+          (printTasksWithInvoices || [])
+            .map((r: any) => r.invoice_id)
+            .filter(Boolean)
+            .forEach((id: string) => excludedInvoiceIds.add(id));
+        }
+
+        // تطبيق الاستبعاد فقط في صفحة الزبون (وليس صفحة المورد/المطبعة)
+        if (!(customerType.supplierType === 'printer' && customerType.printerName)) {
+          printedInvoicesData = (printedInvoicesData || [])
+            .filter((inv: any) => inv?.invoice_type !== 'composite_task')
+            .filter((inv: any) => !excludedInvoiceIds.has(inv.id));
+        } else {
+          // حتى لدى المطبعة: لا نعرض فواتير composite_task لأنها ليست فاتورة مطبعة فعلية
+          printedInvoicesData = (printedInvoicesData || []).filter((inv: any) => inv?.invoice_type !== 'composite_task');
+        }
+      } catch (e) {
+        console.warn('Error filtering composite-related invoices:', e);
+      }
+
+      setPrintedInvoices(printedInvoicesData || []);
 
       // ✅ تحميل إيجارات اللوحات من الشركات الصديقة (إذا كان الزبون مرتبط بشركة صديقة)
       let friendRentalsData: any[] = [];

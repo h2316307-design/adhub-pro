@@ -117,8 +117,9 @@ export const BillboardImage: React.FC<BillboardImageProps> = ({
       onLoad={handleImageLoad}
       loading="lazy"
       style={{ 
-        objectFit: 'cover',
-        objectPosition: 'center'
+        objectFit: 'contain',
+        objectPosition: 'center',
+        backgroundColor: '#1a1a2e'
       }}
     />
   );

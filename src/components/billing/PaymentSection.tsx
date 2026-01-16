@@ -67,6 +67,7 @@ const getPaymentTypeText = (entryType: string): string => {
 
 const getPaymentTargetType = (payment: PaymentRow): string => {
   if (payment.contract_number) return 'عقد';
+  if ((payment as any).composite_task_id) return 'مهمة مجمعة';
   if (payment.printed_invoice_id) return 'فاتورة طباعة';
   if (payment.sales_invoice_id) return 'فاتورة مبيعات';
   if (payment.purchase_invoice_id) return 'فاتورة مشتريات';
@@ -80,12 +81,55 @@ const getPaymentTargetType = (payment: PaymentRow): string => {
 
 const getPaymentTargetNumber = (payment: PaymentRow): string => {
   if (payment.contract_number) return `عقد رقم ${payment.contract_number}`;
+  if ((payment as any).composite_task_id) return `مهمة مجمعة`;
   if (payment.printed_invoice_id) return `فاتورة طباعة`;
   if (payment.sales_invoice_id) return `فاتورة مبيعات`;
   if (payment.purchase_invoice_id) return `فاتورة مشتريات`;
   if (payment.entry_type === 'account_payment') return 'حساب عام';
   if (payment.entry_type === 'debt') return 'دين سابق';
   return '—';
+};
+
+// ✅ الحصول على البيان/الوصف التفصيلي للدفعة
+const getPaymentStatement = (payment: PaymentRow): string => {
+  // إذا كان هناك بيان مخصص
+  if ((payment as any).statement_description) return (payment as any).statement_description;
+  
+  // عقد
+  if (payment.contract_number) {
+    return `دفعة على عقد رقم ${payment.contract_number}`;
+  }
+  
+  // مهمة مجمعة
+  if ((payment as any).composite_task_id) {
+    const taskType = (payment as any).task_type;
+    if (taskType === 'طباعة_تركيب') return 'مهمة طباعة وتركيب';
+    if (taskType === 'طباعة_قص_تركيب') return 'مهمة طباعة وقص وتركيب';
+    return 'مهمة مجمعة';
+  }
+  
+  // فاتورة مبيعات
+  if (payment.sales_invoice_id) {
+    return 'فاتورة مبيعات';
+  }
+  
+  // فاتورة طباعة
+  if (payment.printed_invoice_id) {
+    return 'فاتورة طباعة';
+  }
+  
+  // فاتورة مشتريات
+  if (payment.purchase_invoice_id) {
+    return 'فاتورة مشتريات';
+  }
+  
+  // أنواع أخرى
+  if (payment.entry_type === 'account_payment') return 'دفعة على الحساب العام';
+  if (payment.entry_type === 'debt') return 'دين سابق';
+  if (payment.entry_type === 'general_debit') return 'وارد عام';
+  if (payment.entry_type === 'general_credit') return 'صادر عام';
+  
+  return payment.notes || '—';
 };
 
 export function PaymentSection({
@@ -445,6 +489,7 @@ export function PaymentSection({
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
                       <TableHead className="text-right font-bold">نوع المدفوع له</TableHead>
                       <TableHead className="text-right font-bold">الرقم</TableHead>
+                      <TableHead className="text-right font-bold">البيان</TableHead>
                       <TableHead className="text-right font-bold">النوع</TableHead>
                       <TableHead className="text-right font-bold">المبلغ</TableHead>
                       <TableHead className="text-right font-bold">الرصيد</TableHead>
@@ -504,6 +549,9 @@ export function PaymentSection({
                                 </Badge>
                               )}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            دفعة موزعة على {distributionPayments.length} عقود
                           </TableCell>
                           <TableCell>
                             <span className={getPaymentTypeStyle('receipt')}>
@@ -574,6 +622,9 @@ export function PaymentSection({
                             <TableCell>
                               {getPaymentTargetNumber(payment)}
                             </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {getPaymentStatement(payment)}
+                            </TableCell>
                             <TableCell>
                               <span className={getPaymentTypeStyle(payment.entry_type)}>
                                 {getPaymentTypeText(payment.entry_type)}
@@ -625,6 +676,9 @@ export function PaymentSection({
                       </TableCell>
                       <TableCell>
                         {getPaymentTargetNumber(payment)}
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm">
+                        {getPaymentStatement(payment)}
                       </TableCell>
                       <TableCell>
                         <span className={getPaymentTypeStyle(payment.entry_type)}>

@@ -219,7 +219,7 @@ export default function CustomerBilling() {
             // جلب المهام المجمعة للحصول على ids الفواتير المرتبطة
             const { data: compositeTasks } = await supabase
               .from('composite_tasks')
-              .select('print_task_id, cutout_task_id')
+              .select('print_task_id, cutout_task_id, combined_invoice_id')
               .eq('customer_id', customerId);
             
             if (compositeTasks) {
@@ -231,6 +231,13 @@ export default function CustomerBilling() {
             
             // جلب invoice_ids من مهام الطباعة والقص المجمعة
             const compositeInvoiceIds = new Set<string>();
+            
+            // ✅ إضافة combined_invoice_id من المهام المجمعة مباشرة
+            if (compositeTasks) {
+              for (const ct of compositeTasks) {
+                if (ct.combined_invoice_id) compositeInvoiceIds.add(ct.combined_invoice_id);
+              }
+            }
             
             if (compositePrintTaskIds.size > 0) {
               const { data: printTasks } = await supabase

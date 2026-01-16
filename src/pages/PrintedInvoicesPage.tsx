@@ -62,8 +62,34 @@ export default function PrintedInvoicesPage() {
 
       if (error) throw error;
 
-      setInvoices(data || []);
-      calculateStats(data || []);
+      // ✅ FIX: استبعاد فواتير المهام المجمعة وفواتير طباعة مهام مرتبطة بمهمة مجمعة (لتفادي التكرار)
+      let filtered = (data || []) as any[];
+      try {
+        // 1) لا نعرض فواتير invoice_type=composite_task داخل فواتير الطباعة
+        filtered = filtered.filter((inv) => inv?.invoice_type !== 'composite_task');
+
+        // 2) استبعاد أي printed_invoice مرتبط بـ print_task داخل composite_task
+        const { data: composite } = await supabase
+          .from('composite_tasks')
+          .select('combined_invoice_id, print_task_id')
+          .not('print_task_id', 'is', null);
+
+        const printTaskIds = (composite || []).map((c: any) => c.print_task_id).filter(Boolean);
+        if (printTaskIds.length > 0) {
+          const { data: printTasks } = await supabase
+            .from('print_tasks')
+            .select('invoice_id')
+            .in('id', printTaskIds);
+
+          const excluded = new Set<string>((printTasks || []).map((r: any) => r.invoice_id).filter(Boolean));
+          filtered = filtered.filter((inv) => !excluded.has(inv.id));
+        }
+      } catch (e) {
+        console.warn('Could not filter composite-related printed invoices:', e);
+      }
+
+      setInvoices(filtered as any);
+      calculateStats(filtered as any);
     } catch (error) {
       console.error('Error loading invoices:', error);
       toast.error('فشل في تحميل فواتير الطباعة');

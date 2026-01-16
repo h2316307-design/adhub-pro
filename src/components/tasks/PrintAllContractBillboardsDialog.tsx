@@ -92,38 +92,46 @@ export function PrintAllContractBillboardsDialog({
     return groups;
   }, [allContractItems, contractTasks]);
 
-  // اختيار كل الفرق عند الفتح وجلب رقم العقد ونوع الإعلان لكل لوحة
+  // متغير لتتبع ما إذا تم تهيئة الفرق المختارة
+  const [teamsInitialized, setTeamsInitialized] = useState(false);
+
+  // اختيار كل الفرق عند الفتح فقط (مرة واحدة)
+  useEffect(() => {
+    if (open && !teamsInitialized && Object.keys(itemsByTeam).length > 0) {
+      setSelectedTeamIds(new Set(Object.keys(itemsByTeam)));
+      setTeamsInitialized(true);
+    }
+    if (!open) {
+      setTeamsInitialized(false);
+    }
+  }, [open, teamsInitialized, itemsByTeam]);
+
+  // جلب رقم العقد ونوع الإعلان لكل لوحة
   useEffect(() => {
     if (open) {
-      setSelectedTeamIds(new Set(Object.keys(itemsByTeam)));
-      setLoading(false); // إعادة تعيين حالة التحميل عند الفتح
+      setLoading(false);
       
-      // جلب رقم العقد ونوع الإعلان لكل لوحة من جدول billboards
       const fetchContractData = async () => {
         try {
           const billboardIds = allContractItems.map(item => item.billboard_id);
           if (billboardIds.length === 0) return;
           
-          // جلب أرقام العقود من اللوحات
           const { data: billboardsData } = await supabase
             .from('billboards')
             .select('ID, Contract_Number')
             .in('ID', billboardIds);
           
-          // جمع أرقام العقود الفريدة
           const uniqueContractNumbers = [...new Set(
             (billboardsData || [])
               .map(b => b.Contract_Number)
               .filter((c): c is number => c !== null && c !== undefined)
           )];
           
-          // إضافة رقم العقد الرئيسي إذا لم يكن موجوداً
           if (!uniqueContractNumbers.includes(contractNumber)) {
             uniqueContractNumbers.push(contractNumber);
           }
           
           if (uniqueContractNumbers.length > 0) {
-            // جلب نوع الإعلان لكل عقد
             const { data: contractsData } = await supabase
               .from('Contract')
               .select('Contract_Number, "Ad Type"')
@@ -135,9 +143,8 @@ export function PrintAllContractBillboardsDialog({
             });
             setContractAdTypes(adTypesMap);
             
-            // تعيين نوع الإعلان للعقد الرئيسي كقيمة افتراضية
             const mainContractAdType = adTypesMap[contractNumber] || '';
-            setAdType(mainContractAdType);
+            setAdType(mainContractAdType || 'لوحة إعلانية');
           }
         } catch (error) {
           console.error('Error fetching contract data:', error);
@@ -146,7 +153,7 @@ export function PrintAllContractBillboardsDialog({
       
       fetchContractData();
     }
-  }, [open, itemsByTeam, contractNumber, allContractItems]);
+  }, [open, contractNumber, allContractItems]);
 
   // اللوحات المفلترة حسب الفرق المختارة
   const contractItems = useMemo(() => {

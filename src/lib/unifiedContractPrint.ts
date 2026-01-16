@@ -838,6 +838,20 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   const a4WidthPx = (210 / 25.4) * 96;
   const printScale = (a4WidthPx / DESIGN_W) * 1.5;
   
+  // ✅ حساب عدد اللوحات لكل مقاس
+  const sizeCounts: Record<string, number> = {};
+  billboards.forEach(b => {
+    const size = b.size || 'غير محدد';
+    sizeCounts[size] = (sizeCounts[size] || 0) + 1;
+  });
+  const sizesSummary = Object.entries(sizeCounts)
+    .map(([size, count]) => `${count} ${size}`)
+    .join(' + ');
+  
+  // ✅ بناء العنوان مع الكود السنوي وتفاصيل المقاسات
+  const yearlyCodePart = contractData.yearlyCode ? ` (${contractData.yearlyCode})` : '';
+  const titleText = `${contractData.isOffer ? 'عرض سعر' : 'عقد'} #${contractData.contractNumber}${yearlyCodePart} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${sizesSummary || `${contractData.billboardsCount || 1} لوحة`} • ${contractData.currencyName || ''}`;
+  
   return `
     <!DOCTYPE html>
     <html dir="ltr">
@@ -845,7 +859,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <base href="${origin}/" />
-      <title>${contractData.isOffer ? 'عرض سعر' : 'عقد'} #${contractData.contractNumber} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${contractData.billboardsCount || 1} لوحة • ${contractData.currencyName || ''}</title>
+      <title>${titleText}</title>
       ${stylesHtml}
       <style>
         :root { --print-scale: ${printScale}; }

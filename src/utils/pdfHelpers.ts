@@ -1,5 +1,6 @@
 // Reusable helper to generate a pixel-perfect PDF from an HTML string
 // Uses an offscreen iframe to ensure fonts and images load, then html2pdf.js to export
+import DOMPurify from 'dompurify';
 
 export interface SavePdfOptions {
   filename?: string;
@@ -11,6 +12,14 @@ export interface SavePdfOptions {
 export async function saveHtmlAsPdf(html: string, filename: string, opts: SavePdfOptions = {}) {
   const html2pdf = (await import('html2pdf.js')).default;
 
+  // Sanitize HTML to prevent XSS attacks
+  const sanitizedHtml = DOMPurify.sanitize(html, {
+    ADD_TAGS: ['style', 'link'],
+    ADD_ATTR: ['target', 'rel', 'dir', 'lang'],
+    WHOLE_DOCUMENT: true,
+    RETURN_DOM: false,
+  });
+
   // Create hidden iframe to fully load HTML (fonts/images)
   const iframe = document.createElement('iframe');
   iframe.style.position = 'absolute';
@@ -19,6 +28,7 @@ export async function saveHtmlAsPdf(html: string, filename: string, opts: SavePd
   iframe.style.width = '210mm';
   iframe.style.height = '297mm';
   iframe.style.border = 'none';
+  iframe.sandbox.add('allow-same-origin');
   document.body.appendChild(iframe);
 
   const iframeDoc = iframe.contentDocument || iframe.contentWindow?.document;
@@ -28,7 +38,7 @@ export async function saveHtmlAsPdf(html: string, filename: string, opts: SavePd
   }
 
   iframeDoc.open();
-  iframeDoc.write(html);
+  iframeDoc.write(sanitizedHtml);
   iframeDoc.close();
 
   // Wait for iframe load + fonts/images

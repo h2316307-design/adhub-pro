@@ -194,6 +194,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewHTML, setPreviewHTML] = useState('');
   const [previewTitle, setPreviewTitle] = useState('');
+  const [yearlyContractCode, setYearlyContractCode] = useState('');
   
   // WhatsApp sending
   const { sendMessage, loading: sendingWhatsApp } = useSendWhatsApp();
@@ -226,6 +227,57 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
       loadContractTerms();
     }
   }, [open]);
+
+  // ✅ تحميل كود العقد السنوي عند فتح الحوار
+  useEffect(() => {
+    const loadYearlyCode = async () => {
+      const contractDate = contract?.start_date || contract?.['Contract Date'];
+      if (!contractDate) {
+        setYearlyContractCode('');
+        return;
+      }
+      
+      const cDate = new Date(contractDate);
+      if (isNaN(cDate.getTime())) {
+        setYearlyContractCode('');
+        return;
+      }
+      
+      const cYear = cDate.getFullYear();
+      const yearShort = cYear.toString().slice(-2);
+      
+      try {
+        const startOfYear = `${cYear}-01-01`;
+        const endOfYear = `${cYear}-12-31`;
+        
+        const { data: yearContracts } = await supabase
+          .from('Contract')
+          .select('Contract_Number, "Contract Date"')
+          .gte('"Contract Date"', startOfYear)
+          .lte('"Contract Date"', endOfYear)
+          .order('Contract_Number', { ascending: true });
+        
+        if (yearContracts && yearContracts.length > 0) {
+          const currentContractNum = contract?.Contract_Number || contract?.id;
+          const order = yearContracts.findIndex(c => c.Contract_Number === currentContractNum) + 1;
+          if (order > 0) {
+            setYearlyContractCode(`${order}/${yearShort}`);
+            return;
+          }
+        }
+        
+        const contractNum = parseInt(String(contract?.Contract_Number || contract?.id || '0'));
+        setYearlyContractCode(`${contractNum}/${yearShort}`);
+      } catch (error) {
+        console.error('Error getting yearly code:', error);
+        setYearlyContractCode('');
+      }
+    };
+    
+    if (open && contract) {
+      loadYearlyCode();
+    }
+  }, [open, contract]);
 
   const loadSortingData = async () => {
     try {
@@ -3756,7 +3808,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract }: Cont
                   <Printer className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold">عقد #{contract?.Contract_Number || contract?.id} • {contract?.['Ad Type'] || 'غير محدد'}</h2>
+                  <h2 className="text-sm font-bold">عقد #{contract?.Contract_Number || contract?.id}{yearlyContractCode ? ` (${yearlyContractCode})` : ''} • {contract?.['Ad Type'] || 'غير محدد'}</h2>
                   <p className="text-xs text-primary-foreground/80">{customerData?.name || 'غير محدد'} • {contract?.billboards_count || contract?.billboard_ids?.split(',').length || 1} لوحة • {currencyInfo.name}</p>
                 </div>
               </div>
