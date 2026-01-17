@@ -440,18 +440,25 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         });
       });
 
-      // إضافة فواتير المشتريات
+      // إضافة فواتير المشتريات - فقط المبلغ غير المستخدم كدفعة موزعة
       purchaseInvoicesData.forEach(invoice => {
+        const totalAmount = Number(invoice.total_amount) || 0;
+        const usedAsPayment = Number(invoice.used_as_payment) || 0;
+        const remainingAmount = totalAmount - usedAsPayment;
+        
+        // عدم عرض الفاتورة إذا كانت مستخدمة بالكامل كدفعة موزعة
+        if (remainingAmount <= 0) return;
+        
         transactions.push({
           id: `purchase-${invoice.id}`,
           date: invoice.invoice_date || invoice.created_at,
           type: 'purchase_invoice',
-          description: `فاتورة مشتريات رقم ${invoice.invoice_number || invoice.id}`,
+          description: `فاتورة مشتريات رقم ${invoice.invoice_number || invoice.id}${usedAsPayment > 0 ? ' (جزئي)' : ''}`,
           debit: 0,
-          credit: Number(invoice.total_amount) || 0,
+          credit: remainingAmount,
           balance: 0,
           reference: `مشتريات-${invoice.invoice_number || invoice.id}`,
-          notes: invoice.notes || '—',
+          notes: usedAsPayment > 0 ? `المبلغ الأصلي: ${totalAmount.toLocaleString()} - مستخدم: ${usedAsPayment.toLocaleString()}` : (invoice.notes || '—'),
         });
       });
 
@@ -470,23 +477,28 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         });
       });
 
-      // إضافة إيجارات اللوحات الصديقة من جدول friend_billboard_rentals
+      // إضافة إيجارات اللوحات الصديقة من جدول friend_billboard_rentals - فقط المبلغ غير المستخدم كدفعة
       friendBillboardRentalsData.forEach(rental => {
         const billboardInfo = rental.billboards;
         const billboardName = billboardInfo?.Billboard_Name || `لوحة ${rental.billboard_id}`;
         // ✅ استخدام friend_rental_cost بدلاً من rental_amount
         const rentalCost = Number(rental.friend_rental_cost) || Number(rental.customer_rental_price) || 0;
+        const usedAsPayment = Number(rental.used_as_payment) || 0;
+        const remainingAmount = rentalCost - usedAsPayment;
+        
+        // عدم عرض الإيجار إذا كان مستخدم بالكامل كدفعة موزعة
+        if (remainingAmount <= 0) return;
         
         transactions.push({
           id: `friend-rental-${rental.id}`,
           date: rental.start_date,
           type: 'friend_billboard_rental',
-          description: `إيجار لوحة: ${billboardName}`,
+          description: `إيجار لوحة: ${billboardName}${usedAsPayment > 0 ? ' (جزئي)' : ''}`,
           debit: 0,
-          credit: rentalCost,
+          credit: remainingAmount,
           balance: 0,
           reference: `إيجار-${rental.id.slice(0, 8)}`,
-          notes: `${rental.start_date} - ${rental.end_date}`,
+          notes: usedAsPayment > 0 ? `المبلغ الأصلي: ${rentalCost.toLocaleString()} - مستخدم: ${usedAsPayment.toLocaleString()}` : `${rental.start_date} - ${rental.end_date}`,
         });
       });
 

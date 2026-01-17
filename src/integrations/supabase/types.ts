@@ -2552,8 +2552,10 @@ export type Database = {
           id: string
           notes: string | null
           profit: number | null
+          selectable_for_payment: boolean | null
           start_date: string
           updated_at: string
+          used_as_payment: number | null
         }
         Insert: {
           billboard_id: number
@@ -2566,8 +2568,10 @@ export type Database = {
           id?: string
           notes?: string | null
           profit?: number | null
+          selectable_for_payment?: boolean | null
           start_date: string
           updated_at?: string
+          used_as_payment?: number | null
         }
         Update: {
           billboard_id?: number
@@ -2580,8 +2584,10 @@ export type Database = {
           id?: string
           notes?: string | null
           profit?: number | null
+          selectable_for_payment?: boolean | null
           start_date?: string
           updated_at?: string
+          used_as_payment?: number | null
         }
         Relationships: [
           {

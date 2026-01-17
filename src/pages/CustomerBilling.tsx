@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
-import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2 } from 'lucide-react';
+import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllBillboards } from '@/services/supabaseService';
 import { generateModernInvoiceHTML, numberToArabicWords, generateModernPrintInvoiceHTML } from '@/components/billing/InvoiceTemplates';
@@ -37,6 +37,7 @@ import { PrintInvoicePaymentDialog } from '@/components/billing/PrintInvoicePaym
 import { PurchaseInvoiceDialog } from '@/components/billing/PurchaseInvoiceDialog';
 import { SalesInvoiceDialog } from '@/components/billing/SalesInvoiceDialog';
 import { FriendCompanyManager } from '@/components/customers/FriendCompanyManager';
+import { UseRentalAsPaymentDialog } from '@/components/billing/UseRentalAsPaymentDialog';
 
 // Import types and utilities
 import {
@@ -158,6 +159,10 @@ export default function CustomerBilling() {
   const [accountPaymentOpen, setAccountPaymentOpen] = useState(false);
   const [accountPaymentAmount, setAccountPaymentAmount] = useState('');
   const [accountPaymentMethod, setAccountPaymentMethod] = useState('');
+  
+  // ✅ NEW: Use rental as payment dialog state
+  const [useRentalAsPaymentOpen, setUseRentalAsPaymentOpen] = useState(false);
+  const [selectedRentalForPayment, setSelectedRentalForPayment] = useState<any>(null);
   const [accountPaymentReference, setAccountPaymentReference] = useState('');
   const [accountPaymentNotes, setAccountPaymentNotes] = useState('');
   const [accountPaymentDate, setAccountPaymentDate] = useState<string>(()=> new Date().toISOString().slice(0,10));
@@ -2036,6 +2041,22 @@ export default function CustomerBilling() {
                         <Printer className="h-4 w-4" />
                         طباعة فاتورة
                       </Button>
+                      
+                      {/* زر استخدام الإيجار كدفعة */}
+                      {(Number(rental.friend_rental_cost) || 0) - (Number(rental.used_as_payment) || 0) > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full mt-2 gap-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10"
+                          onClick={() => {
+                            setSelectedRentalForPayment(rental);
+                            setUseRentalAsPaymentOpen(true);
+                          }}
+                        >
+                          <ArrowRightLeft className="h-4 w-4" />
+                          استخدام كدفعة ({((Number(rental.friend_rental_cost) || 0) - (Number(rental.used_as_payment) || 0)).toLocaleString('ar-LY')} د.ل)
+                        </Button>
+                      )}
                     </CardContent>
                   </Card>
                 );
@@ -3244,6 +3265,18 @@ export default function CustomerBilling() {
         getContractPayments={getContractPayments}
         getContractRemaining={getContractRemaining}
       />
+
+      {/* ✅ Use Rental As Payment Dialog */}
+      {selectedRentalForPayment && (
+        <UseRentalAsPaymentDialog
+          open={useRentalAsPaymentOpen}
+          onOpenChange={setUseRentalAsPaymentOpen}
+          customerId={customerId}
+          customerName={customerName}
+          rental={selectedRentalForPayment}
+          onSuccess={loadData}
+        />
+      )}
     </div>
   );
 }
