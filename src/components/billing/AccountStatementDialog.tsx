@@ -641,6 +641,22 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           ? `مقايضة من فاتورة مشتريات ${purchaseTitle}`
           : (payment.reference ? String(payment.reference) : '');
 
+        // ✅ بناء تفاصيل الدفعة: القيمة الكاملة والمتبقي
+        let detailsText = '';
+        if (payment.distributed_payment_id && resolvedPurchaseInvoice) {
+          const fullAmount = Number(resolvedPurchaseInvoice.total_amount) || 0;
+          const usedAmount = Number(resolvedPurchaseInvoice.used_as_payment) || 0;
+          const remainingAmount = fullAmount - usedAmount;
+          detailsText = `القيمة: ${fullAmount.toLocaleString()} | المستخدم: ${usedAmount.toLocaleString()} | المتبقي: ${remainingAmount.toLocaleString()}`;
+        } else if (payment.entry_type === 'debt' && payment.contract_number) {
+          // دين سابق مرتبط بعقد
+          const linkedContract = contractsData.find((c: any) => c.Contract_Number === payment.contract_number);
+          if (linkedContract) {
+            const contractTotal = Number(linkedContract.Total) || 0;
+            detailsText = `قيمة العقد: ${contractTotal.toLocaleString()}`;
+          }
+        }
+
         transactions.push({
           id: `payment-${payment.id}`,
           date: payment.paid_at,
@@ -651,7 +667,9 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           balance: 0,
           reference: paymentRef,
           notes: paymentNotes,
+          details: detailsText,
           hasDistributedPaymentId: !!payment.distributed_payment_id,
+          sourceInvoice: purchaseTitle || null,
         });
       });
 
@@ -915,6 +933,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                           <th className="border border-border p-2 text-center">التاريخ</th>
                           <th className="border border-border p-2 text-center">البيان</th>
                           <th className="border border-border p-2 text-center">المرجع</th>
+                          <th className="border border-border p-2 text-center">التفاصيل</th>
                           <th className="border border-border p-2 text-center">مدين</th>
                           <th className="border border-border p-2 text-center">دائن</th>
                           <th className="border border-border p-2 text-center">الرصيد</th>
@@ -931,8 +950,16 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                                <span className={formatPaymentType(transaction.type, transaction.hasDistributedPaymentId).className}>
                                  {transaction.description}
                                </span>
+                               {transaction.sourceInvoice && (
+                                 <div className="text-xs text-muted-foreground mt-1">
+                                   المصدر: {transaction.sourceInvoice}
+                                 </div>
+                               )}
                              </td>
                             <td className="border border-border p-2 text-center">{transaction.reference}</td>
+                            <td className="border border-border p-2 text-center text-xs text-muted-foreground">
+                              {transaction.details || '—'}
+                            </td>
                             <td className="border border-border p-2 text-center font-medium text-red-400">
                               {transaction.debit > 0 ? `${formatArabicNumber(transaction.debit)} ${currency.symbol}` : '—'}
                             </td>
@@ -962,6 +989,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                           <th className="border border-border p-2 text-center">التاريخ</th>
                           <th className="border border-border p-2 text-center">نوع الإعلان</th>
                           <th className="border border-border p-2 text-center">المبلغ</th>
+                          <th className="border border-border p-2 text-center">المدفوع</th>
+                          <th className="border border-border p-2 text-center">المتبقي</th>
                           <th className="border border-border p-2 text-center">تاريخ الانتهاء</th>
                           <th className="border border-border p-2 text-center">الحالة</th>
                         </tr>
@@ -969,6 +998,9 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                       <tbody>
                         {contracts.map((contract, index) => {
                           const status = getContractStatus(contract['End Date']);
+                          const contractTotal = Number(contract['Total']) || 0;
+                          const contractPaid = Number(contract['Total Paid']) || 0;
+                          const contractRemaining = contractTotal - contractPaid;
                           return (
                             <tr key={contract.Contract_Number} className={index % 2 === 0 ? 'bg-card/50' : 'bg-background'}>
                               <td className="border border-border p-2 text-center font-semibold">{contract.Contract_Number}</td>
@@ -977,7 +1009,13 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                               </td>
                               <td className="border border-border p-2 text-center">{contract['Ad Type'] || '—'}</td>
                               <td className="border border-border p-2 text-center text-primary font-medium">
-                                {formatArabicNumber(Number(contract['Total']) || 0)} {currency.symbol}
+                                {formatArabicNumber(contractTotal)} {currency.symbol}
+                              </td>
+                              <td className="border border-border p-2 text-center text-green-400 font-medium">
+                                {formatArabicNumber(contractPaid)} {currency.symbol}
+                              </td>
+                              <td className="border border-border p-2 text-center text-red-400 font-medium">
+                                {formatArabicNumber(contractRemaining)} {currency.symbol}
                               </td>
                               <td className="border border-border p-2 text-center">
                                 {contract['End Date'] ? new Date(contract['End Date']).toLocaleDateString('ar-LY') : '—'}
