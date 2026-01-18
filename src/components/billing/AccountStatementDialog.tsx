@@ -105,6 +105,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [currency, setCurrency] = useState(CURRENCIES[0]);
+  const [excludeFriendRentals, setExcludeFriendRentals] = useState(false);
 
   // ✅ استخدام نظام الطباعة الموحد
   const { print: printStatement, isPrinting } = useAccountStatementPrint();
@@ -286,6 +287,22 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
 
+      // ✅ fallback: إذا لم يوجد customerId أو لم تُرجع نتائج، ابحث بالاسم
+      if (purchaseInvoicesData.length === 0 && customerName) {
+        const { data, error } = await supabase
+          .from('purchase_invoices')
+          .select('*')
+          .ilike('customer_name', `%${customerName}%`)
+          .order('created_at', { ascending: true });
+
+        if (!error && data) {
+          purchaseInvoicesData = data.filter(inv => {
+            const invAny = inv as any;
+            return !invAny.is_deleted && invAny.status !== 'deleted' && invAny.status !== 'cancelled';
+          });
+        }
+      }
+
       // تحميل فواتير المبيعات
       let salesInvoicesData: any[] = [];
       
@@ -426,12 +443,20 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const contractsRef = taskContractIds.length > 0 
           ? `عقود: ${taskContractIds.join(', ')}`
           : task.contract_id ? `عقد-${task.contract_id}` : '—';
+        // ترجمة نوع المهمة للعربية
+        const getTaskTypeLabel = (taskType: string) => {
+          switch (taskType) {
+            case 'new_installation': return 'تركيب جديد';
+            case 'reinstallation': return 'إعادة تركيب';
+            default: return taskType || 'غير محدد';
+          }
+        };
         
         transactions.push({
           id: `composite-${task.id}`,
           date: task.invoice_date || task.created_at,
           type: 'composite_task',
-          description: `مهمة مجمعة - ${task.task_type || 'غير محدد'}`,
+          description: `مهمة مجمعة - ${getTaskTypeLabel(task.task_type)}`,
           debit: Number(task.customer_total) || 0,
           credit: 0,
           balance: 0,
@@ -449,97 +474,183 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         // عدم عرض الفاتورة إذا كانت مستخدمة بالكامل كدفعة موزعة
         if (remainingAmount <= 0) return;
         
+        // بناء الملاحظات مع قيمة فاتورة المشتريات الكلية
+        let notesText = '';
+        if (usedAsPayment > 0) {
+          notesText = `القيمة الكلية: ${totalAmount.toLocaleString()} د.ل - مستخدم كدفعة: ${usedAsPayment.toLocaleString()} د.ل`;
+        } else {
+          notesText = `القيمة الكلية: ${totalAmount.toLocaleString()} د.ل${invoice.notes ? ' | ' + invoice.notes : ''}`;
+        }
+        
+        // استخدام عنوان الفاتورة بدلاً من الكود - مع إزالة المسافات الزائدة
+        const trimmedInvoiceName = invoice.invoice_name?.trim();
+        const invoiceTitle = trimmedInvoiceName || `فاتورة مشتريات ${invoice.invoice_number || ''}`;
+        
         transactions.push({
           id: `purchase-${invoice.id}`,
           date: invoice.invoice_date || invoice.created_at,
           type: 'purchase_invoice',
-          description: `فاتورة مشتريات رقم ${invoice.invoice_number || invoice.id}${usedAsPayment > 0 ? ' (جزئي)' : ''}`,
+          description: `مقايضة - ${invoiceTitle}${usedAsPayment > 0 ? ' (جزئي)' : ''}`,
           debit: 0,
           credit: remainingAmount,
           balance: 0,
-          reference: `مشتريات-${invoice.invoice_number || invoice.id}`,
-          notes: usedAsPayment > 0 ? `المبلغ الأصلي: ${totalAmount.toLocaleString()} - مستخدم: ${usedAsPayment.toLocaleString()}` : (invoice.notes || '—'),
+          reference: invoice.invoice_name ? `مشتريات-${invoice.invoice_number || invoice.id}` : '—',
+          notes: notesText,
         });
       });
 
       // إضافة فواتير المبيعات
+      // إنشاء خريطة لربط فواتير المبيعات بمعرفاتها
+      const salesInvoicesMap = new Map<string, any>();
       salesInvoicesData.forEach(invoice => {
+        salesInvoicesMap.set(invoice.id, invoice);
+        // استخدام عنوان الفاتورة بدلاً من الكود - مع إزالة المسافات الزائدة
+        const trimmedSalesInvoiceName = invoice.invoice_name?.trim();
+        const invoiceTitle = trimmedSalesInvoiceName || `فاتورة مبيعات ${invoice.invoice_number || ''}`;
+        
         transactions.push({
           id: `sales-${invoice.id}`,
           date: invoice.invoice_date || invoice.created_at,
           type: 'sales_invoice',
-          description: `فاتورة مبيعات رقم ${invoice.invoice_number || invoice.id}`,
+          description: invoiceTitle,
           debit: Number(invoice.total_amount) || 0,
           credit: 0,
           balance: 0,
-          reference: `مبيعات-${invoice.invoice_number || invoice.id}`,
+          reference: invoice.invoice_name ? `مبيعات-${invoice.invoice_number || invoice.id}` : '—',
           notes: invoice.notes || '—',
         });
       });
 
-      // إضافة إيجارات اللوحات الصديقة من جدول friend_billboard_rentals - فقط المبلغ غير المستخدم كدفعة
-      friendBillboardRentalsData.forEach(rental => {
-        const billboardInfo = rental.billboards;
-        const billboardName = billboardInfo?.Billboard_Name || `لوحة ${rental.billboard_id}`;
-        // ✅ استخدام friend_rental_cost بدلاً من rental_amount
-        const rentalCost = Number(rental.friend_rental_cost) || Number(rental.customer_rental_price) || 0;
-        const usedAsPayment = Number(rental.used_as_payment) || 0;
-        const remainingAmount = rentalCost - usedAsPayment;
-        
-        // عدم عرض الإيجار إذا كان مستخدم بالكامل كدفعة موزعة
-        if (remainingAmount <= 0) return;
-        
-        transactions.push({
-          id: `friend-rental-${rental.id}`,
-          date: rental.start_date,
-          type: 'friend_billboard_rental',
-          description: `إيجار لوحة: ${billboardName}${usedAsPayment > 0 ? ' (جزئي)' : ''}`,
-          debit: 0,
-          credit: remainingAmount,
-          balance: 0,
-          reference: `إيجار-${rental.id.slice(0, 8)}`,
-          notes: usedAsPayment > 0 ? `المبلغ الأصلي: ${rentalCost.toLocaleString()} - مستخدم: ${usedAsPayment.toLocaleString()}` : `${rental.start_date} - ${rental.end_date}`,
-        });
-      });
+      // ✅ خريطة فواتير المشتريات (لاستخدام عنوان الفاتورة داخل ملاحظات/مرجع الدفعات المقايضة)
+      const purchaseInvoicesMap = new Map<string, any>();
+      purchaseInvoicesData.forEach((inv) => purchaseInvoicesMap.set(inv.id, inv));
 
-      // إضافة إيجارات الشركات الصديقة من friend_rental_data في العقود
-      contractsData.forEach(contract => {
-        const friendData = contract.friend_rental_data as any;
-        if (friendData && typeof friendData === 'object') {
-          const entries = Object.entries(friendData) as [string, any][];
-          entries.forEach(([billboardId, entry]) => {
-            if (entry && typeof entry.rental_cost === 'number' && entry.rental_cost > 0) {
-              transactions.push({
-                id: `friend-contract-${contract.Contract_Number}-${billboardId}`,
-                date: contract['Contract Date'],
-                type: 'friend_rental_contract',
-                description: `إيجار لوحة صديقة - عقد ${contract.Contract_Number}`,
-                debit: 0,
-                credit: Number(entry.rental_cost) || 0,
-                balance: 0,
-                reference: `عقد-${contract.Contract_Number}`,
-                notes: entry.company_name || '—',
-              });
-            }
+
+      // إضافة إيجارات اللوحات الصديقة من جدول friend_billboard_rentals - فقط المبلغ غير المستخدم كدفعة
+      // ✅ مع مراعاة خيار الاستثناء
+      if (!excludeFriendRentals) {
+        friendBillboardRentalsData.forEach(rental => {
+          const billboardInfo = rental.billboards;
+          const billboardName = billboardInfo?.Billboard_Name || `لوحة ${rental.billboard_id}`;
+          // ✅ استخدام friend_rental_cost بدلاً من rental_amount
+          const rentalCost = Number(rental.friend_rental_cost) || Number(rental.customer_rental_price) || 0;
+          const usedAsPayment = Number(rental.used_as_payment) || 0;
+          const remainingAmount = rentalCost - usedAsPayment;
+          
+          // عدم عرض الإيجار إذا كان مستخدم بالكامل كدفعة موزعة
+          if (remainingAmount <= 0) return;
+          
+          transactions.push({
+            id: `friend-rental-${rental.id}`,
+            date: rental.start_date,
+            type: 'friend_billboard_rental',
+            description: `إيجار لوحة: ${billboardName}${usedAsPayment > 0 ? ' (جزئي)' : ''}`,
+            debit: 0,
+            credit: remainingAmount,
+            balance: 0,
+            reference: `إيجار-${rental.id.slice(0, 8)}`,
+            notes: usedAsPayment > 0 ? `المبلغ الأصلي: ${rentalCost.toLocaleString()} - مستخدم: ${usedAsPayment.toLocaleString()}` : `${rental.start_date} - ${rental.end_date}`,
           });
-        }
-      });
+        });
+
+        // إضافة إيجارات الشركات الصديقة من friend_rental_data في العقود
+        contractsData.forEach(contract => {
+          const friendData = contract.friend_rental_data as any;
+          if (friendData && typeof friendData === 'object') {
+            const entries = Object.entries(friendData) as [string, any][];
+            entries.forEach(([billboardId, entry]) => {
+              if (entry && typeof entry.rental_cost === 'number' && entry.rental_cost > 0) {
+                transactions.push({
+                  id: `friend-contract-${contract.Contract_Number}-${billboardId}`,
+                  date: contract['Contract Date'],
+                  type: 'friend_rental_contract',
+                  description: `إيجار لوحة صديقة - عقد ${contract.Contract_Number}`,
+                  debit: 0,
+                  credit: Number(entry.rental_cost) || 0,
+                  balance: 0,
+                  reference: `عقد-${contract.Contract_Number}`,
+                  notes: entry.company_name || '—',
+                });
+              }
+            });
+          }
+        });
+      }
 
       // إضافة الدفعات
       paymentsData.forEach(payment => {
         const paymentInfo = formatPaymentType(payment.entry_type || 'payment', !!payment.distributed_payment_id);
-        const contractRef = payment.contract_number ? `عقد-${payment.contract_number}` : '—';
-        
+
+        // تحديد المرجع بناءً على نوع الربط (الهدف)
+        let paymentRef = '—';
+        if (payment.contract_number) {
+          paymentRef = `عقد-${payment.contract_number}`;
+        } else if (payment.sales_invoice_id) {
+          // البحث عن فاتورة المبيعات للحصول على اسمها
+          const salesInvoice = salesInvoicesMap.get(payment.sales_invoice_id);
+          if (salesInvoice) {
+            paymentRef = salesInvoice.invoice_name || `مبيعات-${salesInvoice.invoice_number || payment.sales_invoice_id}`;
+          } else {
+            paymentRef = `مبيعات-${payment.sales_invoice_id.slice(0, 8)}`;
+          }
+        } else if (payment.printed_invoice_id) {
+          paymentRef = `فاتورة طباعة`;
+        } else if (payment.composite_task_id) {
+          paymentRef = `مهمة مجمعة`;
+        }
+
+        // ✅ ملاحظات/وصف الدفعة: في حالة المقايضة من فاتورة مشتريات نعرض "عنوان الفاتورة" بدل الكود
+        let paymentNotes: string = payment.notes || '—';
+
+        // نحاول حل فاتورة المشتريات إمّا بالـ id أو (fallback) من الكود الموجود داخل النص
+        let resolvedPurchaseInvoice: any | null = null;
+        if (payment.purchase_invoice_id) {
+          resolvedPurchaseInvoice = purchaseInvoicesMap.get(payment.purchase_invoice_id) || null;
+        }
+
+        if (!resolvedPurchaseInvoice && typeof paymentNotes === 'string') {
+          const match = paymentNotes.match(/PUR-\d+/);
+          if (match) {
+            resolvedPurchaseInvoice = purchaseInvoicesData.find((inv: any) => inv.invoice_number === match[0]) || null;
+          }
+        }
+
+        let purchaseTitle: string | null = null;
+        if (resolvedPurchaseInvoice) {
+          purchaseTitle =
+            resolvedPurchaseInvoice.invoice_name?.trim() ||
+            resolvedPurchaseInvoice.invoice_number ||
+            resolvedPurchaseInvoice.id;
+
+          // استبدال النص القديم الذي يحتوي على الكود فقط
+          if (
+            paymentNotes !== '—' &&
+            (paymentNotes.includes('مقايضة من فاتورة مشتريات') || payment.method === 'مقايضة')
+          ) {
+            paymentNotes = `مقايضة من فاتورة مشتريات ${purchaseTitle}`;
+          }
+
+          // إذا لم يوجد مرجع للهدف، استخدم عنوان/رقم فاتورة المشتريات كمرجع بديل
+          if (paymentRef === '—') {
+            paymentRef = purchaseTitle;
+          }
+        }
+
+        // ✅ الوصف: لا تستخدم payment.reference المخزّن إذا كان سيعيد الكود
+        const descriptionSuffix = purchaseTitle
+          ? `مقايضة من فاتورة مشتريات ${purchaseTitle}`
+          : (payment.reference ? String(payment.reference) : '');
+
         transactions.push({
           id: `payment-${payment.id}`,
           date: payment.paid_at,
           type: payment.entry_type || 'payment',
-          description: `${paymentInfo.text}${payment.reference ? ` - ${payment.reference}` : ''}`,
+          description: `${paymentInfo.text}${descriptionSuffix ? ` - ${descriptionSuffix}` : ''}`,
           debit: 0,
           credit: Number(payment.amount) || 0,
           balance: 0,
-          reference: contractRef,
-          notes: payment.notes || '—',
+          reference: paymentRef,
+          notes: paymentNotes,
           hasDistributedPaymentId: !!payment.distributed_payment_id,
         });
       });
@@ -570,7 +681,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
       loadCustomerData();
       loadAccountData();
     }
-  }, [open, customerId, customerName, startDate, endDate]);
+  }, [open, customerId, customerName, startDate, endDate, excludeFriendRentals]);
 
   // ✅ حساب الإحصائيات
   const calculateStatistics = () => {
@@ -722,6 +833,19 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                       ))}
                     </select>
                   </div>
+                </div>
+                {/* خيار استثناء إيجارات الصديقة */}
+                <div className="flex items-center gap-2 mt-4">
+                  <input
+                    type="checkbox"
+                    id="excludeFriendRentals"
+                    checked={excludeFriendRentals}
+                    onChange={(e) => setExcludeFriendRentals(e.target.checked)}
+                    className="h-4 w-4 rounded border-border"
+                  />
+                  <label htmlFor="excludeFriendRentals" className="text-sm cursor-pointer">
+                    استثناء إيجارات الشركات الصديقة من الكشف
+                  </label>
                 </div>
               </div>
 

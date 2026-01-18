@@ -791,18 +791,30 @@ export default function InstallationTasks() {
 
       const { data: billboardsData, error: bbError } = await supabase
         .from('billboards')
-        .select('ID, Size')
+        .select('ID, Size, City')
         .in('ID', billboardIds);
       if (bbError) throw bbError;
 
-      // Group billboards by team based on size
+      // Group billboards by team based on size AND city
       const billboardsByTeam: Record<string, number[]> = {};
       for (const bb of billboardsData || []) {
         const size = (bb as any).Size as string | null;
+        const city = (bb as any).City as string | null;
         const id = (bb as any).ID as number;
         if (!size) continue;
 
-        const team = teamsData.find((t: any) => Array.isArray(t.sizes) && t.sizes.includes(size));
+        // Find team that matches BOTH size AND city (if team has cities defined)
+        const team = teamsData.find((t: any) => {
+          const sizeMatch = Array.isArray(t.sizes) && t.sizes.includes(size);
+          if (!sizeMatch) return false;
+          
+          // If team has cities defined, check if billboard's city is in team's cities
+          if (Array.isArray(t.cities) && t.cities.length > 0 && city) {
+            return t.cities.includes(city);
+          }
+          // If team has no cities defined, it accepts all cities
+          return true;
+        });
         if (!team) continue;
 
         if (!billboardsByTeam[team.id]) billboardsByTeam[team.id] = [];

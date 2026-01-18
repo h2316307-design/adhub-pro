@@ -145,6 +145,7 @@ export function SalesSection({
                     />
                   </TableHead>
                   <TableHead className="text-right text-primary-foreground">رقم الفاتورة</TableHead>
+                  <TableHead className="text-right text-primary-foreground">عنوان الفاتورة</TableHead>
                   <TableHead className="text-right text-primary-foreground">التاريخ</TableHead>
                   <TableHead className="text-right text-primary-foreground">المبلغ الإجمالي</TableHead>
                   <TableHead className="text-right text-primary-foreground">المدفوع</TableHead>
@@ -169,6 +170,9 @@ export function SalesSection({
                         />
                       </TableCell>
                       <TableCell className="font-bold">{invoice.invoice_number}</TableCell>
+                      <TableCell className="text-primary font-medium">
+                        {invoice.invoice_name || '—'}
+                      </TableCell>
                       <TableCell>
                         {invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-LY') : '—'}
                       </TableCell>

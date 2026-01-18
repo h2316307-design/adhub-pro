@@ -234,7 +234,7 @@ async function generateCombinedStatementHTML(
       border-radius: 4px;
     }
     
-    .accounts-table, .movements-table { width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 15px; }
+    .accounts-table, .movements-table { width: 100%; border-collapse: collapse; font-size: 9px; margin-bottom: 15px; page-break-inside: avoid; }
     .accounts-table th, .movements-table th {
       background: ${styles.tableHeaderBgColor};
       color: ${styles.tableHeaderTextColor};
@@ -247,6 +247,7 @@ async function generateCombinedStatementHTML(
     .accounts-table td, .movements-table td { padding: 5px 3px; border: 1px solid ${styles.tableBorderColor}; text-align: center; vertical-align: middle; }
     .accounts-table tbody tr:nth-child(even), .movements-table tbody tr:nth-child(even) { background: ${hexToRgba(styles.tableRowEvenColor, 100)}; }
     .accounts-table tbody tr:nth-child(odd), .movements-table tbody tr:nth-child(odd) { background: ${hexToRgba(styles.tableRowOddColor, 100)}; }
+    .accounts-table tbody tr, .movements-table tbody tr { page-break-inside: avoid; }
     
     .debit-amount { color: #dc2626; font-weight: bold; }
     .credit-amount { color: #16a34a; font-weight: bold; }
@@ -261,9 +262,10 @@ async function generateCombinedStatementHTML(
       border-radius: 6px;
       margin-top: 15px;
       border: 2px solid ${styles.primaryColor};
+      page-break-inside: avoid;
     }
-    .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-    .summary-box { background: white; padding: 10px; border-radius: 4px; border: 1px solid ${styles.tableBorderColor}; text-align: center; }
+    .summary-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; page-break-inside: avoid; }
+    .summary-box { background: white; padding: 10px; border-radius: 4px; border: 1px solid ${styles.tableBorderColor}; text-align: center; page-break-inside: avoid; }
     .summary-label { font-size: 9px; color: #666; margin-bottom: 5px; }
     .summary-value { font-size: ${styles.bodyFontSize}px; font-weight: bold; color: ${styles.customerSectionTextColor}; }
     
@@ -276,6 +278,7 @@ async function generateCombinedStatementHTML(
       font-size: 18px;
       font-weight: bold;
       margin-top: 15px;
+      page-break-inside: avoid;
     }
     
     .footer {

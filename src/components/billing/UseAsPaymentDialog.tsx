@@ -240,7 +240,7 @@ export function UseAsPaymentDialog({
           entry_type: 'payment',
           purchase_invoice_id: purchaseInvoice.id,
           method: 'مقايضة',
-          notes: `مقايضة من فاتورة مشتريات ${purchaseInvoice.invoice_number}`
+          notes: `مقايضة من فاتورة مشتريات ${String((purchaseInvoice as any).invoice_name ?? '').trim() || purchaseInvoice.invoice_number}`
         };
 
         if (item.type === 'contract') {
