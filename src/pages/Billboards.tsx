@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, lazy, Suspense, startTransition } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -200,80 +201,19 @@ export default function Billboards() {
     }
   };
 
-  // ✅ إنشاء نافذة تأكيد مخصصة بنمط النظام
-  const showSystemConfirm = (title: string, message: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      // إنشاء عنصر النافذة المنبثقة
-      const overlay = document.createElement('div');
-      overlay.className = 'custom-confirm-overlay';
-      
-      const dialog = document.createElement('div');
-      dialog.className = 'custom-confirm-dialog';
-      
-      dialog.innerHTML = `
-        <div class="system-dialog-header">
-          <h3 class="system-dialog-title">${title}</h3>
-        </div>
-        <div class="system-dialog-content">
-          <p style="white-space: pre-line; line-height: 1.6; margin-bottom: 20px;">${message}</p>
-          <div class="system-dialog-buttons">
-            <button class="system-btn-secondary" id="cancel-btn">إلغاء</button>
-            <button class="system-btn-primary" id="confirm-btn">حذف</button>
-          </div>
-        </div>
-      `;
-      
-      overlay.appendChild(dialog);
-      document.body.appendChild(overlay);
-      document.body.style.overflow = 'hidden';
-      
-      const cleanup = () => {
-        document.body.removeChild(overlay);
-        document.body.style.overflow = 'unset';
-      };
-      
-      const confirmBtn = dialog.querySelector('#confirm-btn');
-      const cancelBtn = dialog.querySelector('#cancel-btn');
-      
-      confirmBtn?.addEventListener('click', () => {
-        cleanup();
-        resolve(true);
-      });
-      
-      cancelBtn?.addEventListener('click', () => {
-        cleanup();
-        resolve(false);
-      });
-      
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          cleanup();
-          resolve(false);
-        }
-      });
-      
-      // إضافة دعم مفتاح Escape
-      const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          cleanup();
-          resolve(false);
-          document.removeEventListener('keydown', handleEscape);
-        }
-      };
-      document.addEventListener('keydown', handleEscape);
-    });
-  };
+  // حذف اللوحة باستخدام نافذة التأكيد من النظام
+  const { confirm: systemConfirm } = useSystemDialog();
 
-  // ✅ COMPLETELY FIXED: Delete function with better error handling and system-style confirmation
   const deleteBillboard = async (billboardId: number | string) => {
     try {
-      // ✅ ENHANCED: Better confirmation dialog
       const billboardName = billboards.find(b => (b.ID || b.id) == billboardId)?.Billboard_Name || `اللوحة رقم ${billboardId}`;
       
-      const confirmed = await showSystemConfirm(
-        'تأكيد حذف اللوحة',
-        `هل تريد حذف "${billboardName}"؟\n\nتحذير: هذا الإجراء لا يمكن التراجع عنه!`
-      );
+      const confirmed = await systemConfirm({
+        title: 'تأكيد حذف اللوحة',
+        message: `هل تريد حذف "${billboardName}"?\n\nتحذير: هذا الإجراء لا يمكن التراجع عنه!`,
+        variant: 'destructive',
+        confirmText: 'حذف'
+      });
       
       if (!confirmed) {
         return;

@@ -23,6 +23,7 @@ import {
   Calendar,
   Plus,
   Image as ImageIcon,
+  Camera,
   ZoomIn,
   X
 } from 'lucide-react';
@@ -116,6 +117,14 @@ export function MobileTaskCard({
   const customerTotal = taskItems.reduce((sum, item) => sum + (item.customer_installation_cost || 0), 0);
   const additionalTotal = taskItems.reduce((sum, item) => sum + (item.additional_cost || 0), 0);
   const pendingItems = taskItems.filter(i => i.status !== 'completed').length;
+
+  // حساب اللوحات التي لم يتم إضافة صور التركيب لها
+  const itemsMissingPhotos = taskItems.filter(i => 
+    i.status === 'completed' && !i.installed_image_face_a_url && !i.installed_image_face_b_url
+  ).length;
+  const itemsWithPhotos = taskItems.filter(i => 
+    i.installed_image_face_a_url || i.installed_image_face_b_url
+  ).length;
 
   // جمع كل صور التصميم من عناصر المهمة
   const allDesignImages = taskItems
@@ -235,7 +244,7 @@ export function MobileTaskCard({
         {/* قسم التصميم - سلايدر بعرض الكارت */}
         {uniqueDesignImages.length > 0 ? (
           <div 
-            className="relative w-full h-44 overflow-hidden bg-gradient-to-br from-muted/50 to-muted"
+            className="relative w-full h-64 overflow-hidden bg-gradient-to-br from-muted/50 to-muted"
           >
             {/* الخلفية الضبابية */}
             <div 
@@ -543,6 +552,20 @@ export function MobileTaskCard({
                 <Badge variant="secondary" className="text-xs gap-1 px-2.5 py-1 rounded-full">
                   <Clock className="h-3 w-3" />
                   لم تبدأ
+                </Badge>
+              )}
+
+              {/* صور التركيب */}
+              <div className="flex items-center gap-1.5 text-sm bg-muted/50 px-2.5 py-1 rounded-full">
+                <Camera className="h-3.5 w-3.5 text-violet-500" />
+                <span className="font-semibold">{itemsWithPhotos}</span>
+                <span className="text-muted-foreground text-xs">صورة</span>
+              </div>
+
+              {itemsMissingPhotos > 0 && (
+                <Badge className="bg-red-500/10 text-red-600 dark:text-red-400 text-xs gap-1 px-2.5 py-1 rounded-full border-0">
+                  <Camera className="h-3 w-3" />
+                  {itemsMissingPhotos} بدون صور
                 </Badge>
               )}
 

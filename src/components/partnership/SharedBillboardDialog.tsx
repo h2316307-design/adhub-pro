@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -25,6 +26,7 @@ interface Props {
 }
 
 export function SharedBillboardDialog({ trigger, billboard, onSaved, autoSave = true }: Props) {
+  const { confirm: systemConfirm } = useSystemDialog();
   const [open, setOpen] = useState(false);
   const [allPartners, setAllPartners] = useState<{ id: string; name: string; phone?: string | null; default_partner_pre_pct?: number; default_partner_post_pct?: number }[]>([]);
   const [rows, setRows] = useState<PartnerRow[]>([]);
@@ -333,7 +335,7 @@ export function SharedBillboardDialog({ trigger, billboard, onSaved, autoSave = 
 
   // إلغاء تفعيل الشراكة
   const removePartnership = async () => {
-    const confirmed = window.confirm('هل تريد إلغاء تفعيل الشراكة لهذه اللوحة؟ سيتم حذف جميع بيانات المشاركة.');
+    const confirmed = await systemConfirm({ title: 'إلغاء الشراكة', message: 'هل تريد إلغاء تفعيل الشراكة لهذه اللوحة؟ سيتم حذف جميع بيانات المشاركة.', variant: 'destructive', confirmText: 'إلغاء الشراكة' });
     if (!confirmed) return;
     
     setIsSaving(true);

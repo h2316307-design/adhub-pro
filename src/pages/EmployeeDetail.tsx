@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -84,6 +85,7 @@ export default function EmployeeDetail() {
   const [installationTeam, setInstallationTeam] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   
+  const { confirm: systemConfirm } = useSystemDialog();
   const [taskDialogOpen, setTaskDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
   const [receiptDialogOpen, setReceiptDialogOpen] = useState(false);
@@ -416,7 +418,7 @@ export default function EmployeeDetail() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا العمل؟')) return;
+    if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا العمل؟', variant: 'destructive', confirmText: 'حذف' })) return;
 
     try {
       await supabase
@@ -971,7 +973,7 @@ export default function EmployeeDetail() {
                               size="sm"
                               variant="ghost"
                               onClick={async () => {
-                                if (!confirm('هل أنت متأكد من حذف هذا السحب؟')) return;
+                                if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا السحب؟', variant: 'destructive', confirmText: 'حذف' })) return;
                                 try {
                                   await supabase
                                     .from('expenses_withdrawals')
@@ -1065,7 +1067,7 @@ export default function EmployeeDetail() {
                               size="sm"
                               variant="ghost"
                               onClick={async () => {
-                                if (!confirm('هل أنت متأكد من حذف هذا التسكير؟')) return;
+                                if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا التسكير؟', variant: 'destructive', confirmText: 'حذف' })) return;
                                 try {
                                   await supabase
                                     .from('period_closures')
@@ -1210,7 +1212,7 @@ export default function EmployeeDetail() {
                               size="sm"
                               variant="ghost"
                               onClick={async () => {
-                                if (!confirm('هل أنت متأكد من حذف هذه السلفة؟')) return;
+                                if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذه السلفة؟', variant: 'destructive', confirmText: 'حذف' })) return;
                                 try {
                                   await supabase
                                     .from('employee_advances')

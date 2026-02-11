@@ -3,10 +3,12 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { Billboard } from '@/types';
 import { fetchAllBillboards } from '@/services/supabaseService';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 
 export const useBillboards = () => {
   const [billboards, setBillboards] = useState<Billboard[]>([]);
   const [loading, setLoading] = useState(true);
+  const { confirm: systemConfirm } = useSystemDialog();
 
   const loadBillboards = async () => {
     try {
@@ -17,70 +19,6 @@ export const useBillboards = () => {
       console.error('خطأ في تحميل اللوحات:', (error as any)?.message || JSON.stringify(error));
       setBillboards([] as any);
     }
-  };
-
-  // ✅ إنشاء نافذة تأكيد مخصصة بنمط النظام
-  const showSystemConfirm = (title: string, message: string): Promise<boolean> => {
-    return new Promise((resolve) => {
-      // إنشاء عنصر النافذة المنبثقة
-      const overlay = document.createElement('div');
-      overlay.className = 'custom-confirm-overlay';
-      
-      const dialog = document.createElement('div');
-      dialog.className = 'custom-confirm-dialog';
-      
-      dialog.innerHTML = `
-        <div class="system-dialog-header">
-          <h3 class="system-dialog-title">${title}</h3>
-        </div>
-        <div class="system-dialog-content">
-          <p style="white-space: pre-line; line-height: 1.6; margin-bottom: 20px;">${message}</p>
-          <div class="system-dialog-buttons">
-            <button class="system-btn-secondary" id="cancel-btn">إلغاء</button>
-            <button class="system-btn-primary" id="confirm-btn">حذف</button>
-          </div>
-        </div>
-      `;
-      
-      overlay.appendChild(dialog);
-      document.body.appendChild(overlay);
-      document.body.style.overflow = 'hidden';
-      
-      const cleanup = () => {
-        document.body.removeChild(overlay);
-        document.body.style.overflow = 'unset';
-      };
-      
-      const confirmBtn = dialog.querySelector('#confirm-btn');
-      const cancelBtn = dialog.querySelector('#cancel-btn');
-      
-      confirmBtn?.addEventListener('click', () => {
-        cleanup();
-        resolve(true);
-      });
-      
-      cancelBtn?.addEventListener('click', () => {
-        cleanup();
-        resolve(false);
-      });
-      
-      overlay.addEventListener('click', (e) => {
-        if (e.target === overlay) {
-          cleanup();
-          resolve(false);
-        }
-      });
-      
-      // إضافة دعم مفتاح Escape
-      const handleEscape = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          cleanup();
-          resolve(false);
-          document.removeEventListener('keydown', handleEscape);
-        }
-      };
-      document.addEventListener('keydown', handleEscape);
-    });
   };
 
   const deleteBillboard = async (billboardId: number) => {
@@ -95,10 +33,12 @@ export const useBillboards = () => {
       const billboard = billboards.find(b => (b.ID || (b as any).id) == billboardId);
       const billboardName = billboard?.Billboard_Name || `اللوحة رقم ${billboardId}`;
       
-      const confirmed = await showSystemConfirm(
-        'تأكيد حذف اللوحة',
-        `هل تريد حذف "${billboardName}"؟\n\nتحذير: هذا الإجراء لا يمكن التراجع عنه!`
-      );
+      const confirmed = await systemConfirm({
+        title: 'تأكيد حذف اللوحة',
+        message: `هل تريد حذف "${billboardName}"؟\n\nتحذير: هذا الإجراء لا يمكن التراجع عنه!`,
+        variant: 'destructive',
+        confirmText: 'حذف'
+      });
       
       if (!confirmed) {
         return false;

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -33,6 +34,7 @@ export default function GeneralDiscountsSection({
   customerName,
   onDiscountChange 
 }: GeneralDiscountsSectionProps) {
+  const { confirm: systemConfirm } = useSystemDialog();
   const [discounts, setDiscounts] = useState<GeneralDiscount[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingDiscount, setEditingDiscount] = useState<GeneralDiscount | null>(null);
@@ -136,7 +138,7 @@ export default function GeneralDiscountsSection({
   };
 
   const handleDelete = async (discountId: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا الخصم؟')) return;
+    if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا الخصم؟', variant: 'destructive', confirmText: 'حذف' })) return;
 
     try {
       const { error } = await supabase

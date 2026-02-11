@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import InteractiveMap from '@/components/InteractiveMap';
 
 export default function SharedBillboards() {
+  const { confirm: systemConfirm } = useSystemDialog();
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [rentAmountById, setRentAmountById] = useState<Record<string, number>>({});
@@ -348,7 +350,7 @@ export default function SharedBillboards() {
   };
 
   const removeFromPartnership = async (bb: any) => {
-    const confirmed = window.confirm('هل تريد إزالة هذه اللوحة من الشراكة؟ سيتم حذف جميع بيانات المشاركة المرتبطة بها.');
+    const confirmed = await systemConfirm({ title: 'إزالة من الشراكة', message: 'هل تريد إزالة هذه اللوحة من الشراكة؟ سيتم حذف جميع بيانات المشاركة المرتبطة بها.', variant: 'destructive', confirmText: 'إزالة' });
     if (!confirmed) return;
 
     try {

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -140,6 +141,7 @@ interface RecentPayment {
 
 export default function OperatingExpenses() {
   const navigate = useNavigate();
+  const { confirm: systemConfirm } = useSystemDialog();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [closures, setClosures] = useState<PeriodClosure[]>([]);
@@ -539,7 +541,7 @@ export default function OperatingExpenses() {
 
   // Delete withdrawal
   const deleteWithdrawal = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذا السحب؟')) {
+    if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا السحب؟', variant: 'destructive', confirmText: 'حذف' })) {
       return;
     }
 
@@ -1165,7 +1167,7 @@ export default function OperatingExpenses() {
                           size="sm"
                           variant="ghost"
                           onClick={async () => {
-                            if (!confirm('هل أنت متأكد من حذف هذه التسكيرة؟')) return;
+                            if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذه التسكيرة؟', variant: 'destructive', confirmText: 'حذف' })) return;
                             try {
                               const { error } = await supabase
                                 .from('period_closures')

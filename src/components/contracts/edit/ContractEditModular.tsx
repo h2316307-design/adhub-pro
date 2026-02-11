@@ -41,11 +41,13 @@ export default function ContractEditModular() {
   const [selected, setSelected] = useState<string[]>([]);
 
   // Customer data
-  const [customers, setCustomers] = useState<{ id: string; name: string }[]>([]);
+  const [customers, setCustomers] = useState<{ id: string; name: string; company?: string; phone?: string }[]>([]);
   const [customerOpen, setCustomerOpen] = useState(false);
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
+  const [customerCompany, setCustomerCompany] = useState<string | null>(null);
+  const [customerPhone, setCustomerPhone] = useState<string | null>(null);
   const [adType, setAdType] = useState('');
 
   // ✅ UNIFIED: Use unified pricing hook
@@ -151,7 +153,7 @@ export default function ContractEditModular() {
   useEffect(() => {
     (async () => {
       try {
-        const { data, error } = await supabase.from('customers').select('id,name').order('name', { ascending: true });
+        const { data, error } = await supabase.from('customers').select('id,name,company,phone').order('name', { ascending: true });
         if (!error && Array.isArray(data)) {
           setCustomers(data);
         }
@@ -196,6 +198,8 @@ export default function ContractEditModular() {
         setCurrentContract(c);
         setCustomerName(c.customer_name || c['Customer Name'] || '');
         setCustomerId(c.customer_id ?? null);
+        setCustomerCompany(c.Company || null);
+        setCustomerPhone(c.Phone || null);
         setAdType(c.ad_type || c['Ad Type'] || '');
         
         const savedPricingCategory = c.customer_category || 'عادي';
@@ -703,9 +707,11 @@ export default function ContractEditModular() {
     setCustomerQuery('');
   };
 
-  const handleSelectCustomer = (customer: { id: string; name: string }) => {
+  const handleSelectCustomer = (customer: { id: string; name: string; company?: string; phone?: string }) => {
     setCustomerName(customer.name);
     setCustomerId(customer.id);
+    setCustomerCompany(customer.company || null);
+    setCustomerPhone(customer.phone || null);
     setCustomerOpen(false);
     setCustomerQuery('');
   };
@@ -944,6 +950,8 @@ export default function ContractEditModular() {
       
       const updates: any = {
         'Customer Name': customerName,
+        Company: customerCompany || null,
+        Phone: customerPhone || null,
         'Ad Type': adType,
         'Contract Date': startDate,
         'End Date': endDate,
@@ -1172,6 +1180,8 @@ export default function ContractEditModular() {
                 setCustomerQuery={setCustomerQuery}
                 onAddCustomer={handleAddCustomer}
                 onSelectCustomer={handleSelectCustomer}
+                customerCompany={customerCompany}
+                customerPhone={customerPhone}
               />
 
               {/* التواريخ والمدة */}

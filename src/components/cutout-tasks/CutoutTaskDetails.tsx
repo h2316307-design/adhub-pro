@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -60,6 +61,7 @@ const priorityLabels: Record<string, string> = {
 
 export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
   const queryClient = useQueryClient();
+  const { confirm: systemConfirm } = useSystemDialog();
   const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(task?.printer_id || null);
 
   // جلب قائمة المطابع
@@ -360,8 +362,8 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
           <Button
             variant="destructive"
             size="sm"
-            onClick={() => {
-              if (confirm('هل أنت متأكد من حذف هذه المهمة؟')) {
+            onClick={async () => {
+              if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذه المهمة؟', variant: 'destructive', confirmText: 'حذف' })) {
                 deleteTaskMutation.mutate();
               }
             }}

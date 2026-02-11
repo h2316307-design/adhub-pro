@@ -1,4 +1,5 @@
 import { Button } from '@/components/ui/button';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -42,6 +43,7 @@ export default function GeneralTransactionsSection({
   onRefresh
 }: GeneralTransactionsSectionProps) {
   
+  const { confirm: systemConfirm } = useSystemDialog();
   const debits = transactions.filter(t => t.entry_type === 'general_debit');
   const credits = transactions.filter(t => t.entry_type === 'general_credit');
   
@@ -50,7 +52,7 @@ export default function GeneralTransactionsSection({
   const netBalance = totalDebits - totalCredits;
   
   const handleDelete = async (id: string) => {
-    if (!confirm('هل أنت متأكد من حذف هذه المعاملة؟')) return;
+    if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذه المعاملة؟', variant: 'destructive', confirmText: 'حذف' })) return;
     
     try {
       const { error } = await supabase

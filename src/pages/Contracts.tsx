@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState, useMemo } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
@@ -48,6 +49,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 export default function Contracts() {
+  const { confirm: systemConfirm } = useSystemDialog();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [availableBillboards, setAvailableBillboards] = useState<Billboard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -207,7 +209,7 @@ export default function Contracts() {
   };
 
   const handleDeleteContract = async (contractId: string) => {
-    if (window.confirm('هل أنت متأكد من حذف هذا العقد؟')) {
+    if (await systemConfirm({ title: 'تأكيد حذف العقد', message: 'هل أنت متأكد من حذف هذا العقد؟', variant: 'destructive', confirmText: 'حذف' })) {
       try {
         await deleteContract(contractId);
         toast.success('تم حذف العقد بنجاح');

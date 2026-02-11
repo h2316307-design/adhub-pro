@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ export function BillboardTaskCard({
   const [editingDate, setEditingDate] = useState(item.installation_date || '');
   const [savingDate, setSavingDate] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
+  const { confirm: systemConfirm } = useSystemDialog();
   const [isCustomerCostEditable, setIsCustomerCostEditable] = useState(false);
   const [additionalCost, setAdditionalCost] = useState<number>(item.additional_cost || 0);
   const [additionalCostNotes, setAdditionalCostNotes] = useState<string>(item.additional_cost_notes || '');
@@ -255,9 +257,9 @@ export function BillboardTaskCard({
             <div className="absolute top-1.5 right-1.5 z-10 flex gap-1">
               {onUncomplete && (
                 <button
-                  onClick={(e) => {
+                  onClick={async (e) => {
                     e.stopPropagation();
-                    if (confirm('هل تريد التراجع عن إكمال هذه اللوحة؟')) {
+                    if (await systemConfirm({ title: 'تراجع', message: 'هل تريد التراجع عن إكمال هذه اللوحة؟', confirmText: 'تراجع' })) {
                       onUncomplete();
                     }
                   }}
@@ -668,9 +670,9 @@ export function BillboardTaskCard({
         <div className="absolute top-2 left-2 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
           {onDelete && (
             <button
-              onClick={(e) => {
+                onClick={async (e) => {
                 e.stopPropagation();
-                if (confirm('هل تريد حذف هذه اللوحة من المهمة؟')) {
+                if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل تريد حذف هذه اللوحة من المهمة؟', variant: 'destructive', confirmText: 'حذف' })) {
                   onDelete();
                 }
               }}

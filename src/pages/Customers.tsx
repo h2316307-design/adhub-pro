@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
@@ -285,6 +286,7 @@ function CustomerRow({
 }
 
 export default function Customers() {
+  const { confirm: systemConfirm } = useSystemDialog();
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<ContractRow[]>([]);
@@ -897,7 +899,7 @@ export default function Customers() {
   };
 
   const deleteReceipt = async (paymentId: string) => {
-    if (!window.confirm('هل أنت متأكد من حذف هذا الإيصال؟')) return;
+    if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا الإيصال؟', variant: 'destructive', confirmText: 'حذف' })) return;
     
     try {
       const { error } = await supabase

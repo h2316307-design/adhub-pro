@@ -5,6 +5,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { PrintSettingsProvider } from "@/store";
+import { SystemDialogProvider } from "@/contexts/SystemDialogContext";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -78,6 +79,7 @@ const App = () => (
     <TooltipProvider>
       <ThemeProvider>
         <PrintSettingsProvider>
+          <SystemDialogProvider>
           <Toaster />
           <BrowserRouter>
             <AuthProvider>
@@ -665,6 +667,7 @@ const App = () => (
           </Routes>
         </AuthProvider>
       </BrowserRouter>
+          </SystemDialogProvider>
       </PrintSettingsProvider>
       </ThemeProvider>
     </TooltipProvider>

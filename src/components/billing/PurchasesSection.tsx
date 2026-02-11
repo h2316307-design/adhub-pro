@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -26,6 +27,7 @@ interface PurchasesSectionProps {
 export function PurchasesSection({ customerId, customerName }: PurchasesSectionProps) {
   const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const { confirm: systemConfirm } = useSystemDialog();
   const [editingPurchase, setEditingPurchase] = useState<Purchase | null>(null);
   
   const [itemName, setItemName] = useState('');
@@ -134,7 +136,7 @@ export function PurchasesSection({ customerId, customerName }: PurchasesSectionP
   };
 
   const deletePurchase = async (id: string) => {
-    if (!window.confirm('هل تريد حذف هذه المشتريات؟')) return;
+    if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل تريد حذف هذه المشتريات؟', variant: 'destructive', confirmText: 'حذف' })) return;
 
     try {
       const { error } = await supabase

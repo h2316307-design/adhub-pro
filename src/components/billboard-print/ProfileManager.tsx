@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -35,6 +36,7 @@ export function ProfileManager({
   isSaving,
   isCreating,
 }: ProfileManagerProps) {
+  const { confirm: systemConfirm } = useSystemDialog();
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showProfilesDialog, setShowProfilesDialog] = useState(false);
   const [newName, setNewName] = useState('');
@@ -270,9 +272,9 @@ export function ProfileManager({
                               variant="ghost"
                               size="icon"
                               className="h-7 w-7 text-destructive hover:text-destructive"
-                              onClick={(e) => {
+                              onClick={async (e) => {
                                 e.stopPropagation();
-                                if (confirm('هل أنت متأكد من حذف هذا البروفايل؟')) {
+                                if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا البروفايل؟', variant: 'destructive', confirmText: 'حذف' })) {
                                   onDeleteProfile(profile.id);
                                 }
                               }}

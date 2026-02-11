@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
@@ -99,6 +100,7 @@ export default function CustodyManagement() {
   // Account form
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
+  const { confirm: systemConfirm } = useSystemDialog();
   const [custodyName, setCustodyName] = useState('');
   const [initialAmount, setInitialAmount] = useState('');
   const [accountNotes, setAccountNotes] = useState('');
@@ -374,7 +376,7 @@ export default function CustodyManagement() {
 
   // Delete expense
   const handleDeleteExpense = async (expense: CustodyExpense) => {
-    if (!confirm(`هل تريد حذف هذا المصروف؟\n${expense.description}\nالمبلغ: ${expense.amount.toLocaleString('ar-LY')} د.ل`)) {
+    if (!await systemConfirm({ title: 'تأكيد حذف المصروف', message: `هل تريد حذف هذا المصروف؟\n${expense.description}\nالمبلغ: ${expense.amount.toLocaleString('ar-LY')} د.ل`, variant: 'destructive', confirmText: 'حذف' })) {
       return;
     }
 
@@ -409,7 +411,7 @@ export default function CustodyManagement() {
 
   // Delete transaction
   const handleDeleteTransaction = async (transaction: CustodyTransaction) => {
-    if (!confirm(`هل تريد حذف هذه الحركة؟\n${transaction.description || transaction.transaction_type}\nالمبلغ: ${transaction.amount.toLocaleString('ar-LY')} د.ل`)) {
+    if (!await systemConfirm({ title: 'تأكيد حذف الحركة', message: `هل تريد حذف هذه الحركة؟\n${transaction.description || transaction.transaction_type}\nالمبلغ: ${transaction.amount.toLocaleString('ar-LY')} د.ل`, variant: 'destructive', confirmText: 'حذف' })) {
       return;
     }
 
@@ -561,7 +563,7 @@ export default function CustodyManagement() {
 
   // ترجيع العهدة من الدفعة الموزعة
   const handleReturnCustody = async (account: CustodyAccount) => {
-    if (!confirm(`هل تريد ترجيع العهدة "${account.account_number}" للموظف "${(account.employee as any)?.name}"؟\n\nسيتم حذف العهدة وإرجاع المبلغ إلى الدفعة الموزعة.`)) {
+    if (!await systemConfirm({ title: 'ترجيع العهدة', message: `هل تريد ترجيع العهدة "${account.account_number}" للموظف "${(account.employee as any)?.name}"؟\n\nسيتم حذف العهدة وإرجاع المبلغ إلى الدفعة الموزعة.`, variant: 'destructive', confirmText: 'ترجيع' })) {
       return;
     }
 
@@ -584,7 +586,7 @@ export default function CustodyManagement() {
 
   // حذف العهدة اليدوية
   const handleDeleteCustody = async (account: CustodyAccount) => {
-    if (!confirm(`هل تريد حذف العهدة "${account.account_number}" للموظف "${(account.employee as any)?.name}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`)) {
+    if (!await systemConfirm({ title: 'تأكيد حذف العهدة', message: `هل تريد حذف العهدة "${account.account_number}" للموظف "${(account.employee as any)?.name}"؟\n\nهذا الإجراء لا يمكن التراجع عنه.`, variant: 'destructive', confirmText: 'حذف' })) {
       return;
     }
 
