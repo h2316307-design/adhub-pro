@@ -1,0 +1,574 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* نظام التصميم الفاخر للوحات الإعلانية - ذهبي وأسود */
+
+@layer base {
+  :root {
+    /* خلفيات أساسية - أبيض نقي مع لمسات ذهبية */
+    --background: 0 0% 100%;
+    --foreground: 0 0% 9%;
+
+    /* البطاقات والعناصر - أبيض فاخر */
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 9%;
+
+    /* النوافذ المنبثقة */
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+
+    /* الألوان الأساسية - ذهبي فاخر */
+    --primary: 43 96% 56%;
+    --primary-foreground: 0 0% 9%;
+    --primary-glow: 43 100% 65%;
+
+    /* الألوان الثانوية - رمادي فاتح راقي */
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 9%;
+
+    /* الألوان المكتومة - رمادي فاتح */
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 45%;
+
+    /* ألوان التأكيد - ذهبي لامع */
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 9%;
+
+    /* ألوان التحذير */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* الحدود والمدخلات - حدود ذهبية خفيفة */
+    --border: 43 50% 88%;
+    --input: 43 50% 88%;
+    --ring: 43 96% 56%;
+
+    --radius: 0.75rem;
+
+    /* Gradients فاخرة ذهبية */
+    --gradient-primary: linear-gradient(135deg, hsl(43 96% 56%) 0%, hsl(38 92% 50%) 100%);
+    --gradient-secondary: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(43 96% 96%) 100%);
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 98%) 0%, hsl(43 50% 96%) 100%);
+    --gradient-luxury: linear-gradient(135deg, hsl(0 0% 100%) 0%, hsl(43 96% 98%) 35%, hsl(43 96% 94%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(0 0% 9%) 0%, hsl(43 96% 30%) 50%, hsl(43 96% 56%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 100%) 0%, hsl(43 50% 98%) 100%);
+    
+    /* ظلال قوية وعصرية */
+    --shadow-gold: 0 20px 50px -12px hsl(43 96% 56% / 0.35);
+    --shadow-luxury: 0 25px 60px -15px hsl(43 96% 56% / 0.4);
+    --shadow-card: 0 10px 30px -5px hsl(222 47% 11% / 0.1);
+    --shadow-soft: 0 2px 10px hsl(222 47% 11% / 0.05);
+    --shadow-hover: 0 15px 40px -10px hsl(43 96% 56% / 0.3);
+    
+    /* انتقالات سلسة */
+    --transition-luxury: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-glow: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    --transition-smooth: all 0.2s ease-in-out;
+
+    /* ألوان الشريط الجانبي - ذهبي فاخر */
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 9%;
+    --sidebar-primary: 43 96% 56%;
+    --sidebar-primary-foreground: 0 0% 9%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 43 50% 88%;
+    --sidebar-ring: 43 96% 56%;
+
+    /* ألوان إضافية للعقود */
+    --green: 142 76% 36%;
+    --yellow: 43 96% 56%;
+    --red: 0 84% 60%;
+    --orange: 25 95% 53%;
+    --purple: 262 83% 58%;
+    --blue: 217 91% 60%;
+  }
+
+  .dark {
+    /* خلفيات داكنة - أسود فاخر */
+    --background: 0 0% 9%;
+    --foreground: 43 96% 90%;
+
+    /* البطاقات والعناصر - أسود مع لمسة ذهبية */
+    --card: 0 0% 13%;
+    --card-foreground: 43 96% 90%;
+
+    /* النوافذ المنبثقة */
+    --popover: 0 0% 13%;
+    --popover-foreground: 43 96% 90%;
+
+    /* الألوان الأساسية - ذهبي لامع */
+    --primary: 43 96% 56%;
+    --primary-foreground: 0 0% 9%;
+    --primary-glow: 43 100% 68%;
+
+    /* الألوان الثانوية - رمادي داكن */
+    --secondary: 0 0% 20%;
+    --secondary-foreground: 43 96% 90%;
+
+    /* الألوان المكتومة */
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 60%;
+
+    /* ألوان التأكيد */
+    --accent: 38 92% 50%;
+    --accent-foreground: 0 0% 9%;
+
+    /* ألوان التحذير */
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* الحدود والمدخلات */
+    --border: 43 30% 25%;
+    --input: 0 0% 20%;
+    --ring: 43 96% 56%;
+
+    /* Gradients فاخرة - أسود وذهبي */
+    --gradient-primary: linear-gradient(135deg, hsl(43 96% 56%) 0%, hsl(38 92% 50%) 100%);
+    --gradient-secondary: linear-gradient(135deg, hsl(0 0% 20%) 0%, hsl(43 96% 56%) 100%);
+    --gradient-dark: linear-gradient(135deg, hsl(0 0% 9%) 0%, hsl(0 0% 13%) 100%);
+    --gradient-luxury: linear-gradient(135deg, hsl(0 0% 9%) 0%, hsl(43 30% 15%) 35%, hsl(43 96% 56%) 100%);
+    --gradient-hero: linear-gradient(135deg, hsl(0 0% 9%) 0%, hsl(43 96% 20%) 50%, hsl(43 96% 56%) 100%);
+    --gradient-card: linear-gradient(145deg, hsl(0 0% 13%) 0%, hsl(43 20% 15%) 100%);
+    
+    /* ظلال محسنة */
+    --shadow-gold: 0 20px 50px -12px hsl(43 96% 56% / 0.4);
+    --shadow-luxury: 0 25px 60px -15px hsl(43 96% 56% / 0.5);
+    --shadow-card: 0 10px 30px -5px hsl(0 0% 0% / 0.5);
+    --shadow-soft: 0 2px 10px hsl(0 0% 0% / 0.3);
+    --shadow-hover: 0 15px 40px -10px hsl(43 96% 56% / 0.4);
+
+    /* ألوان الشريط الجانبي - أسود وذهبي */
+    --sidebar-background: 0 0% 13%;
+    --sidebar-foreground: 43 96% 90%;
+    --sidebar-primary: 43 96% 56%;
+    --sidebar-primary-foreground: 0 0% 9%;
+    --sidebar-accent: 0 0% 20%;
+    --sidebar-accent-foreground: 43 96% 90%;
+    --sidebar-border: 43 30% 25%;
+    --sidebar-ring: 43 96% 56%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Doran', 'Cairo', 'Tajawal', sans-serif;
+    font-size: 80%;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  html {
+    font-size: 80%;
+    height: 100%;
+  }
+
+  #root {
+    height: 100%;
+  }
+
+  /* ✅ استخدام خط Manrope للأرقام والمقاسات */
+  .font-numbers,
+  [data-numbers],
+  .size-text,
+  .price-text,
+  .stat-number,
+  .font-manrope {
+    font-family: 'Manrope', sans-serif !important;
+    font-feature-settings: 'tnum' on, 'lnum' on;
+  }
+
+  /* ✅ تطبيق خط Manrope تلقائياً على الإحصائيات والأسعار */
+  .expenses-stat-value {
+    font-family: 'Manrope', sans-serif !important;
+    font-feature-settings: 'tnum' on, 'lnum' on;
+  }
+}
+
+/* ✅ NEW: إضافة فئات CSS للألوان الجديدة */
+.text-green {
+  color: hsl(var(--green));
+}
+
+.text-yellow {
+  color: hsl(var(--yellow));
+}
+
+.text-red {
+  color: hsl(var(--red));
+}
+
+.text-orange {
+  color: hsl(var(--orange));
+}
+
+.text-purple {
+  color: hsl(var(--purple));
+}
+
+.text-blue {
+  color: hsl(var(--blue));
+}
+
+/* ✅ تحسين النوافذ المنبثقة - نمط فاتح */
+.system-dialog {
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(200, 160, 0, 0.3);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15), 0 0 15px rgba(200, 160, 0, 0.1);
+}
+
+.system-dialog-header {
+  background: linear-gradient(135deg, rgba(200, 160, 0, 0.08), rgba(200, 160, 0, 0.04));
+  border-bottom: 1px solid rgba(200, 160, 0, 0.2);
+  padding: 12px 20px;
+  border-radius: 6px 6px 0 0;
+}
+
+.system-dialog-title {
+  color: #B8860B;
+  font-weight: 600;
+  font-size: 14px;
+  text-align: right;
+  direction: rtl;
+}
+
+.system-dialog-content {
+  padding: 20px;
+  color: #333;
+  text-align: right;
+  direction: rtl;
+}
+
+.system-dialog-buttons {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding-top: 14px;
+  border-top: 1px solid rgba(200, 160, 0, 0.1);
+}
+
+.system-btn-primary {
+  background: linear-gradient(135deg, #B8860B, #DAA520);
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.system-btn-primary:hover {
+  background: linear-gradient(135deg, #DAA520, #B8860B);
+  box-shadow: 0 3px 10px rgba(200, 160, 0, 0.3);
+}
+
+.system-btn-secondary {
+  background: rgba(240, 240, 240, 0.9);
+  color: #333;
+  border: 1px solid rgba(200, 160, 0, 0.3);
+  padding: 6px 14px;
+  border-radius: 5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.system-btn-secondary:hover {
+  background: rgba(230, 230, 230, 0.9);
+  border-color: rgba(200, 160, 0, 0.5);
+}
+
+/* ✅ تحسين window.confirm - نمط فاتح */
+.custom-confirm-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.custom-confirm-dialog {
+  background: rgba(255, 255, 255, 0.98);
+  border: 1px solid rgba(200, 160, 0, 0.3);
+  border-radius: 6px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15), 0 0 15px rgba(200, 160, 0, 0.1);
+  min-width: 320px;
+  max-width: 400px;
+}
+
+/* Expenses Page Styles */
+.expenses-container {
+  @apply space-y-6;
+  direction: rtl;
+}
+
+.expenses-stats-grid {
+  @apply grid grid-cols-1 md:grid-cols-4 gap-4;
+}
+
+.expenses-stat-card {
+  @apply p-6;
+}
+
+.expenses-stat-content {
+  @apply flex items-center justify-between;
+}
+
+.expenses-stat-text {
+  @apply text-sm font-medium text-muted-foreground;
+}
+
+.expenses-stat-value {
+  @apply text-2xl font-bold;
+}
+
+.expenses-stat-icon {
+  @apply h-8 w-8;
+}
+
+.expenses-actions {
+  @apply flex gap-4;
+}
+
+.expenses-action-btn {
+  @apply flex items-center gap-2;
+}
+
+/* Preview Card Styles */
+.expenses-preview-card {
+  @apply border-2 border-primary/30 bg-gradient-to-br from-card to-primary/10 shadow-lg rounded-lg;
+}
+
+/* ✅ Ensure dropdowns appear above maps and other elements */
+[data-radix-popper-content-wrapper],
+[data-radix-select-content],
+[data-radix-popover-content],
+.command-wrapper {
+  z-index: 9999 !important;
+}
+
+/* Custom scrollbar for summary cards */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: hsl(var(--muted) / 0.3);
+  border-radius: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary) / 0.5);
+  border-radius: 4px;
+  transition: background 0.2s;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.7);
+}
+
+.expenses-preview-title {
+  @apply text-xl font-bold text-primary text-center;
+}
+
+.expenses-preview-grid {
+  @apply grid grid-cols-1 md:grid-cols-4 gap-6;
+}
+
+.expenses-preview-item {
+  @apply bg-card/80 backdrop-blur-sm rounded-lg p-4 shadow-md border border-primary/20;
+}
+
+.expenses-preview-label {
+  @apply text-sm font-semibold text-primary mb-2;
+}
+
+.expenses-preview-value {
+  @apply text-2xl font-bold text-foreground;
+}
+
+.expenses-preview-text {
+  @apply text-sm font-medium text-muted-foreground;
+}
+
+.expenses-table-container {
+  @apply overflow-x-auto;
+}
+
+.expenses-contract-number {
+  @apply font-medium;
+}
+
+.expenses-amount-calculated {
+  @apply font-medium text-primary;
+}
+
+.expenses-amount-excluded {
+  @apply text-muted-foreground line-through;
+}
+
+.expenses-actions-cell {
+  @apply flex items-center gap-2;
+}
+
+.expenses-dialog-content {
+  @apply max-w-md;
+}
+
+.expenses-dialog-form {
+  @apply space-y-4;
+}
+
+.expenses-form-label {
+  @apply text-sm font-medium;
+}
+
+.expenses-form-grid {
+  @apply grid grid-cols-2 gap-4;
+}
+
+.expenses-loading {
+  @apply flex items-center justify-center h-64;
+  direction: rtl;
+}
+
+.expenses-loading-spinner {
+  @apply h-6 w-6 animate-spin ml-2;
+}
+
+.expenses-empty-state {
+  @apply text-center text-muted-foreground;
+}
+
+/* Custom Colors for Expenses */
+.stat-blue {
+  @apply text-blue-400;
+}
+
+.stat-green {
+  @apply text-green-400;
+}
+
+.stat-red {
+  @apply text-red-400;
+}
+
+.stat-purple {
+  @apply text-purple-400;
+}
+
+/* ✅ NEW: إضافة فئات CSS للبطاقات والتفاعلات - نمط فاخر */
+.card-elegant {
+  @apply bg-card border border-border rounded-lg shadow-sm hover:shadow-luxury hover:border-primary/30 transition-all duration-300;
+}
+
+.card-hover {
+  @apply hover:bg-card hover:shadow-luxury hover:border-primary/20 hover:scale-[1.02] transition-all duration-300;
+}
+
+.btn-primary {
+  @apply bg-gradient-to-r from-primary to-accent text-primary-foreground hover:shadow-luxury hover:scale-105 transition-all duration-300;
+}
+
+.section-header {
+  @apply text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent;
+}
+
+.text-muted {
+  @apply text-muted-foreground;
+}
+
+/* تأثيرات الهوفر المحسنة */
+.hover-lift {
+  @apply transition-all duration-300 hover:shadow-luxury hover:-translate-y-1;
+}
+
+.hover-glow {
+  @apply transition-all duration-300 hover:shadow-gold hover:border-primary/50;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .expenses-stats-grid {
+    @apply grid-cols-1;
+  }
+  
+  .expenses-preview-grid {
+    @apply grid-cols-2;
+  }
+  
+  .expenses-actions {
+    @apply flex-col;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .expenses-actions,
+  .expenses-dialog-content {
+    @apply hidden;
+  }
+  
+  .expenses-table-container {
+    @apply overflow-visible;
+  }
+}
+
+/* تصغير المسافات والحشوات بنسبة 20% */
+@layer utilities {
+  .container {
+    padding-left: 1.6rem !important;
+    padding-right: 1.6rem !important;
+  }
+}
+
+/* Force native/system number display for date inputs and numeric fields */
+input[type="date"],
+input[type="number"],
+input[type="time"],
+input[type="datetime-local"] {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" on, "lnum" on;
+}
+
+/* Ensure consistent number rendering across all browsers */
+.font-system-ui {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Apply system font to date/number inputs for consistent display */
+input[type="date"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="date"]::-webkit-datetime-edit-text,
+input[type="date"]::-webkit-datetime-edit-day-field,
+input[type="date"]::-webkit-datetime-edit-month-field,
+input[type="date"]::-webkit-datetime-edit-year-field {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+/* Hide number input spinners/arrows */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
