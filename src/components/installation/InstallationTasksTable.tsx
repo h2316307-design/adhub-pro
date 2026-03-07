@@ -6,14 +6,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { UnifiedPrintAllDialog } from '@/components/shared/printing/UnifiedPrintAllDialog';
+import type { BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   CheckCircle2, Clock, Package, Users,
   Plus, RefreshCw, XCircle, Printer, Palette,
-  Trash2, Edit, ChevronDown, Image as ImageIcon,
+  Trash2, Edit, ChevronDown, ChevronUp, Image as ImageIcon,
   LayoutList, Layers, FileText, X,
   ChevronLeft, ChevronRight, Building2, CalendarDays,
-  Banknote
+  Banknote, FolderOpen
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
@@ -650,6 +653,8 @@ export const InstallationTasksTable: React.FC<Props> = ({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const [bulkPrintOpen, setBulkPrintOpen] = useState(false);
+  const [groupByContract, setGroupByContract] = useState(false);
   const PAGE_SIZE = 15;
 
   const handleSort = (field: SortField) => {
@@ -888,8 +893,13 @@ export const InstallationTasksTable: React.FC<Props> = ({
                 <span className="text-amber-400 font-bold text-sm">{selected.size} مهمة محددة</span>
               </div>
               <div className="w-px h-5 bg-amber-500/25 mx-1" />
-              <Button size="sm" variant="ghost" className="h-8 px-3 text-xs gap-1.5 text-amber-400 hover:bg-amber-500/15 rounded-xl">
-                <Printer className="h-3.5 w-3.5" /> طباعة المحدد
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 px-3 text-xs gap-1.5 text-amber-400 hover:bg-amber-500/15 rounded-xl"
+                onClick={() => setBulkPrintOpen(true)}
+              >
+                <Printer className="h-3.5 w-3.5" /> طباعة المحدد ({enriched.filter(t => selected.has(t.id)).reduce((s, t) => s + t.totalItems, 0)} لوحة)
               </Button>
               <Button size="sm" variant="ghost" className="h-8 px-3 text-xs gap-1.5 text-blue-400 hover:bg-blue-500/15 rounded-xl">
                 <ChevronDown className="h-3.5 w-3.5" /> تغيير الحالة
@@ -910,6 +920,19 @@ export const InstallationTasksTable: React.FC<Props> = ({
           )}
         </AnimatePresence>
 
+        {/* ── View mode toggle ── */}
+        <div className="flex items-center gap-2 shrink-0">
+          <Button
+            size="sm"
+            variant={groupByContract ? 'default' : 'outline'}
+            className={`h-8 px-3 text-xs gap-1.5 rounded-xl ${groupByContract ? 'bg-amber-500 hover:bg-amber-600 text-black' : ''}`}
+            onClick={() => setGroupByContract(!groupByContract)}
+          >
+            <FolderOpen className="h-3.5 w-3.5" />
+            {groupByContract ? 'عرض مسطح' : 'تجميع بالعقد'}
+          </Button>
+        </div>
+
         {/* ── Card list ── */}
         <div className="flex flex-col gap-4 flex-1 overflow-y-auto pb-4 min-h-0">
           {isLoading ? (
@@ -928,6 +951,87 @@ export const InstallationTasksTable: React.FC<Props> = ({
               <Package className="h-16 w-16 opacity-10" />
               <span className="text-sm opacity-60">لا توجد مهام مطابقة</span>
             </div>
+          ) : groupByContract ? (
+            // ── Contract Grouped View ──
+            (() => {
+              const groups: Record<number, typeof enriched> = {};
+              paginated.forEach(task => {
+                const cid = task.contract_id;
+                if (!groups[cid]) groups[cid] = [];
+                groups[cid].push(task);
+              });
+              return Object.entries(groups).map(([contractId, groupTasks]) => {
+                const cid = Number(contractId);
+                const contract = contractById[cid];
+                const customerName = contract?.['Customer Name'] || 'غير محدد';
+                const totalBillboards = groupTasks.reduce((s, t) => s + t.totalItems, 0);
+                const completedBillboards = groupTasks.reduce((s, t) => s + t.completed, 0);
+                const pct = totalBillboards > 0 ? Math.round((completedBillboards / totalBillboards) * 100) : 0;
+                const uniqueTeams = [...new Set(groupTasks.map(t => t.team?.team_name).filter(Boolean))];
+
+                return (
+                  <Collapsible key={cid} defaultOpen>
+                    <CollapsibleTrigger className="w-full">
+                      <div className="bg-card border border-border rounded-2xl px-5 py-3 flex flex-wrap items-center gap-3 hover:bg-muted/30 transition-colors cursor-pointer">
+                        <FolderOpen className="h-5 w-5 text-amber-500 shrink-0" />
+                        <span className="font-bold text-foreground text-base">عقد #{cid}</span>
+                        <span className="text-sm text-muted-foreground">— {customerName}</span>
+                        <div className="flex items-center gap-3 mr-auto">
+                          <span className="text-xs text-muted-foreground bg-muted/60 px-2 py-1 rounded-lg">
+                            <Users className="h-3 w-3 inline ml-1" />{groupTasks.length} فريق
+                          </span>
+                          <span className="text-xs text-muted-foreground bg-muted/60 px-2 py-1 rounded-lg">
+                            <Layers className="h-3 w-3 inline ml-1" />{completedBillboards}/{totalBillboards} لوحة
+                          </span>
+                          <span className={`text-xs font-bold px-2 py-1 rounded-lg ${
+                            pct === 100 ? 'bg-emerald-500/15 text-emerald-400'
+                            : pct > 0 ? 'bg-amber-500/15 text-amber-400'
+                            : 'bg-muted/60 text-muted-foreground'
+                          }`}>
+                            {pct}%
+                          </span>
+                          {uniqueTeams.length > 0 && (
+                            <span className="text-[10px] text-muted-foreground/70 truncate max-w-[200px]">
+                              {uniqueTeams.join(' • ')}
+                            </span>
+                          )}
+                          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform [[data-state=open]_&]:rotate-180" />
+                        </div>
+                      </div>
+                    </CollapsibleTrigger>
+                    <CollapsibleContent>
+                      <div className="flex flex-col gap-3 pr-4 pt-2 pb-1 border-r-2 border-amber-500/20 mr-4">
+                        {groupTasks.map((task, idx) => {
+                          const cfg = STATUS_CONFIG[task.displayStatus];
+                          const isSelected = selected.has(task.id);
+                          return (
+                            <TaskCardRowInner
+                              key={task.id}
+                              task={task}
+                              idx={idx}
+                              cfg={cfg}
+                              isSelected={isSelected}
+                              deleteConfirmId={deleteConfirmId}
+                              onOpenTask={onOpenTask}
+                              onToggle={() => toggleOne(task.id)}
+                              onPrintTask={onPrintTask}
+                              onPrintAll={onPrintAll}
+                              onDistributeDesigns={onDistributeDesigns}
+                              onManageDesigns={onManageDesigns}
+                              onAddBillboard={onAddBillboard}
+                              onDeleteTask={onDeleteTask}
+                              setDeleteConfirmId={setDeleteConfirmId}
+                              onEditTask={onEditTask}
+                              onCompleteAllBillboards={onCompleteAllBillboards}
+                            />
+                          );
+                        })}
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                );
+              });
+            })()
           ) : (
             paginated.map((task, idx) => {
               const cfg = STATUS_CONFIG[task.displayStatus];
@@ -985,6 +1089,42 @@ export const InstallationTasksTable: React.FC<Props> = ({
             </div>
           </div>
         )}
+
+        {/* ── Bulk Print Dialog ── */}
+        {bulkPrintOpen && (() => {
+          const selectedTasks = enriched.filter(t => selected.has(t.id));
+          const bulkItems: BillboardPrintItem[] = selectedTasks.flatMap(t =>
+            t.items.map((item: any) => ({
+              id: item.id,
+              billboard_id: item.billboard_id,
+              design_face_a: item.design_face_a,
+              design_face_b: item.design_face_b,
+              installed_image_face_a_url: item.installed_image_face_a_url,
+              installed_image_face_b_url: item.installed_image_face_b_url,
+              installation_date: item.installation_date,
+              team_id: t.team_id,
+              has_cutout: item.has_cutout,
+              contract_number: t.contract_id,
+              ad_type: t.designName,
+            }))
+          );
+          const firstContract = selectedTasks[0];
+          return (
+            <UnifiedPrintAllDialog
+              open={bulkPrintOpen}
+              onOpenChange={setBulkPrintOpen}
+              contextType="installation"
+              contextNumber={firstContract?.contract_id || 0}
+              customerName={selectedTasks.length === 1 ? firstContract?.customerName : `${selectedTasks.length} مهام محددة`}
+              adType={selectedTasks.length === 1 ? firstContract?.designName : ''}
+              items={bulkItems}
+              billboards={billboardById}
+              teams={teamById}
+              showTeamFilter={true}
+              title={`طباعة ${selected.size} مهمة (${bulkItems.length} لوحة)`}
+            />
+          );
+        })()}
       </div>
     </TooltipProvider>
   );
