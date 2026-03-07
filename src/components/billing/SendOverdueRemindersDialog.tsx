@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSendWhatsApp } from "@/hooks/useSendWhatsApp";
 import { useSendTextly } from "@/hooks/useSendTextly";
 import { supabase } from "@/integrations/supabase/client";
-import { DEFAULT_CONTRACT_EXPIRY_TEMPLATE, DEFAULT_OVERDUE_SUMMARY_TEMPLATE, applyOverdueTemplate } from "@/utils/messageTemplates";
+import { DEFAULT_CONTRACT_EXPIRY_TEMPLATE, DEFAULT_OVERDUE_SUMMARY_TEMPLATE, DEFAULT_OVERDUE_MINIMAL_TEMPLATE, applyOverdueTemplate } from "@/utils/messageTemplates";
 import {
   Send,
   Loader2,
@@ -98,6 +98,7 @@ interface OverdueInstallment {
   dueDate: string;
   description: string;
   daysOverdue: number;
+  adType?: string;
 }
 
 interface UnpaidPrintInvoice {
@@ -188,19 +189,17 @@ function ManualOverdueRow({
       }`}
       style={rowStyle}
     >
-      <div className="flex items-stretch">
-        {/* صورة التصميم على جانب الكارت */}
+      <div className="flex flex-col sm:flex-row sm:items-stretch">
+        {/* صورة التصميم على جانب الكارت - مخفية على الموبايل */}
         {designImageUrl && (
           <div
-            className="relative w-28 flex-shrink-0 overflow-hidden"
+            className="relative hidden sm:block w-28 flex-shrink-0 overflow-hidden"
             style={hasColor ? { borderLeft: `3px solid rgba(${colorData.rgb}, 0.6)` } : { borderLeft: '3px solid hsl(var(--border))' }}
           >
-            {/* خلفية ضبابية */}
             <div className="absolute inset-0">
               <img src={designImageUrl} alt="" className="w-full h-full object-cover scale-150 blur-xl opacity-40" aria-hidden="true" />
               <div className="absolute inset-0 bg-black/30" />
             </div>
-            {/* الصورة الرئيسية */}
             <img
               src={designImageUrl}
               alt="التصميم"
@@ -212,57 +211,59 @@ function ManualOverdueRow({
         )}
 
         {/* المحتوى الرئيسي */}
-        <div className="flex-1 min-w-0 p-3">
-          <div className="flex items-center gap-3">
+        <div className="flex-1 min-w-0 p-2.5 sm:p-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 mb-1 flex-wrap">
-                <span className={`font-bold text-sm truncate ${hasColor ? 'text-white' : ''}`}>{customer.customerName}</span>
-                <Badge variant="secondary" className={`text-[10px] shrink-0 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
+              <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
+                <span className={`font-bold text-xs sm:text-sm truncate ${hasColor ? 'text-white' : ''}`}>{customer.customerName}</span>
+                <Badge variant="secondary" className={`text-[9px] sm:text-[10px] shrink-0 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
                   {customer.overdueCount} دفعة
                 </Badge>
-                <Badge variant="outline" className={`text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
+                <Badge variant="outline" className={`text-[9px] sm:text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
                   <Clock className="h-2.5 w-2.5" />
                   أقدم تأخير: {customer.oldestDaysOverdue} يوم
                 </Badge>
                 {contractNumbers.length > 0 && (
-                  <Badge variant="outline" className={`text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
+                  <Badge variant="outline" className={`text-[9px] sm:text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
                     <Megaphone className="h-2.5 w-2.5" />
                     عقد #{contractNumbers.join(', #')}
                   </Badge>
                 )}
               </div>
-              <div className={`flex items-center gap-3 text-xs ${hasColor ? 'text-white/70' : 'text-muted-foreground'}`}>
+              <div className={`flex items-center gap-3 text-[10px] sm:text-xs ${hasColor ? 'text-white/70' : 'text-muted-foreground'}`}>
                 <span className="flex items-center gap-1">
                   <Phone className="h-3 w-3" />
                   {customer.phone}
                 </span>
               </div>
             </div>
-            <div className="text-left shrink-0">
-              <div className={`font-bold text-base ${hasColor ? 'text-red-300' : 'text-destructive'}`}>
-                {customer.totalOverdue.toLocaleString("ar-LY")}
+            <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
+              <div className="text-left shrink-0">
+                <div className={`font-bold text-sm sm:text-base ${hasColor ? 'text-red-300' : 'text-destructive'}`}>
+                  {customer.totalOverdue.toLocaleString("ar-LY")}
+                </div>
+                <div className={`text-[9px] sm:text-[10px] ${hasColor ? 'text-white/60' : 'text-muted-foreground'}`}>د.ل متأخر</div>
               </div>
-              <div className={`text-[10px] ${hasColor ? 'text-white/60' : 'text-muted-foreground'}`}>د.ل متأخر</div>
-            </div>
-            <div className="flex items-center gap-1.5 shrink-0">
-              <Button size="sm" variant="outline" className={`h-8 w-8 p-0 ${hasColor ? 'border-white/30 text-white hover:bg-white/20' : ''}`} onClick={() => setExpanded(!expanded)} title="تعديل الرسالة">
-                <MessageSquare className="h-3.5 w-3.5" />
-              </Button>
-              <Button size="sm" variant="outline" className={`h-8 w-8 p-0 ${hasColor ? 'border-white/30 text-white hover:bg-white/20' : ''}`} onClick={onCopy} title="نسخ الرسالة">
-                <Copy className="h-3.5 w-3.5" />
-              </Button>
-              {customer.phone ? (
-                <Button
-                  size="sm"
-                  className="h-8 gap-1.5 bg-[hsl(142,70%,35%)] hover:bg-[hsl(142,70%,30%)] text-white"
-                  onClick={() => window.open(generateWhatsAppLink(customer.phone!, message), "_blank")}
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  واتساب
+              <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+                <Button size="sm" variant="outline" className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${hasColor ? 'border-white/30 text-white hover:bg-white/20' : ''}`} onClick={() => setExpanded(!expanded)} title="تعديل الرسالة">
+                  <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 </Button>
-              ) : (
-                <Badge variant="secondary" className="text-[10px]">بدون رقم</Badge>
-              )}
+                <Button size="sm" variant="outline" className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${hasColor ? 'border-white/30 text-white hover:bg-white/20' : ''}`} onClick={onCopy} title="نسخ الرسالة">
+                  <Copy className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                </Button>
+                {customer.phone ? (
+                  <Button
+                    size="sm"
+                    className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs bg-[hsl(142,70%,35%)] hover:bg-[hsl(142,70%,30%)] text-white"
+                    onClick={() => window.open(generateWhatsAppLink(customer.phone!, message), "_blank")}
+                  >
+                    <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                    واتساب
+                  </Button>
+                ) : (
+                  <Badge variant="secondary" className="text-[10px]">بدون رقم</Badge>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -308,7 +309,8 @@ export function SendOverdueRemindersDialog({
   const [loading, setLoading] = useState(false);
   const [overdueTemplate, setOverdueTemplate] = useState(DEFAULT_CONTRACT_EXPIRY_TEMPLATE);
   const [summaryTemplate, setSummaryTemplate] = useState(DEFAULT_OVERDUE_SUMMARY_TEMPLATE);
-  const [messageMode, setMessageMode] = useState<'detailed' | 'summary'>('detailed');
+  const [minimalTemplate, setMinimalTemplate] = useState(DEFAULT_OVERDUE_MINIMAL_TEMPLATE);
+  const [messageMode, setMessageMode] = useState<'detailed' | 'summary' | 'minimal'>('detailed');
   const [manualMessages, setManualMessages] = useState<Map<string, string>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<string>("overdue_desc");
@@ -342,7 +344,7 @@ export function SendOverdueRemindersDialog({
       }
       setManualMessages(msgs);
     }
-  }, [customersWithPhone, messageMode, overdueTemplate, summaryTemplate]);
+  }, [customersWithPhone, messageMode, overdueTemplate, summaryTemplate, minimalTemplate]);
 
   // Filtered & sorted
   const filteredCustomers = useMemo(() => {
@@ -477,7 +479,7 @@ export function SendOverdueRemindersDialog({
       const today = new Date();
       const { data: contracts, error } = await supabase
         .from('Contract')
-        .select('Contract_Number, "Customer Name", customer_id, installments_data, Total')
+        .select('Contract_Number, "Customer Name", customer_id, installments_data, Total, "Ad Type"')
         .not('installments_data', 'is', null);
 
       if (error) throw error;
@@ -557,6 +559,7 @@ export function SendOverdueRemindersDialog({
                   dueDate: inst.dueDate,
                   description: inst.description || 'دفعة',
                   daysOverdue: diffDays,
+                  adType: contract['Ad Type'] || undefined,
                 });
                 customerData.totalOverdue += overdueAmount;
                 customerData.overdueCount += 1;
@@ -665,6 +668,14 @@ export function SendOverdueRemindersDialog({
   };
 
   const generateCustomerMessage = (customer: CustomerOverdue): string => {
+    if (messageMode === 'minimal') {
+      return applyOverdueTemplate(minimalTemplate, {
+        customerName: customer.customerName,
+        paymentDetails: '',
+        totalOverdue: 0,
+      });
+    }
+
     if (messageMode === 'summary') {
       return applyOverdueTemplate(summaryTemplate, {
         customerName: customer.customerName,
@@ -684,7 +695,9 @@ export function SendOverdueRemindersDialog({
       details += `*دفعات العقود المتأخرة:*\n`;
       let idx = 1;
       contractGroups.forEach((installments, contractNumber) => {
-        details += `\n${idx}. عقد #${contractNumber}\n`;
+        const adType = installments[0]?.adType;
+        const contractLabel = adType ? `عقد #${contractNumber} (${adType})` : `عقد #${contractNumber}`;
+        details += `\n${idx}. ${contractLabel}\n`;
         installments.forEach(inst => {
           details += `   - دفعة متأخرة: ${inst.installmentAmount.toLocaleString('ar-LY')} د.ل\n`;
           details += `     تاريخ الاستحقاق: ${new Date(inst.dueDate).toLocaleDateString('ar-LY')}\n`;
@@ -876,13 +889,13 @@ export function SendOverdueRemindersDialog({
           إرسال تنبيهات واتساب
         </Button>
       </DialogTrigger>
-      <DialogContent className="max-w-5xl max-h-[92vh] p-0 gap-0 overflow-hidden" dir="rtl">
+      <DialogContent className="max-w-5xl max-h-[92dvh] w-[95vw] sm:w-auto p-0 gap-0 overflow-hidden" dir="rtl">
         {/* Header */}
-        <div className="bg-gradient-to-l from-orange-500/10 via-orange-500/5 to-transparent border-b px-6 py-5">
+        <div className="bg-gradient-to-l from-orange-500/10 via-orange-500/5 to-transparent border-b px-3 py-3 sm:px-6 sm:py-5">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-3 text-xl font-bold">
-              <div className="p-2 rounded-lg bg-orange-500/10">
-                <Clock className="h-5 w-5 text-orange-600" />
+            <DialogTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-xl font-bold">
+              <div className="p-1.5 sm:p-2 rounded-lg bg-orange-500/10">
+                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
               </div>
               تنبيهات الدفعات المتأخرة
             </DialogTitle>
@@ -890,7 +903,7 @@ export function SendOverdueRemindersDialog({
 
           {/* Summary stats */}
           {!loading && !loadingPhones && customersWithPhone.length > 0 && (
-            <div className="grid grid-cols-4 gap-3 mt-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-3 sm:mt-4">
               <div className="bg-background/80 backdrop-blur rounded-lg p-3 border">
                 <div className="text-xs text-muted-foreground mb-1">عدد الزبائن المتأخرين</div>
                 <div className="text-xl font-bold">{customersWithPhone.length}</div>
@@ -930,28 +943,30 @@ export function SendOverdueRemindersDialog({
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
-              <div className="px-6 pt-4 pb-2 border-b bg-muted/30">
-                <TabsList className="w-full grid grid-cols-2 h-11">
-                  <TabsTrigger value="manual" className="gap-2 text-sm">
-                    <MessageSquare className="h-4 w-4" />
-                    إرسال يدوي (واتساب مباشر)
+              <div className="px-3 sm:px-6 pt-3 sm:pt-4 pb-2 border-b bg-muted/30">
+                <TabsList className="w-full grid grid-cols-2 h-9 sm:h-11">
+                  <TabsTrigger value="manual" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <MessageSquare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">إرسال يدوي (واتساب مباشر)</span>
+                    <span className="sm:hidden">يدوي</span>
                   </TabsTrigger>
-                  <TabsTrigger value="auto" className="gap-2 text-sm">
-                    <Send className="h-4 w-4" />
-                    إرسال تلقائي (API)
+                  <TabsTrigger value="auto" className="gap-1 sm:gap-2 text-xs sm:text-sm">
+                    <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                    <span className="hidden sm:inline">إرسال تلقائي (API)</span>
+                    <span className="sm:hidden">تلقائي</span>
                   </TabsTrigger>
                 </TabsList>
               </div>
 
               {/* Manual Tab */}
-              <TabsContent value="manual" className="px-6 py-4 mt-0 flex-1 overflow-auto">
+              <TabsContent value="manual" className="px-3 sm:px-6 py-3 sm:py-4 mt-0 flex-1 overflow-auto">
                 {/* خيار نوع الرسالة */}
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                   <Label className="text-sm font-semibold shrink-0">نوع الرسالة:</Label>
                   <RadioGroup
                     value={messageMode}
-                    onValueChange={(v) => setMessageMode(v as 'detailed' | 'summary')}
-                    className="flex gap-3"
+                    onValueChange={(v) => setMessageMode(v as 'detailed' | 'summary' | 'minimal')}
+                    className="flex gap-3 flex-wrap"
                   >
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <RadioGroupItem value="detailed" />
@@ -959,7 +974,11 @@ export function SendOverdueRemindersDialog({
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <RadioGroupItem value="summary" />
-                      <span className="text-sm">مختصر (المبلغ المتأخر فقط)</span>
+                      <span className="text-sm">مختصر (المبلغ فقط)</span>
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <RadioGroupItem value="minimal" />
+                      <span className="text-sm">مختصر (بدون مبلغ)</span>
                     </label>
                   </RadioGroup>
                 </div>

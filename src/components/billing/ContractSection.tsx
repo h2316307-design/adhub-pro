@@ -219,11 +219,11 @@ export function ContractSection({
           }
         }
 
-        // ✅ 3. البحث عبر لوحات العقد
+        // ✅ 3. البحث عبر لوحات العقد + تصاميم اللوحات المباشرة
         if (allImages.length === 0) {
           const { data: contractBillboards } = await supabase
             .from('billboards')
-            .select('ID')
+            .select('ID, design_face_a, design_face_b')
             .eq('Contract_Number', contractNumber);
 
           if (contractBillboards && contractBillboards.length > 0) {
@@ -254,6 +254,22 @@ export function ContractSection({
                 });
               }
             }
+
+            // ✅ 3.5 fallback: تصاميم من أي مهمة لنفس اللوحات بدون فلتر العقد
+            if (allImages.length === 0 && designItems && designItems.length > 0) {
+              designItems.forEach(item => {
+                addImage(item.design_face_a);
+                addImage(item.design_face_b);
+              });
+            }
+
+            // ✅ 3.6 fallback: تصاميم اللوحات المباشرة من جدول billboards
+            if (allImages.length === 0) {
+              contractBillboards.forEach(b => {
+                addImage(b.design_face_a);
+                addImage(b.design_face_b);
+              });
+            }
           }
         }
 
@@ -278,7 +294,7 @@ export function ContractSection({
               if (Array.isArray(designData)) {
                 for (const d of designData) {
                   const dd = d as any;
-                  addImage(dd?.designFaceA || dd?.designFaceB || dd?.faceA || dd?.faceB || dd?.design_face_a || dd?.design_face_b || dd?.billboardImage);
+                  addImage(dd?.designFaceA || dd?.designFaceB || dd?.faceA || dd?.faceB || dd?.design_face_a || dd?.design_face_b);
                 }
               }
             } catch {}
