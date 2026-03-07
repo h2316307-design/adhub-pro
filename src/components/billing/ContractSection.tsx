@@ -278,7 +278,7 @@ export function ContractSection({
               if (Array.isArray(designData)) {
                 for (const d of designData) {
                   const dd = d as any;
-                  addImage(dd?.designFaceA || dd?.designFaceB || dd?.faceA || dd?.faceB || dd?.design_face_a || dd?.design_face_b);
+                  addImage(dd?.designFaceA || dd?.designFaceB || dd?.faceA || dd?.faceB || dd?.design_face_a || dd?.design_face_b || dd?.billboardImage);
                 }
               }
             } catch {}

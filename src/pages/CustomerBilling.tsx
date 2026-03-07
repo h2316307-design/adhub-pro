@@ -1157,6 +1157,99 @@ export default function CustomerBilling() {
               .eq('id', invoiceId);
           }
         }
+
+        // 6. تحديث فواتير الطباعة/المجمعة المرتبطة
+        const printedInvoiceIds = new Set<string>();
+        paymentsToDelete.forEach(p => {
+          if (p.printed_invoice_id) printedInvoiceIds.add(p.printed_invoice_id);
+        });
+
+        for (const invoiceId of printedInvoiceIds) {
+          // حساب إجمالي المبالغ المحذوفة لهذه الفاتورة
+          const deletedAmount = paymentsToDelete
+            .filter(p => p.printed_invoice_id === invoiceId)
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+          // حذف سجلات print_invoice_payments المرتبطة
+          const paymentIds = paymentsToDelete.filter(p => p.printed_invoice_id === invoiceId).map(p => p.id);
+          await supabase
+            .from('print_invoice_payments')
+            .delete()
+            .in('payment_id', paymentIds);
+
+          // جلب paid_amount الحالي
+          const { data: printedInvoice } = await supabase
+            .from('printed_invoices')
+            .select('paid_amount, total_amount')
+            .eq('id', invoiceId)
+            .single();
+
+          if (printedInvoice) {
+            const newPaidAmount = Math.max(0, (printedInvoice.paid_amount || 0) - deletedAmount);
+            await supabase
+              .from('printed_invoices')
+              .update({
+                paid_amount: newPaidAmount,
+                paid: newPaidAmount >= (printedInvoice.total_amount || 0) && (printedInvoice.total_amount || 0) > 0
+              })
+              .eq('id', invoiceId);
+          }
+        }
+
+        // 7. تحديث فواتير المبيعات المرتبطة
+        const salesInvoiceIds = new Set<string>();
+        paymentsToDelete.forEach(p => {
+          if (p.sales_invoice_id) salesInvoiceIds.add(p.sales_invoice_id);
+        });
+
+        for (const invoiceId of salesInvoiceIds) {
+          const deletedAmount = paymentsToDelete
+            .filter(p => p.sales_invoice_id === invoiceId)
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+          const { data: salesInvoice } = await supabase
+            .from('sales_invoices')
+            .select('paid_amount, total_amount')
+            .eq('id', invoiceId)
+            .single();
+
+          if (salesInvoice) {
+            const newPaidAmount = Math.max(0, (salesInvoice.paid_amount || 0) - deletedAmount);
+            await supabase
+              .from('sales_invoices')
+              .update({
+                paid_amount: newPaidAmount,
+                status: newPaidAmount >= (salesInvoice.total_amount || 0) ? 'paid' : 'pending'
+              })
+              .eq('id', invoiceId);
+          }
+        }
+
+        // 8. تحديث المهام المجمعة المرتبطة (composite_tasks.paid_amount)
+        const compositeTaskIds = new Set<string>();
+        paymentsToDelete.forEach(p => {
+          if (p.composite_task_id) compositeTaskIds.add(p.composite_task_id);
+        });
+
+        for (const taskId of compositeTaskIds) {
+          const deletedAmount = paymentsToDelete
+            .filter(p => p.composite_task_id === taskId)
+            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+
+          const { data: task } = await supabase
+            .from('composite_tasks')
+            .select('paid_amount')
+            .eq('id', taskId)
+            .single();
+
+          if (task) {
+            const newPaidAmount = Math.max(0, (task.paid_amount || 0) - deletedAmount);
+            await supabase
+              .from('composite_tasks')
+              .update({ paid_amount: newPaidAmount })
+              .eq('id', taskId);
+          }
+        }
       }
 
       toast.success('تم حذف الدفعة الموزعة والعهد المرتبطة بها بنجاح');
