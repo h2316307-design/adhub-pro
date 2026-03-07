@@ -44,6 +44,48 @@ export type Database = {
         }
         Relationships: []
       }
+      activity_log: {
+        Row: {
+          action: string
+          ad_type: string | null
+          contract_number: number | null
+          created_at: string
+          customer_name: string | null
+          description: string
+          details: Json | null
+          entity_id: string | null
+          entity_type: string
+          id: string
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          ad_type?: string | null
+          contract_number?: number | null
+          created_at?: string
+          customer_name?: string | null
+          description: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type: string
+          id?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          ad_type?: string | null
+          contract_number?: number | null
+          created_at?: string
+          customer_name?: string | null
+          description?: string
+          details?: Json | null
+          entity_id?: string | null
+          entity_type?: string
+          id?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       base_prices: {
         Row: {
           billboard_level: string

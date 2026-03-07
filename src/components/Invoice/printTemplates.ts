@@ -3,7 +3,7 @@ import { CUSTOMERS, CustomerType, getPriceFor } from '@/data/pricing';
 import { addDays, format as fmt } from 'date-fns';
 
 function formatCurrency(n: number) {
-  return `${(n || 0).toLocaleString('ar-LY')} د.ل`;
+  return `${(n || 0).toLocaleString('en-US')} د.ل`;
 }
 
 function mapUrl(b: any): string {
@@ -283,7 +283,7 @@ export function buildBgc2OfferHtml(items: any[], meta: OfferMeta) {
       <div class="c landmark">${landmark}</div>
       <div class="c size">${size}</div>
       <div class="c faces">${faces}</div>
-      <div class="c price">${(unit || 0).toLocaleString('ar-LY')} د.ل</div>
+      <div class="c price">${(unit || 0).toLocaleString('en-US')} د.ل</div>
       <div class="c duration">${durationText}</div>
       <div class="c link"><a href="${url}">اضغط هنا</a></div>
     </div>`;

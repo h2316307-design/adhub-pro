@@ -183,12 +183,12 @@ export interface DebtSourceBreakdown {
 
 function buildSourceDetailsText(sources: DebtSourceBreakdown): string {
   const lines: string[] = [];
-  if (sources.contractsDebt > 0) lines.push(`   - العقود: ${sources.contractsDebt.toLocaleString('ar-LY')} د.ل`);
-  if (sources.salesInvoicesDebt > 0) lines.push(`   - فواتير المبيعات: ${sources.salesInvoicesDebt.toLocaleString('ar-LY')} د.ل`);
-  if (sources.printedInvoicesDebt > 0) lines.push(`   - فواتير الطباعة: ${sources.printedInvoicesDebt.toLocaleString('ar-LY')} د.ل`);
-  if (sources.compositeTasksDebt > 0) lines.push(`   - الفواتير المجمعة: ${sources.compositeTasksDebt.toLocaleString('ar-LY')} د.ل`);
-  if (sources.purchaseInvoicesCredit > 0) lines.push(`   - خصم المشتريات: -${sources.purchaseInvoicesCredit.toLocaleString('ar-LY')} د.ل`);
-  if (sources.otherDebts > 0) lines.push(`   - أخرى: ${sources.otherDebts.toLocaleString('ar-LY')} د.ل`);
+  if (sources.contractsDebt > 0) lines.push(`   - العقود: ${sources.contractsDebt.toLocaleString('en-US')} د.ل`);
+  if (sources.salesInvoicesDebt > 0) lines.push(`   - فواتير المبيعات: ${sources.salesInvoicesDebt.toLocaleString('en-US')} د.ل`);
+  if (sources.printedInvoicesDebt > 0) lines.push(`   - فواتير الطباعة: ${sources.printedInvoicesDebt.toLocaleString('en-US')} د.ل`);
+  if (sources.compositeTasksDebt > 0) lines.push(`   - الفواتير المجمعة: ${sources.compositeTasksDebt.toLocaleString('en-US')} د.ل`);
+  if (sources.purchaseInvoicesCredit > 0) lines.push(`   - خصم المشتريات: -${sources.purchaseInvoicesCredit.toLocaleString('en-US')} د.ل`);
+  if (sources.otherDebts > 0) lines.push(`   - أخرى: ${sources.otherDebts.toLocaleString('en-US')} د.ل`);
   return lines.length > 0 ? lines.join('\n') : '';
 }
 
@@ -215,17 +215,17 @@ export function applyDebtTemplate(
   return template
     .replace(/{اسم_العميل}/g, data.customerName)
     .replace(/{عدد_العقود}/g, String(data.contractsCount))
-    .replace(/{إجمالي_القيمة}/g, data.totalRent.toLocaleString('ar-LY'))
-    .replace(/{المدفوع}/g, data.totalPaid.toLocaleString('ar-LY'))
+    .replace(/{إجمالي_القيمة}/g, data.totalRent.toLocaleString('en-US'))
+    .replace(/{المدفوع}/g, data.totalPaid.toLocaleString('en-US'))
     .replace(/{نسبة_السداد}/g, paymentPercentage)
-    .replace(/{المستحق}/g, data.totalDebt.toLocaleString('ar-LY'))
+    .replace(/{المستحق}/g, data.totalDebt.toLocaleString('en-US'))
     .replace(/{تفاصيل_العقود}/g, contractDetailsText)
     .replace(/{تفاصيل_المصادر}/g, sourceDetailsText)
-    .replace(/{مستحق_العقود}/g, sources.contractsDebt.toLocaleString('ar-LY'))
-    .replace(/{مستحق_المبيعات}/g, sources.salesInvoicesDebt.toLocaleString('ar-LY'))
-    .replace(/{مستحق_الطباعة}/g, sources.printedInvoicesDebt.toLocaleString('ar-LY'))
-    .replace(/{مستحق_المجمعة}/g, sources.compositeTasksDebt.toLocaleString('ar-LY'))
-    .replace(/{خصم_المشتريات}/g, sources.purchaseInvoicesCredit.toLocaleString('ar-LY'));
+    .replace(/{مستحق_العقود}/g, sources.contractsDebt.toLocaleString('en-US'))
+    .replace(/{مستحق_المبيعات}/g, sources.salesInvoicesDebt.toLocaleString('en-US'))
+    .replace(/{مستحق_الطباعة}/g, sources.printedInvoicesDebt.toLocaleString('en-US'))
+    .replace(/{مستحق_المجمعة}/g, sources.compositeTasksDebt.toLocaleString('en-US'))
+    .replace(/{خصم_المشتريات}/g, sources.purchaseInvoicesCredit.toLocaleString('en-US'));
 }
 
 export function applyOverdueTemplate(
@@ -239,7 +239,7 @@ export function applyOverdueTemplate(
   return template
     .replace(/{اسم_العميل}/g, data.customerName)
     .replace(/{تفاصيل_الدفعات}/g, data.paymentDetails)
-    .replace(/{المستحق}/g, data.totalOverdue.toLocaleString('ar-LY'));
+    .replace(/{المستحق}/g, data.totalOverdue.toLocaleString('en-US'));
 }
 
 export function applyContractExpiryAlertTemplate(

@@ -99,7 +99,7 @@ export function BookingSummary({
             <Calculator className="h-4 w-4" />
             الإجمالي:
           </span>
-          <span>{totalCost.toLocaleString('ar-LY')} د.ل</span>
+          <span>{totalCost.toLocaleString('en-US')} د.ل</span>
         </div>
 
         <div className="grid grid-cols-2 gap-2">

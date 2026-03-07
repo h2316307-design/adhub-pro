@@ -99,7 +99,7 @@ function ManualCustomerRow({
         </div>
         <div className="text-left shrink-0">
           <div className="text-destructive font-bold text-base">
-            {customer.totalDebt.toLocaleString("ar-LY")}
+            {customer.totalDebt.toLocaleString("en-US")}
           </div>
           <div className="text-[10px] text-muted-foreground">د.ل مستحق</div>
         </div>
@@ -458,9 +458,9 @@ export function SendDebtRemindersDialog({
     r += `التاريخ: ${new Date().toLocaleDateString("ar", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}\n\n`;
     r += `*الملخص التنفيذي:*\n`;
     r += `- عدد الزبائن: ${customersWithDebt.length}\n`;
-    r += `- إجمالي قيمة العقود: ${totalRentVal.toLocaleString("ar-LY")} د.ل\n`;
-    r += `- إجمالي المدفوع: ${totalPaidVal.toLocaleString("ar-LY")} د.ل\n`;
-    r += `- إجمالي المستحقات: ${totalDebtVal.toLocaleString("ar-LY")} د.ل\n`;
+    r += `- إجمالي قيمة العقود: ${totalRentVal.toLocaleString("en-US")} د.ل\n`;
+    r += `- إجمالي المدفوع: ${totalPaidVal.toLocaleString("en-US")} د.ل\n`;
+    r += `- إجمالي المستحقات: ${totalDebtVal.toLocaleString("en-US")} د.ل\n`;
     r += `- نسبة التحصيل: ${totalRentVal > 0 ? ((totalPaidVal / totalRentVal) * 100).toFixed(1) : "0"}%\n\n`;
 
     if (selectedData.length > 0) {
@@ -470,14 +470,14 @@ export function SendDebtRemindersDialog({
         .slice(0, 15)
         .forEach((c, i) => {
           r += `${i + 1}. ${c.customerName}\n`;
-          r += `   - المستحق: ${c.totalDebt.toLocaleString("ar-LY")} د.ل\n`;
+          r += `   - المستحق: ${c.totalDebt.toLocaleString("en-US")} د.ل\n`;
           if (c.sourceBreakdown) {
             const s = c.sourceBreakdown;
-            if (s.contractsDebt > 0) r += `     - عقود: ${s.contractsDebt.toLocaleString("ar-LY")} د.ل\n`;
-            if (s.salesInvoicesDebt > 0) r += `     - مبيعات: ${s.salesInvoicesDebt.toLocaleString("ar-LY")} د.ل\n`;
-            if (s.printedInvoicesDebt > 0) r += `     - طباعة: ${s.printedInvoicesDebt.toLocaleString("ar-LY")} د.ل\n`;
-            if (s.compositeTasksDebt > 0) r += `     - مجمعة: ${s.compositeTasksDebt.toLocaleString("ar-LY")} د.ل\n`;
-            if (s.purchaseInvoicesCredit > 0) r += `     - خصم مشتريات: -${s.purchaseInvoicesCredit.toLocaleString("ar-LY")} د.ل\n`;
+            if (s.contractsDebt > 0) r += `     - عقود: ${s.contractsDebt.toLocaleString("en-US")} د.ل\n`;
+            if (s.salesInvoicesDebt > 0) r += `     - مبيعات: ${s.salesInvoicesDebt.toLocaleString("en-US")} د.ل\n`;
+            if (s.printedInvoicesDebt > 0) r += `     - طباعة: ${s.printedInvoicesDebt.toLocaleString("en-US")} د.ل\n`;
+            if (s.compositeTasksDebt > 0) r += `     - مجمعة: ${s.compositeTasksDebt.toLocaleString("en-US")} د.ل\n`;
+            if (s.purchaseInvoicesCredit > 0) r += `     - خصم مشتريات: -${s.purchaseInvoicesCredit.toLocaleString("en-US")} د.ل\n`;
           }
           r += `   - العقود: ${c.contractsCount} | التحصيل: ${c.totalRent > 0 ? ((c.totalPaid / c.totalRent) * 100).toFixed(0) : "0"}%\n\n`;
         });
@@ -645,7 +645,7 @@ export function SendDebtRemindersDialog({
               </div>
               <div className="bg-background/80 backdrop-blur rounded-lg p-3 border border-destructive/20">
                 <div className="text-xs text-muted-foreground mb-1">إجمالي المستحقات</div>
-                <div className="text-xl font-bold text-destructive">{totalDebt.toLocaleString("ar-LY")} <span className="text-sm">د.ل</span></div>
+                <div className="text-xl font-bold text-destructive">{totalDebt.toLocaleString("en-US")} <span className="text-sm">د.ل</span></div>
               </div>
               <div className="bg-background/80 backdrop-blur rounded-lg p-3 border border-green-500/20">
                 <div className="text-xs text-muted-foreground mb-1">نسبة التحصيل</div>
@@ -654,7 +654,7 @@ export function SendDebtRemindersDialog({
               {selectedCustomers.size > 0 && (
                 <div className="bg-background/80 backdrop-blur rounded-lg p-3 border border-primary/20">
                   <div className="text-xs text-muted-foreground mb-1">المحدد ({selectedCustomers.size})</div>
-                  <div className="text-xl font-bold text-primary">{selectedDebtTotal.toLocaleString("ar-LY")} <span className="text-sm">د.ل</span></div>
+                  <div className="text-xl font-bold text-primary">{selectedDebtTotal.toLocaleString("en-US")} <span className="text-sm">د.ل</span></div>
                 </div>
               )}
             </div>

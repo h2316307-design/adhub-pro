@@ -16,6 +16,9 @@ import { toast } from 'sonner';
 import { format, differenceInDays } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { OverduePaymentsAlert } from '@/components/billing/OverduePaymentsAlert';
+import { OverdueInvoicesAlert } from '@/components/billing/OverdueInvoicesAlert';
+import { OverdueCompositeTasksAlert } from '@/components/billing/OverdueCompositeTasksAlert';
+import { RecentActivityLog } from '@/components/billing/RecentActivityLog';
 import { useNavigate, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 
@@ -491,6 +494,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 pb-10" dir="rtl">
       <OverduePaymentsAlert />
+      <OverdueInvoicesAlert />
+      <OverdueCompositeTasksAlert />
+      <RecentActivityLog />
       
       {/* ✅ الهيدر الرئيسي - تصميم عصري */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-primary/10 via-primary/5 to-accent/10 p-6 border border-primary/20">

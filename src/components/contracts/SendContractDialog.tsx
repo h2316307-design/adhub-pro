@@ -122,7 +122,7 @@ export function SendContractDialog({
             adType: (contractData as any)?.['Ad Type'] || 'عقد إيجار لوحات إعلانية',
             startDate: formatArabicDate(startDate),
             endDate: endDate ? formatArabicDate(endDate) : '',
-            price: `${((contractData as any)?.Total || 0).toLocaleString('ar-LY')} د.ل`,
+            price: `${((contractData as any)?.Total || 0).toLocaleString('en-US')} د.ل`,
             duration: duration,
             year: startDate ? new Date(startDate).getFullYear().toString() : new Date().getFullYear().toString(),
             phoneNumber: phoneNumber,

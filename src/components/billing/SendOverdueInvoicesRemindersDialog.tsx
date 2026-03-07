@@ -6,7 +6,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -21,7 +20,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useSendWhatsApp } from "@/hooks/useSendWhatsApp";
 import { useSendTextly } from "@/hooks/useSendTextly";
 import { supabase } from "@/integrations/supabase/client";
-import { DEFAULT_CONTRACT_EXPIRY_TEMPLATE, DEFAULT_OVERDUE_SUMMARY_TEMPLATE, DEFAULT_OVERDUE_MINIMAL_TEMPLATE, applyOverdueTemplate } from "@/utils/messageTemplates";
 import {
   Send,
   Loader2,
@@ -36,90 +34,31 @@ import {
   Phone,
   Search,
   Clock,
-  Megaphone,
+  Receipt,
 } from "lucide-react";
 import { toast } from "sonner";
 
-// تحويل RGB إلى HSL
-const rgbToHsl = (r: number, g: number, b: number) => {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min;
-  let h = 0, s = 0;
-  const l = (max + min) / 2;
-  if (delta !== 0) {
-    s = delta / (1 - Math.abs(2 * l - 1));
-    switch (max) {
-      case r: h = ((g - b) / delta) % 6; break;
-      case g: h = (b - r) / delta + 2; break;
-      default: h = (r - g) / delta + 4;
-    }
-    h *= 60;
-    if (h < 0) h += 360;
-  }
-  return { h: Math.round(h), s: Math.round(s * 100), l: Math.round(l * 100) };
-};
-
-// استخراج اللون السائد من الصورة باستخدام proxy
-const extractColorFromImage = async (imageUrl: string): Promise<{ rgb: string; hsl: string } | null> => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    const proxyUrl = `https://images.weserv.nl/?url=${encodeURIComponent(imageUrl)}&w=50&h=50`;
-    img.onload = () => {
-      try {
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
-        if (!ctx) { resolve(null); return; }
-        canvas.width = 50; canvas.height = 50;
-        ctx.drawImage(img, 0, 0, 50, 50);
-        const imageData = ctx.getImageData(0, 0, 50, 50).data;
-        let r = 0, g = 0, b = 0, count = 0;
-        for (let i = 0; i < imageData.length; i += 4) {
-          const brightness = (imageData[i] + imageData[i + 1] + imageData[i + 2]) / 3;
-          if (brightness > 30 && brightness < 225) { r += imageData[i]; g += imageData[i + 1]; b += imageData[i + 2]; count++; }
-        }
-        if (count > 0) {
-          r = Math.round(r / count); g = Math.round(g / count); b = Math.round(b / count);
-          const hsl = rgbToHsl(r, g, b);
-          const adjustedL = Math.min(hsl.l, 25);
-          resolve({ rgb: `${r}, ${g}, ${b}`, hsl: `${hsl.h} ${Math.min(hsl.s, 60)}% ${adjustedL}%` });
-        } else { resolve(null); }
-      } catch { resolve(null); }
-    };
-    img.onerror = () => resolve(null);
-    img.src = proxyUrl;
-  });
-};
-
-interface OverdueInstallment {
-  contractNumber: number;
+interface OverdueInvoice {
+  id: string;
+  invoiceNumber: string;
+  invoiceName: string | null;
   customerName: string;
   customerId: string | null;
-  installmentAmount: number;
-  dueDate: string;
-  description: string;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  invoiceDate: string;
   daysOverdue: number;
-  adType?: string;
+  type: 'sales' | 'print' | 'composite';
 }
 
-interface UnpaidPrintInvoice {
-  invoiceId: string;
-  contractNumber: number;
-  customerName: string;
-  customerId: string | null;
-  amount: number;
-  createdAt: string;
-  daysOverdue: number;
-}
-
-interface CustomerOverdue {
+interface CustomerInvoiceOverdue {
   customerId: string | null;
   customerName: string;
   totalOverdue: number;
   overdueCount: number;
   oldestDaysOverdue: number;
-  installments: OverdueInstallment[];
-  unpaidInvoices: UnpaidPrintInvoice[];
+  invoices: OverdueInvoice[];
   phone?: string;
 }
 
@@ -129,10 +68,9 @@ interface ManagementPhone {
   label?: string;
 }
 
-interface SendOverdueRemindersDialogProps {
-  customerOverdues?: CustomerOverdue[];
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
+interface SendOverdueInvoicesRemindersDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
 }
 
 function formatPhone(phone: string): string {
@@ -147,109 +85,89 @@ function generateWhatsAppLink(phone: string, message: string): string {
   return `https://wa.me/${formatPhone(phone)}?text=${encodeURIComponent(message)}`;
 }
 
-// مكون الصف اليدوي مع صورة التصميم وتلوين الصف
-function ManualOverdueRow({
+const getTaskTypeLabel = (type: string) => {
+  const map: Record<string, string> = {
+    'installation_print': 'تركيب + طباعة',
+    'installation_print_cutout': 'تركيب + طباعة + قص',
+    'installation_cutout': 'تركيب + قص',
+    'print_cutout': 'طباعة + قص',
+    'installation': 'تركيب',
+    'print': 'طباعة',
+    'cutout': 'قص',
+    'new_installation': 'تركيب جديد',
+    'reinstallation': 'إعادة تركيب',
+  };
+  return map[type] || type;
+};
+
+const getTypeLabel = (type: string) => {
+  if (type === 'sales') return 'مبيعات';
+  if (type === 'print') return 'طباعة';
+  return 'مجمعة';
+};
+
+function ManualInvoiceRow({
   customer,
   message,
   onMessageChange,
   onReset,
   onCopy,
-  designImageUrl,
 }: {
-  customer: CustomerOverdue;
+  customer: CustomerInvoiceOverdue;
   message: string;
   onMessageChange: (msg: string) => void;
   onReset: () => void;
   onCopy: () => void;
-  designImageUrl?: string;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [colorData, setColorData] = useState<{ rgb: string; hsl: string } | null>(null);
-
-  // أرقام العقود المرتبطة بالزبون
-  const contractNumbers = [...new Set(customer.installments.map(i => i.contractNumber))];
-
-  useEffect(() => {
-    if (designImageUrl) {
-      extractColorFromImage(designImageUrl).then(c => setColorData(c));
-    } else {
-      setColorData(null);
-    }
-  }, [designImageUrl]);
-
-  const hasColor = !!colorData;
-
-  const rowStyle = hasColor ? {
-    backgroundColor: `hsl(${colorData.hsl})`,
-  } : {};
 
   return (
-    <div
-      className={`rounded-xl border-2 overflow-hidden transition-all duration-300 ${
-        hasColor ? 'text-white hover:opacity-90' : 'hover:shadow-md'
-      }`}
-      style={rowStyle}
-    >
+    <div className="rounded-xl border-2 overflow-hidden transition-all duration-300 hover:shadow-md">
       <div className="flex flex-col sm:flex-row sm:items-stretch">
-        {/* صورة التصميم على جانب الكارت - مخفية على الموبايل */}
-        {designImageUrl && (
-          <div
-            className="relative hidden sm:block w-28 flex-shrink-0 overflow-hidden"
-            style={hasColor ? { borderLeft: `3px solid rgba(${colorData.rgb}, 0.6)` } : { borderLeft: '3px solid hsl(var(--border))' }}
-          >
-            <div className="absolute inset-0">
-              <img src={designImageUrl} alt="" className="w-full h-full object-cover scale-150 blur-xl opacity-40" aria-hidden="true" />
-              <div className="absolute inset-0 bg-black/30" />
-            </div>
-            <img
-              src={designImageUrl}
-              alt="التصميم"
-              className="relative w-full h-full object-contain p-1.5 z-10"
-              style={{ minHeight: '100%' }}
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-            />
-          </div>
-        )}
-
-        {/* المحتوى الرئيسي */}
         <div className="flex-1 min-w-0 p-2.5 sm:p-3">
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
-                <span className={`font-bold text-xs sm:text-sm truncate ${hasColor ? 'text-white' : ''}`}>{customer.customerName}</span>
-                <Badge variant="secondary" className={`text-[9px] sm:text-[10px] shrink-0 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
-                  {customer.overdueCount} دفعة
+                <span className="font-bold text-xs sm:text-sm truncate">{customer.customerName}</span>
+                <Badge variant="secondary" className="text-[9px] sm:text-[10px] shrink-0">
+                  {customer.overdueCount} فاتورة
                 </Badge>
-                <Badge variant="outline" className={`text-[9px] sm:text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
+                <Badge variant="outline" className="text-[9px] sm:text-[10px] shrink-0 gap-1">
                   <Clock className="h-2.5 w-2.5" />
                   أقدم تأخير: {customer.oldestDaysOverdue} يوم
                 </Badge>
-                {contractNumbers.length > 0 && (
-                  <Badge variant="outline" className={`text-[9px] sm:text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
-                    <Megaphone className="h-2.5 w-2.5" />
-                    عقد #{contractNumbers.join(', #')}
-                  </Badge>
-                )}
               </div>
-              <div className={`flex items-center gap-3 text-[10px] sm:text-xs ${hasColor ? 'text-white/70' : 'text-muted-foreground'}`}>
+              <div className="flex items-center gap-3 text-[10px] sm:text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
                   <Phone className="h-3 w-3" />
                   {customer.phone}
                 </span>
               </div>
+              {/* عرض أنواع الفواتير */}
+              <div className="flex gap-1 mt-1 flex-wrap">
+                {['sales', 'print', 'composite'].map(t => {
+                  const count = customer.invoices.filter(i => i.type === t).length;
+                  if (count === 0) return null;
+                  return (
+                    <Badge key={t} variant="outline" className="text-[9px]">
+                      {getTypeLabel(t)} ({count})
+                    </Badge>
+                  );
+                })}
+              </div>
             </div>
             <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3">
               <div className="text-left shrink-0">
-                <div className={`font-bold text-sm sm:text-base ${hasColor ? 'text-red-300' : 'text-destructive'}`}>
+                <div className="font-bold text-sm sm:text-base text-destructive">
                   {formatAmount(customer.totalOverdue)}
                 </div>
-                <div className={`text-[9px] sm:text-[10px] ${hasColor ? 'text-white/60' : 'text-muted-foreground'}`}>د.ل متأخر</div>
+                <div className="text-[9px] sm:text-[10px] text-muted-foreground">د.ل متأخر</div>
               </div>
               <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-                <Button size="sm" variant="outline" className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${hasColor ? 'border-white/30 text-white hover:bg-white/20' : ''}`} onClick={() => setExpanded(!expanded)} title="تعديل الرسالة">
+                <Button size="sm" variant="outline" className="h-7 w-7 sm:h-8 sm:w-8 p-0" onClick={() => setExpanded(!expanded)} title="تعديل الرسالة">
                   <MessageSquare className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 </Button>
-                <Button size="sm" variant="outline" className={`h-7 w-7 sm:h-8 sm:w-8 p-0 ${hasColor ? 'border-white/30 text-white hover:bg-white/20' : ''}`} onClick={onCopy} title="نسخ الرسالة">
+                <Button size="sm" variant="outline" className="h-7 w-7 sm:h-8 sm:w-8 p-0" onClick={onCopy} title="نسخ الرسالة">
                   <Copy className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                 </Button>
                 {customer.phone ? (
@@ -270,8 +188,8 @@ function ManualOverdueRow({
         </div>
       </div>
       {expanded && (
-        <div className={`border-t p-4 ${hasColor ? 'border-white/20 bg-black/20' : 'bg-muted/30'}`}>
-          <Label className={`text-xs font-medium mb-2 block ${hasColor ? 'text-white/80' : ''}`}>تعديل الرسالة:</Label>
+        <div className="border-t p-4 bg-muted/30">
+          <Label className="text-xs font-medium mb-2 block">تعديل الرسالة:</Label>
           <Textarea
             value={message}
             onChange={(e) => onMessageChange(e.target.value)}
@@ -279,7 +197,7 @@ function ManualOverdueRow({
             dir="rtl"
           />
           <div className="flex gap-2 mt-2">
-            <Button size="sm" variant="ghost" className={`text-xs ${hasColor ? 'text-white/70 hover:text-white hover:bg-white/10' : ''}`} onClick={onReset}>
+            <Button size="sm" variant="ghost" className="text-xs" onClick={onReset}>
               إعادة تعيين الرسالة
             </Button>
           </div>
@@ -289,53 +207,43 @@ function ManualOverdueRow({
   );
 }
 
-export function SendOverdueRemindersDialog({ 
-  customerOverdues: propCustomerOverdues, 
-  open: controlledOpen,
-  onOpenChange: setControlledOpen
-}: SendOverdueRemindersDialogProps) {
+export function SendOverdueInvoicesRemindersDialog({ 
+  open,
+  onOpenChange,
+}: SendOverdueInvoicesRemindersDialogProps) {
   const { sendMessage: sendWhatsApp, loading: sendingWhatsApp } = useSendWhatsApp();
   const { sendMessage: sendTextly, loading: sendingTextly } = useSendTextly();
-  const [internalOpen, setInternalOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<string>("manual");
   const [recipientType, setRecipientType] = useState<'customers' | 'management' | 'both'>('customers');
   const [selectedCustomers, setSelectedCustomers] = useState<Set<string>>(new Set());
   const [selectedManagement, setSelectedManagement] = useState<Set<string>>(new Set());
-  const [customersWithPhone, setCustomersWithPhone] = useState<CustomerOverdue[]>([]);
+  const [customersWithPhone, setCustomersWithPhone] = useState<CustomerInvoiceOverdue[]>([]);
   const [managementPhones, setManagementPhones] = useState<ManagementPhone[]>([]);
   const [loadingPhones, setLoadingPhones] = useState(false);
   const [sendingStatus, setSendingStatus] = useState<Map<string, 'pending' | 'success' | 'error'>>(new Map());
   const [sendingMethod, setSendingMethod] = useState<'textly' | 'whatsapp'>('textly');
-  const [loadedCustomerOverdues, setLoadedCustomerOverdues] = useState<CustomerOverdue[]>([]);
+  const [customerOverdues, setCustomerOverdues] = useState<CustomerInvoiceOverdue[]>([]);
   const [loading, setLoading] = useState(false);
-  const [overdueTemplate, setOverdueTemplate] = useState(DEFAULT_CONTRACT_EXPIRY_TEMPLATE);
-  const [summaryTemplate, setSummaryTemplate] = useState(DEFAULT_OVERDUE_SUMMARY_TEMPLATE);
-  const [minimalTemplate, setMinimalTemplate] = useState(DEFAULT_OVERDUE_MINIMAL_TEMPLATE);
   const [messageMode, setMessageMode] = useState<'detailed' | 'summary' | 'minimal'>('detailed');
   const [manualMessages, setManualMessages] = useState<Map<string, string>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<string>("overdue_desc");
-  const [contractDesigns, setContractDesigns] = useState<Map<number, string>>(new Map());
   
   const sending = sendingWhatsApp || sendingTextly;
-  
-  const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
-  const setOpen = setControlledOpen !== undefined ? setControlledOpen : setInternalOpen;
-  
-  const customerOverdues = propCustomerOverdues || loadedCustomerOverdues;
 
   useEffect(() => {
     if (open) {
-      if (!propCustomerOverdues) {
-        loadAllCustomerOverdues();
-      }
-      loadCustomerPhones();
+      loadAllOverdueInvoices();
       loadManagementPhones();
-      loadTemplate();
     }
-  }, [open, propCustomerOverdues]);
+  }, [open]);
 
-  // Generate messages when data/mode changes
+  useEffect(() => {
+    if (customerOverdues.length > 0) {
+      loadCustomerPhones();
+    }
+  }, [customerOverdues]);
+
   useEffect(() => {
     if (customersWithPhone.length > 0) {
       const msgs = new Map<string, string>();
@@ -345,9 +253,8 @@ export function SendOverdueRemindersDialog({
       }
       setManualMessages(msgs);
     }
-  }, [customersWithPhone, messageMode, overdueTemplate, summaryTemplate, minimalTemplate]);
+  }, [customersWithPhone, messageMode]);
 
-  // Filtered & sorted
   const filteredCustomers = useMemo(() => {
     let result = [...customersWithPhone];
     if (searchQuery.trim()) {
@@ -367,216 +274,131 @@ export function SendOverdueRemindersDialog({
     return result;
   }, [customersWithPhone, searchQuery, sortBy]);
 
-  const loadTemplate = async () => {
-    try {
-      const { data } = await supabase
-        .from('system_settings')
-        .select('setting_value')
-        .eq('setting_key', 'contract_expiry_template')
-        .maybeSingle();
-      if (data?.setting_value) setOverdueTemplate(data.setting_value);
-    } catch {}
-  };
-
-  // تحميل صور التصميم عندما تتوفر بيانات الزبائن
-  useEffect(() => {
-    if (customerOverdues.length > 0) {
-      loadContractDesigns();
-    }
-  }, [customerOverdues]);
-
-  const loadContractDesigns = async () => {
-    // جمع كل أرقام العقود من الزبائن المتأخرين
-    const allContractNumbers = [...new Set(
-      customerOverdues.flatMap(c => c.installments.map(i => i.contractNumber))
-    )];
-    if (allContractNumbers.length === 0) return;
-
-    try {
-      const designMap = new Map<number, string>();
-
-      // 1) البحث في مهام التركيب أولاً
-      for (const cn of allContractNumbers) {
-        if (designMap.has(cn)) continue;
-        const { data: tasks } = await supabase
-          .from('installation_tasks')
-          .select('id')
-          .eq('contract_id', cn);
-        
-        if (tasks && tasks.length > 0) {
-          const taskIds = tasks.map(t => t.id);
-          const { data: items } = await supabase
-            .from('installation_task_items')
-            .select('design_face_a, design_face_b')
-            .in('task_id', taskIds)
-            .or('design_face_a.not.is.null,design_face_b.not.is.null')
-            .limit(1);
-          
-          if (items && items.length > 0) {
-            const img = items[0].design_face_a || items[0].design_face_b;
-            if (img) designMap.set(cn, img);
-          }
-        }
-      }
-
-      // 2) البحث في design_data للعقود المفقودة
-      const missingContracts = allContractNumbers.filter(cn => !designMap.has(cn));
-      if (missingContracts.length > 0) {
-        const { data: contractData } = await supabase
-          .from('Contract')
-          .select('Contract_Number, design_data')
-          .in('Contract_Number', missingContracts);
-        
-        if (contractData) {
-          for (const cd of contractData) {
-            if (cd.Contract_Number && !designMap.has(cd.Contract_Number) && cd.design_data) {
-              try {
-                const designData = typeof cd.design_data === 'string'
-                  ? JSON.parse(cd.design_data)
-                  : cd.design_data;
-                
-                if (Array.isArray(designData)) {
-                  for (const d of designData) {
-                    const img = d?.designFaceA || d?.designFaceB || d?.faceA || d?.faceB || d?.design_face_a || d?.design_face_b;
-                    if (typeof img === 'string' && img.trim()) {
-                      designMap.set(cd.Contract_Number, img);
-                      break;
-                    }
-                  }
-                }
-              } catch {}
-            }
-          }
-        }
-      }
-
-      // 3) البحث في اللوحات
-      const stillMissing = allContractNumbers.filter(cn => !designMap.has(cn));
-      if (stillMissing.length > 0) {
-        const { data: billboards } = await supabase
-          .from('billboards')
-          .select('Contract_Number, design_face_a, design_face_b')
-          .in('Contract_Number', stillMissing);
-
-        if (billboards) {
-          for (const bb of billboards) {
-            if (bb.Contract_Number && !designMap.has(bb.Contract_Number)) {
-              const img = bb.design_face_a || bb.design_face_b;
-              if (img) designMap.set(bb.Contract_Number, img);
-            }
-          }
-        }
-      }
-
-      setContractDesigns(designMap);
-    } catch (error) {
-      console.error('Error loading contract designs:', error);
-    }
-  };
-
-  const loadAllCustomerOverdues = async () => {
+  const loadAllOverdueInvoices = async () => {
     setLoading(true);
     try {
       const today = new Date();
-      const { data: contracts, error } = await supabase
-        .from('Contract')
-        .select('Contract_Number, "Customer Name", customer_id, installments_data, Total, "Ad Type"')
-        .not('installments_data', 'is', null);
+      const overdueByCustomer = new Map<string, CustomerInvoiceOverdue>();
 
-      if (error) throw error;
+      const addInvoiceToCustomer = (inv: OverdueInvoice) => {
+        const key = inv.customerId || `name:${inv.customerName}`;
+        if (!overdueByCustomer.has(key)) {
+          overdueByCustomer.set(key, {
+            customerId: inv.customerId,
+            customerName: inv.customerName,
+            totalOverdue: 0,
+            overdueCount: 0,
+            oldestDaysOverdue: 0,
+            invoices: [],
+          });
+        }
+        const data = overdueByCustomer.get(key)!;
+        data.invoices.push(inv);
+        data.totalOverdue += inv.remainingAmount;
+        data.overdueCount += 1;
+        data.oldestDaysOverdue = Math.max(data.oldestDaysOverdue, inv.daysOverdue);
+      };
 
-      const overdueByCustomer = new Map<string, CustomerOverdue>();
-      const contractNumbers = (contracts || []).map(c => c.Contract_Number);
-      const { data: allPayments } = contractNumbers.length > 0
-        ? await supabase
-            .from('customer_payments')
-            .select('contract_number, amount, paid_at')
-            .in('contract_number', contractNumbers)
-        : { data: [] };
+      // 1. فواتير المبيعات
+      const { data: salesInvoices } = await supabase
+        .from('sales_invoices')
+        .select('id, invoice_number, invoice_name, customer_name, customer_id, total_amount, paid_amount, remaining_amount, invoice_date')
+        .eq('paid', false);
 
-      const paymentsByContract = new Map<number, { amount: number; paid_at: string }[]>();
-      (allPayments || []).forEach((p: any) => {
-        if (!paymentsByContract.has(p.contract_number)) 
-          paymentsByContract.set(p.contract_number, []);
-        paymentsByContract.get(p.contract_number)!.push({ 
-          amount: Number(p.amount) || 0, 
-          paid_at: p.paid_at 
-        });
-      });
+      for (const inv of salesInvoices || []) {
+        const remaining = (inv.remaining_amount != null) 
+          ? inv.remaining_amount 
+          : (inv.total_amount - inv.paid_amount);
+        if (remaining <= 0) continue;
 
-      for (const contract of (contracts || [])) {
-        try {
-          let installments: any[] = [];
-          const rawData = contract.installments_data;
-          if (!rawData) continue;
-          
-          if (typeof rawData === 'string') {
-            try { installments = JSON.parse(rawData); } catch { continue; }
-          } else if (Array.isArray(rawData)) {
-            installments = rawData;
-          } else { continue; }
-
-          const installmentsSorted = installments
-            .filter((i: any) => i.dueDate)
-            .sort((a: any, b: any) => new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime());
-
-          const totalPaidForContract = (paymentsByContract.get(contract.Contract_Number) || [])
-            .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-
-          let paymentsRemaining = totalPaidForContract;
-
-          for (const inst of installmentsSorted) {
-            const dueDate = new Date(inst.dueDate);
-            const diffDays = Math.ceil((today.getTime() - dueDate.getTime()) / (1000 * 60 * 60 * 24));
-
-            if (diffDays > 0) {
-              const currentDue = Number(inst.amount) || 0;
-              const allocated = Math.min(currentDue, Math.max(0, paymentsRemaining));
-              const overdueAmount = Math.max(0, currentDue - allocated);
-              paymentsRemaining = Math.max(0, paymentsRemaining - allocated);
-
-              if (overdueAmount > 0) {
-                const customerId = contract.customer_id || `name:${contract['Customer Name']}`;
-                const customerName = contract['Customer Name'] || 'غير معروف';
-
-                if (!overdueByCustomer.has(customerId)) {
-                  overdueByCustomer.set(customerId, {
-                    customerId: contract.customer_id,
-                    customerName,
-                    totalOverdue: 0,
-                    overdueCount: 0,
-                    oldestDaysOverdue: 0,
-                    installments: [],
-                    unpaidInvoices: [],
-                  });
-                }
-
-                const customerData = overdueByCustomer.get(customerId)!;
-                customerData.installments.push({
-                  contractNumber: contract.Contract_Number,
-                  customerName,
-                  customerId: contract.customer_id,
-                  installmentAmount: overdueAmount,
-                  dueDate: inst.dueDate,
-                  description: inst.description || 'دفعة',
-                  daysOverdue: diffDays,
-                  adType: contract['Ad Type'] || undefined,
-                });
-                customerData.totalOverdue += overdueAmount;
-                customerData.overdueCount += 1;
-                customerData.oldestDaysOverdue = Math.max(customerData.oldestDaysOverdue, diffDays);
-              }
-            }
-          }
-        } catch (e) {
-          console.error('Error parsing contract installments:', e);
+        const invoiceDate = new Date(inv.invoice_date);
+        const diffDays = Math.ceil((today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays > 15) {
+          addInvoiceToCustomer({
+            id: inv.id,
+            invoiceNumber: inv.invoice_number,
+            invoiceName: inv.invoice_name,
+            customerName: inv.customer_name,
+            customerId: inv.customer_id,
+            totalAmount: inv.total_amount,
+            paidAmount: inv.paid_amount,
+            remainingAmount: remaining,
+            invoiceDate: inv.invoice_date,
+            daysOverdue: diffDays,
+            type: 'sales',
+          });
         }
       }
 
-      setLoadedCustomerOverdues(Array.from(overdueByCustomer.values()));
+      // 2. فواتير الطباعة
+      const { data: printInvoices } = await supabase
+        .from('printed_invoices')
+        .select('id, invoice_number, customer_name, customer_id, total_amount, paid_amount, invoice_date, printer_name')
+        .eq('paid', false);
+
+      for (const inv of printInvoices || []) {
+        const total = Number(inv.total_amount) || 0;
+        const paid = Number(inv.paid_amount) || 0;
+        const remaining = total - paid;
+        if (remaining <= 0) continue;
+
+        const invoiceDate = new Date(inv.invoice_date);
+        const diffDays = Math.ceil((today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays > 15) {
+          addInvoiceToCustomer({
+            id: inv.id,
+            invoiceNumber: inv.invoice_number,
+            invoiceName: inv.printer_name ? `طباعة - ${inv.printer_name}` : null,
+            customerName: inv.customer_name || 'غير معروف',
+            customerId: inv.customer_id,
+            totalAmount: total,
+            paidAmount: paid,
+            remainingAmount: remaining,
+            invoiceDate: inv.invoice_date,
+            daysOverdue: diffDays,
+            type: 'print',
+          });
+        }
+      }
+
+      // 3. المهام المجمعة
+      const { data: tasks } = await supabase
+        .from('composite_tasks')
+        .select('id, task_number, task_type, customer_name, customer_id, customer_total, paid_amount, created_at, status')
+        .not('status', 'eq', 'cancelled');
+
+      for (const task of tasks || []) {
+        const customerTotal = Number(task.customer_total) || 0;
+        const paidAmount = Number(task.paid_amount) || 0;
+        const remaining = customerTotal - paidAmount;
+        if (remaining <= 0 || customerTotal <= 0) continue;
+
+        const createdAt = new Date(task.created_at || '');
+        const diffDays = Math.ceil((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        
+        if (diffDays > 15) {
+          addInvoiceToCustomer({
+            id: task.id,
+            invoiceNumber: String(task.task_number),
+            invoiceName: getTaskTypeLabel(task.task_type),
+            customerName: task.customer_name || 'غير معروف',
+            customerId: task.customer_id,
+            totalAmount: customerTotal,
+            paidAmount: paidAmount,
+            remainingAmount: remaining,
+            invoiceDate: task.created_at || '',
+            daysOverdue: diffDays,
+            type: 'composite',
+          });
+        }
+      }
+
+      setCustomerOverdues(Array.from(overdueByCustomer.values()));
     } catch (error) {
-      console.error('Error loading customer overdues:', error);
-      toast.error('خطأ في تحميل بيانات الزبائن');
+      console.error('Error loading overdue invoices:', error);
+      toast.error('خطأ في تحميل الفواتير المتأخرة');
     } finally {
       setLoading(false);
     }
@@ -588,7 +410,6 @@ export function SendOverdueRemindersDialog({
       const customerIds = customerOverdues
         .map(c => c.customerId)
         .filter(id => id !== null) as string[];
-
       const customerNames = customerOverdues
         .filter(c => !c.customerId)
         .map(c => c.customerName);
@@ -668,67 +489,39 @@ export function SendOverdueRemindersDialog({
     }
   };
 
-  const generateCustomerMessage = (customer: CustomerOverdue): string => {
+  const generateCustomerMessage = (customer: CustomerInvoiceOverdue): string => {
     if (messageMode === 'minimal') {
-      return applyOverdueTemplate(minimalTemplate, {
-        customerName: customer.customerName,
-        paymentDetails: '',
-        totalOverdue: 0,
-      });
+      return `السلام عليكم ورحمة الله وبركاته\n\nالسيد/ ${customer.customerName} المحترم،\n\nنود تذكيركم بأن لديكم فواتير متأخرة السداد.\n\nنرجو المبادرة بالسداد في أقرب وقت ممكن.\n\nللاستفسار أو التنسيق يرجى التواصل معنا.\n\nنشكر لكم حسن تعاونكم،\nمع فائق التقدير والاحترام`;
     }
 
     if (messageMode === 'summary') {
-      return applyOverdueTemplate(summaryTemplate, {
-        customerName: customer.customerName,
-        paymentDetails: '',
-        totalOverdue: customer.totalOverdue,
-      });
+      return `السلام عليكم ورحمة الله وبركاته\n\nالسيد/ ${customer.customerName} المحترم،\n\nنود تذكيركم بأن عليكم فواتير متأخرة بقيمة ${formatAmount(customer.totalOverdue)} د.ل.\n\nنرجو المبادرة بالسداد في أقرب وقت ممكن.\n\nللاستفسار أو التنسيق يرجى التواصل معنا.\n\nنشكر لكم حسن تعاونكم،\nمع فائق التقدير والاحترام`;
     }
 
-    let details = '';
-    const contractGroups = new Map<number, OverdueInstallment[]>();
-    customer.installments.forEach(inst => {
-      if (!contractGroups.has(inst.contractNumber)) contractGroups.set(inst.contractNumber, []);
-      contractGroups.get(inst.contractNumber)!.push(inst);
-    });
-
-    if (contractGroups.size > 0) {
-      details += `*دفعات العقود المتأخرة:*\n`;
-      let idx = 1;
-      contractGroups.forEach((installments, contractNumber) => {
-        const adType = installments[0]?.adType;
-        const contractLabel = adType ? `عقد #${contractNumber} (${adType})` : `عقد #${contractNumber}`;
-        details += `\n${idx}. ${contractLabel}\n`;
-        installments.forEach(inst => {
-          details += `   - دفعة متأخرة: ${formatAmount(inst.installmentAmount)} د.ل\n`;
-          details += `     تاريخ الاستحقاق: ${new Date(inst.dueDate).toLocaleDateString('ar-LY')}\n`;
-          details += `     التأخير: ${inst.daysOverdue} يوم\n`;
-        });
-        idx++;
-      });
+    // detailed
+    let details = '*فواتير متأخرة:*\n';
+    let idx = 1;
+    for (const inv of customer.invoices) {
+      const typeBadge = getTypeLabel(inv.type);
+      const nameLabel = inv.invoiceName ? ` - ${inv.invoiceName}` : '';
+      if (inv.type === 'composite') {
+        details += `\n${idx}. مهمة مجمعة #${inv.invoiceNumber}${nameLabel}\n`;
+      } else {
+        details += `\n${idx}. فاتورة ${typeBadge} #${inv.invoiceNumber}${nameLabel}\n`;
+      }
+      details += `   المبلغ المتبقي: ${formatAmount(inv.remainingAmount)} د.ل\n`;
+      details += `   التأخير: ${inv.daysOverdue} يوم\n`;
+      idx++;
     }
 
-    if (customer.unpaidInvoices.length > 0) {
-      details += `\n*فواتير إضافية غير مسددة:*\n`;
-      customer.unpaidInvoices.forEach((inv, idx) => {
-        details += `${idx + 1}. عقد #${inv.contractNumber}\n`;
-        details += `   المبلغ: ${formatAmount(inv.amount)} د.ل\n`;
-        details += `   مدة التأخير: ${inv.daysOverdue} يوم\n`;
-      });
-    }
-
-    return applyOverdueTemplate(overdueTemplate, {
-      customerName: customer.customerName,
-      paymentDetails: details.trim(),
-      totalOverdue: customer.totalOverdue,
-    });
+    return `السلام عليكم ورحمة الله وبركاته\n\nالسيد/ ${customer.customerName} المحترم،\n\nنود إعلامكم بأن لديكم فواتير متأخرة السداد:\n\n${details.trim()}\n\nإجمالي المبلغ المستحق: ${formatAmount(customer.totalOverdue)} د.ل\n\nنرجو المبادرة بالسداد في أقرب وقت ممكن.\n\nللاستفسار أو التنسيق يرجى التواصل معنا.\n\nنشكر لكم حسن تعاونكم،\nمع فائق التقدير والاحترام`;
   };
 
   const generateManagementReport = (): string => {
     const totalOverdue = customerOverdues.reduce((sum, c) => sum + c.totalOverdue, 0);
     const selectedData = customersWithPhone.filter(c => selectedCustomers.has(c.customerId || c.customerName));
     
-    let report = `*تقرير الدفعات المتأخرة*\n---------------\n\n`;
+    let report = `*تقرير الفواتير والمهام المتأخرة*\n---------------\n\n`;
     report += `التاريخ: ${new Date().toLocaleDateString('ar', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n`;
     report += `*الملخص التنفيذي:*\n`;
     report += `- عدد الزبائن المتأخرين: ${customerOverdues.length}\n`;
@@ -740,7 +533,12 @@ export function SendOverdueRemindersDialog({
         report += `${idx + 1}. *${customer.customerName}*\n`;
         report += `   - المبلغ المتأخر: ${formatAmount(customer.totalOverdue)} د.ل\n`;
         report += `   - أقدم تأخير: ${customer.oldestDaysOverdue} يوم\n`;
-        report += `   - عدد الدفعات: ${customer.overdueCount}\n\n`;
+        report += `   - عدد الفواتير: ${customer.overdueCount}\n`;
+        customer.invoices.forEach(inv => {
+          const nameLabel = inv.invoiceName ? ` (${inv.invoiceName})` : '';
+          report += `     -- ${getTypeLabel(inv.type)} #${inv.invoiceNumber}${nameLabel}: ${formatAmount(inv.remainingAmount)} د.ل\n`;
+        });
+        report += '\n';
       });
       if (selectedData.length > 15) {
         report += `... و ${selectedData.length - 15} زبون آخر\n\n`;
@@ -823,7 +621,7 @@ export function SendOverdueRemindersDialog({
 
     if (errorCount === 0) {
       setTimeout(() => {
-        setOpen(false);
+        onOpenChange(false);
         setSelectedCustomers(new Set());
         setSelectedManagement(new Set());
         setSendingStatus(new Map());
@@ -850,7 +648,6 @@ export function SendOverdueRemindersDialog({
     .filter(c => selectedCustomers.has(c.customerId || c.customerName))
     .reduce((s, c) => s + c.totalOverdue, 0);
 
-  // شريط البحث والفلاتر
   const searchAndFiltersBar = (
     <div className="flex flex-col sm:flex-row gap-2 mb-3">
       <div className="flex-1 relative">
@@ -870,7 +667,7 @@ export function SendOverdueRemindersDialog({
           <SelectItem value="overdue_desc">المتأخر (الأعلى)</SelectItem>
           <SelectItem value="overdue_asc">المتأخر (الأقل)</SelectItem>
           <SelectItem value="oldest">أقدم تأخير</SelectItem>
-          <SelectItem value="count">عدد الدفعات</SelectItem>
+          <SelectItem value="count">عدد الفواتير</SelectItem>
           <SelectItem value="name">الاسم</SelectItem>
         </SelectContent>
       </Select>
@@ -883,26 +680,19 @@ export function SendOverdueRemindersDialog({
   );
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="default" size="lg" className="gap-2">
-          <MessageSquare className="h-5 w-5" />
-          إرسال تنبيهات واتساب
-        </Button>
-      </DialogTrigger>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[92dvh] w-[95vw] sm:w-auto p-0 gap-0 overflow-hidden" dir="rtl">
         {/* Header */}
         <div className="bg-gradient-to-l from-orange-500/10 via-orange-500/5 to-transparent border-b px-3 py-3 sm:px-6 sm:py-5">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 sm:gap-3 text-base sm:text-xl font-bold">
               <div className="p-1.5 sm:p-2 rounded-lg bg-orange-500/10">
-                <Clock className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
+                <Receipt className="h-4 w-4 sm:h-5 sm:w-5 text-orange-600" />
               </div>
-              تنبيهات الدفعات المتأخرة
+              تنبيهات الفواتير والمهام المتأخرة
             </DialogTitle>
           </DialogHeader>
 
-          {/* Summary stats */}
           {!loading && !loadingPhones && customersWithPhone.length > 0 && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3 mt-3 sm:mt-4">
               <div className="bg-background/80 backdrop-blur rounded-lg p-3 border">
@@ -914,7 +704,7 @@ export function SendOverdueRemindersDialog({
                 <div className="text-xl font-bold text-destructive">{formatAmount(totalOverdueAmount)} <span className="text-sm">د.ل</span></div>
               </div>
               <div className="bg-background/80 backdrop-blur rounded-lg p-3 border border-orange-500/20">
-                <div className="text-xs text-muted-foreground mb-1">عدد الدفعات المتأخرة</div>
+                <div className="text-xs text-muted-foreground mb-1">عدد الفواتير المتأخرة</div>
                 <div className="text-xl font-bold text-orange-600">{totalOverdueCount}</div>
               </div>
               {selectedCustomers.size > 0 && (
@@ -939,8 +729,8 @@ export function SendOverdueRemindersDialog({
               <div className="p-4 rounded-full bg-green-500/10">
                 <CheckCircle2 className="h-10 w-10 text-green-500" />
               </div>
-              <p className="text-lg font-semibold">لا توجد دفعات متأخرة</p>
-              <p className="text-sm text-muted-foreground">جميع الزبائن ملتزمون بالسداد أو لا توجد أرقام هواتف</p>
+              <p className="text-lg font-semibold">لا توجد فواتير متأخرة</p>
+              <p className="text-sm text-muted-foreground">جميع الفواتير مسددة أو لا توجد أرقام هواتف</p>
             </div>
           ) : (
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col h-full">
@@ -961,7 +751,6 @@ export function SendOverdueRemindersDialog({
 
               {/* Manual Tab */}
               <TabsContent value="manual" className="px-3 sm:px-6 py-3 sm:py-4 mt-0 flex-1 overflow-auto">
-                {/* خيار نوع الرسالة */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
                   <Label className="text-sm font-semibold shrink-0">نوع الرسالة:</Label>
                   <RadioGroup
@@ -971,7 +760,7 @@ export function SendOverdueRemindersDialog({
                   >
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <RadioGroupItem value="detailed" />
-                      <span className="text-sm">مفصل (تفاصيل الدفعات)</span>
+                      <span className="text-sm">مفصل (تفاصيل الفواتير)</span>
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer">
                       <RadioGroupItem value="summary" />
@@ -988,18 +777,11 @@ export function SendOverdueRemindersDialog({
                   <div className="space-y-3 pl-1">
                     {filteredCustomers.map((customer) => {
                       const id = customer.customerId || customer.customerName;
-                      // أخذ أول صورة تصميم متوفرة من عقود الزبون
-                      const customerContractNumbers = [...new Set(customer.installments.map(i => i.contractNumber))];
-                      const designUrl = customerContractNumbers.reduce<string | undefined>((found, cn) => {
-                        if (found) return found;
-                        return contractDesigns.get(cn);
-                      }, undefined);
                       return (
-                        <ManualOverdueRow
+                        <ManualInvoiceRow
                           key={id}
                           customer={customer}
                           message={manualMessages.get(id) || generateCustomerMessage(customer)}
-                          designImageUrl={designUrl}
                           onMessageChange={(newMsg) => {
                             const updated = new Map(manualMessages);
                             updated.set(id, newMsg);
@@ -1083,16 +865,20 @@ export function SendOverdueRemindersDialog({
                       <Label className="text-sm font-semibold mb-3 block">نوع الرسالة</Label>
                       <RadioGroup
                         value={messageMode}
-                        onValueChange={(v) => setMessageMode(v as 'detailed' | 'summary')}
+                        onValueChange={(v) => setMessageMode(v as 'detailed' | 'summary' | 'minimal')}
                         className="flex gap-4"
                       >
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <RadioGroupItem value="detailed" />
-                          <span className="text-sm">مفصل (تفاصيل الدفعات)</span>
+                          <span className="text-sm">مفصل (تفاصيل الفواتير)</span>
                         </label>
                         <label className="flex items-center gap-1.5 cursor-pointer">
                           <RadioGroupItem value="summary" />
-                          <span className="text-sm">مختصر (المبلغ المتأخر فقط)</span>
+                          <span className="text-sm">مختصر (المبلغ فقط)</span>
+                        </label>
+                        <label className="flex items-center gap-1.5 cursor-pointer">
+                          <RadioGroupItem value="minimal" />
+                          <span className="text-sm">مختصر (بدون مبلغ)</span>
                         </label>
                       </RadioGroup>
                     </div>
@@ -1105,11 +891,11 @@ export function SendOverdueRemindersDialog({
                       <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                         <div className="flex items-center gap-2">
                           <Checkbox
-                            id="sel-all-c-overdue"
+                            id="sel-all-c-inv"
                             checked={selectedCustomers.size === filteredCustomers.length && filteredCustomers.length > 0}
                             onCheckedChange={toggleAllCustomers}
                           />
-                          <label htmlFor="sel-all-c-overdue" className="font-semibold text-sm cursor-pointer">
+                          <label htmlFor="sel-all-c-inv" className="font-semibold text-sm cursor-pointer">
                             الكل ({filteredCustomers.length})
                           </label>
                         </div>
@@ -1136,8 +922,8 @@ export function SendOverdueRemindersDialog({
                                   <div className="font-medium text-sm truncate">{customer.customerName}</div>
                                   <div className="text-xs text-muted-foreground flex items-center gap-2">
                                     <span>{customer.phone}</span>
-                                    <span>• {customer.overdueCount} دفعة</span>
-                                    <span>• أقدم تأخير: {customer.oldestDaysOverdue} يوم</span>
+                                    <span>- {customer.overdueCount} فاتورة</span>
+                                    <span>- أقدم تأخير: {customer.oldestDaysOverdue} يوم</span>
                                   </div>
                                 </div>
                                 <Badge variant="destructive" className="text-xs shrink-0">
@@ -1172,11 +958,11 @@ export function SendOverdueRemindersDialog({
                           <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
                             <div className="flex items-center gap-2">
                               <Checkbox
-                                id="sel-all-m-overdue"
+                                id="sel-all-m-inv"
                                 checked={selectedManagement.size === managementPhones.length}
                                 onCheckedChange={toggleAllManagement}
                               />
-                              <label htmlFor="sel-all-m-overdue" className="font-semibold text-sm cursor-pointer">
+                              <label htmlFor="sel-all-m-inv" className="font-semibold text-sm cursor-pointer">
                                 الكل ({managementPhones.length})
                               </label>
                             </div>
@@ -1214,7 +1000,7 @@ export function SendOverdueRemindersDialog({
 
                 {/* Footer for auto tab */}
                 <div className="flex items-center justify-between pt-4 mt-4 border-t">
-                  <Button variant="outline" onClick={() => setOpen(false)} disabled={sending}>
+                  <Button variant="outline" onClick={() => onOpenChange(false)} disabled={sending}>
                     إلغاء
                   </Button>
                   <Button

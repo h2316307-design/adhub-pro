@@ -160,7 +160,7 @@ export function TopOverduePayments() {
                     
                     <div className="flex items-center gap-1 font-bold text-red-400 mt-2">
                       <DollarSign className="h-4 w-4" />
-                      {payment.amount.toLocaleString('ar-LY')} د.ل
+                      {payment.amount.toLocaleString('en-US')} د.ل
                     </div>
                   </div>
                   

@@ -26,7 +26,7 @@ export async function loadLogoAsDataUri(logoPath: string): Promise<string> {
  * تنسيق الرقم بالعربية
  */
 export function formatArabicNumber(num: number): string {
-  return num.toLocaleString('ar-LY', {
+  return num.toLocaleString('en-US', {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2
   });
@@ -115,5 +115,5 @@ export function numberToArabicWords(num: number): string {
     return result;
   }
   
-  return num.toLocaleString('ar-LY');
+  return num.toLocaleString('en-US');
 }

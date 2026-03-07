@@ -437,7 +437,7 @@ export default function OverduePayments() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-destructive">
-              {totalOverdue.toLocaleString('ar-LY')} <span className="text-lg">د.ل</span>
+              {totalOverdue.toLocaleString('en-US')} <span className="text-lg">د.ل</span>
             </div>
           </CardContent>
         </Card>
@@ -526,7 +526,7 @@ export default function OverduePayments() {
                           الفواتير
                         </Button>
                         <Badge variant="destructive" className="text-lg px-3 py-1">
-                          {customer.totalOverdue.toLocaleString('ar-LY')} د.ل
+                          {customer.totalOverdue.toLocaleString('en-US')} د.ل
                         </Badge>
                       </div>
                     </div>
@@ -562,7 +562,7 @@ export default function OverduePayments() {
                                   </Badge>
                                 </div>
                                 <div className="text-sm text-muted-foreground space-y-1">
-                                  <div><strong>المبلغ:</strong> {installment.installmentAmount.toLocaleString('ar-LY')} د.ل</div>
+                                  <div><strong>المبلغ:</strong> {installment.installmentAmount.toLocaleString('en-US')} د.ل</div>
                                   <div><strong>تاريخ الاستحقاق:</strong> {new Date(installment.dueDate).toLocaleDateString('ar-LY')}</div>
                                   <div><strong>الوصف:</strong> {installment.description}</div>
                                 </div>
@@ -628,7 +628,7 @@ export default function OverduePayments() {
                                   </Badge>
                                 </div>
                                 <div className="text-sm text-gray-700 space-y-1">
-                                  <div><strong>المبلغ:</strong> {invoice.amount.toLocaleString('ar-LY')} د.ل</div>
+                                  <div><strong>المبلغ:</strong> {invoice.amount.toLocaleString('en-US')} د.ل</div>
                                   <div><strong>تاريخ الإصدار:</strong> {new Date(invoice.createdAt).toLocaleDateString('ar-LY')}</div>
                                 </div>
                               </div>
@@ -691,7 +691,7 @@ export default function OverduePayments() {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">المبلغ المستحق:</span>
-                  <span className="font-bold text-destructive">{paymentDialog.installment.installmentAmount.toLocaleString('ar-LY')} د.ل</span>
+                  <span className="font-bold text-destructive">{paymentDialog.installment.installmentAmount.toLocaleString('en-US')} د.ل</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">أيام التأخير:</span>

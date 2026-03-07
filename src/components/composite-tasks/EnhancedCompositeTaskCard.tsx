@@ -465,7 +465,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           <div className="flex flex-col items-end gap-1">
             <div className="text-[11px] text-muted-foreground">المستحق على الزبون</div>
             <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {(task.customer_total || (task.customer_installation_cost + task.customer_print_cost + task.customer_cutout_cost)).toLocaleString('ar-LY')} د.ل
+              {(task.customer_total || (task.customer_installation_cost + task.customer_print_cost + task.customer_cutout_cost)).toLocaleString('en-US')} د.ل
             </div>
             <div className="text-xs text-muted-foreground">
               {format(new Date(task.created_at), 'dd MMM yyyy', { locale: ar })}
@@ -498,7 +498,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
               <div className="flex-1">
                 <div className="text-sm font-medium text-muted-foreground">التركيب</div>
                 <div className="text-lg font-bold text-primary">
-                  {task.customer_installation_cost.toLocaleString('ar-LY')} د.ل
+                  {task.customer_installation_cost.toLocaleString('en-US')} د.ل
                 </div>
                 {task.task_type === 'reinstallation' && task.customer_installation_cost > 0 && (
                   <div className="text-[10px] text-orange-500 mt-0.5">
@@ -520,7 +520,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
                 <div className="flex-1">
                   <div className="text-sm font-medium text-muted-foreground">الطباعة</div>
                   <div className="text-lg font-bold text-accent">
-                    {task.customer_print_cost.toLocaleString('ar-LY')} د.ل
+                    {task.customer_print_cost.toLocaleString('en-US')} د.ل
                   </div>
                 </div>
               </div>
@@ -535,7 +535,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
                 <div className="flex-1">
                   <div className="text-sm font-medium text-muted-foreground">القص</div>
                   <div className="text-lg font-bold text-purple-600 dark:text-purple-400">
-                    {task.customer_cutout_cost.toLocaleString('ar-LY')} د.ل
+                    {task.customer_cutout_cost.toLocaleString('en-US')} د.ل
                   </div>
                 </div>
               </div>
@@ -549,7 +549,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
                 إجمالي المستحق على الزبون
               </span>
               <span className="text-2xl font-bold text-primary">
-                {(task.customer_total || (task.customer_installation_cost + task.customer_print_cost + task.customer_cutout_cost)).toLocaleString('ar-LY')} د.ل
+                {(task.customer_total || (task.customer_installation_cost + task.customer_print_cost + task.customer_cutout_cost)).toLocaleString('en-US')} د.ل
               </span>
             </div>
           </div>
@@ -562,7 +562,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
               <span className="text-sm text-red-700 dark:text-red-400">
                 خصم {task.discount_reason && <span className="text-xs">({task.discount_reason})</span>}
               </span>
-              <span className="font-bold text-red-600">- {(task.discount_amount || 0).toLocaleString('ar-LY')} د.ل</span>
+              <span className="font-bold text-red-600">- {(task.discount_amount || 0).toLocaleString('en-US')} د.ل</span>
             </div>
           </div>
         )}

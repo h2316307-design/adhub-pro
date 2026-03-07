@@ -659,7 +659,7 @@ export default function ContractCreate() {
                   <div>
                     <label className="expenses-form-label block mb-2">إجمالي تكلفة الطباعة</label>
                     <div className="px-4 py-3 rounded bg-muted text-card-foreground font-bold">
-                      {printCostTotal.toLocaleString('ar-LY')} {currentCurrency.symbol}
+                      {printCostTotal.toLocaleString('en-US')} {currentCurrency.symbol}
                     </div>
                   </div>
                 </div>
@@ -746,14 +746,14 @@ export default function ContractCreate() {
               <div>
                 <label className="expenses-form-label block mb-2">صافي الإيجار (أساس الحساب)</label>
                 <div className="px-4 py-3 rounded bg-muted text-card-foreground font-bold">
-                  {rentalCostOnly.toLocaleString('ar-LY')} {currentCurrency.symbol}
+                  {rentalCostOnly.toLocaleString('en-US')} {currentCurrency.symbol}
                 </div>
               </div>
               
               <div>
                 <label className="expenses-form-label block mb-2">رسوم التشغيل المحسوبة</label>
                 <div className="px-4 py-3 rounded bg-primary/10 text-primary font-bold">
-                  {operatingFee.toLocaleString('ar-LY')} {currentCurrency.symbol}
+                  {operatingFee.toLocaleString('en-US')} {currentCurrency.symbol}
                 </div>
               </div>
             </div>
@@ -789,7 +789,7 @@ export default function ContractCreate() {
                   <div>
                     <label className="expenses-form-label block mb-2">إجمالي تكلفة التركيب</label>
                     <div className="px-4 py-3 rounded bg-orange/10 text-orange font-bold">
-                      {convertPrice(installationCost).toLocaleString('ar-LY')} {currentCurrency.symbol}
+                      {convertPrice(installationCost).toLocaleString('en-US')} {currentCurrency.symbol}
                     </div>
                   </div>
                   

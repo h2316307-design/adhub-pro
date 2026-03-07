@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { formatAmount } from '@/lib/formatUtils';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -103,7 +104,7 @@ export function SendPaymentsReportDialog({ open, onOpenChange, payments }: SendP
     let msg = `*تقرير الدفعات والإيصالات خلال ${periodLabels[period]}*\n`;
     msg += `تاريخ التقرير: ${today}\n`;
     msg += `إجمالي المعاملات: ${totalCount}\n`;
-    msg += `إجمالي المبالغ: ${totalAmount.toLocaleString('ar-LY')} د.ل\n`;
+    msg += `إجمالي المبالغ: ${formatAmount(totalAmount)} د.ل\n`;
     msg += `---------------\n\n`;
 
     if (totalCount === 0) {
@@ -116,17 +117,17 @@ export function SendPaymentsReportDialog({ open, onOpenChange, payments }: SendP
           const typeLabel = item.entry_type === 'receipt' ? 'إيصال' : 'دفعة';
           const methodLabel = methodLabels[item.method] || item.method || '';
           const date = item.paid_at ? format(parseISO(item.paid_at), 'yyyy/MM/dd') : '';
-          msg += `${i + 1}. ${typeLabel} - ${item.amount.toLocaleString('ar-LY')} د.ل - ${date}`;
+          msg += `${i + 1}. ${typeLabel} - ${formatAmount(item.amount)} د.ل - ${date}`;
           if (methodLabel) msg += ` - ${methodLabel}`;
           if (item.contract_number) msg += ` - عقد #${item.contract_number}`;
           msg += `\n`;
         });
-        msg += `إجمالي العميل: ${group.total.toLocaleString('ar-LY')} د.ل\n`;
+        msg += `إجمالي العميل: ${formatAmount(group.total)} د.ل\n`;
         if (gi < groups.length - 1) msg += `\n---------------\n\n`;
       });
 
       msg += `\n---------------\n`;
-      msg += `*الإجمالي: ${totalCount} معاملة - ${totalAmount.toLocaleString('ar-LY')} د.ل*`;
+      msg += `*الإجمالي: ${totalCount} معاملة - ${formatAmount(totalAmount)} د.ل*`;
     }
 
     return msg;
@@ -203,7 +204,7 @@ export function SendPaymentsReportDialog({ open, onOpenChange, payments }: SendP
               <div className="text-xs text-muted-foreground mt-1">معاملة</div>
             </div>
             <div className="rounded-xl border-2 border-accent/30 bg-accent/5 p-4 text-center">
-              <div className="text-lg font-bold text-foreground">{totalAmount.toLocaleString('ar-LY')} د.ل</div>
+              <div className="text-lg font-bold text-foreground">{formatAmount(totalAmount)} د.ل</div>
               <div className="text-xs text-muted-foreground mt-1">إجمالي المبالغ</div>
             </div>
           </div>
@@ -220,13 +221,13 @@ export function SendPaymentsReportDialog({ open, onOpenChange, payments }: SendP
                   {Object.values(groupedByCustomer).map((group, gi) => (
                     <div key={gi} className="border-b border-border/30 pb-2 last:border-0">
                       <div className="font-semibold text-sm mb-1">
-                        {group.customerName} ({group.items.length} معاملة - {group.total.toLocaleString('ar-LY')} د.ل)
+                        {group.customerName} ({group.items.length} معاملة - {formatAmount(group.total)} د.ل)
                       </div>
                       {group.items.map((item) => {
                         const typeLabel = item.entry_type === 'receipt' ? 'إيصال' : 'دفعة';
                         return (
                           <div key={item.id} className="flex justify-between items-center py-0.5 pr-3">
-                            <span>{typeLabel} - {item.amount.toLocaleString('ar-LY')} د.ل</span>
+                            <span>{typeLabel} - {formatAmount(item.amount)} د.ل</span>
                             <span className="text-muted-foreground">{item.paid_at ? format(parseISO(item.paid_at), 'yyyy/MM/dd') : ''}</span>
                           </div>
                         );

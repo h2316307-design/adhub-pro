@@ -162,16 +162,16 @@ export const InstallmentManager: React.FC<InstallmentManagerProps> = ({
             <div className="flex justify-between text-sm">
               <span>إجمالي الدفعات:</span>
               <span className="font-medium">
-                {installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString('ar-LY')} د.ل
+                {installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString('en-US')} د.ل
               </span>
             </div>
             <div className="flex justify-between text-sm">
               <span>إجمالي العقد:</span>
-              <span className="font-bold text-primary">{finalTotal.toLocaleString('ar-LY')} د.ل</span>
+              <span className="font-bold text-primary">{finalTotal.toLocaleString('en-US')} د.ل</span>
             </div>
             {Math.abs(installments.reduce((sum, inst) => sum + inst.amount, 0) - finalTotal) > 1 && (
               <div className="text-xs text-red-600 font-medium bg-red-50 p-2 rounded">
-                تحذير: مجموع الدفعات ({installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString('ar-LY')} د.ل) لا يساوي إجمالي العقد ({finalTotal.toLocaleString('ar-LY')} د.ل)
+                تحذير: مجموع الدفعات ({installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString('en-US')} د.ل) لا يساوي إجمالي العقد ({finalTotal.toLocaleString('en-US')} د.ل)
               </div>
             )}
             {Math.abs(installments.reduce((sum, inst) => sum + inst.amount, 0) - finalTotal) <= 1 && (

@@ -85,7 +85,7 @@ export default function GeneralTransactionsSection({
               <span className="text-sm font-medium text-red-300">إجمالي الواردات</span>
             </div>
             <div className="text-3xl font-bold text-red-400 mb-1">
-              {totalDebits.toLocaleString('ar-LY')}
+              {totalDebits.toLocaleString('en-US')}
               <span className="text-sm font-normal text-red-300/70 mr-1">د.ل</span>
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -106,7 +106,7 @@ export default function GeneralTransactionsSection({
               <span className="text-sm font-medium text-green-300">إجمالي الصادرات</span>
             </div>
             <div className="text-3xl font-bold text-green-400 mb-1">
-              {totalCredits.toLocaleString('ar-LY')}
+              {totalCredits.toLocaleString('en-US')}
               <span className="text-sm font-normal text-green-300/70 mr-1">د.ل</span>
             </div>
             <p className="text-xs text-muted-foreground flex items-center gap-1">
@@ -137,7 +137,7 @@ export default function GeneralTransactionsSection({
               </span>
             </div>
             <div className={`text-3xl font-bold mb-1 ${netBalance > 0 ? 'text-amber-400' : 'text-blue-400'}`}>
-              {Math.abs(netBalance).toLocaleString('ar-LY')}
+              {Math.abs(netBalance).toLocaleString('en-US')}
               <span className={`text-sm font-normal mr-1 ${netBalance > 0 ? 'text-amber-300/70' : 'text-blue-300/70'}`}>
                 د.ل
               </span>
@@ -212,7 +212,7 @@ export default function GeneralTransactionsSection({
                   <div className="flex items-center gap-4">
                     <div className="text-left">
                       <div className="text-xl font-bold text-red-400">
-                        {Number(transaction.amount).toLocaleString('ar-LY')}
+                        {Number(transaction.amount).toLocaleString('en-US')}
                         <span className="text-sm font-normal text-red-300/70 mr-1">د.ل</span>
                       </div>
                       {transaction.method && (
@@ -282,7 +282,7 @@ export default function GeneralTransactionsSection({
                   <div className="flex items-center gap-4">
                     <div className="text-left">
                       <div className="text-xl font-bold text-green-400">
-                        {Number(transaction.amount).toLocaleString('ar-LY')}
+                        {Number(transaction.amount).toLocaleString('en-US')}
                         <span className="text-sm font-normal text-green-300/70 mr-1">د.ل</span>
                       </div>
                       {transaction.method && (

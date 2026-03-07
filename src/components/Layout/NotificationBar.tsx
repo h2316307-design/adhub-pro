@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   Bell, ChevronDown, ChevronUp, DollarSign, CalendarClock,
   Wrench, Trash2, ClipboardList, CreditCard, BookOpen, HardHat,
-  ExternalLink, X,
+  ExternalLink, X, Activity,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
@@ -24,6 +24,7 @@ const categoryConfig: Record<string, { icon: typeof Bell; link: string; color: s
   'مهام إزالة':        { icon: Trash2,         link: '/admin/removal-tasks',         color: 'text-orange-600 dark:text-orange-400',  bg: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800/50' },
   'مهام مجمعة':        { icon: ClipboardList,  link: '/admin/composite-tasks',       color: 'text-indigo-600 dark:text-indigo-400',  bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/50' },
   'آخر الدفعات':       { icon: CreditCard,     link: '/admin/payments',              color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/50' },
+  'آخر الحركات':       { icon: Activity,       link: '/admin/activity-log',          color: 'text-cyan-600 dark:text-cyan-400',      bg: 'bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800/50' },
   'طلبات حجز':         { icon: BookOpen,       link: '/admin/booking-requests',      color: 'text-purple-600 dark:text-purple-400',  bg: 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/50' },
   'صيانة':             { icon: HardHat,        link: '/admin/billboard-maintenance', color: 'text-yellow-600 dark:text-yellow-400',  bg: 'bg-yellow-50 dark:bg-yellow-950/40 border-yellow-200 dark:border-yellow-800/50' },
 };
@@ -46,7 +47,7 @@ export function NotificationBar() {
 
       const [
         overdueRes, expiringRes, compositeRes, installRes,
-        removalRes, bookingsRes, maintenanceRes, recentPaymentsRes,
+        removalRes, bookingsRes, maintenanceRes, recentPaymentsRes, activityRes,
       ] = await Promise.all([
         supabase.from('Contract').select('Contract_Number, "Customer Name", Remaining, "End Date", "Ad Type"').gt('Remaining', '0').lt('End Date', today).limit(20),
         supabase.from('Contract').select('Contract_Number, "Customer Name", "End Date", "Ad Type"').gte('End Date', today).lte('End Date', nextWeekStr).limit(20),
@@ -56,6 +57,7 @@ export function NotificationBar() {
         supabase.from('booking_requests').select('id, status, total_price, start_date, end_date').eq('status', 'pending').limit(10),
         supabase.from('billboards').select('ID, Billboard_Name, maintenance_status, "Ad_Type"').eq('maintenance_status', 'needs_maintenance').limit(10),
         supabase.from('customer_payments').select('id, amount, customer_name, contract_number, method, paid_at').order('paid_at', { ascending: false }).limit(10),
+        supabase.from('activity_log').select('id, action, entity_type, description, customer_name, contract_number, created_at, details').order('created_at', { ascending: false }).limit(10),
       ]);
 
       for (const c of overdueRes.data || []) {
@@ -134,6 +136,21 @@ export function NotificationBar() {
           details: [b.Billboard_Name || '', adType ? `📋 ${adType}` : '', '🔧 تحتاج صيانة'].filter(Boolean),
         });
       }
+      const actionLabels: Record<string, string> = { create: '➕ إنشاء', update: '✏️ تعديل', delete: '🗑️ حذف' };
+      for (const a of activityRes.data || []) {
+        const actionLabel = actionLabels[a.action] || a.action;
+        const timeStr = new Date(a.created_at).toLocaleTimeString('ar-LY', { hour: '2-digit', minute: '2-digit' });
+        alerts.push({ id: `activity-${a.id}`, type: 'info', category: 'آخر الحركات',
+          message: a.description || 'حركة',
+          details: [
+            actionLabel,
+            a.contract_number ? `عقد #${a.contract_number}` : '',
+            a.customer_name || '',
+            (a.details as any)?.amount ? `💰 ${Number((a.details as any).amount).toLocaleString()} د.ل` : '',
+            `🕐 ${timeStr}`,
+          ].filter(Boolean),
+        });
+      }
       return alerts;
     },
     staleTime: 2 * 60 * 1000,
@@ -148,7 +165,8 @@ export function NotificationBar() {
     return acc;
   }, {} as Record<string, Notification[]>);
 
-  const sortedCategories = categoryOrder.filter(c => grouped[c]);
+  // Always show "آخر الحركات" even if empty
+  const sortedCategories = categoryOrder.filter(c => grouped[c] || c === 'آخر الحركات');
 
   return (
     <div className="shrink-0 border-b border-border/60">
@@ -171,13 +189,18 @@ export function NotificationBar() {
             {sortedCategories.map(cat => {
               const conf = categoryConfig[cat];
               const Icon = conf.icon;
-              const count = grouped[cat].length;
+              const count = (grouped[cat] || []).length;
               const isActive = expandedCat === cat && expanded;
 
               return (
                 <button
                   key={cat}
                   onClick={() => {
+                    // If category has no items, navigate directly to the page
+                    if (count === 0) {
+                      navigate(conf.link);
+                      return;
+                    }
                     if (isActive) {
                       setExpandedCat(null);
                     } else {
@@ -194,12 +217,14 @@ export function NotificationBar() {
                 >
                   <Icon className={cn('h-3.5 w-3.5', isActive ? '' : conf.color)} />
                   <span className="whitespace-nowrap">{cat}</span>
-                  <span className={cn(
-                    'min-w-[20px] h-5 rounded-full text-[11px] font-bold flex items-center justify-center px-1',
-                    isActive ? 'bg-foreground/10' : 'bg-muted'
-                  )}>
-                    {count}
-                  </span>
+                  {count > 0 && (
+                    <span className={cn(
+                      'min-w-[20px] h-5 rounded-full text-[11px] font-bold flex items-center justify-center px-1',
+                      isActive ? 'bg-foreground/10' : 'bg-muted'
+                    )}>
+                      {count}
+                    </span>
+                  )}
                 </button>
               );
             })}

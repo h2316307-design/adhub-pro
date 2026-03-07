@@ -24,9 +24,10 @@ import { TopOverduePayments } from '@/components/customers/TopOverduePayments';
 import { SendAccountStatementDialog } from '@/components/customers/SendAccountStatementDialog';
 import { SendOverdueRemindersDialog } from '@/components/billing/SendOverdueRemindersDialog';
 import { SendDebtRemindersDialog } from '@/components/billing/SendDebtRemindersDialog';
+import { SendOverdueInvoicesRemindersDialog } from '@/components/billing/SendOverdueInvoicesRemindersDialog';
 import { BulkAccountStatementDialog } from '@/components/customers/BulkAccountStatementDialog';
 import { SendDebtReportDialog } from '@/components/customers/SendDebtReportDialog';
-import { Mail, FileSpreadsheet, AlertTriangle, DollarSign, Send } from 'lucide-react';
+import { Mail, FileSpreadsheet, AlertTriangle, DollarSign, Send, Receipt } from 'lucide-react';
 import { getMergedInvoiceStylesAsync } from '@/hooks/useInvoiceSettingsSync';
 import { calculateCustomerFinancials } from '@/hooks/useCustomerFinancials';
 
@@ -370,6 +371,9 @@ export default function Customers() {
   
   // debt report dialog
   const [debtReportOpen, setDebtReportOpen] = useState(false);
+  
+  // invoice reminders dialog state
+  const [invoiceRemindersOpen, setInvoiceRemindersOpen] = useState(false);
   
   // edit discount dialog state
   const [editDiscountOpen, setEditDiscountOpen] = useState(false);
@@ -1359,6 +1363,14 @@ export default function Customers() {
                 <DollarSign className="h-4 w-4 ml-2" />
                 تذكيرات الديون
               </Button>
+              <Button 
+                variant="outline"
+                className="border-orange-500/50 text-orange-600 hover:bg-orange-500/10"
+                onClick={() => setInvoiceRemindersOpen(true)}
+              >
+                <Receipt className="h-4 w-4 ml-2" />
+                تذكيرات الفواتير
+              </Button>
               <Button disabled={syncing} onClick={async () => {
                 try {
                   setSyncing(true);
@@ -2238,6 +2250,12 @@ export default function Customers() {
       <SendDebtRemindersDialog 
         open={debtRemindersOpen} 
         onOpenChange={setDebtRemindersOpen} 
+      />
+      
+      {/* Invoice Reminders Dialog */}
+      <SendOverdueInvoicesRemindersDialog 
+        open={invoiceRemindersOpen} 
+        onOpenChange={setInvoiceRemindersOpen} 
       />
       
       {/* Bulk Account Statement Dialog */}

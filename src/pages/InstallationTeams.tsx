@@ -384,12 +384,12 @@ export default function InstallationTeams() {
                           <div className="flex items-center gap-1">
                             <DollarSign className="h-3 w-3 text-amber-500" />
                             <span className="text-muted-foreground">معلق:</span>
-                            <span className="font-semibold text-amber-600">{account.pending.toLocaleString('ar-LY')}</span>
+                            <span className="font-semibold text-amber-600">{account.pending.toLocaleString('en-US')}</span>
                           </div>
                           <div className="flex items-center gap-1">
                             <DollarSign className="h-3 w-3 text-emerald-500" />
                             <span className="text-muted-foreground">مدفوع:</span>
-                            <span className="font-semibold text-emerald-600">{account.paid.toLocaleString('ar-LY')}</span>
+                            <span className="font-semibold text-emerald-600">{account.paid.toLocaleString('en-US')}</span>
                           </div>
                         </div>
                       </TableCell>

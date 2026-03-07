@@ -713,7 +713,7 @@ export default function ExpenseManagement() {
                 <td>${format(new Date(e.expense_date), 'dd/MM/yyyy')}</td>
                 <td>${e.description}</td>
                 <td>${e.category}</td>
-                <td style="font-weight:700">${Number(e.amount).toLocaleString('ar-LY')} د.ل</td>
+                <td style="font-weight:700">${Number(e.amount).toLocaleString('en-US')} د.ل</td>
                 <td class="${e.payment_status === 'paid' ? 'paid' : 'unpaid'}">${e.payment_status === 'paid' ? '✓ مسدد' : '✗ غير مسدد'}</td>
                 <td>${e.employee_id ? (employees.find(emp => emp.id === e.employee_id)?.name || '-') : '-'}</td>
                 <td>${e.payment_method || '-'}</td>
@@ -724,15 +724,15 @@ export default function ExpenseManagement() {
 
         <div class="totals">
           <div class="total-item">
-            <div class="total-value">${totalAmount.toLocaleString('ar-LY')} د.ل</div>
+            <div class="total-value">${totalAmount.toLocaleString('en-US')} د.ل</div>
             <div class="total-label">إجمالي المصروفات</div>
           </div>
           <div class="total-item">
-            <div class="total-value paid">${paidAmount.toLocaleString('ar-LY')} د.ل</div>
+            <div class="total-value paid">${paidAmount.toLocaleString('en-US')} د.ل</div>
             <div class="total-label">المسدد</div>
           </div>
           <div class="total-item">
-            <div class="total-value unpaid">${unpaidAmount.toLocaleString('ar-LY')} د.ل</div>
+            <div class="total-value unpaid">${unpaidAmount.toLocaleString('en-US')} د.ل</div>
             <div class="total-label">غير المسدد</div>
           </div>
         </div>
@@ -1032,7 +1032,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-red-700 dark:text-red-300">
-                {stats.totalExpenses.toLocaleString('ar-LY')} د.ل
+                {stats.totalExpenses.toLocaleString('en-US')} د.ل
               </div>
             </CardContent>
           </Card>
@@ -1046,7 +1046,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-amber-700 dark:text-amber-300">
-                {stats.totalWithdrawals.toLocaleString('ar-LY')} د.ل
+                {stats.totalWithdrawals.toLocaleString('en-US')} د.ل
               </div>
             </CardContent>
           </Card>
@@ -1060,7 +1060,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-emerald-700 dark:text-emerald-300">
-                {stats.remainingBalance.toLocaleString('ar-LY')} د.ل
+                {stats.remainingBalance.toLocaleString('en-US')} د.ل
               </div>
             </CardContent>
           </Card>
@@ -1074,7 +1074,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-blue-700 dark:text-blue-300">
-                {stats.monthlyExpenses.toLocaleString('ar-LY')} د.ل
+                {stats.monthlyExpenses.toLocaleString('en-US')} د.ل
               </div>
             </CardContent>
           </Card>
@@ -1088,7 +1088,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-purple-700 dark:text-purple-300">
-                {stats.totalSalaries.toLocaleString('ar-LY')} د.ل
+                {stats.totalSalaries.toLocaleString('en-US')} د.ل
               </div>
             </CardContent>
           </Card>
@@ -1117,7 +1117,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-orange-700 dark:text-orange-300">
-                {stats.unpaidExpenses.toLocaleString('ar-LY')} د.ل
+                {stats.unpaidExpenses.toLocaleString('en-US')} د.ل
               </div>
             </CardContent>
           </Card>
@@ -1132,7 +1132,7 @@ export default function ExpenseManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-xl font-bold text-rose-700 dark:text-rose-300">
-                {stats.employeeDues.toLocaleString('ar-LY')} د.ل
+                {stats.employeeDues.toLocaleString('en-US')} د.ل
               </div>
               {stats.employeeDues > 5000 && (
                 <div className="flex items-center gap-1 mt-1 text-xs text-rose-600">
@@ -1278,7 +1278,7 @@ export default function ExpenseManagement() {
                             {format(new Date(withdrawal.date), 'dd/MM/yyyy', { locale: ar })}
                           </TableCell>
                           <TableCell className="font-bold text-destructive">
-                            {Number(withdrawal.amount).toLocaleString('ar-LY')} د.ل
+                            {Number(withdrawal.amount).toLocaleString('en-US')} د.ل
                           </TableCell>
                           <TableCell>
                             <Badge variant="outline">{withdrawal.method}</Badge>
@@ -1750,7 +1750,7 @@ export default function ExpenseManagement() {
                           <TableCell>{format(new Date(expense.expense_date), 'dd/MM/yyyy', { locale: ar })}</TableCell>
                           <TableCell className="font-medium max-w-xs truncate">{expense.description}</TableCell>
                           <TableCell><Badge variant="outline">{expense.category}</Badge></TableCell>
-                          <TableCell className="font-bold">{expense.amount.toLocaleString('ar-LY')} د.ل</TableCell>
+                          <TableCell className="font-bold">{expense.amount.toLocaleString('en-US')} د.ل</TableCell>
                           <TableCell>
                             {expense.payment_status === 'paid' ? (
                               <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
@@ -1811,7 +1811,7 @@ export default function ExpenseManagement() {
                           <SelectContent>
                             {employeeDues.filter(d => d.balance > 0).map(d => (
                               <SelectItem key={d.employee_id} value={d.employee_id}>
-                                {d.employee_name} (مستحق: {d.balance.toLocaleString('ar-LY')} د.ل)
+                                {d.employee_name} (مستحق: {d.balance.toLocaleString('en-US')} د.ل)
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -1861,11 +1861,11 @@ export default function ExpenseManagement() {
                         <TableRow key={d.employee_id}>
                           <TableCell className="font-medium">{d.employee_name}</TableCell>
                           <TableCell>{d.position || '-'}</TableCell>
-                          <TableCell>{d.total_credit.toLocaleString('ar-LY')} د.ل</TableCell>
-                          <TableCell>{d.total_debit.toLocaleString('ar-LY')} د.ل</TableCell>
+                          <TableCell>{d.total_credit.toLocaleString('en-US')} د.ل</TableCell>
+                          <TableCell>{d.total_debit.toLocaleString('en-US')} د.ل</TableCell>
                           <TableCell className="font-bold">
                             <span className={d.balance > 0 ? 'text-destructive' : 'text-green-600'}>
-                              {d.balance.toLocaleString('ar-LY')} د.ل
+                              {d.balance.toLocaleString('en-US')} د.ل
                             </span>
                           </TableCell>
                           <TableCell>
@@ -2063,7 +2063,7 @@ export default function ExpenseManagement() {
                           <TableCell className="font-medium">{employee.name}</TableCell>
                           <TableCell>{employee.position || '-'}</TableCell>
                           <TableCell className="font-bold">
-                            {(employee.base_salary || 0).toLocaleString('ar-LY')} د.ل
+                            {(employee.base_salary || 0).toLocaleString('en-US')} د.ل
                           </TableCell>
                           <TableCell>
                             {employee.hire_date ? new Date(employee.hire_date).toLocaleDateString('ar-LY') : '-'}

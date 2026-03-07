@@ -126,7 +126,7 @@ export const useContractInstallments = ({
     setInstallments(newInstallments);
     
     if (hasFirstPayment) {
-      toast.success(`تم توزيع الدفعات: دفعة أولى (${actualFirstPayment.toLocaleString('ar-LY')} د.ل) + ${numberOfRecurringPayments} دفعات متكررة`);
+      toast.success(`تم توزيع الدفعات: دفعة أولى (${actualFirstPayment.toLocaleString('en-US')} د.ل) + ${numberOfRecurringPayments} دفعات متكررة`);
     } else {
       toast.success(`تم توزيع المبلغ على ${numberOfRecurringPayments} دفعات متساوية`);
     }
@@ -218,7 +218,7 @@ export const useContractInstallments = ({
     
     // دفعة واحدة فقط
     if (installments.length === 1) {
-      return `دفعة واحدة: ${installments[0].amount.toLocaleString('ar-LY')} د.ل بتاريخ ${installments[0].dueDate}`;
+      return `دفعة واحدة: ${installments[0].amount.toLocaleString('en-US')} د.ل بتاريخ ${installments[0].dueDate}`;
     }
 
     const first = installments[0];
@@ -237,13 +237,13 @@ export const useContractInstallments = ({
       const firstRecurringDate = recurring[0].dueDate;
       const lastRecurringDate = recurring[recurring.length - 1].dueDate;
       
-      let summary = `الدفعة الأولى: ${first.amount.toLocaleString('ar-LY')} د.ل بتاريخ ${first.dueDate}`;
+      let summary = `الدفعة الأولى: ${first.amount.toLocaleString('en-US')} د.ل بتاريخ ${first.dueDate}`;
       
       // إضافة معلومات الدفعات المتكررة
       if (recurring.length === 1) {
-        summary += `\nدفعة ثانية: ${recurringAmount.toLocaleString('ar-LY')} د.ل بتاريخ ${firstRecurringDate}`;
+        summary += `\nدفعة ثانية: ${recurringAmount.toLocaleString('en-US')} د.ل بتاريخ ${firstRecurringDate}`;
       } else {
-        summary += `\nبعدها يتم السداد ${recurringType} بمقدار ${recurringAmount.toLocaleString('ar-LY')} د.ل`;
+        summary += `\nبعدها يتم السداد ${recurringType} بمقدار ${recurringAmount.toLocaleString('en-US')} د.ل`;
         summary += `\nتبدأ من ${firstRecurringDate} حتى ${lastRecurringDate}`;
         summary += ` (${recurring.length} دفعات)`;
       }
@@ -252,7 +252,7 @@ export const useContractInstallments = ({
     }
 
     // إذا كانت الدفعات غير متساوية أو مختلفة النوع
-    return `${installments.length} دفعات: الأولى ${first.amount.toLocaleString('ar-LY')} د.ل بتاريخ ${first.dueDate}، والأخيرة بتاريخ ${installments[installments.length - 1].dueDate}`;
+    return `${installments.length} دفعات: الأولى ${first.amount.toLocaleString('en-US')} د.ل بتاريخ ${first.dueDate}، والأخيرة بتاريخ ${installments[installments.length - 1].dueDate}`;
   };
 
   return {

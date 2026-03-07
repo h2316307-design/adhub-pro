@@ -741,7 +741,7 @@ export default function Salaries() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-primary">
-              {totalSalaries.toLocaleString('ar-LY')} د.ل
+              {totalSalaries.toLocaleString('en-US')} د.ل
             </div>
           </CardContent>
         </Card>
@@ -765,7 +765,7 @@ export default function Salaries() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-blue-600">
-              {totalPaidPayroll.toLocaleString('ar-LY')} د.ل
+              {totalPaidPayroll.toLocaleString('en-US')} د.ل
             </div>
           </CardContent>
         </Card>
@@ -853,11 +853,11 @@ export default function Salaries() {
                           </TableCell>
                           <TableCell>
                             {employee.salary_type === 'monthly' 
-                              ? `${(employee.base_salary || 0).toLocaleString('ar-LY')} د.ل`
+                              ? `${(employee.base_salary || 0).toLocaleString('en-US')} د.ل`
                               : employee.installation_team_id && teamEarnings[employee.installation_team_id] != null
-                                ? <span className="font-medium text-blue-600 dark:text-blue-400">{Math.round(teamEarnings[employee.installation_team_id]).toLocaleString('ar-LY')} د.ل</span>
+                                ? <span className="font-medium text-blue-600 dark:text-blue-400">{Math.round(teamEarnings[employee.installation_team_id]).toLocaleString('en-US')} د.ل</span>
                                 : employee.linked_to_operating_expenses
-                                  ? <span className="font-medium text-orange-600 dark:text-orange-400">{Math.round(operatingStats.totalRevenue).toLocaleString('ar-LY')} د.ل</span>
+                                  ? <span className="font-medium text-orange-600 dark:text-orange-400">{Math.round(operatingStats.totalRevenue).toLocaleString('en-US')} د.ل</span>
                                   : <span className="text-muted-foreground text-sm">بالعمل</span>
                             }
                           </TableCell>
@@ -923,7 +923,7 @@ export default function Salaries() {
                   {manualTasks
                     .filter(t => t.status === 'completed')
                     .reduce((sum, t) => sum + (t.operating_cost || 0), 0)
-                    .toLocaleString('ar-LY')} د.ل
+                    .toLocaleString('en-US')} د.ل
                 </p>
               </div>
 
@@ -960,7 +960,7 @@ export default function Salaries() {
                         </TableCell>
                         <TableCell>{fmtDate(task.task_date)}</TableCell>
                         <TableCell className="font-medium">
-                          {(task.operating_cost || 0).toLocaleString('ar-LY')} د.ل
+                          {(task.operating_cost || 0).toLocaleString('en-US')} د.ل
                         </TableCell>
                         <TableCell>
                           <Badge variant={task.status === 'completed' ? 'default' : 'secondary'}>
@@ -1109,10 +1109,10 @@ export default function Salaries() {
                           {(item.employee as any)?.name || '-'}
                         </TableCell>
                         <TableCell>{(item.employee as any)?.position || '-'}</TableCell>
-                        <TableCell>{(item.basic_salary || 0).toLocaleString('ar-LY')} د.ل</TableCell>
-                        <TableCell>{(item.allowances || 0).toLocaleString('ar-LY')} د.ل</TableCell>
-                        <TableCell>{(item.deductions || 0).toLocaleString('ar-LY')} د.ل</TableCell>
-                        <TableCell className="font-bold">{(item.net_salary || 0).toLocaleString('ar-LY')} د.ل</TableCell>
+                        <TableCell>{(item.basic_salary || 0).toLocaleString('en-US')} د.ل</TableCell>
+                        <TableCell>{(item.allowances || 0).toLocaleString('en-US')} د.ل</TableCell>
+                        <TableCell>{(item.deductions || 0).toLocaleString('en-US')} د.ل</TableCell>
+                        <TableCell className="font-bold">{(item.net_salary || 0).toLocaleString('en-US')} د.ل</TableCell>
                         <TableCell>
                           <Badge variant={item.paid ? 'default' : 'secondary'}>
                             {item.paid ? 'مدفوع' : 'معلق'}
@@ -1146,7 +1146,7 @@ export default function Salaries() {
               <CardContent>
                 <div className="mb-4 p-4 bg-red-50 dark:bg-red-950/20 rounded-lg">
                   <p className="text-sm text-muted-foreground mb-1">إجمالي السلف المستحقة</p>
-                  <p className="text-2xl font-bold text-red-600">{totalAdvances.toLocaleString('ar-LY')} د.ل</p>
+                  <p className="text-2xl font-bold text-red-600">{totalAdvances.toLocaleString('en-US')} د.ل</p>
                 </div>
                 
                 <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -1165,7 +1165,7 @@ export default function Salaries() {
                               </p>
                             </div>
                             <Badge variant="outline">
-                              {advance.remaining.toLocaleString('ar-LY')} د.ل
+                              {advance.remaining.toLocaleString('en-US')} د.ل
                             </Badge>
                           </div>
                           {advance.reason && (
@@ -1193,14 +1193,14 @@ export default function Salaries() {
                     {advances
                       .filter(a => a.status === 'approved')
                       .reduce((sum, a) => sum + a.amount, 0)
-                      .toLocaleString('ar-LY')} د.ل
+                      .toLocaleString('en-US')} د.ل
                   </p>
                 </div>
                 
                 <div className="p-4 bg-muted rounded-lg">
                   <p className="text-sm text-muted-foreground mb-1">المتبقي من السلف</p>
                   <p className="text-xl font-bold text-red-600">
-                    {totalAdvances.toLocaleString('ar-LY')} د.ل
+                    {totalAdvances.toLocaleString('en-US')} د.ل
                   </p>
                 </div>
 
@@ -1210,7 +1210,7 @@ export default function Salaries() {
                     {(advances
                       .filter(a => a.status === 'approved')
                       .reduce((sum, a) => sum + a.amount, 0) - totalAdvances)
-                      .toLocaleString('ar-LY')} د.ل
+                      .toLocaleString('en-US')} د.ل
                   </p>
                 </div>
               </CardContent>
@@ -1425,7 +1425,7 @@ export default function Salaries() {
               <p className="text-sm text-muted-foreground mb-2">سيتم إنشاء رواتب لـ:</p>
               <p className="text-lg font-bold">{activeEmployees} موظف نشط</p>
               <p className="text-sm text-muted-foreground mt-2">
-                إجمالي الرواتب: {totalSalaries.toLocaleString('ar-LY')} د.ل
+                إجمالي الرواتب: {totalSalaries.toLocaleString('en-US')} د.ل
               </p>
             </div>
           </div>

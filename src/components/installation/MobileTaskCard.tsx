@@ -639,19 +639,19 @@ export function MobileTaskCard({
               <div className="bg-emerald-50 dark:bg-emerald-950/30 rounded-xl p-2 text-center">
                 <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mb-0.5">تكلفة الفريق</p>
                 <p className="font-bold text-sm text-emerald-700 dark:text-emerald-300 font-manrope">
-                  {totalInstallCost.toLocaleString('ar-LY')}
+                  {totalInstallCost.toLocaleString('en-US')}
                 </p>
               </div>
               <div className="bg-blue-50 dark:bg-blue-950/30 rounded-xl p-2 text-center">
                 <p className="text-[10px] text-blue-600 dark:text-blue-400 mb-0.5">سعر الزبون</p>
                 <p className="font-bold text-sm text-blue-700 dark:text-blue-300 font-manrope">
-                  {customerTotal.toLocaleString('ar-LY')}
+                  {customerTotal.toLocaleString('en-US')}
                 </p>
               </div>
               <div className="bg-amber-50 dark:bg-amber-950/30 rounded-xl p-2 text-center">
                 <p className="text-[10px] text-amber-600 dark:text-amber-400 mb-0.5">إضافية</p>
                 <p className="font-bold text-sm text-amber-700 dark:text-amber-300 font-manrope">
-                  {additionalTotal > 0 ? `+${additionalTotal.toLocaleString('ar-LY')}` : '0'}
+                  {additionalTotal > 0 ? `+${additionalTotal.toLocaleString('en-US')}` : '0'}
                 </p>
               </div>
             </div>

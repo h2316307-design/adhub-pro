@@ -103,6 +103,7 @@ const QuickPrintSettings = lazyRetry(() => import("./pages/QuickPrintSettings"))
 const BillboardPhotosGallery = lazyRetry(() => import("./pages/BillboardPhotosGallery"));
 const BulkWhatsApp = lazyRetry(() => import("./pages/BulkWhatsApp"));
 const RephotographyBillboards = lazyRetry(() => import("./pages/RephotographyBillboards"));
+const ActivityLogPage = lazyRetry(() => import("./pages/ActivityLog"));
 
 const SmartDistribution = lazyRetry(() => import("./pages/SmartDistribution"));
 const ImageGallery = lazyRetry(() => import("./pages/ImageGallery"));
@@ -188,6 +189,7 @@ const adminRoutes: { path: string; Component: React.LazyExoticComponent<any>; pe
   { path: "billboard-photos", Component: BillboardPhotosGallery, permission: "billboards" },
   { path: "bulk-whatsapp", Component: BulkWhatsApp, permission: "messaging_settings" },
   { path: "rephotography", Component: RephotographyBillboards, permission: "billboards" },
+  { path: "activity-log", Component: ActivityLogPage },
 ];
 
 // ---- QueryClient with caching ----

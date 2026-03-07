@@ -627,8 +627,8 @@ export default function PrintInstallationInvoice() {
           <tr>
             <td style="text-align: right; padding-right: 15px;">${item.description}</td>
             <td>${item.quantity}</td>
-            <td>${item.unitPrice.toLocaleString('ar-LY')} د.ل</td>
-            <td>${item.total.toLocaleString('ar-LY')} د.ل</td>
+            <td>${item.unitPrice.toLocaleString('en-US')} د.ل</td>
+            <td>${item.total.toLocaleString('en-US')} د.ل</td>
           </tr>
         `).join('')}
       </tbody>
@@ -636,7 +636,7 @@ export default function PrintInstallationInvoice() {
     
     <div class="total-section">
       <div class="total-label">الإجمالي</div>
-      <div class="total-value">${data.totalAmount.toLocaleString('ar-LY')} د.ل</div>
+      <div class="total-value">${data.totalAmount.toLocaleString('en-US')} د.ل</div>
       <div class="total-words">${data.totalInWords}</div>
     </div>
     
@@ -819,7 +819,7 @@ export default function PrintInstallationInvoice() {
                           </p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-lg font-bold text-primary">{contract.total.toLocaleString('ar-LY')} د.ل</span>
+                          <span className="text-lg font-bold text-primary">{contract.total.toLocaleString('en-US')} د.ل</span>
                           <Button
                             onClick={() => removeContractFromInvoice(contract.contractNumber)}
                             size="sm"
@@ -974,7 +974,7 @@ export default function PrintInstallationInvoice() {
                                   } else if (invoiceType === 'print_and_installation') {
                                     itemTotal = size.quantity * ((size.print_price || 0) + (size.installation_price || 0));
                                   }
-                                  return itemTotal.toLocaleString('ar-LY');
+                                  return itemTotal.toLocaleString('en-US');
                                 })()} د.ل
                               </TableCell>
                             </TableRow>
@@ -1007,7 +1007,7 @@ export default function PrintInstallationInvoice() {
                 <div className="flex justify-between items-center text-lg font-bold">
                   <span className="text-foreground">إجمالي الفاتورة:</span>
                   <span className="text-primary text-2xl">
-                    {totalInvoiceAmount.toLocaleString('ar-LY')} د.ل
+                    {totalInvoiceAmount.toLocaleString('en-US')} د.ل
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">

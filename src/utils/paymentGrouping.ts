@@ -45,7 +45,7 @@ export function groupRepeatingPayments(
     if (count >= 2) {
       const groupedPayments = installments.slice(i, i + count);
       groups.push({
-        amount: current.amount.toLocaleString('ar-LY'),
+        amount: current.amount.toLocaleString('en-US'),
         count,
         paymentType: current.paymentType,
         startDate: current.dueDate,
@@ -57,7 +57,7 @@ export function groupRepeatingPayments(
     } else {
       // Single payment
       groups.push({
-        amount: current.amount.toLocaleString('ar-LY'),
+        amount: current.amount.toLocaleString('en-US'),
         count: 1,
         paymentType: current.paymentType,
         startDate: current.dueDate,
@@ -130,7 +130,7 @@ export function formatPaymentsList(
     if (group.isGrouped) {
       const total = (
         Number(group.amount.replace(/,/g, '')) * group.count
-      ).toLocaleString('ar-LY');
+      ).toLocaleString('en-US');
       lines.push(
         `${number}. ${group.count} دفعات متساوية ${group.paymentType} × ${group.amount} ${currencySymbol} = ${total} ${currencySymbol} (من ${group.startDate} إلى ${group.endDate})`
       );
@@ -199,7 +199,7 @@ export function generatePaymentsClauseText(
   // Single payment
   if (normalized.length === 1) {
     const one = normalized[0];
-    const amount = Number(one.amount).toLocaleString('ar-LY');
+    const amount = Number(one.amount).toLocaleString('en-US');
     const date = formatArabicContractDate(one.dueDate);
     const type = one.paymentType ? ` ${one.paymentType}` : '';
     return `دفعة واحدة ${amount} ${currencySymbol}${type}${date ? ` بتاريخ ${date}` : ''}`.trim();
@@ -214,7 +214,7 @@ export function generatePaymentsClauseText(
     const lines: string[] = [];
     
     normalized.forEach((inst, idx) => {
-      const amount = Number(inst.amount).toLocaleString('ar-LY');
+      const amount = Number(inst.amount).toLocaleString('en-US');
       const date = formatArabicContractDate(inst.dueDate);
       const ordinal = getOrdinalName(idx);
       
@@ -232,7 +232,7 @@ export function generatePaymentsClauseText(
   // CASE 2: More than 3 installments → Summarize
   // ============================================
   const first = normalized[0];
-  const firstAmount = Number(first.amount).toLocaleString('ar-LY');
+  const firstAmount = Number(first.amount).toLocaleString('en-US');
   const firstDate = formatArabicContractDate(first.dueDate);
   
   // Check if remaining payments are all equal
@@ -248,7 +248,7 @@ export function generatePaymentsClauseText(
 
   if (allRestEqual && rest.length >= 2) {
     // All remaining payments are equal - summarize them
-    const restAmount = Number(rest[0].amount).toLocaleString('ar-LY');
+    const restAmount = Number(rest[0].amount).toLocaleString('en-US');
     const restCount = rest.length;
     const startDate = formatArabicContractDate(rest[0].dueDate);
     const endDate = formatArabicContractDate(rest[rest.length - 1].dueDate);
@@ -281,7 +281,7 @@ export function generatePaymentsClauseText(
         text += `ثم ${g.count} دفعات × ${g.amount} ${currencySymbol} من ${formatArabicContractDate(g.startDate)} إلى ${formatArabicContractDate(g.endDate)}`;
       } else {
         const inst = g.originalInstallments[0];
-        const amount = Number(inst.amount).toLocaleString('ar-LY');
+        const amount = Number(inst.amount).toLocaleString('en-US');
         const date = formatArabicContractDate(inst.dueDate);
         const type = inst.paymentType ? ` ${inst.paymentType}` : '';
         text += `ثم دفعة ${amount} ${currencySymbol}${type}${date ? ` بتاريخ ${date}` : ''}`;

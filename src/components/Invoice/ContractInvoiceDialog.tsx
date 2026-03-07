@@ -282,9 +282,9 @@ export default function ContractInvoiceDialog({
         <td>${item.size}</td>
         <td>${item.quantity}</td>
         <td>${item.area.toFixed(2)} م²</td>
-        <td>${item.pricePerMeter.toLocaleString('ar-LY')} د.ل</td>
+        <td>${item.pricePerMeter.toLocaleString('en-US')} د.ل</td>
         <td>${item.totalArea.toFixed(2)} م²</td>
-        <td>${item.totalPrice.toLocaleString('ar-LY')} د.ل</td>
+        <td>${item.totalPrice.toLocaleString('en-US')} د.ل</td>
       </tr>
     `).join('');
 
@@ -352,11 +352,11 @@ export default function ContractInvoiceDialog({
           <tr class="total-row">
             <td colspan="4">الإجماليات</td>
             <td>${totalArea.toFixed(2)} م²</td>
-            <td>${totalPrice.toLocaleString('ar-LY')} د.ل</td>
+            <td>${totalPrice.toLocaleString('en-US')} د.ل</td>
           </tr>
           <tr class="final-total">
             <td colspan="5">المبلغ الإجمالي للطباعة</td>
-            <td>${totalPrice.toLocaleString('ar-LY')} دينار ليبي</td>
+            <td>${totalPrice.toLocaleString('en-US')} دينار ليبي</td>
           </tr>
         </tbody>
       </table>
@@ -604,7 +604,7 @@ export default function ContractInvoiceDialog({
                           />
                         </TableCell>
                         <TableCell className="font-bold text-blue-400 text-center">{item.totalArea.toFixed(2)}</TableCell>
-                        <TableCell className="font-bold text-yellow-400 text-center">{item.totalPrice.toLocaleString('ar-LY')}</TableCell>
+                        <TableCell className="font-bold text-yellow-400 text-center">{item.totalPrice.toLocaleString('en-US')}</TableCell>
                         <TableCell className="text-center">
                           <Button
                             size="sm"

@@ -63,7 +63,7 @@ export function SummaryCards({
                 <TrendingUp className="h-5 w-5 text-sky-400" />
                 <p className="text-sm font-medium text-slate-400">إجمالي الديون</p>
               </div>
-              <p className="text-3xl font-bold text-sky-400">{totalDebits.toLocaleString('ar-LY')}</p>
+              <p className="text-3xl font-bold text-sky-400">{totalDebits.toLocaleString('en-US')}</p>
               <p className="text-xs text-slate-500 mt-1">إجمالي المبيعات</p>
             </div>
             
@@ -73,7 +73,7 @@ export function SummaryCards({
                 <CreditCard className="h-5 w-5 text-emerald-400" />
                 <p className="text-sm font-medium text-slate-400">إجمالي المدفوعات</p>
               </div>
-              <p className="text-3xl font-bold text-emerald-400">{totalCredits.toLocaleString('ar-LY')}</p>
+              <p className="text-3xl font-bold text-emerald-400">{totalCredits.toLocaleString('en-US')}</p>
               <p className="text-xs text-slate-500 mt-1">جميع الدفعات المستلمة</p>
             </div>
             
@@ -89,8 +89,8 @@ export function SummaryCards({
                   </div>
                   <p className={`text-4xl font-bold ${isCredit ? 'text-emerald-400' : 'text-rose-400'}`}>
                     {netBalance >= 0 
-                      ? netBalance.toLocaleString('ar-LY') 
-                      : `(${Math.abs(netBalance).toLocaleString('ar-LY')})`}
+                      ? netBalance.toLocaleString('en-US') 
+                      : `(${Math.abs(netBalance).toLocaleString('en-US')})`}
                   </p>
                   <p className={`text-xs mt-2 font-medium ${isCredit ? 'text-emerald-300' : 'text-rose-300'}`}>
                     {isCredit ? '⬆ فائض مستحق للعميل' : 'مستحق على العميل'}
@@ -107,12 +107,12 @@ export function SummaryCards({
                 <p className="text-sm font-medium text-slate-400">الرصيد النهائي</p>
               </div>
               <p className={`text-2xl font-bold ${balance > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                {balance >= 0 ? balance.toLocaleString('ar-LY') : `(${Math.abs(balance).toLocaleString('ar-LY')})`}
+                {balance >= 0 ? balance.toLocaleString('en-US') : `(${Math.abs(balance).toLocaleString('en-US')})`}
               </p>
               <p className="text-xs text-slate-500 mt-1">شامل إيجارات الصديقة</p>
               {totalFriendRentals > 0 && (
                 <p className="text-xs text-amber-400 mt-1">
-                  ({totalFriendRentals.toLocaleString('ar-LY')})
+                  ({totalFriendRentals.toLocaleString('en-US')})
                 </p>
               )}
             </div>
@@ -151,7 +151,7 @@ export function SummaryCards({
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="text-sm font-medium text-muted-foreground mb-2">إجمالي العقود</p>
-                <p className="text-3xl font-bold text-sky-600 dark:text-sky-400">{totalRent.toLocaleString('ar-LY')}</p>
+                <p className="text-3xl font-bold text-sky-600 dark:text-sky-400">{totalRent.toLocaleString('en-US')}</p>
                 <p className="text-xs text-muted-foreground mt-1">دينار ليبي</p>
               </div>
               <div className="w-14 h-14 bg-sky-500/20 rounded-2xl flex items-center justify-center shadow-inner">
@@ -168,7 +168,7 @@ export function SummaryCards({
             <div className="flex items-start justify-between">
               <div className="flex-1">
                 <p className="text-sm font-medium text-muted-foreground mb-2">إجمالي المدفوع</p>
-                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{totalCredits.toLocaleString('ar-LY')}</p>
+                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{totalCredits.toLocaleString('en-US')}</p>
                 <p className="text-xs text-muted-foreground mt-1">دينار ليبي</p>
               </div>
               <div className="w-14 h-14 bg-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner">
@@ -194,7 +194,7 @@ export function SummaryCards({
                   {balance < 0 ? 'فائض لصالح العميل' : 'المتبقي'}
                 </p>
                 <p className={`text-3xl font-bold ${balance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                  {balance >= 0 ? balance.toLocaleString('ar-LY') : Math.abs(balance).toLocaleString('ar-LY')}
+                  {balance >= 0 ? balance.toLocaleString('en-US') : Math.abs(balance).toLocaleString('en-US')}
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   {balance < 0 ? 'رصيد دائن للعميل' : 'مستحق على العميل'}
@@ -251,7 +251,7 @@ export function SummaryCards({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">الخصومات</p>
-                <p className="text-lg font-bold text-amber-600 dark:text-amber-400 truncate">{(totalDiscounts || 0).toLocaleString('ar-LY')}</p>
+                <p className="text-lg font-bold text-amber-600 dark:text-amber-400 truncate">{(totalDiscounts || 0).toLocaleString('en-US')}</p>
               </div>
             </div>
           </CardContent>
@@ -266,7 +266,7 @@ export function SummaryCards({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">رصيد الحساب</p>
-                <p className="text-lg font-bold text-blue-600 dark:text-blue-400 truncate">{accountPayments.toLocaleString('ar-LY')}</p>
+                <p className="text-lg font-bold text-blue-600 dark:text-blue-400 truncate">{accountPayments.toLocaleString('en-US')}</p>
               </div>
             </div>
           </CardContent>
@@ -281,7 +281,7 @@ export function SummaryCards({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">فواتير الطباعة</p>
-                <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400 truncate">{totalPrintedInvoices.toLocaleString('ar-LY')}</p>
+                <p className="text-lg font-bold text-indigo-600 dark:text-indigo-400 truncate">{totalPrintedInvoices.toLocaleString('en-US')}</p>
               </div>
             </div>
           </CardContent>
@@ -296,7 +296,7 @@ export function SummaryCards({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">المشتريات</p>
-                <p className="text-lg font-bold text-purple-600 dark:text-purple-400 truncate">{totalPurchases.toLocaleString('ar-LY')}</p>
+                <p className="text-lg font-bold text-purple-600 dark:text-purple-400 truncate">{totalPurchases.toLocaleString('en-US')}</p>
               </div>
             </div>
           </CardContent>
@@ -311,7 +311,7 @@ export function SummaryCards({
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-xs text-muted-foreground truncate">المبيعات</p>
-                <p className="text-lg font-bold text-teal-600 dark:text-teal-400 truncate">{totalSales.toLocaleString('ar-LY')}</p>
+                <p className="text-lg font-bold text-teal-600 dark:text-teal-400 truncate">{totalSales.toLocaleString('en-US')}</p>
               </div>
             </div>
           </CardContent>
@@ -327,7 +327,7 @@ export function SummaryCards({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">شركة صديقة</p>
-                  <p className="text-lg font-bold text-orange-600 dark:text-orange-400 truncate">{totalFriendRentals.toLocaleString('ar-LY')}</p>
+                  <p className="text-lg font-bold text-orange-600 dark:text-orange-400 truncate">{totalFriendRentals.toLocaleString('en-US')}</p>
                 </div>
               </div>
             </CardContent>
@@ -344,7 +344,7 @@ export function SummaryCards({
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">فواتير مجمعة</p>
-                  <p className="text-lg font-bold text-pink-600 dark:text-pink-400 truncate">{totalCompositeTasks.toLocaleString('ar-LY')}</p>
+                  <p className="text-lg font-bold text-pink-600 dark:text-pink-400 truncate">{totalCompositeTasks.toLocaleString('en-US')}</p>
                 </div>
               </div>
             </CardContent>

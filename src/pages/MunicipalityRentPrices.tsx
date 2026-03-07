@@ -162,7 +162,7 @@ const MunicipalityRentPrices = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">إجمالي المساحة</p>
-              <p className="text-xl font-bold text-foreground">{billboardSummaries.reduce((s, b) => s + b.totalArea, 0).toLocaleString('ar-LY')} م²</p>
+              <p className="text-xl font-bold text-foreground">{billboardSummaries.reduce((s, b) => s + b.totalArea, 0).toLocaleString('en-US')} م²</p>
             </div>
           </CardContent>
         </Card>
@@ -173,7 +173,7 @@ const MunicipalityRentPrices = () => {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">إجمالي الإيجار السنوي</p>
-              <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{totalAnnualRent.toLocaleString('ar-LY')} د.ل</p>
+              <p className="text-xl font-bold text-orange-600 dark:text-orange-400">{totalAnnualRent.toLocaleString('en-US')} د.ل</p>
             </div>
           </CardContent>
         </Card>
@@ -215,11 +215,11 @@ const MunicipalityRentPrices = () => {
                               {p.municipality_name}
                             </div>
                           </td>
-                          <td className="p-3 font-bold text-primary">{p.price_per_meter.toLocaleString('ar-LY')} د.ل/م²</td>
+                          <td className="p-3 font-bold text-primary">{p.price_per_meter.toLocaleString('en-US')} د.ل/م²</td>
                           <td className="p-3">{summary?.count || 0}</td>
-                          <td className="p-3">{(summary?.totalArea || 0).toLocaleString('ar-LY')} م²</td>
+                          <td className="p-3">{(summary?.totalArea || 0).toLocaleString('en-US')} م²</td>
                           <td className="p-3 font-bold text-orange-600 dark:text-orange-400">
-                            {(summary?.annualRent || 0).toLocaleString('ar-LY')} د.ل
+                            {(summary?.annualRent || 0).toLocaleString('en-US')} د.ل
                           </td>
                           <td className="p-3 text-muted-foreground text-xs max-w-[200px] truncate">{p.notes || '—'}</td>
                           <td className="p-3">
@@ -249,8 +249,8 @@ const MunicipalityRentPrices = () => {
                     <td className="p-3">الإجمالي</td>
                     <td className="p-3">—</td>
                     <td className="p-3">{billboardSummaries.reduce((s, b) => s + b.count, 0)}</td>
-                    <td className="p-3">{billboardSummaries.reduce((s, b) => s + b.totalArea, 0).toLocaleString('ar-LY')} م²</td>
-                    <td className="p-3 text-orange-600 dark:text-orange-400">{totalAnnualRent.toLocaleString('ar-LY')} د.ل</td>
+                    <td className="p-3">{billboardSummaries.reduce((s, b) => s + b.totalArea, 0).toLocaleString('en-US')} م²</td>
+                    <td className="p-3 text-orange-600 dark:text-orange-400">{totalAnnualRent.toLocaleString('en-US')} د.ل</td>
                     <td colSpan={2}></td>
                   </tr>
                 </tfoot>

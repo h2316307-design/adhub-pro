@@ -140,7 +140,7 @@ const formatPercent = (value: number): string => {
   if (!Number.isFinite(value)) {
     return '0';
   }
-  return value.toLocaleString('ar-LY', {
+  return value.toLocaleString('en-US', {
     maximumFractionDigits: value % 1 === 0 ? 0 : 2,
   });
 };
@@ -1118,14 +1118,14 @@ export default function OperatingExpenses() {
                   const closed = isContractClosed(contract);
                   
                   const formattedPercent = formatPercent(contract.feePercent);
-                  const formattedRentCost = contract.rent_cost.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
-                  const formattedInstallCost = contract.installation_cost.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
-                  const formattedPrintCost = contract.print_cost.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
-                  const formattedTotal = contract.total_amount.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
-                  const formattedPaid = contract.total_paid.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
+                  const formattedRentCost = contract.rent_cost.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                  const formattedInstallCost = contract.installation_cost.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                  const formattedPrintCost = contract.print_cost.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                  const formattedTotal = contract.total_amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                  const formattedPaid = contract.total_paid.toLocaleString('en-US', { maximumFractionDigits: 2 });
                   const formattedCollectionPct = formatPercent(contract.collectionPercentage);
-                  const formattedFullFee = contract.fullFeeAmount.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
-                  const formattedCollectedFee = contract.collectedFeeAmount.toLocaleString('ar-LY', { maximumFractionDigits: 2 });
+                  const formattedFullFee = contract.fullFeeAmount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+                  const formattedCollectedFee = contract.collectedFeeAmount.toLocaleString('en-US', { maximumFractionDigits: 2 });
 
                   const isFullyPaid = contract.collectionPercentage >= 100;
                   const isPartialPaid = contract.collectionPercentage > 0 && contract.collectionPercentage < 100;
@@ -1200,7 +1200,7 @@ export default function OperatingExpenses() {
                       </TableCell>
                       <TableCell className="text-right font-manrope font-semibold">
                         {(!closed && !excluded && contractWithdrawn > 0) 
-                          ? `${contractWithdrawn.toLocaleString('ar-LY', { maximumFractionDigits: 0 })} د.ل` 
+                          ? `${contractWithdrawn.toLocaleString('en-US', { maximumFractionDigits: 0 })} د.ل` 
                           : '—'}
                       </TableCell>
                       <TableCell className="text-right">

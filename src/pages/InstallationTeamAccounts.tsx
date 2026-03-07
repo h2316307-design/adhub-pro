@@ -329,7 +329,7 @@ export default function InstallationTeamAccounts() {
         if (error) throw error;
       }
 
-      toast.success(`تم سداد ${selectedIds.size} لوحة بمبلغ ${totalAmount.toLocaleString('ar-LY')} د.ل`);
+      toast.success(`تم سداد ${selectedIds.size} لوحة بمبلغ ${totalAmount.toLocaleString('en-US')} د.ل`);
       setReceiptData({ amount: totalAmount, paid_at: new Date().toISOString(), method: paymentMethod === 'cash' ? 'نقدي' : paymentMethod === 'bank' ? 'تحويل بنكي' : paymentMethod, notes: paymentNotes, billboards: billboardsForReceipt });
       setPaymentDialogOpen(false);
       setReceiptDialogOpen(true);
@@ -952,7 +952,7 @@ export default function InstallationTeamAccounts() {
               <div>
                 <p className="text-xs text-muted-foreground">إجمالي المعلق</p>
                 <p className="text-lg font-bold text-orange-500">
-                  {overallStats.totalPending.toLocaleString('ar-LY')} <span className="text-xs">د.ل</span>
+                  {overallStats.totalPending.toLocaleString('en-US')} <span className="text-xs">د.ل</span>
                 </p>
               </div>
             </div>
@@ -968,7 +968,7 @@ export default function InstallationTeamAccounts() {
               <div>
                 <p className="text-xs text-muted-foreground">إجمالي المدفوع</p>
                 <p className="text-lg font-bold text-emerald-500">
-                  {overallStats.totalPaid.toLocaleString('ar-LY')} <span className="text-xs">د.ل</span>
+                  {overallStats.totalPaid.toLocaleString('en-US')} <span className="text-xs">د.ل</span>
                 </p>
               </div>
             </div>
@@ -993,7 +993,7 @@ export default function InstallationTeamAccounts() {
                       <Cell key={i} fill={entry.color} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(v: number) => `${v.toLocaleString('ar-LY')} د.ل`} />
+                  <Tooltip formatter={(v: number) => `${v.toLocaleString('en-US')} د.ل`} />
                 </PieChart>
               </ResponsiveContainer>
             </CardContent>
@@ -1009,7 +1009,7 @@ export default function InstallationTeamAccounts() {
                   <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
                   <XAxis type="number" tick={{ fontSize: 10 }} />
                   <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 11 }} />
-                  <Tooltip formatter={(v: number) => `${v.toLocaleString('ar-LY')} د.ل`} />
+                  <Tooltip formatter={(v: number) => `${v.toLocaleString('en-US')} د.ل`} />
                   <Legend />
                   <Bar dataKey="معلق" fill="#f97316" radius={[0, 4, 4, 0]} />
                   <Bar dataKey="مدفوع" fill="#22c55e" radius={[0, 4, 4, 0]} />
@@ -1077,7 +1077,7 @@ export default function InstallationTeamAccounts() {
                         <Clock className="h-3.5 w-3.5 text-orange-500" />
                         <span className="text-xs">معلق ({summary.pending_count})</span>
                       </div>
-                      <span className="text-sm font-bold text-orange-500">{summary.pending_amount.toLocaleString('ar-LY')} د.ل</span>
+                      <span className="text-sm font-bold text-orange-500">{summary.pending_amount.toLocaleString('en-US')} د.ل</span>
                     </div>
 
                     <div className="flex justify-between items-center p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10">
@@ -1085,13 +1085,13 @@ export default function InstallationTeamAccounts() {
                         <CheckCircle className="h-3.5 w-3.5 text-emerald-500" />
                         <span className="text-xs">مدفوع ({summary.paid_count})</span>
                       </div>
-                      <span className="text-sm font-bold text-emerald-500">{summary.paid_amount.toLocaleString('ar-LY')} د.ل</span>
+                      <span className="text-sm font-bold text-emerald-500">{summary.paid_amount.toLocaleString('en-US')} د.ل</span>
                     </div>
 
                     <div className="pt-2 border-t border-border/50">
                       <div className="flex justify-between items-center">
                         <span className="font-semibold text-xs">الإجمالي</span>
-                        <span className="font-bold text-primary text-base">{summary.total_amount.toLocaleString('ar-LY')} د.ل</span>
+                        <span className="font-bold text-primary text-base">{summary.total_amount.toLocaleString('en-US')} د.ل</span>
                       </div>
                     </div>
                   </CardContent>

@@ -92,7 +92,7 @@ export default function InstallationPricing() {
 
   const printAll = () => {
     const today = new Date().toLocaleDateString('ar-LY');
-    const body = filtered.map(r => `<tr><td class="sz">${r.size}</td><td>${r.install == null ? '—' : r.install.toLocaleString('ar-LY')} د.ل</td><td>${r.print == null ? '—' : r.print.toLocaleString('ar-LY')} د.ل</td></tr>`).join('');
+    const body = filtered.map(r => `<tr><td class="sz">${r.size}</td><td>${r.install == null ? '—' : r.install.toLocaleString('en-US')} د.ل</td><td>${r.print == null ? '—' : r.print.toLocaleString('en-US')} د.ل</td></tr>`).join('');
     const html = `<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8" />
       <title>أسعار التركيب والطباعة</title>
       <style>

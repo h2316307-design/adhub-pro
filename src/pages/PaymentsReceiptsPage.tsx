@@ -608,7 +608,7 @@ export default function PaymentsReceiptsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الواردات</p>
-                <h3 className="text-xl font-bold text-green-600 font-numbers">{stats.totalCredits.toLocaleString('ar-LY')} د.ل</h3>
+                <h3 className="text-xl font-bold text-green-600 font-numbers">{stats.totalCredits.toLocaleString('en-US')} د.ل</h3>
               </div>
               <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center">
                 <TrendingUp className="h-5 w-5 text-green-600" />
@@ -621,7 +621,7 @@ export default function PaymentsReceiptsPage() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">إجمالي الصادرات</p>
-                <h3 className="text-xl font-bold text-red-600 font-numbers">{stats.totalDebits.toLocaleString('ar-LY')} د.ل</h3>
+                <h3 className="text-xl font-bold text-red-600 font-numbers">{stats.totalDebits.toLocaleString('en-US')} د.ل</h3>
               </div>
               <div className="h-10 w-10 rounded-full bg-red-500/10 flex items-center justify-center">
                 <TrendingDown className="h-5 w-5 text-red-600" />
@@ -768,11 +768,11 @@ export default function PaymentsReceiptsPage() {
                             </td>
                             <td className="px-2 py-2 text-center">
                               <span className="font-bold text-lg text-purple-700 dark:text-purple-300">
-                                {group.totalAmount.toLocaleString('ar-LY')} <span className="text-sm">د.ل</span>
+                                {group.totalAmount.toLocaleString('en-US')} <span className="text-sm">د.ل</span>
                               </span>
                             </td>
                             <td className={`px-2 py-2 text-center font-bold text-base ${(group.distributions[0]?.remaining_debt || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                              {(group.distributions[0]?.remaining_debt || 0).toLocaleString('ar-LY')}
+                              {(group.distributions[0]?.remaining_debt || 0).toLocaleString('en-US')}
                             </td>
                             <td className="px-2 py-2 text-center text-sm text-muted-foreground">
                               {contractsList.length > 0 ? contractsList.slice(0, 2).map(c => `#${c}`).join('، ') : '—'}
@@ -800,8 +800,8 @@ export default function PaymentsReceiptsPage() {
                                         <span className="font-bold text-amber-800 dark:text-amber-200">عهدة</span>
                                       </div>
                                       <span className="text-muted-foreground">لدى: <strong className="text-foreground">{group.custodyInfo.employee_name}</strong></span>
-                                      <span className="text-muted-foreground">المبلغ: <strong className="text-amber-700">{group.custodyInfo.initial_amount.toLocaleString('ar-LY')} د.ل</strong></span>
-                                      <span className="text-muted-foreground">المتبقي: <strong className={group.custodyInfo.current_balance > 0 ? 'text-red-600' : 'text-green-600'}>{group.custodyInfo.current_balance.toLocaleString('ar-LY')} د.ل</strong></span>
+                                      <span className="text-muted-foreground">المبلغ: <strong className="text-amber-700">{group.custodyInfo.initial_amount.toLocaleString('en-US')} د.ل</strong></span>
+                                      <span className="text-muted-foreground">المتبقي: <strong className={group.custodyInfo.current_balance > 0 ? 'text-red-600' : 'text-green-600'}>{group.custodyInfo.current_balance.toLocaleString('en-US')} د.ل</strong></span>
                                       {group.custodyInfo.current_balance === 0 && <Badge className="bg-green-100 text-green-700 text-xs">✓ مسددة</Badge>}
                                     </div>
                                   </td>
@@ -824,7 +824,7 @@ export default function PaymentsReceiptsPage() {
                                   </td>
                                   <td className="px-2 py-2 text-center text-xs text-muted-foreground">{dist.ad_type || '—'}</td>
                                   <td className="px-2 py-2 text-center font-semibold text-base">
-                                    {(Number(dist.amount) || 0).toLocaleString('ar-LY')} <span className="text-xs text-muted-foreground">د.ل</span>
+                                    {(Number(dist.amount) || 0).toLocaleString('en-US')} <span className="text-xs text-muted-foreground">د.ل</span>
                                   </td>
                                   <td className="px-2 py-2 text-center text-muted-foreground">—</td>
                                   <td className="px-2 py-2 text-center text-sm text-primary font-medium">
@@ -863,10 +863,10 @@ export default function PaymentsReceiptsPage() {
                             {payment.ad_type ? <Badge variant="outline" className="text-xs">{payment.ad_type}</Badge> : <span className="text-muted-foreground text-sm">—</span>}
                           </td>
                           <td className={`px-2 py-2 text-center font-bold text-lg ${Number(payment.amount) < 0 ? 'text-red-600' : ''}`}>
-                            {(Number(payment.amount) || 0).toLocaleString('ar-LY')} <span className="text-sm text-muted-foreground">د.ل</span>
+                            {(Number(payment.amount) || 0).toLocaleString('en-US')} <span className="text-sm text-muted-foreground">د.ل</span>
                           </td>
                           <td className={`px-2 py-2 text-center font-bold text-base ${(payment.remaining_debt || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                            {(payment.remaining_debt || 0).toLocaleString('ar-LY')}
+                            {(payment.remaining_debt || 0).toLocaleString('en-US')}
                           </td>
                           <td className="px-2 py-2 text-center text-sm text-primary font-medium">
                             {payment.contract_number ? `#${payment.contract_number}` : '—'}

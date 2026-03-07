@@ -1613,7 +1613,7 @@ export default function OffersPage() {
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs text-primary">إجمالي القيمة</p>
-                      <p className="text-lg font-bold text-primary">{offersStats.totalValue.toLocaleString('ar-LY')} د.ل</p>
+                      <p className="text-lg font-bold text-primary">{offersStats.totalValue.toLocaleString('en-US')} د.ل</p>
                     </div>
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                       <TrendingUp className="h-5 w-5 text-primary" />

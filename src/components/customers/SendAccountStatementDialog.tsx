@@ -324,21 +324,21 @@ export function SendAccountStatementDialog({
     message += `*الملخص المالي:*\n`;
     message += `---------------\n`;
     message += `- عدد العقود: ${customer.contractsCount}\n`;
-    message += `- إجمالي العقود: ${customer.totalRent.toLocaleString('ar-LY')} د.ل\n`;
-    message += `- إجمالي المدفوع: ${customer.totalPaid.toLocaleString('ar-LY')} د.ل\n`;
-    message += `- رصيد الحساب: ${customer.accountBalance.toLocaleString('ar-LY')} د.ل\n\n`;
+    message += `- إجمالي العقود: ${customer.totalRent.toLocaleString('en-US')} د.ل\n`;
+    message += `- إجمالي المدفوع: ${customer.totalPaid.toLocaleString('en-US')} د.ل\n`;
+    message += `- رصيد الحساب: ${customer.accountBalance.toLocaleString('en-US')} د.ل\n\n`;
     
     // الدين الكلي مع التفاصيل
-    message += `*الدين الكلي: ${totalDebt.toLocaleString('ar-LY')} د.ل*\n`;
+    message += `*الدين الكلي: ${totalDebt.toLocaleString('en-US')} د.ل*\n`;
     message += `   تفاصيل الديون:\n`;
     if (contractsRemaining > 0) {
-      message += `   - متبقي من العقود: ${contractsRemaining.toLocaleString('ar-LY')} د.ل\n`;
+      message += `   - متبقي من العقود: ${contractsRemaining.toLocaleString('en-US')} د.ل\n`;
     }
     if (printInvoicesRemaining > 0) {
-      message += `   - متبقي من الطباعة: ${printInvoicesRemaining.toLocaleString('ar-LY')} د.ل\n`;
+      message += `   - متبقي من الطباعة: ${printInvoicesRemaining.toLocaleString('en-US')} د.ل\n`;
     }
     if (salesInvoicesRemaining > 0) {
-      message += `   - متبقي من فواتير المبيعات: ${salesInvoicesRemaining.toLocaleString('ar-LY')} د.ل\n`;
+      message += `   - متبقي من فواتير المبيعات: ${salesInvoicesRemaining.toLocaleString('en-US')} د.ل\n`;
     }
     message += `\n`;
 
@@ -346,7 +346,7 @@ export function SendAccountStatementDialog({
     if (includeOverdue && overdueInfo?.hasOverdue) {
       message += `*تنبيه: دفعات متأخرة!*\n`;
       message += `---------------\n`;
-      message += `- المبلغ المتأخر: ${overdueInfo.totalOverdueAmount.toLocaleString('ar-LY')} د.ل\n`;
+      message += `- المبلغ المتأخر: ${overdueInfo.totalOverdueAmount.toLocaleString('en-US')} د.ل\n`;
       message += `- أقدم تأخير: ${overdueInfo.oldestDaysOverdue} يوم\n`;
       if (overdueInfo.oldestDueDate) {
         message += `- تاريخ الاستحقاق: ${new Date(overdueInfo.oldestDueDate).toLocaleDateString('ar-LY')}\n`;
@@ -363,9 +363,9 @@ export function SendAccountStatementDialog({
         if (contract.adType) {
           message += `   - نوع الإعلان: ${contract.adType}\n`;
         }
-        message += `   - المبلغ الإجمالي: ${contract.total.toLocaleString('ar-LY')} د.ل\n`;
-        message += `   - المدفوع: ${contract.paid.toLocaleString('ar-LY')} د.ل\n`;
-        message += `   - المتبقي: ${contract.remaining.toLocaleString('ar-LY')} د.ل\n`;
+        message += `   - المبلغ الإجمالي: ${contract.total.toLocaleString('en-US')} د.ل\n`;
+        message += `   - المدفوع: ${contract.paid.toLocaleString('en-US')} د.ل\n`;
+        message += `   - المتبقي: ${contract.remaining.toLocaleString('en-US')} د.ل\n`;
         if (contract.startDate) {
           message += `   - بداية العقد: ${new Date(contract.startDate).toLocaleDateString('ar-LY')}\n`;
         }
@@ -396,9 +396,9 @@ export function SendAccountStatementDialog({
       const totalPrint = printInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
       const totalPaidPrint = printInvoices.reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0);
       message += `- عدد الفواتير: ${printInvoices.length}\n`;
-      message += `- إجمالي المبلغ: ${totalPrint.toLocaleString('ar-LY')} د.ل\n`;
-      message += `- المدفوع: ${totalPaidPrint.toLocaleString('ar-LY')} د.ل\n`;
-      message += `- المتبقي: ${(totalPrint - totalPaidPrint).toLocaleString('ar-LY')} د.ل\n\n`;
+      message += `- إجمالي المبلغ: ${totalPrint.toLocaleString('en-US')} د.ل\n`;
+      message += `- المدفوع: ${totalPaidPrint.toLocaleString('en-US')} د.ل\n`;
+      message += `- المتبقي: ${(totalPrint - totalPaidPrint).toLocaleString('en-US')} د.ل\n\n`;
     }
 
     // فواتير المبيعات
@@ -408,9 +408,9 @@ export function SendAccountStatementDialog({
       const totalSales = salesInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
       const totalPaidSales = salesInvoices.reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0);
       message += `- عدد الفواتير: ${salesInvoices.length}\n`;
-      message += `- إجمالي المبلغ: ${totalSales.toLocaleString('ar-LY')} د.ل\n`;
-      message += `- المدفوع: ${totalPaidSales.toLocaleString('ar-LY')} د.ل\n`;
-      message += `- المتبقي: ${(totalSales - totalPaidSales).toLocaleString('ar-LY')} د.ل\n\n`;
+      message += `- إجمالي المبلغ: ${totalSales.toLocaleString('en-US')} د.ل\n`;
+      message += `- المدفوع: ${totalPaidSales.toLocaleString('en-US')} د.ل\n`;
+      message += `- المتبقي: ${(totalSales - totalPaidSales).toLocaleString('en-US')} د.ل\n\n`;
     }
 
     // فواتير المشتريات
@@ -419,7 +419,7 @@ export function SendAccountStatementDialog({
       message += `---------------\n`;
       const totalPurchase = purchaseInvoices.reduce((sum, inv) => sum + Number(inv.total_amount || 0), 0);
       message += `- عدد الفواتير: ${purchaseInvoices.length}\n`;
-      message += `- إجمالي المبلغ: ${totalPurchase.toLocaleString('ar-LY')} د.ل\n`;
+      message += `- إجمالي المبلغ: ${totalPurchase.toLocaleString('en-US')} د.ل\n`;
       message += `ملاحظة: المشتريات تُخصم من رصيد الزبون\n\n`;
     }
 

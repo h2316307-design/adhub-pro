@@ -592,7 +592,7 @@ export default function Customers() {
           </div>
           
           <div class="amount">
-            المبلغ المدفوع: ${(Number(payment.amount) || 0).toLocaleString('ar-LY')} دينار ليبي
+            المبلغ المدفوع: ${(Number(payment.amount) || 0).toLocaleString('en-US')} دينار ليبي
           </div>
           
           ${unifiedFooterHtml(styles)}
@@ -646,7 +646,7 @@ export default function Customers() {
         <td>${contract['Ad Type'] || '—'}</td>
         <td>${contract['Start Date'] ? new Date(contract['Start Date']).toLocaleDateString('ar-LY') : '—'}</td>
         <td>${contract['End Date'] ? new Date(contract['End Date']).toLocaleDateString('ar-LY') : '—'}</td>
-        <td>${(Number(contract['Total Rent']) || 0).toLocaleString('ar-LY')} د.ل</td>
+        <td>${(Number(contract['Total Rent']) || 0).toLocaleString('en-US')} د.ل</td>
       </tr>
     `).join('');
 
@@ -657,8 +657,8 @@ export default function Customers() {
         <tr>
           <td>${size}</td>
           <td>${qty}</td>
-          <td>${unitPrice.toLocaleString('ar-LY')} د.ل</td>
-          <td>${lineTotal.toLocaleString('ar-LY')} د.ل</td>
+          <td>${unitPrice.toLocaleString('en-US')} د.ل</td>
+          <td>${lineTotal.toLocaleString('en-US')} د.ل</td>
         </tr>
       `;
     }).join('');
@@ -699,7 +699,7 @@ export default function Customers() {
           ${contractRows}
           <tr class="total-row">
             <td colspan="4">إجمالي العقود</td>
-            <td>${contractTotal.toLocaleString('ar-LY')} د.ل</td>
+            <td>${contractTotal.toLocaleString('en-US')} د.ل</td>
           </tr>
         </tbody>
       </table>
@@ -720,7 +720,7 @@ export default function Customers() {
           ${printRows}
           <tr class="total-row">
             <td colspan="3">إجمالي الطباعة</td>
-            <td>${printTotal.toLocaleString('ar-LY')} د.ل</td>
+            <td>${printTotal.toLocaleString('en-US')} د.ل</td>
           </tr>
         </tbody>
       </table>
@@ -731,12 +731,12 @@ export default function Customers() {
           ${includeAccountBalance ? `
           <tr>
             <td colspan="4">رصيد الحساب العام</td>
-            <td>${accountBalance.toLocaleString('ar-LY')} د.ل</td>
+            <td>${accountBalance.toLocaleString('en-US')} د.ل</td>
           </tr>
           ` : ''}
           <tr class="total-row">
             <td colspan="4">الإجمالي النهائي</td>
-            <td>${finalTotal.toLocaleString('ar-LY')} د.ل</td>
+            <td>${finalTotal.toLocaleString('en-US')} د.ل</td>
           </tr>
         </tbody>
       </table>
@@ -815,7 +815,7 @@ export default function Customers() {
                 {syncing ? 'جاري المزامنة...' : 'مزامنة العملاء'}
               </Button>
             </div>
-            <div className="flex items-center text-sm text-muted-foreground">إجمالي المدفوعات: {totalAllPaid.toLocaleString('ar-LY')} د.ل</div>
+            <div className="flex items-center text-sm text-muted-foreground">إجمالي المدفوعات: {totalAllPaid.toLocaleString('en-US')} د.ل</div>
           </div>
 
           {/* Add/Edit customer dialog */}
@@ -927,10 +927,10 @@ export default function Customers() {
                       <TableCell>{c.phone || '—'}</TableCell>
                       <TableCell>{c.company || '—'}</TableCell>
                       <TableCell className="text-right">{c.contractsCount}</TableCell>
-                      <TableCell className="text-right font-semibold">{c.totalRent.toLocaleString('ar-LY')} د.ل</TableCell>
-                      <TableCell className="text-right text-green-600">{c.totalPaid.toLocaleString('ar-LY')} د.ل</TableCell>
-                      <TableCell className="text-right text-blue-600 font-semibold">{c.accountBalance.toLocaleString('ar-LY')} د.ل</TableCell>
-                      <TableCell className="text-right text-red-600 font-semibold">{remaining.toLocaleString('ar-LY')} د.ل</TableCell>
+                      <TableCell className="text-right font-semibold">{c.totalRent.toLocaleString('en-US')} د.ل</TableCell>
+                      <TableCell className="text-right text-green-600">{c.totalPaid.toLocaleString('en-US')} د.ل</TableCell>
+                      <TableCell className="text-right text-blue-600 font-semibold">{c.accountBalance.toLocaleString('en-US')} د.ل</TableCell>
+                      <TableCell className="text-right text-red-600 font-semibold">{remaining.toLocaleString('en-US')} د.ل</TableCell>
                       <TableCell>
                         <div className="flex gap-2">
                           <Button size="sm" onClick={() => { const id = typeof c.id === 'string' ? c.id : String(c.id); navigate(`/admin/customer-billing?id=${encodeURIComponent(id)}&name=${encodeURIComponent(c.name)}`); }}>عرض فواتير</Button>
@@ -1004,9 +1004,9 @@ export default function Customers() {
                                 <TableCell>{ct['Ad Type'] || '—'}</TableCell>
                                 <TableCell>{ct['Start Date'] ? new Date(ct['Start Date']).toLocaleDateString('ar-LY') : '—'}</TableCell>
                                 <TableCell>{ct['End Date'] ? new Date(ct['End Date']).toLocaleDateString('ar-LY') : '—'}</TableCell>
-                                <TableCell className="font-semibold">{totalRent.toLocaleString('ar-LY')} د.ل</TableCell>
-                                <TableCell className="text-green-600">{paidForContract.toLocaleString('ar-LY')} د.ل</TableCell>
-                                <TableCell className={remaining > 0 ? 'text-red-600 font-semibold' : 'text-green-600'}>{remaining.toLocaleString('ar-LY')} د.ل</TableCell>
+                                <TableCell className="font-semibold">{totalRent.toLocaleString('en-US')} د.ل</TableCell>
+                                <TableCell className="text-green-600">{paidForContract.toLocaleString('en-US')} د.ل</TableCell>
+                                <TableCell className={remaining > 0 ? 'text-red-600 font-semibold' : 'text-green-600'}>{remaining.toLocaleString('en-US')} د.ل</TableCell>
                                 <TableCell>
                                   {isExpired ? (
                                     <span className="px-2 py-1 bg-red-100 text-red-800 rounded text-xs">منتهي</span>
@@ -1081,7 +1081,7 @@ export default function Customers() {
                                    p.entry_type || '—'}
                                 </span>
                               </TableCell>
-                              <TableCell className="font-semibold text-green-600">{(Number(p.amount)||0).toLocaleString('ar-LY')} د.ل</TableCell>
+                              <TableCell className="font-semibold text-green-600">{(Number(p.amount)||0).toLocaleString('en-US')} د.ل</TableCell>
                               <TableCell>{p.method || '—'}</TableCell>
                               <TableCell>{p.reference || '—'}</TableCell>
                               <TableCell>{p.paid_at ? new Date(p.paid_at).toLocaleDateString('ar-LY') : '—'}</TableCell>
@@ -1313,7 +1313,7 @@ export default function Customers() {
                         }}
                       />
                       <label htmlFor={`contract-${num}`} className="text-sm cursor-pointer">
-                        عقد رقم {num} - {ct['Ad Type'] || '—'} - {(Number(ct['Total Rent']) || 0).toLocaleString('ar-LY')} د.ل
+                        عقد رقم {num} - {ct['Ad Type'] || '—'} - {(Number(ct['Total Rent']) || 0).toLocaleString('en-US')} د.ل
                       </label>
                     </div>
                   );
