@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { formatAmount } from '@/lib/formatUtils';
 import { calculateAllBillboardPrices } from '@/utils/contractBillboardPricing';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1101,7 +1102,7 @@ export function SelectedBillboardsCard({
                         {discountPerBillboard > 0 && (
                           <div className="flex justify-between items-center bg-destructive/10 rounded-lg px-3 py-1.5 -mx-1">
                             <span className="text-xs font-medium text-destructive">الخصم</span>
-                            <span className="text-sm font-bold text-destructive font-manrope">- {Math.round(discountPerBillboard).toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-sm font-bold text-destructive font-manrope">- {formatAmount(discountPerBillboard)} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -1109,7 +1110,7 @@ export function SelectedBillboardsCard({
                         {discountPerBillboard > 0 && (
                           <div className="flex justify-between items-center bg-green-500/10 rounded-lg px-3 py-2 -mx-1 border border-green-500/20">
                             <span className="text-xs font-bold text-green-600">بعد الخصم</span>
-                            <span className="text-base font-bold text-green-600 font-manrope">{Math.round(netRentalAfterDiscount).toLocaleString('ar-LY')} {currencySymbol}</span>
+                            <span className="text-base font-bold text-green-600 font-manrope">{formatAmount(netRentalAfterDiscount)} {currencySymbol}</span>
                           </div>
                         )}
 
@@ -1119,7 +1120,7 @@ export function SelectedBillboardsCard({
                             <span className="text-sm font-bold text-primary">الإجمالي النهائي</span>
                             <div className="text-left">
                               <span className="text-lg font-bold text-primary font-manrope">
-                                {Math.round(totalForBoard).toLocaleString('ar-LY')} {currencySymbol}
+                                {formatAmount(totalForBoard)} {currencySymbol}
                               </span>
                               <span className="text-[10px] text-primary/60 font-normal mr-1">
                                 /{pricingMode === 'months' ? `${durationMonths} شهر` : `${durationDays} يوم`}

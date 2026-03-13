@@ -162,7 +162,7 @@ export function calculateAllBillboardPrices(
 
     search(0, 0, []);
 
-    if (bestCombo && bestGap < expectedContractTotal * 0.01) {
+    if (bestCombo && bestGap < 0.5) {
       // Apply the best combination back to prelimResults
       groupEntries.forEach(([, indices], gi) => {
         const newVal = bestCombo![gi];
