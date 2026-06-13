@@ -1,8 +1,0 @@
-/node_modules
-.wweb*
-dist/
-.wwebjs_auth/
-.wwebjs_cache/
-*.log
-.env
-*.session

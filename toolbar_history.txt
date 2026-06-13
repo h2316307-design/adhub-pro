@@ -1,151 +1,0 @@
-=== Step: 566 ===
-Found in content:
-Created At: 2026-06-12T01:56:18Z
-Completed At: 2026-06-12T01:56:18Z
-File Path: `file:///e:/adhub-pro-main%20%284%29/adhub-pro-main/src/pages/DesignStudio.tsx`
-Total Lines: 6979
-Total Bytes: 405266
-Showing lines 4650 to 4705
-The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
-4650:           <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm">
-4651:             <CardContent className="py-2.5 px-4 flex flex-wrap items-center justify-between gap-3">
-4652: 
-4653:               {/* Size */}
-4654:               <div className="flex flex-wrap items-center gap-2 text-xs">
-4655:                 <Select onValueChange={handlePresetSize}>
-4656:                   <SelectTrigger className="h-8 w-28 text-[11px] bg-muted/40">
-4657:                     <SelectValue placeholder="قوالب المقاس..." />
-4658:                   </SelectTrigger>
-4659:                   <SelectContent>
-4660:                     <SelectItem value="portrait">عمودي (1500×2000)</SelectItem>
-4661:                                    const pickPhotos = (limit: number) => {
-4662:                       const items = taskItems.flatMap((it: any) => {
-4663:                         const designUrls = [
-4664:                           it.design_image_url,
-4665:                           it.design_url,
-4666:                           it.design_face_a_url,
-4667:                           it.design_face_b_url,
-4668:                           it.design_face_a,
-4669:                           it.design_face_b,
-4670:                         ].filter(Boolean);
-4671:                         const installUrls = [
-4672:                           it.installed_image_url,
-4673:                           it.installed_image_face_a_url,
-4674:                           it.installed_image_face_b_url,
-4675:                         ].filter
-<truncated 731 bytes>
-                  { id: 'd4', url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=900&auto=format&fit=crop' },
-4684:                         { id: 'd5', url: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=900&auto=format&fit=crop' },
-4685:                         { id: 'd6', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=900&auto=format&fit=crop' },
-4686:                       ];
-4687:                       const pool = items.length > 0 ? items : fallback;
-4688:                       // Dedupe by URL so the same design image never repeats in the grid
-4689:                       const seen = new Set<string>();
-4690:                       const unique: { id: string; url: string }[] = [];
-4691:                 
-============================================================
-=== Step: 604 ===
-Found in content:
-            <Plus className="h-3.5 w-3.5" />
-4634:                         حفظ جديد
-4635:                       </Button>
-4636:                     </div>
-4637:                   </div>
-4638:                 </div>
-4639:               </CardContent>
-4640:             </Card>
-4641:           </TabsContent>
-4642: 
-4643:         </Tabs>
-4644:       </div>
-4645: 
-4646:         {/* ═══════════════ RIGHT: CANVAS (Sticky so it follows scrolling down the side panel) ═══════════════ */}
-4647:         <div className="flex-1 flex flex-col gap-3 xl:sticky xl:top-4 self-start">
-4648: 
-4649:           {/* ── Toolbar ── */}
-4650:           <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm">
-4651:             <CardContent className="py-2.5 px-4 flex flex-wrap items-center justify-between gap-3">
-4652: 
-4653:               {/* Size */}
-4654:               <div className="flex flex-wrap items-center gap-2 text-xs">
-4655:                 <Select onValueChange={handlePresetSize}>
-4656:                   <SelectTrigger className="h-8 w-28 text-[11px] bg-muted/40">
-4657:                     <SelectValue placeholder="قوالب المقاس..." />
-4658:                   </SelectTrigger>
-4659:                   <SelectContent>
-4660:                     <Sele
-<truncated 5409 bytes>
- 70%, rgba(0,0,0,${0.08 + g.tint * 0.45}) 100%)`,
-4728:                                 borderLeft: '1px solid rgba(255, 255, 255, 0.25)',
-4729:                                 borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-4730:                                 boxShadow: 'inset 0 0 15px rgba(255,255,255,0.04), 0 0 25px rgba(255,255,255,0.05)',
-4731:                               }}
-4732:                             />
-4733:                           ))}
-4734:                         </div>
-4735:                       );
-4736:                     };
-4737: 
-4738:                     const Header = ({ accent, brandRight = true, align = 'center', imagesSide }: { accent: string; brandRight?: boolean; align?: 'right' | 'center' | 'left'; imagesSide?: 'left' | 'right' }) => {
-4739:                       const panelLogoEl = textElements.find(el => el.id === 'company_logo');
-4740:                       const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
-4741:                       const showLogo = coverShow.companyLogo && !!logoSrc;
-4742:                       const showName = coverShow.companyName;
-4743:                       const isT5 = coverTemplate === 'template5';
-4744:                       const brandWidth = align === 'center' ? (imagesSide ? (isT5 ? '33%' : '50%') : '80%') : '60%';
-4745:                       const brandMarginLeft = align === 'center'
-4746:                         ? (imagesSide === 'left' ? (isT5 ? '64%' : '45%') : imagesSide === 'right' ? '3%' : 'auto')
-4747:                         : align === 'right' ? 'auto' : '0';
-4748:                       const brandMarginRight = align === 'center'
-4749:     
-============================================================
-=== Step: 679 ===
-============================================================
-=== Step: 682 ===
-Found in content:
-Created At: 2026-06-12T03:35:29Z
-Completed At: 2026-06-12T03:35:34Z
-
-				The command failed with exit code: 1
-				Output:
-				Step: 566
-Found in text content:
->: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
-4650:           <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm">
-4651:             <CardContent className="py-2.5 px-4 flex flex-wrap items-center justify-between gap-3">
-4652: 
-4653:               {/* Size */}
-4654:               <div className="flex flex-wrap items-center gap-2 text-xs">
-4655:                 <Select onValueChange={handlePresetSize}>
-4656:                   <SelectTrigger className="h-8 w-28 text-[11px] bg-muted/40">
-4657:                     <SelectValue placeholder="� �..." />
-4658:                   </SelectTrigger>
-4659:                   <SelectContent>
-4660:                     <SelectItem value="portrait">� (1500�2000)</SelectItem>
-4661:                                    const pickPhotos = (limit: number) => {
-4662:                       const items = taskItems.flatMap((it: any) => {
-4663:                         const designUrls = [
-4664:                           it.design_image_url,
-4665:                           it.design_url,
-4666:                           it.design_face_a_url,
-4667:                           it.design_face_b_url,
-4668:                           it.design_face_a,
-4669:                           it.design_face_b,
-4670:                         ].filter(Boolean);
-4671:                         const installUrls = [
-4672:                   
-============================================================
-Step: 604
-Found in text content:
-Traceback (most recent call last):
-  File "C:\Users\p\.gemini\antigravity\brain\c7ca029a-294b-448b-9325-a4948271b458\scratch\find_toolbar.py", line 28, in <module>
-    print(text[max(0, idx-500):idx+1000])
-  File "C:\Users\p\AppData\Local\Programs\Python\Python312\Lib\encodings\cp1256.py", line 19, in encode
-    return codecs.charmap_encode(input,self.errors,encoding_table)[0]
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-UnicodeEncodeError: 'charmap' codec can't encode characters in position 117-118: character maps to <undefined>
-
-
-============================================================
-=== Step: 683 ===
-============================================================
