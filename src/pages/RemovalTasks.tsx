@@ -79,6 +79,64 @@ interface RemovalTaskItem {
   billboards?: any;
 }
 
+function normalizeString(str: string | null | undefined): string {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ');
+}
+
+function findCorrectTeamForRemoval(sortedTeams: any[], billboardSize: string | null, billboardCity: string | null, billboardCompanyId: string | null): any {
+  const normSize = normalizeString(billboardSize);
+  const normCity = normalizeString(billboardCity);
+
+  const matchesSizeAndCity = (t: any) => {
+    const sizeMatch = Array.isArray(t.sizes) && t.sizes.some((s: any) => normalizeString(s) === normSize);
+    if (!sizeMatch) return false;
+    if (Array.isArray(t.cities) && t.cities.length > 0 && normCity) {
+      const cityMatch = t.cities.some((c: any) => normalizeString(c) === normCity);
+      if (!cityMatch) return false;
+    }
+    return true;
+  };
+
+  // 1. إذا اللوحة لها شركة مالكة، نبحث أولاً في الفرق المرتبطة بهذه الشركة
+  if (billboardCompanyId) {
+    const companyTeam = sortedTeams.find((t: any) => {
+      if (!matchesSizeAndCity(t)) return false;
+      const isCompanyMatch = t.friend_company_id === billboardCompanyId || 
+        (Array.isArray(t.friend_company_ids) && t.friend_company_ids.includes(billboardCompanyId));
+      return isCompanyMatch;
+    });
+    if (companyTeam) return companyTeam;
+  }
+
+  // fallback 1: فرق عامة (بدون شركة) تطابق مدينة + مقاس
+  const generalTeam = sortedTeams.find((t: any) => {
+    if (!matchesSizeAndCity(t)) return false;
+    const hasCompany = t.friend_company_id || (Array.isArray(t.friend_company_ids) && t.friend_company_ids.length > 0);
+    return !hasCompany;
+  });
+  if (generalTeam) return generalTeam;
+
+  // fallback 2: أي فريق يطابق مدينة + مقاس (حتى لو مرتبط بشركة)
+  const anyTeamCitySize = sortedTeams.find((t: any) => matchesSizeAndCity(t));
+  if (anyTeamCitySize) return anyTeamCitySize;
+
+  // fallback 3: أي فريق يطابق المقاس فقط
+  const anySizeTeam = sortedTeams.find((t: any) => 
+    Array.isArray(t.sizes) && t.sizes.some((s: any) => normalizeString(s) === normSize)
+  );
+  if (anySizeTeam) return anySizeTeam;
+
+  // fallback 4: أي فريق كحل أخير
+  return sortedTeams[0] || null;
+}
+
 export default function RemovalTasks() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -1099,23 +1157,7 @@ export default function RemovalTasks() {
       let addedCount = 0;
       
       for (const bb of missingBillboards) {
-        let team: any = null;
-        if (bb.friend_company_id) {
-          team = sortedTeams.find((t: any) => 
-            t.friend_company_id === bb.friend_company_id &&
-            Array.isArray(t.sizes) && t.sizes.includes(bb.Size)
-          );
-        }
-        if (!team) {
-          team = sortedTeams.find((t: any) => {
-            const sizeMatch = Array.isArray(t.sizes) && t.sizes.includes(bb.Size);
-            if (!sizeMatch) return false;
-            if (Array.isArray(t.cities) && t.cities.length > 0 && bb.City) {
-              return t.cities.includes(bb.City);
-            }
-            return true;
-          });
-        }
+        const team = findCorrectTeamForRemoval(sortedTeams, bb.Size, bb.City, bb.friend_company_id);
         
         if (!team) continue;
         
@@ -1239,14 +1281,7 @@ export default function RemovalTasks() {
         const billboard = billboardById[billboardId];
         if (!billboard) continue;
         
-        const correctTeam = sortedTeams.find((t: any) => {
-          const sizeMatch = Array.isArray(t.sizes) && t.sizes.includes(billboard.Size);
-          if (!sizeMatch) return false;
-          if (Array.isArray(t.cities) && t.cities.length > 0 && billboard.City) {
-            return t.cities.includes(billboard.City);
-          }
-          return true;
-        });
+        const correctTeam = findCorrectTeamForRemoval(sortedTeams, billboard.Size, billboard.City, billboard.friend_company_id);
         
         if (!correctTeam) {
           items.forEach(item => itemsToDelete.push(item.id));

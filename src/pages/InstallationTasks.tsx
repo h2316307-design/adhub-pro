@@ -119,17 +119,32 @@ interface TaskDesign {
  * دالة موحدة لاختيار الفريق الصحيح للوحة
  * الأولوية: مقاس + مدينة + شركة مالكة (الفرق المرتبطة بالشركة أولاً)
  */
+function normalizeString(str: string | null | undefined): string {
+  if (!str) return '';
+  return str
+    .trim()
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ى/g, 'ي')
+    .replace(/ة/g, 'ه')
+    .replace(/\s+/g, ' ');
+}
+
 function findCorrectTeam(sortedTeams: any[], billboardSize: string | null, billboardCity: string | null, billboardCompanyId: string | null): any {
+  const normSize = normalizeString(billboardSize);
+  const normCity = normalizeString(billboardCity);
+
   const matchesSizeAndCity = (t: any) => {
-    const sizeMatch = Array.isArray(t.sizes) && t.sizes.includes(billboardSize);
+    const sizeMatch = Array.isArray(t.sizes) && t.sizes.some((s: any) => normalizeString(s) === normSize);
     if (!sizeMatch) return false;
-    if (Array.isArray(t.cities) && t.cities.length > 0 && billboardCity) {
-      if (!t.cities.includes(billboardCity)) return false;
+    if (Array.isArray(t.cities) && t.cities.length > 0 && normCity) {
+      const cityMatch = t.cities.some((c: any) => normalizeString(c) === normCity);
+      if (!cityMatch) return false;
     }
     return true;
   };
 
-  // إذا اللوحة لها شركة مالكة، نبحث أولاً في الفرق المرتبطة بهذه الشركة
+  // 1. إذا اللوحة لها شركة مالكة، نبحث أولاً في الفرق المرتبطة بهذه الشركة
   if (billboardCompanyId) {
     const companyTeam = sortedTeams.find((t: any) => {
       if (!matchesSizeAndCity(t)) return false;
@@ -151,7 +166,9 @@ function findCorrectTeam(sortedTeams: any[], billboardSize: string | null, billb
   if (anyTeamCitySize) return anyTeamCitySize;
 
   // fallback 3: أي فريق يطابق المقاس فقط
-  const anySizeTeam = sortedTeams.find((t: any) => Array.isArray(t.sizes) && t.sizes.includes(billboardSize));
+  const anySizeTeam = sortedTeams.find((t: any) => 
+    Array.isArray(t.sizes) && t.sizes.some((s: any) => normalizeString(s) === normSize)
+  );
   if (anySizeTeam) return anySizeTeam;
 
   // fallback 4: أي فريق كحل أخير
@@ -1295,43 +1312,67 @@ export default function InstallationTasks() {
     const eligible = allTaskItems.filter(i =>
       i.status !== 'completed' && (taskTypeById[i.task_id] || 'installation') === 'installation'
     );
-    const byBillboard: Record<number, any[]> = {};
-    eligible.forEach(item => {
-      if (!byBillboard[item.billboard_id]) byBillboard[item.billboard_id] = [];
-      byBillboard[item.billboard_id].push(item);
-    });
-
+    
     const taskTeamMap: Record<string, string> = {};
     const taskContractMap: Record<string, any> = {};
     tasks.forEach((t: any) => { taskTeamMap[t.id] = t.team_id; taskContractMap[t.id] = t.contract_id; });
+
+    // تجميع حسب contract_id + billboard_id
+    const byContractAndBillboard: Record<string, any[]> = {};
+    eligible.forEach(item => {
+      const contractId = taskContractMap[item.task_id] || 'no_contract';
+      const key = `${contractId}_${item.billboard_id}`;
+      if (!byContractAndBillboard[key]) byContractAndBillboard[key] = [];
+      byContractAndBillboard[key].push(item);
+    });
+
     const teamPriorityMap: Record<string, number> = {};
     const teamNameMap: Record<string, string> = {};
     teams.forEach((t: any) => { teamPriorityMap[t.id] = t.priority || 0; teamNameMap[t.id] = t.team_name || ''; });
 
+    const getPriorityWeight = (priority: any) => {
+      const val = Number(priority);
+      if (isNaN(val) || val <= 0) return 999999;
+      return val;
+    };
+
     const rows: any[] = [];
-    for (const [bbId, items] of Object.entries(byBillboard)) {
+    for (const [key, items] of Object.entries(byContractAndBillboard)) {
       if (items.length <= 1) continue;
+      const [contractIdStr, bbIdStr] = key.split('_');
+      const bbId = Number(bbIdStr);
+      
       const sorted = [...items].sort((a, b) => {
-        const pa = teamPriorityMap[taskTeamMap[a.task_id] || ''] || 0;
-        const pb = teamPriorityMap[taskTeamMap[b.task_id] || ''] || 0;
-        return pb - pa;
+        const pa = getPriorityWeight(teamPriorityMap[taskTeamMap[a.task_id] || '']);
+        const pb = getPriorityWeight(teamPriorityMap[taskTeamMap[b.task_id] || '']);
+        return pa - pb;
       });
+
+      const highestPriorityTeamId = taskTeamMap[sorted[0].task_id] || '';
+      const highestPriorityTeamName = teamNameMap[highestPriorityTeamId] || 'غير محدد';
+
       sorted.forEach((it, idx) => {
         const teamId = taskTeamMap[it.task_id] || '';
         const contractId = taskContractMap[it.task_id];
         const contract = contractById[contractId];
-        const billboard = billboardById[Number(bbId)];
+        const billboard = billboardById[bbId];
         rows.push({
           itemId: it.id,
-          billboardId: Number(bbId),
+          billboardId: bbId,
           billboardName: billboard?.Billboard_Name || `لوحة ${bbId}`,
+          size: billboard?.Size || '',
           city: billboard?.City || '',
+          imageUrl: billboard?.Image_URL || '',
+          nearestLandmark: billboard?.Nearest_Landmark || '',
           taskId: it.task_id,
           taskShortId: String(it.task_id).slice(-6),
           teamName: teamNameMap[teamId] || 'غير محدد',
           contractName: contract?.['Customer Name'] || `عقد ${contractId}`,
           priority: teamPriorityMap[teamId] || 0,
           willKeep: idx === 0,
+          reason: idx === 0 
+            ? 'أعلى أولوية للفرقة' 
+            : `يوجد فرقة أعلى أولوية (${highestPriorityTeamName})`,
         });
       });
     }
@@ -1355,14 +1396,23 @@ export default function InstallationTasks() {
         .in('id', itemsToDelete);
       if (error) throw error;
 
-      // حذف المهام الفارغة
+      // حذف المهام الفارغة بالتحقق الفعلي من قاعدة البيانات
       const affectedTaskIds = [...new Set(
         allTaskItems.filter(i => itemsToDelete.includes(i.id)).map(i => i.task_id)
       )];
       for (const taskId of affectedTaskIds) {
-        const remaining = allTaskItems.filter(i => i.task_id === taskId && !itemsToDelete.includes(i.id));
-        if (remaining.length === 0) {
-          await supabase.from('installation_task_items').delete().eq('task_id', taskId);
+        const { data: remaining, error: checkError } = await supabase
+          .from('installation_task_items')
+          .select('id')
+          .eq('task_id', taskId)
+          .limit(1);
+
+        if (checkError) {
+          console.error(`Error checking remaining items for task ${taskId}:`, checkError);
+          continue;
+        }
+
+        if (!remaining || remaining.length === 0) {
           await supabase.from('installation_tasks').delete().eq('id', taskId);
         }
       }
@@ -1401,17 +1451,21 @@ export default function InstallationTasks() {
       let movedCount = 0;
       let mergedCount = 0;
       
-      // تجميع حسب billboard_id - حذف المكررات أولاً
-      const byBillboard: Record<number, typeof pendingItems> = {};
+      // تجميع حسب contract_id + billboard_id - حذف المكررات أولاً
+      const byContractAndBillboard: Record<string, typeof pendingItems> = {};
       pendingItems.forEach(item => {
-        if (!byBillboard[item.billboard_id]) byBillboard[item.billboard_id] = [];
-        byBillboard[item.billboard_id].push(item);
+        const taskObj = taskDataMap[item.task_id];
+        const contractId = taskObj?.contract_id || 'no_contract';
+        const key = `${contractId}_${item.billboard_id}`;
+        if (!byContractAndBillboard[key]) byContractAndBillboard[key] = [];
+        byContractAndBillboard[key].push(item);
       });
       
       const itemsToDelete: string[] = [];
       const itemsToMove: { id: string; newTaskId: string }[] = [];
       
-      for (const [billboardIdStr, items] of Object.entries(byBillboard)) {
+      for (const [key, items] of Object.entries(byContractAndBillboard)) {
+        const [contractId, billboardIdStr] = key.split('_');
         const billboardId = Number(billboardIdStr);
         const billboard = billboardById[billboardId];
         if (!billboard) continue;
@@ -1424,7 +1478,7 @@ export default function InstallationTasks() {
           continue;
         }
         
-        // حذف المكررات - الاحتفاظ بأول نسخة
+        // حذف المكررات - الاحتفاظ بأول نسخة للمركز/العقد نفسه
         if (items.length > 1) {
           for (let i = 1; i < items.length; i++) {
             itemsToDelete.push(items[i].id);
@@ -2369,6 +2423,10 @@ export default function InstallationTasks() {
 
             const handlePasteFromClipboard = async (targetFace: 'A' | 'B') => {
               try {
+                if (!navigator.clipboard || !navigator.clipboard.read) {
+                  toast.error('المتصفح لا يدعم الوصول للحافظة أو يتطلب اتصالاً آمناً (HTTPS)');
+                  return;
+                }
                 const clipboardItems = await navigator.clipboard.read();
                 let imageFile: File | null = null;
                 

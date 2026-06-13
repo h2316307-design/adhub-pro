@@ -65,25 +65,27 @@ export function EmployeeDistributionSection({
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full p-2.5 rounded-lg border border-border/50 hover:bg-accent/30 transition-colors">
-        <div className="flex items-center gap-2">
-          <Checkbox
-            checked={enableEmployee}
-            onCheckedChange={(checked) => {
-              setEnableEmployee(checked as boolean);
-              if (checked) setIsOpen(true);
-            }}
-            onClick={(e) => e.stopPropagation()}
-          />
-          <UserCheck className="h-4 w-4 text-green-600" />
-          <span className="text-sm font-semibold">دفع لموظفين</span>
-          {enableEmployee && getTotalEmployeePaymentAmount() > 0 && (
-            <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700">
-              {getTotalEmployeePaymentAmount().toFixed(0)} د.ل
-            </Badge>
-          )}
+      <CollapsibleTrigger asChild>
+        <div className="flex items-center justify-between w-full p-2.5 rounded-lg border border-border/50 hover:bg-accent/30 transition-colors cursor-pointer select-none" role="button">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              checked={enableEmployee}
+              onCheckedChange={(checked) => {
+                setEnableEmployee(checked as boolean);
+                if (checked) setIsOpen(true);
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+            <UserCheck className="h-4 w-4 text-green-600" />
+            <span className="text-sm font-semibold">دفع لموظفين</span>
+            {enableEmployee && getTotalEmployeePaymentAmount() > 0 && (
+              <Badge variant="outline" className="text-xs bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-300 dark:border-green-700">
+                {getTotalEmployeePaymentAmount().toFixed(0)} د.ل
+              </Badge>
+            )}
+          </div>
+          <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
         </div>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </CollapsibleTrigger>
       <CollapsibleContent>
         {enableEmployee && (

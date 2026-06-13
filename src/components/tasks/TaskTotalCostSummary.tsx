@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Separator } from '@/components/ui/separator';
 import { 
   DollarSign, Calculator, Ruler, ChevronDown, ChevronUp, 
-  Box, Building2, Landmark, LayoutGrid, Check, Pencil, X, Save, Gift, Square, Zap
+  Box, Building2, Landmark, LayoutGrid, Check, Pencil, X, Save, Gift, Square, Zap, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -24,6 +24,7 @@ interface TaskItem {
   id: string;
   billboard_id: number;
   customer_installation_cost: number;
+  company_installation_cost?: number | null;
   has_cutout?: boolean;
   additional_cost?: number;
   additional_cost_notes?: string | null;
@@ -191,11 +192,16 @@ export function TaskTotalCostSummary({
       // المساحة الفعلية = مساحة الوجه الواحد × عدد الأوجه المراد تركيبها
       const singleFaceArea = area; // المساحة لوجه واحد
       const itemArea = singleFaceArea * facesToInstall;
-      // تكلفة الشركة: نصف السعر إذا وجه واحد من لوحة بوجهين
-      const fullCompanyCost = installationPrices[item.billboard_id] || 0;
-      const itemCompanyCost = (totalFaces > 1 && facesToInstall === 1)
-        ? fullCompanyCost / 2
-        : fullCompanyCost;
+      // تكلفة الشركة: نصف السعر إذا وجه واحد من لوحة بوجهين، أو التكلفة المخصصة إن وجدت
+      const hasCompanyCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
+      const itemCompanyCost = hasCompanyCost
+        ? item.company_installation_cost!
+        : (() => {
+            const fullCompanyCost = installationPrices[item.billboard_id] || 0;
+            return (totalFaces > 1 && facesToInstall === 1)
+              ? fullCompanyCost / 2
+              : fullCompanyCost;
+          })();
       const itemCustomerCost = item.customer_installation_cost || 0;
 
       companyCost += itemCompanyCost;
@@ -275,7 +281,12 @@ export function TaskTotalCostSummary({
   // بدء تعديل عنصر
   const startEditingItem = (item: TaskItem & { billboard: Billboard; area: number }) => {
     setEditingItemId(item.id);
-    const existingCompanyCost = customCompanyCosts[item.id] ?? installationPrices[item.billboard_id] ?? 0;
+    const existingCompanyCost = item.company_installation_cost ?? customCompanyCosts[item.id] ?? (() => {
+      const fullCompanyCost = installationPrices[item.billboard_id] || 0;
+      const totalFaces = item.billboard?.Faces_Count || 1;
+      const facesToInstall = item.faces_to_install ?? totalFaces;
+      return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
+    })();
     setEditValues({
       companyCost: existingCompanyCost,
       customerCost: item.customer_installation_cost || 0,
@@ -299,6 +310,7 @@ export function TaskTotalCostSummary({
       const { error } = await supabase
         .from('installation_task_items')
         .update({
+          company_installation_cost: editValues.companyCost,
           customer_installation_cost: editValues.customerCost,
           additional_cost: editValues.additionalCost || null,
           additional_cost_notes: editValues.additionalNotes || null
@@ -1035,6 +1047,28 @@ export function TaskTotalCostSummary({
                                               </div>
                                             </div>
 
+                                            {/* الزبون سدد التكاليف */}
+                                            <div className="col-span-2 sm:col-span-4 flex items-center justify-between gap-3 bg-amber-500/[0.03] border border-amber-500/10 p-2.5 rounded-xl shadow-sm mt-1">
+                                              <div className="flex flex-col text-right">
+                                                <span className="text-xs font-bold text-amber-700 dark:text-amber-400">حالة سداد التكاليف للزبون</span>
+                                                <span className="text-[10px] text-muted-foreground mt-0.5">تصفير التكاليف للشركة وللزبون (بدون تكاليف)</span>
+                                              </div>
+                                              <Button
+                                                size="sm"
+                                                variant={editValues.customerCost === 0 && editValues.companyCost === 0 ? "default" : "outline"}
+                                                className={`h-8 px-3 text-xs font-semibold gap-1.5 rounded-lg transition-all cursor-pointer ${
+                                                  editValues.customerCost === 0 && editValues.companyCost === 0
+                                                    ? "bg-amber-500 hover:bg-amber-600 text-black border-0 shadow-sm animate-pulse"
+                                                    : "border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                                                }`}
+                                                onClick={() => setEditValues(prev => ({ ...prev, customerCost: 0, companyCost: 0 }))}
+                                                type="button"
+                                              >
+                                                <CheckCircle2 className="h-3.5 w-3.5" />
+                                                <span>{editValues.customerCost === 0 && editValues.companyCost === 0 ? "تم السداد والتصفير" : "سدد التكاليف / بدون تكاليف"}</span>
+                                              </Button>
+                                            </div>
+
                                             {/* تكلفة إضافية */}
                                             <div className="space-y-1.5">
                                               <Label className="text-xs font-medium text-foreground">تكلفة إضافية</Label>
@@ -1096,7 +1130,18 @@ export function TaskTotalCostSummary({
                                             {/* التكاليف */}
                                             <div className="flex items-center gap-2 text-sm flex-wrap">
                                               <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700">
-                                                الشركة: {(customCompanyCosts[item.id] ?? installationPrices[item.billboard_id] ?? 0).toLocaleString('ar-LY')}
+                                                 الشركة: {(() => {
+                                                   const hasCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
+                                                   const cost = hasCost 
+                                                     ? item.company_installation_cost! 
+                                                     : (customCompanyCosts[item.id] ?? (() => {
+                                                         const fullCompanyCost = installationPrices[item.billboard_id] || 0;
+                                                         const totalFaces = item.billboard?.Faces_Count || 1;
+                                                         const facesToInstall = item.faces_to_install ?? totalFaces;
+                                                         return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
+                                                       })());
+                                                   return cost.toLocaleString('ar-LY');
+                                                 })()}
                                               </Badge>
                                               {item.customer_installation_cost === 0 ? (
                                                 <Badge className="bg-purple-100 text-purple-700 border-0 dark:bg-purple-950/50 dark:text-purple-300">

@@ -115,9 +115,10 @@ export function MobileTaskCard({
   const isFullyCompleted = completedItems === taskItems.length && taskItems.length > 0;
   const isPartiallyCompleted = completedItems > 0 && !isFullyCompleted;
 
-  // حساب تكلفة التركيب من جدول التسعير
+  // حساب تكلفة التركيب من جدول التسعير أو التكلفة المخصصة
   const totalInstallCost = taskItems.reduce((sum, item) => {
-    const price = installationPricingByBillboard[item.billboard_id] || 0;
+    const hasCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
+    const price = hasCost ? item.company_installation_cost : (installationPricingByBillboard[item.billboard_id] || 0);
     return sum + price;
   }, 0);
   const customerTotal = taskItems.reduce((sum, item) => sum + (item.customer_installation_cost || 0), 0);

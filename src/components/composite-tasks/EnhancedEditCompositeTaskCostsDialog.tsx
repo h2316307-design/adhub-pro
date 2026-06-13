@@ -14,7 +14,7 @@ import {
   Wrench, Printer, Scissors, DollarSign, Package, 
   TrendingUp, TrendingDown, Calculator, Ruler, ChevronDown, ChevronUp, 
   Building2, Landmark, LayoutGrid, Check, Square, Zap, Gift, Pencil, X, Save,
-  Loader2, AlertCircle, AlertTriangle
+  Loader2, AlertCircle, AlertTriangle, CheckCircle2
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { cn } from '@/lib/utils';
@@ -359,7 +359,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
             .from('billboards').select('"ID", "Size", "Faces_Count"').in('ID', billboardIds);
           
           installItems.forEach(item => {
-            if (item.company_installation_cost != null && item.company_installation_cost > 0) {
+            if (item.company_installation_cost !== null && item.company_installation_cost !== undefined) {
               savedCompanyCosts[item.id] = item.company_installation_cost;
             } else {
               const bb = billboardsDataForCosts?.find((b: any) => b.ID === item.billboard_id);
@@ -1359,13 +1359,37 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                                         />
                                                       </div>
                                                       <div className="space-y-2">
-                                                        <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed">ملاحظات وسبب إضافية الشركة</Label>
-                                                        <Input dir="rtl" value={editValues.companyAdditionalNotes} onChange={e => setEditValues(prev => ({...prev, companyAdditionalNotes: e.target.value}))} placeholder="تراخيص، رافعة تلسكوبية..." className="h-11 text-xs rounded-xl text-right" />
-                                                      </div>
-                                                      <div className="space-y-2">
-                                                        <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed">ملاحظات وسبب إضافية العميل</Label>
-                                                        <Input dir="rtl" value={editValues.additionalNotes} onChange={e => setEditValues(prev => ({...prev, additionalNotes: e.target.value}))} placeholder="تجهيزات معينة للموقع، عمل ليلي..." className="h-11 text-xs rounded-xl text-right" />
-                                                      </div>
+                                                         <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed">ملاحظات وسبب إضافية العميل</Label>
+                                                         <Input dir="rtl" value={editValues.additionalNotes} onChange={e => setEditValues(prev => ({...prev, additionalNotes: e.target.value}))} placeholder="تجهيزات معينة للموقع، عمل ليلي..." className="h-11 text-xs rounded-xl text-right" />
+                                                       </div>
+
+                                                       {/* الزبون سدد التكاليف */}
+                                                       <div className="col-span-1 sm:col-span-2 flex items-center justify-between gap-3 bg-amber-500/[0.03] border border-amber-500/10 p-3 rounded-xl shadow-sm mt-1 text-right">
+                                                         <div className="flex flex-col">
+                                                           <span className="text-xs font-bold text-amber-700 dark:text-amber-400">حالة سداد التكاليف للزبون</span>
+                                                           <span className="text-[10px] text-muted-foreground mt-0.5">تصفير التكاليف للشركة وللزبون (بدون تكاليف)</span>
+                                                         </div>
+                                                         <Button
+                                                           size="sm"
+                                                           variant={editValues.customerCost === 0 && editValues.companyCost === 0 ? "default" : "outline"}
+                                                           className={cn(
+                                                             "h-9 px-4 text-xs font-bold gap-2 rounded-xl transition-all cursor-pointer",
+                                                             editValues.customerCost === 0 && editValues.companyCost === 0
+                                                               ? "bg-amber-500 hover:bg-amber-600 text-black border-0 shadow-sm animate-pulse"
+                                                               : "border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                                                           )}
+                                                           onClick={() => setEditValues(prev => ({ ...prev, customerCost: 0, companyCost: 0 }))}
+                                                           type="button"
+                                                         >
+                                                           <CheckCircle2 className="h-4 w-4" />
+                                                           <span>{editValues.customerCost === 0 && editValues.companyCost === 0 ? "تم السداد والتصفير" : "سدد التكاليف / بدون تكاليف"}</span>
+                                                         </Button>
+                                                       </div>
+
+                                                       <div className="space-y-2">
+                                                         <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed text-right">ملاحظات وسبب إضافية الشركة</Label>
+                                                         <Input dir="rtl" value={editValues.companyAdditionalNotes} onChange={e => setEditValues(prev => ({...prev, companyAdditionalNotes: e.target.value}))} placeholder="تراخيص، رافعة تلسكوبية..." className="h-11 text-xs rounded-xl text-right" />
+                                                       </div>
 
                                                       <div className="space-y-2 col-span-2 border-t border-border/10 pt-4 mt-2">
                                                         <Label className="text-sm font-semibold text-purple-600 block leading-relaxed">هل تحتوي هذه اللوحة على مجسم؟</Label>

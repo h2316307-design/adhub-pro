@@ -799,7 +799,7 @@ export default function ExpenseManagement() {
       setNewExpense({
         description: '',
         amount: 0,
-        category: '',
+        category: categoryOptions.includes('أخرى') ? 'أخرى' : (categoryOptions[0] || ''),
         expense_date: new Date().toISOString().split('T')[0],
         payment_method: '',
         payment_status: 'unpaid',
@@ -1903,7 +1903,8 @@ export default function ExpenseManagement() {
                         setEditingExpense(null);
                         setSelectedCustodyAccountId('');
                         setNewExpense({
-                          description: '', amount: 0, category: '',
+                          description: '', amount: 0, 
+                          category: categoryOptions.includes('أخرى') ? 'أخرى' : (categoryOptions[0] || ''),
                           expense_date: new Date().toISOString().split('T')[0],
                           payment_method: '', payment_status: 'unpaid', employee_id: '',
                           notes: '', receiver_name: '', sender_name: ''

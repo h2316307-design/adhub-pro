@@ -1303,7 +1303,7 @@ export default function DesignStudio() {
     }
   }, [loadItemDetails]);
 
-  // Load task items when a contract is selected
+  // Load task items when a contract is selected (loads all tasks associated with this contract)
   useEffect(() => {
     if (!selectedContractId) {
       setSelectedTaskId('');
@@ -1319,14 +1319,11 @@ export default function DesignStudio() {
       // and loadTasks orders by created_at DESC, so the first entry is newest).
       const firstTaskId = contract.taskIds[0];
       setSelectedTaskId(prev => (prev && contract.taskIds.includes(prev) ? prev : firstTaskId));
+      
+      // Load all task items for all tasks in this contract (e.g. multi-team split installations)
+      loadTaskItems(contract.taskIds);
     }
-  }, [selectedContractId, groupedContracts]);
-
-  // Load items strictly for the selected task (avoids leaking previous task images)
-  useEffect(() => {
-    if (!selectedTaskId) return;
-    loadTaskItems([selectedTaskId]);
-  }, [selectedTaskId, loadTaskItems]);
+  }, [selectedContractId, groupedContracts, loadTaskItems]);
 
   // Load details when selected item changes (from dropdown switch)
   useEffect(() => {
@@ -1338,8 +1335,24 @@ export default function DesignStudio() {
     const currentItems = taskItemsRef.current;
     if (currentItems.length > 0) {
       loadItemDetails(selectedItemId, currentItems);
+      
+      // Auto-sync selectedTaskId with the selected item's task_id
+      const item = currentItems.find(i => i.id === selectedItemId);
+      if (item && item.task_id) {
+        setSelectedTaskId(item.task_id);
+      }
     }
   }, [selectedItemId, loadItemDetails]);
+
+  // Sync selectedItemId when selectedTaskId is changed by the user in the task dropdown
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    const currentItems = taskItemsRef.current;
+    const item = currentItems.find(i => i.task_id === selectedTaskId);
+    if (item && item.id !== selectedItemId) {
+      setSelectedItemId(item.id);
+    }
+  }, [selectedTaskId, selectedItemId]);
 
   // Automatically fit image height when switching billboard images
   const prevImageUrlRef = useRef<string>('');
@@ -3831,7 +3844,7 @@ export default function DesignStudio() {
                         <SelectContent>
                           {contractTasks.map(t => (
                             <SelectItem key={t.id} value={t.id} className="text-xs">
-                              {taskTypeLabel(t.task_type)} — {t.created_at ? new Date(t.created_at).toLocaleDateString('ar-LY') : ''}
+                              {taskTypeLabel(t.task_type)} — {t.installation_teams?.team_name || 'بدون فريق'} — {t.created_at ? new Date(t.created_at).toLocaleDateString('ar-LY') : ''}
                             </SelectItem>
                           ))}
                         </SelectContent>

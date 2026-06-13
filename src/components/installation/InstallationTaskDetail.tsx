@@ -123,7 +123,11 @@ export const InstallationTaskDetail: React.FC<Props> = ({
   const displayStatus = getDisplayStatus(taskItems);
   const cfg = STATUS_CONFIG[displayStatus];
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
-  const totalCost = taskItems.reduce((sum, item) => sum + (installationPricingByBillboard[item.billboard_id] || 0), 0);
+  const totalCost = taskItems.reduce((sum, item) => {
+    const hasCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
+    const cost = hasCost ? item.company_installation_cost : (installationPricingByBillboard[item.billboard_id] || 0);
+    return sum + cost;
+  }, 0);
   const designImage = taskDesigns[0]?.design_face_a_url || taskItems.find(i => i.design_face_a)?.design_face_a;
   const firstInstallDate = taskItems.find(i => i.installation_date)?.installation_date;
 

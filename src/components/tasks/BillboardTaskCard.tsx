@@ -89,7 +89,7 @@ export function BillboardTaskCard({
   const [saving, setSaving] = useState(false);
   const [hasCutout, setHasCutout] = useState<boolean>(item.has_cutout || false);
   const [customerInstallationCost, setCustomerInstallationCost] = useState<number>(item.customer_installation_cost || 0);
-  const [companyInstallationCost, setCompanyInstallationCost] = useState<number>(item.company_installation_cost || 0);
+  const [companyInstallationCost, setCompanyInstallationCost] = useState<number | null>(item.company_installation_cost);
   const [isCompanyCostEditable, setIsCompanyCostEditable] = useState(false);
   const [savingCompanyCost, setSavingCompanyCost] = useState(false);
   const [savingCost, setSavingCost] = useState(false);
@@ -120,9 +120,8 @@ export function BillboardTaskCard({
     return installationPrice;
   })();
 
-  const baseUnmultiplied = installationPrice;
-  const isStoredCostStale = totalReinstalledFaces > 0 && companyInstallationCost > 0 && companyInstallationCost === baseUnmultiplied;
-  const displayCompanyCost = (companyInstallationCost > 0 && !isStoredCostStale) ? companyInstallationCost : effectiveInstallationPrice;
+  const hasCompanyCost = companyInstallationCost !== null && companyInstallationCost !== undefined;
+  const displayCompanyCost = hasCompanyCost ? companyInstallationCost : effectiveInstallationPrice;
   
   useEffect(() => {
     setSelectedDesignId(item.selected_design_id || 'none');
@@ -133,7 +132,7 @@ export function BillboardTaskCard({
   }, [item.customer_installation_cost]);
 
   useEffect(() => {
-    setCompanyInstallationCost(item.company_installation_cost || 0);
+    setCompanyInstallationCost(item.company_installation_cost);
   }, [item.company_installation_cost]);
 
   useEffect(() => {
@@ -286,7 +285,7 @@ export function BillboardTaskCard({
   };
 
   const handleCompanyCostSave = async () => {
-    if (companyInstallationCost === (item.company_installation_cost || 0)) {
+    if (companyInstallationCost === item.company_installation_cost) {
       setIsCompanyCostEditable(false);
       return;
     }
@@ -303,8 +302,35 @@ export function BillboardTaskCard({
     } catch (error) {
       console.error('Error updating company installation cost:', error);
       toast.error('فشل في تحديث تكلفة الشركة');
-      setCompanyInstallationCost(item.company_installation_cost || 0);
+      setCompanyInstallationCost(item.company_installation_cost);
     } finally {
+      setSavingCompanyCost(false);
+    }
+  };
+
+  const handleCustomerPaidAllCosts = async () => {
+    setSavingCost(true);
+    setSavingCompanyCost(true);
+    try {
+      const { error } = await supabase
+        .from('installation_task_items')
+        .update({ 
+          customer_installation_cost: 0,
+          company_installation_cost: 0
+        })
+        .eq('id', item.id);
+
+      if (error) throw error;
+      
+      toast.success('تم تحديد: الزبون سدد التكاليف (المهمة بدون تكاليف)');
+      setCustomerInstallationCost(0);
+      setCompanyInstallationCost(0);
+      onRefresh?.();
+    } catch (error) {
+      console.error('Error setting customer paid costs:', error);
+      toast.error('فشل في حفظ التغييرات');
+    } finally {
+      setSavingCost(false);
       setSavingCompanyCost(false);
     }
   };
@@ -445,8 +471,8 @@ export function BillboardTaskCard({
                       <Input
                         type="number"
                         min="0"
-                        value={companyInstallationCost === 0 ? '' : companyInstallationCost}
-                        onChange={(e) => setCompanyInstallationCost(e.target.value === '' ? 0 : Number(e.target.value))}
+                        value={companyInstallationCost === null ? '' : companyInstallationCost}
+                        onChange={(e) => setCompanyInstallationCost(e.target.value === '' ? null : Number(e.target.value))}
                         className="h-7 w-20 text-xs font-bold pl-1 bg-background border-border"
                         autoFocus
                       />
@@ -457,7 +483,7 @@ export function BillboardTaskCard({
                   ) : (
                     <button
                       onClick={() => { setIsCompanyCostEditable(true); setCompanyInstallationCost(displayCompanyCost); }}
-                      className="font-black text-sm text-foreground hover:underline flex items-center gap-1 leading-none"
+                      className="font-black text-sm text-foreground hover:underline flex items-center gap-1 leading-none animate-in fade-in duration-200"
                     >
                       <span>{displayCompanyCost.toLocaleString('en-US')} د.ل</span>
                       <Pencil className="h-3 w-3 text-muted-foreground" />
@@ -488,7 +514,7 @@ export function BillboardTaskCard({
                   ) : (
                     <button
                       onClick={() => setIsCustomerCostEditable(true)}
-                      className="font-black text-sm text-foreground hover:underline flex items-center gap-1 leading-none"
+                      className="font-black text-sm text-foreground hover:underline flex items-center gap-1 leading-none animate-in fade-in duration-200"
                     >
                       <span>{customerInstallationCost.toLocaleString('en-US')} د.ل</span>
                       <Pencil className="h-3 w-3 text-muted-foreground" />
@@ -496,6 +522,29 @@ export function BillboardTaskCard({
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Quick Action: Paid / Settled Costs */}
+            <div className="flex items-center justify-between gap-2 bg-amber-500/[0.03] border border-amber-500/10 p-2.5 rounded-xl shadow-sm transition-all duration-200 hover:bg-amber-500/[0.06]">
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400">حالة سداد التكاليف للزبون</span>
+                <span className="text-[9px] text-muted-foreground mt-0.5">تصفير التكاليف للشركة والزبون معاً</span>
+              </div>
+              <Button
+                variant={customerInstallationCost === 0 && companyInstallationCost === 0 ? "default" : "outline"}
+                size="sm"
+                onClick={handleCustomerPaidAllCosts}
+                className={cn(
+                  "h-8 px-3 text-xs font-semibold gap-1.5 rounded-lg transition-all duration-200 cursor-pointer",
+                  customerInstallationCost === 0 && companyInstallationCost === 0
+                    ? "bg-amber-500 hover:bg-amber-600 text-black border-0 shadow-sm"
+                    : "border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
+                )}
+                disabled={savingCost || savingCompanyCost}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>{customerInstallationCost === 0 && companyInstallationCost === 0 ? "تم السداد والتصفير" : "سدد التكاليف / بدون تكاليف"}</span>
+              </Button>
             </div>
 
             {/* Profit margin bar */}

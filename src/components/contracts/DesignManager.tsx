@@ -214,6 +214,10 @@ export function DesignManager({ selectedBillboards, designs, onChange, contractI
 
   const handlePasteFromClipboard = async (designId: string, face: 'A' | 'B') => {
     try {
+      if (!navigator.clipboard || !navigator.clipboard.read) {
+        toast.error('المتصفح لا يدعم الوصول للحافظة أو يتطلب اتصالاً آمناً (HTTPS)');
+        return;
+      }
       const clipboardItems = await navigator.clipboard.read();
       for (const item of clipboardItems) {
         const imageType = item.types.find(t => t.startsWith('image/'));

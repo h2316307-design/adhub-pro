@@ -901,7 +901,11 @@ export const InstallationTasksTable: React.FC<Props> = ({
     const contract = contractById[task.contract_id];
     const team = teamById[task.team_id];
     const completed = items.filter(i => i.status === 'completed').length;
-    const totalCost = items.reduce((s, i) => s + (installationPricingByBillboard[i.billboard_id] || 0), 0);
+    const totalCost = items.reduce((s, i) => {
+      const hasCost = i.company_installation_cost !== null && i.company_installation_cost !== undefined;
+      const cost = hasCost ? i.company_installation_cost : (installationPricingByBillboard[i.billboard_id] || 0);
+      return s + cost;
+    }, 0);
     const displayStatus = getDisplayStatus(items);
     const installDate = items.find(i => i.installation_date)?.installation_date;
     // مشاركة التصاميم بين جميع الفرق في نفس المجموعة (نفس العقد + نوع المهمة + رقم إعادة التركيب)
