@@ -1,0 +1,44 @@
+Created At: 2026-06-07T19:27:17Z
+Completed At: 2026-06-07T19:27:18Z
+File Path: `file:///e:/adhub-pro-main%20%284%29/adhub-pro-main/src/pages/DesignStudio.tsx`
+Total Lines: 2851
+Total Bytes: 149504
+Showing lines 2345 to 2380
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+2345:                       {(() => {
+2346:                         const itemsToShow = taskItems.slice(0, 3);
+2347:                         const dummyCards = [
+2348:                           { id: 'dummy1', title: 'لوحة 1' },
+2349:                           { id: 'dummy2', title: 'لوحة 2' },
+2350:                           { id: 'dummy3', title: 'لوحة 3' }
+2351:                         ];
+2352:                         const renderCards = itemsToShow.length > 0 ? itemsToShow : dummyCards;
+2353: 
+2354:                         return renderCards.map((item, idx) => {
+2355:                           let transformStr = '';
+2356:                           let zIndexValue = 10;
+2357:                           if (idx === 0) {
+2358:                             transformStr = 'rotateY(24deg) rotateX(4deg) rotateZ(-2deg) scale(0.9) translateZ(-50px)';
+2359:                             zIndexValue = 8;
+2360:                           } else if (idx === 1 && renderCards.length === 3) {
+2361:                             transformStr = 'translateZ(50px) scale(1.03) translateY(-10px)';
+2362:                             zIndexValue = 12;
+2363:                           } else if (idx === 2 || (idx === 1 && renderCards.length === 2)) {
+2364:                             transformStr = 'rotateY(-24deg) rotateX(4deg) rotateZ(2deg) scale(0.9) translateZ(-50px)';
+2365:                             zIndexValue = 8;
+2366:                           }
+2367: 
+2368:                           let imgUrl = '';
+2369:                           if ('installed_image_url' in item) {
+2370:                             imgUrl = item.installed_image_url || item.installed_image_face_a_url || item.installed_image_face_b_url || '';
+2371:                           }
+2372:                           if (!imgUrl) {
+2373:                             if (idx === 0) imgUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop';
+2374:                             else if (idx === 1) imgUrl = 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=600&auto=format&fit=crop';
+2375:                             else imgUrl = 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop';
+2376:                           }
+2377: 
+2378:                           const bCode = 'billboard_code' in item && item.billboard_code 
+2379:                             ? item.billboard_code 
+2380:                             : (selectedItemDetails?.billboard_code ? `${selectedItemDetails.billboard_code} #${idx+1}` : `لوحة تركيب #${idx + 1}`);
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

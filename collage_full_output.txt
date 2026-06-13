@@ -1,0 +1,52 @@
+                        const dummyCards = [
+                          { id: 'dummy1', title: 'لوحة 1' },
+                          { id: 'dummy2', title: 'لوحة 2' },
+                          { id: 'dummy3', title: 'لوحة 3' }
+                        ];
+                        const renderCards = itemsToShow.length > 0 ? itemsToShow : dummyCards;
+
+                        return renderCards.map((item, idx) => {
+                          let transformStr = '';
+                          let zIndexValue = 10;
+                          if (idx === 0) {
+                            transformStr = 'rotateY(24deg) rotateX(4deg) rotateZ(-2deg) scale(0.9) translateZ(-50px)';
+                            zIndexValue = 8;
+                          } else if (idx === 1 && renderCards.length === 3) {
+                            transformStr = 'translateZ(50px) scale(1.03) translateY(-10px)';
+                            zIndexValue = 12;
+                          } else if (idx === 2 || (idx === 1 && renderCards.length === 2)) {
+                            transformStr = 'rotateY(-24deg) rotateX(4deg) rotateZ(2deg) scale(0.9) translateZ(-50px)';
+                            zIndexValue = 8;
+                          }
+
+                          let imgUrl = '';
+                          if ('installed_image_url' in item) {
+                          
+<truncated 17088 bytes>
+esize' }}
+                                onMouseDown={(e) => handleHandleMouseDown(e, 'br')}
+                              />
+                              {/* Edge Center Handles */}
+                              <div
+                                style={{ ...handleBaseStyle, left: '50%', transform: 'translateX(-50%)', top: `${handleOffset}px`, cursor: 'ns-resize' }}
+                                onMouseDown={(e) => handleHandleMouseDown(e, 't')}
+                              />
+                              <div
+                                style={{ ...handleBaseStyle, left: '50%', transform: 'translateX(-50%)', bottom: `${handleOffset}px`, cursor: 'ns-resize' }}
+                                onMouseDown={(e) => handleHandleMouseDown(e, 'b')}
+                              />
+                              <div
+                                style={{ ...handleBaseStyle, top: '50%', transform: 'translateY(-50%)', left: `${handleOffset}px`, cursor: 'ew-resize' }}
+                                onMouseDown={(e) => handleHandleMouseDown(e, 'l')}
+                              />
+                              <div
+                                style={{ ...handleBaseStyle, top: '50%', transform: 'translateY(-50%)', right: `${handleOffset}px`, cursor: 'ew-resize' }}
+                                onMouseDown={(e) => handleHandleMouseDown(e, 'r')}
+                              />
+                            </>
+                          );
+                        })()}
+                      </div>
+                    )}
+
+                    {/* ── No image placeholder ── */}

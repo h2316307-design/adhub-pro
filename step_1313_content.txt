@@ -1,0 +1,58 @@
+Created At: 2026-06-07T22:44:01Z
+Completed At: 2026-06-07T22:44:02Z
+File Path: `file:///e:/adhub-pro-main%20%284%29/adhub-pro-main/src/pages/DesignStudio.tsx`
+Total Lines: 3704
+Total Bytes: 193041
+Showing lines 2990 to 3040
+The following code has been modified to include a line number before every line, in the format: <line_number>: <original_line>. Please note that any changes targeting the original code should remove the line number, colon, and leading space.
+2990:                 className="select-none relative"
+2991:               >
+2992:                 {layoutMode === 'cover' ? (
+2993:                   <div className="w-full h-full relative flex flex-col justify-between p-16 select-none bg-gradient-to-b from-[#030a13] via-[#0a1c30] to-[#04090f] text-white">
+2994:                     {/* Glowing background circles for visual excellence */}
+2995:                     <div className="absolute top-[20%] left-[10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-[150px] pointer-events-none" />
+2996:                     <div className="absolute bottom-[20%] right-[10%] w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[180px] pointer-events-none" />
+2997: 
+2998:                     {/* Header: Client Info Left, Company Brand Right */}
+2999:                     <div className="flex justify-between items-start w-full z-10">
+3000:                       {/* Client Info (Left) */}
+3001:                       <div className="flex flex-col gap-1 text-left" style={{ direction: 'ltr', fontFamily: 'sans-serif' }}>
+3002:                         <div className="text-white/60 text-lg font-medium">
+3003:                           Location: {selectedItemDetails?.municipality || 'Tripoli'}{selectedItemDetails?.region ? `, ${selectedItemDetails.region}` : ''}
+3004:                         </div>
+3005:                       </div>
+3006: 
+3007:                       {/* Company Brand (Right) */}
+3008:                       <div className="flex items-center gap-3">
+3009:                         {companyInfo.logoUrl ? (
+3010:
+<truncated 247 bytes>
+               <div className="text-[#c9a84c] text-3xl font-black font-sans leading-none">{companyInfo.name}</div>
+3014:                             <div className="text-white/40 text-sm font-semibold tracking-wider uppercase mt-1">{companyInfo.subtitle}</div>
+3015:                           </div>
+3016:                         )}
+3017:                       </div>
+3018:                     </div>
+3019: 
+3020:                     {/* Center Content */}
+3021:                     <div className="flex flex-col items-center justify-center text-center gap-6 my-auto z-10">
+3022:                       <h2 className="text-[#38bdf8] text-5xl font-semibold tracking-wide mb-2 drop-shadow-sm">
+3023:                         {coverTitle1}
+3024:                       </h2>
+3025:                       <h1 className="text-white text-8xl font-black tracking-tight leading-tight drop-shadow-[0_10px_20px_rgba(0,0,0,0.5)]">
+3026:                         {coverTitle2}
+3027:                       </h1>
+3028:                       {coverBadge && (
+3029:                         <div className="px-10 py-4 mt-4 bg-gradient-to-r from-blue-600/35 to-cyan-600/35 border border-blue-400/40 rounded-full text-white text-3xl font-bold tracking-wide shadow-[0_0_30px_rgba(59,130,246,0.3)] backdrop-blur-md">
+3030:                           {coverBadge}
+3031:                         </div>
+3032:                       )}
+3033:                     </div>
+3034: 
+3035:                     {/* Bottom Collage */}
+3036:                     <div className="w-full flex justify-center items-center gap-12 pb-16 z-10" style={{ perspective: '1200px' }}>
+3037:                       {(() => {
+3038:                         const itemsToShow = taskItems.slice(0, 3);
+3039:                         const dummyCards = [
+3040:                           { id: 'dummy1', title: 'لوحة 1' },
+The above content does NOT show the entire file contents. If you need to view any lines of the file which were not shown to complete your task, call this tool again to view those lines.

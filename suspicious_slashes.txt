@@ -1,0 +1,350 @@
+Line 3: import { supabase } from '@/integrations/supabase/client';
+Line 4: import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+Line 5: import { Button } from '@/components/ui/button';
+Line 6: import { Input } from '@/components/ui/input';
+Line 7: import { Label } from '@/components/ui/label';
+Line 8: import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+Line 9: import { Slider } from '@/components/ui/slider';
+Line 10: import { Switch } from '@/components/ui/switch';
+Line 11: import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+Line 15: import { extractImagePalette, pickAccentColor, pickGlowColor, pickSecondaryColor, alphaToHex } from '@/utils/extractImagePalette';
+Line 318: { id: 'company_logo', type: 'image', label: 'شعار الشركة', textKey: 'company_logo', visible: true, fontSize: 12, fontColor: '', fontWeight: 'normal', alignment: 'center', x: 180, y: 40, url: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><path d="M50 10 L80 25 L80 55 C80 75 50 90 50 90 C50 90 20 75 20 55 L20 25 Z" fill="none" stroke="%23c9a84c" stroke-width="4" /><path d="M50 20 L70 32 L70 52 C70 67 50 78 50 78 C50 78 30 67 30 52 L30 32 Z" fill="%23c9a84c" opacity="0.3" /><text x="50" y="58" font-size="22" font-weight="bold" fill="%23c9a84c" text-anchor="middle" font-family="sans-serif">AD</text></svg>', width: 120, height: 120, borderRadius: 0, parentStrip: 'panel' },
+Line 443: setUrl(canvas.toDataURL('image/png'));
+Line 451: processMask('/cover-portal-mask-window.png', setCoverPortalMaskWindowUrl);
+Line 452: processMask('/cover-portal-mask-reflection.png', setCoverPortalMaskReflectionUrl);
+Line 453: processMask('/cover-portal-mask-chair.png', setCoverPortalMaskChairUrl);
+Line 602: }, [selectedContractId, groupedContracts]); // eslint-disable-line react-hooks/exhaustive-deps
+Line 614: }, [selectedContractId, groupedContracts]); // eslint-disable-line react-hooks/exhaustive-deps
+Line 1244: } catch { /* noop */ }
+Line 1254: if (!url || !url.startsWith('data:image/svg+xml')) return url;
+Line 1271: const widthMatch = svgContent.match(/\swidth=["']([^"']+)["']/);
+Line 1272: const heightMatch = svgContent.match(/\sheight=["']([^"']+)["']/);
+Line 1273: const viewBoxMatch = svgContent.match(/viewBox=["']([^"']+)["']/);
+Line 1280: svgContent = svgContent.replace(/<svg([^>]*)>/, (_m, p1: string) => {
+Line 1282: .replace(/\swidth=["'][^"']+["']/g, '')
+Line 1283: .replace(/\sheight=["'][^"']+["']/g, '')
+Line 1284: .replace(/\spreserveAspectRatio=["'][^"']+["']/g, '');
+Line 1291: return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgContent)))}`;
+Line 1293: return `data:image/svg+xml;utf8,${encodeURIComponent(svgContent)}`;
+Line 1321: const rgbMatch = trimmed.match(/^rgba?\s*\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+)?\s*\)$/i);
+Line 1497: const deltaX = (e.clientX - dragState.startX) / zoom;
+Line 1498: const deltaY = (e.clientY - dragState.startY) / zoom;
+Line 1525: if (Math.abs(newX + imageStyle.width / 2 - canvasWidth / 2) < threshold) {
+Line 1526: snapX = Math.round(canvasWidth / 2 - imageStyle.width / 2);
+Line 1527: guidesX.push(Math.round(canvasWidth / 2));
+Line 1530: if (Math.abs(newY + imageStyle.height / 2 - canvasHeight / 2) < threshold) {
+Line 1531: snapY = Math.round(canvasHeight / 2 - imageStyle.height / 2);
+Line 1532: guidesY.push(Math.round(canvasHeight / 2));
+Line 1567: if (Math.abs(elementCenterXInCanvas - canvasWidth / 2) < threshold) {
+Line 1568: snapX = Math.round(canvasWidth / 2 - parentX);
+Line 1569: guidesX.push(Math.round(canvasWidth / 2));
+Line 1575: const panelCenterY = glassPanel.height / 2;
+Line 1582: const stripCenterY = locationStrip.height / 2;
+Line 1589: if (Math.abs(newY - canvasHeight / 2) < threshold) {
+Line 1590: snapY = Math.round(canvasHeight / 2);
+Line 1591: guidesY.push(Math.round(canvasHeight / 2));
+Line 1680: const deltaX = (e.clientX - handleDragState.startX) / zoom;
+Line 1681: const deltaY = (e.clientY - handleDragState.startY) / zoom;
+Line 1694: const aspect = initialWidth / initialHeight;
+Line 1697: newH = newW / aspect;
+Line 1700: newH = newW / aspect;
+Line 1704: newH = newW / aspect;
+Line 1708: newH = newW / aspect;
+Line 1808: const deltaY = (e.clientY - panelHandleDragState.startY) / zoom;
+Line 1825: const ratio = newH / initialHeight;
+Line 1876: const ratio = img.naturalWidth / img.naturalHeight;
+Line 1878: setImageStyleUser(prev => ({ ...prev, height: Math.round(prev.width / ratio) }));
+Line 1905: const avgX = Math.round((minX + maxX) / 2);
+Line 1906: const avgY = Math.round((minY + maxY) / 2);
+Line 2039: label: `شعار/صورة مخصصة #${textElements.length + 1}`,
+Line 2056: toast.success('تم إضافة الشعار/الصورة بنجاح! يمكنك سحبها وتحريكها الآن.');
+Line 2447: const du = c.toDataURL('image/png');
+Line 2472: const matches = Array.from(styleAttr.matchAll(/url\((['"]?)([^'")]+)\1\)/g));
+Line 2568: const r = fit === 'contain' ? Math.min(dw / iw, dh / ih) : Math.max(dw / iw, dh / ih);
+Line 2570: ctx.drawImage(img, dx + (dw - w) / 2, dy + (dh - h) / 2, w, h);
+Line 2574: const rr = Math.min(r, w / 2, h / 2);
+Line 2613: drawObjectFit(ctx, mainImg, -W * pad / 2, -H * pad / 2, W * (1 + pad), H * (1 + pad), 'cover');
+Line 2670: return 'data:image/svg+xml;utf8,' + encodeURIComponent(xml);
+Line 2685: if (alignment === 'center') drawX = baseX - w / 2;
+Line 2700: ctx.fillText(companyInfo.name || 'Logo', drawX + w / 2, baseY + h * 0.4);
+Line 2703: ctx.fillText(companyInfo.subtitle || '', drawX + w / 2, baseY + h * 0.7);
+Line 2713: if (alignment === 'center') drawX = baseX - box / 2;
+Line 2718: ctx.arc(drawX + box / 2, baseY + box / 2, box / 2, 0, Math.PI * 2);
+Line 2758: else if (alignment === 'center') groupRight = baseX + totalW / 2;
+Line 2798: groupRight = baseX + totalW / 2;
+Line 2813: ctx.arc(iconLeft + inlineIconBox / 2, baseY + 4 + inlineIconBox / 2, inlineIconBox / 2, 0, Math.PI * 2);
+Line 2821: ctx.drawImage(img, iconLeft + (inlineIconBox - iconSize) / 2, baseY + 4 + (inlineIconBox - iconSize) / 2, iconSize, iconSize);
+Line 2827: ctx.arc(iconLeft + inlineIconBox / 2, baseY + 4 + inlineIconBox / 2, 3, 0, Math.PI * 2);
+Line 2857: ctx.translate(sw - 50 - 20, sy + sh / 2 - 20);
+Line 2861: ctx.scale(40 / 24, 40 / 24);
+Line 2877: out.toBlob((b) => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png', 1.0);
+Line 2928: return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+Line 2962: { id: 'd1', url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=900&auto=format&fit=crop' },
+Line 2963: { id: 'd2', url: 'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=900&auto=format&fit=crop' },
+Line 2964: { id: 'd3', url: 'https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900&auto=format&fit=crop' },
+Line 2965: { id: 'd4', url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=900&auto=format&fit=crop' },
+Line 2966: { id: 'd5', url: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=900&auto=format&fit=crop' },
+Line 2967: { id: 'd6', url: 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=900&auto=format&fit=crop' },
+Line 3040: <div className="text-white/85 text-lg font-bold tracking-wide">العميل: {selectedItemDetails?.customer_name || 'العميل'}</div>
+Line 3041: <div className="text-white/60 text-lg font-medium tracking-wide">الموقع: {selectedItemDetails?.municipality || 'طرابلس'}{selectedItemDetails?.region ? `، ${selectedItemDetails.region}` : ''}</div>
+Line 3059: style={{ gridArea: '1 / 1', height: `${coverFontSizes.companyBrandLogo}px`, maxWidth: `${coverFontSizes.companyBrandLogo * 3.5}px` }}
+Line 3063: <div className="text-center" style={{ gridArea: '1 / 1' }}>
+Line 3066: <div className="text-white/60 font-semibold tracking-wider uppercase" style={{ fontSize: `${Math.max(10, Math.round(coverFontSizes.companyBrandName * 0.4))}px`, marginTop: `${Math.max(8, Math.round(coverFontSizes.companyBrandName * 0.35))}px` }}>{companyInfo.subtitle}</div>
+Line 3117: <div className="text-white/65 italic max-w-[55%] leading-tight" style={{ direction: 'ltr', fontFamily: "'Manrope', sans-serif", fontSize: `${coverFontSizes.copyright}px` }}>{coverCopyright}</div>
+Line 3132: <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Tajawal:wght@300;400;500;700;900&family=Almarai:wght@300;400;700;800&family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+Line 3134: {/* ──── Top Header Bar with Back Button ──── */}
+Line 3135: <div className="flex items-center justify-between bg-card/90 backdrop-blur-sm p-3 rounded-xl border border-border/40 shadow-sm">
+Line 3146: {/* ═══════════════ CONTRACT SELECTION MODAL ═══════════════ */}
+Line 3154: className="bg-card border border-border/50 rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col"
+Line 3157: {/* Modal Header */}
+Line 3158: <div className="flex items-center justify-between p-5 border-b border-border/40">
+Line 3160: <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center">
+Line 3173: {/* Search Bar */}
+Line 3174: <div className="p-4 border-b border-border/30">
+Line 3181: className="pr-10 h-10 text-sm bg-muted/40"
+Line 3190: {/* Photo availability filter */}
+Line 3205: : 'bg-muted/40 text-muted-foreground border-border/40 hover:border-primary/40'
+Line 3214: {/* Contracts Grid */}
+Line 3241: ? 'border-primary ring-2 ring-primary/40 bg-primary/5 shadow-md'
+Line 3242: : 'border-border/40 bg-card hover:border-primary/40'
+Line 3245: {/* Design Thumbnail */}
+Line 3246: <div className="w-full h-36 bg-muted/50 relative overflow-hidden">
+Line 3254: <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground/40 gap-2">
+Line 3259: {/* Ad type badge */}
+Line 3261: <div className="absolute top-2 right-2 bg-black/60 backdrop-blur-sm text-white text-[9px] font-bold px-2 py-0.5 rounded-full truncate max-w-[90%]">
+Line 3265: {/* Photo availability badge */}
+Line 3270: ? 'bg-green-500/85 text-white border-green-300/50'
+Line 3272: ? 'bg-amber-500/85 text-white border-amber-300/50'
+Line 3273: : 'bg-red-500/85 text-white border-red-300/50'
+Line 3277: 📷 {tc.photoItems || 0}/{tc.totalItems || 0}
+Line 3281: {/* Selected check */}
+Line 3289: {/* Info */}
+Line 3301: <span key={t} className="text-[9px] bg-muted/80 text-muted-foreground px-1.5 py-0.5 rounded-full truncate max-w-[80px]">
+Line 3318: {/* Modal Footer */}
+Line 3319: <div className="p-4 border-t border-border/30 flex items-center justify-between">
+Line 3341: {/* ═══════════════ LEFT PANEL (RESTYLED WITH TABS) ═══════════════ */}
+Line 3343: {/* ── Sticky template save toolbar (always visible) ── */}
+Line 3344: <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border border-border/40 rounded-2xl p-2 shadow-md flex items-center gap-2">
+Line 3365: className="h-9 px-2 gap-1 text-[11px] rounded-xl font-bold bg-primary hover:bg-primary/95"
+Line 3375: {/* Elegant tabs navigation */}
+Line 3376: <TabsList className="grid grid-cols-4 bg-muted/60 p-1.5 rounded-2xl border border-border/25 shadow-sm">
+Line 3383: {/* ════════ TAB 1: DATA & TASKS ════════ */}
+Line 3385: {/* Task Selector */}
+Line 3386: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3394: {/* Contract Selector */}
+Line 3399: className="w-full h-auto min-h-[60px] justify-start gap-3 px-3 py-2 text-right hover:bg-primary/5 hover:border-primary/40 transition-all rounded-xl border-border/60"
+Line 3407: <img src={c.designImage} crossOrigin="anonymous" className="h-10 w-10 rounded-lg object-cover border border-border/50 flex-shrink-0 shadow-sm" />
+Line 3429: {/* Task selector (only when contract has multiple tasks, e.g. re-installation) */}
+Line 3460: {/* Billboard list navigation */}
+Line 3463: <Label className="text-[11px] text-muted-foreground">اللوحة ({currentItemIndex + 1} / {taskItems.length})</Label>
+Line 3487: {/* Image source selector */}
+Line 3502: {/* Quick Info Display */}
+Line 3504: <div className="bg-muted/50 rounded-xl p-2.5 text-[11px] space-y-1.5 border border-border/30">
+Line 3514: {/* Company Info */}
+Line 3515: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3561: {/* ── Studio-only: override ad type for ALL billboards ── */}
+Line 3562: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3600: {/* ════════ TAB 2: CANVAS & LAYOUT ════════ */}
+Line 3602: {/* Design Mode Selector */}
+Line 3603: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3628: {/* Template Background settings */}
+Line 3629: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3681: {/* Location Strip styling */}
+Line 3682: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3734: {/* ════════ TAB 3: ELEMENTS & LAYERS ════════ */}
+Line 3736: {/* Add New Elements */}
+Line 3737: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 3752: رفع شعار / صورة
+Line 3753: <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+Line 3758: <div className="flex flex-wrap gap-1 max-h-[100px] overflow-y-auto p-1.5 bg-muted/35 border rounded-lg">
+Line 3765: className="h-7 w-7 rounded-md hover:bg-primary/20"
+Line 3776: {/* Layer controls & Active selections */}
+Line 3777: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl flex-1">
+Line 3790: {/* Template selector */}
+Line 3791: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 3863: {/* Accent color */}
+Line 3864: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 3871: className="h-8 w-12 rounded-md border border-border/60 bg-transparent cursor-pointer"
+Line 3885: className="h-6 w-6 rounded-full border-2 border-border/40 hover:scale-110 transition-transform"
+Line 3892: {/* Secondary color (controls kicker / badge / footer-right by default) */}
+Line 3893: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 3900: className="h-8 w-12 rounded-md border border-border/60 bg-transparent cursor-pointer"
+Line 3914: className="h-6 w-6 rounded-full border-2 border-border/40 hover:scale-110 transition-transform"
+Line 3922: {/* Glow color behind main text — all templates */}
+Line 3923: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 3930: className="h-8 w-12 rounded-md border border-border/60 bg-transparent cursor-pointer"
+Line 3944: className="h-6 w-6 rounded-full border-2 border-border/40 hover:scale-110 transition-transform"
+Line 3951: {/* Glow / blur intensity sliders */}
+Line 3952: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 3971: {/* Theme mode: manual vs auto-from-design */}
+Line 3972: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 3989: className="h-7 w-7 rounded-md border-2 border-border/40 hover:scale-110 transition-transform"
+Line 4007: {/* Per-element colors */}
+Line 4008: <div className="space-y-2 pb-3 border-b border-border/40">
+Line 4035: className="h-7 w-10 rounded-md border border-border/60 bg-transparent cursor-pointer"
+Line 4050: className="h-4 w-4 rounded-full border border-border/40 hover:scale-110 transition-transform"
+Line 4140: <div className="space-y-2 border-t border-border/40 pt-3">
+Line 4141: <div className="text-[11px] font-bold text-primary">إظهار / إخفاء العناصر</div>
+Line 4181: {/* Multi-selection controls */}
+Line 4183: <div className="border border-primary/30 rounded-xl p-3 bg-primary/5 space-y-3">
+Line 4188: {/* Alignment Buttons */}
+Line 4251: {/* Single Element controls render */}
+Line 4318: className="w-full gap-1 h-8 text-xs font-bold rounded-lg border-primary/30"
+Line 4344: const ratio = v / glassPanel.height;
+Line 4509: {/* Visibility Toggle */}
+Line 4515: {/* Coordinates */}
+Line 4527: {/* Custom Text input */}
+Line 4535: {/* Custom Image input (URL) */}
+Line 4543: {/* Text properties */}
+Line 4603: {/* Composite parts controls: municipality + region */}
+Line 4616: <div key={partKey} className="rounded-lg border border-border/40 p-2 space-y-2 bg-muted/30">
+Line 4647: {/* Text Companion Icon Option */}
+Line 4684: {/* Image properties */}
+Line 4714: {/* If Element is Icon */}
+Line 4760: {/* Delete Button for custom elements */}
+Line 4783: {/* ════════ TAB 4: TEMPLATES ════════ */}
+Line 4785: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm rounded-2xl">
+Line 4793: {/* Load Template */}
+Line 4810: {/* Update Current Template (if selected) */}
+Line 4822: <div className="border-t border-border/30 pt-3 space-y-3">
+Line 4823: {/* Save New Template */}
+Line 4837: className="h-9 gap-1 text-xs rounded-xl font-bold bg-primary hover:bg-primary/95"
+Line 4852: {/* ═══════════════ RIGHT: CANVAS (Sticky so it follows scrolling down the side panel) ═══════════════ */}
+Line 4855: {/* ── Toolbar ── */}
+Line 4856: <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm">
+Line 4859: {/* Size */}
+Line 4862: <SelectTrigger className="h-8 w-28 text-[11px] bg-muted/40">
+Line 4880: {/* Controls */}
+Line 4886: className={`h-8 px-2.5 gap-1.5 text-xs ${lockMode ? 'bg-amber-500/20 border-amber-500/50 text-amber-600' : ''}`}
+Line 4892: <div className="flex items-center border rounded-md p-0.5 bg-muted/40">
+Line 4907: {/* ── Canvas Viewport ── */}
+Line 4908: <div className="flex-1 overflow-auto bg-muted/20 border border-border/40 rounded-2xl flex items-center justify-center p-6 min-h-[500px] relative">
+Line 4943: const waveVal = Math.sin((i / 4) * Math.PI); // 0 -> 1 -> 0
+Line 4944: const scaleFactor = (coverT4.cardHeight ?? 45) / 50; // slider mapped to 0..2
+Line 4966: const tint = 0.04 + Math.sin((idx / 15) * Math.PI) * 0.1;
+Line 4980: {/* Background Glow Wave SVG - Layered soft blurs */}
+Line 5000: {/* Layer 1: Wide ambient glow */}
+Line 5010: {/* Layer 2: Core glow */}
+Line 5020: {/* Layer 3: Intense white center reflection */}
+Line 5032: {/* Extra ambient glow behind text block */}
+Line 5047: {/* Image Slices Collage */}
+Line 5066: imgUrl = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=900&auto=format&fit=crop';
+Line 5110: const scaleFactor = (coverT4.cardHeight ?? 45) / 50;
+Line 5115: const randomImgScale = rand(1.0, 1.45); // Random Zoom-In / Zoom-Out!
+Line 5153: {/* Glass sheen overlay */}
+Line 5166: {/* Full-screen Deep Ribbed Glass Overlay (16 Ribs) */}
+Line 5263: {/* Background Glow Wave SVG - Layered soft blurs matching theme colors (with randomized curve path) */}
+Line 5283: {/* Layer 1: Wide ambient glow */}
+Line 5293: {/* Layer 2: Core glow */}
+Line 5303: {/* Layer 3: Intense white center reflection */}
+Line 5315: {/* Floating random ambient crystal glows */}
+Line 5332: {/* Ambient shadow gradient to guide text contrast */}
+Line 5420: const tint = 0.04 + Math.sin((idx / 15) * Math.PI) * 0.1;
+Line 5434: {/* Background Glow Wave SVG - Layered soft blurs */}
+Line 5454: {/* Layer 1: Wide ambient glow */}
+Line 5464: {/* Layer 2: Core glow */}
+Line 5474: {/* Layer 3: Intense white center reflection */}
+Line 5486: {/* Side-strip polaroid cards — fill canvas height */}
+Line 5510: {/* Square inner — design at max width with frosted-glass fill */}
+Line 5511: <div className="relative w-full overflow-hidden" style={{ background: '#0b0b0b', aspectRatio: `1 / ${coverT4.cardHeight}` }}>
+Line 5512: {/* Crystal-glass base: full design as color base, no blur smear */}
+Line 5521: {/* Subtle radial vignette for depth without blur smear */}
+Line 5523: {/* Foreground design — fragmented zoom-in of a different region per crystal */}
+Line 5537: {/* Wavy crystal glass overlay — moved after the foreground design to blend glass refraction directly on top of the card design */}
+Line 5541: {/* Crystal sheen overlay to break the surface */}
+Line 5556: {/* Full-screen Deep Ribbed Glass Overlay (16 Ribs) */}
+Line 5579: {/* Edge darkening for overall contrast */}
+Line 5581: {/* Controllable glow behind main heading */}
+Line 5623: {/* Unified continuous blurred background of design images (darkened for cosmic space contrast) */}
+Line 5646: {/* Transparent glass slat panels on top */}
+Line 5700: {/* Background blurred image (crystal glass base) */}
+Line 5712: {/* Vignette overlay */}
+Line 5714: {/* Foreground design image */}
+Line 5727: {/* Wavy glass overlay (matches template4 glass refraction) */}
+Line 5731: {/* Sheen */}
+Line 5762: <div className="relative w-full overflow-hidden" style={{ background: '#0b0b0b', aspectRatio: '1 / 1' }}>
+Line 5763: {/* Background blurred image (crystal glass base) */}
+Line 5775: {/* Vignette overlay */}
+Line 5777: {/* Foreground design image */}
+Line 5790: {/* Wavy glass overlay (matches template4 glass refraction) */}
+Line 5794: {/* Sheen */}
+Line 5806: <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: `url('/cover-bg-portal.png')`, backgroundSize: 'cover', backgroundPosition: 'center', width: '100%', height: '100%', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
+Line 5807: {/* Color tint overlays to unify room mood with theme accent color (color + multiply mode) */}
+Line 5811: {/* Repositioned text background glows to left side */}
+Line 5820: {/* Main collage inside the window using custom Photoshop mask */}
+Line 5854: {/* Starfield overlay (sharp stars behind cards, in front of slats) */}
+Line 5880: {/* Cosmic cloud SVG overlay for organic nebula dust detail */}
+Line 5889: {/* Deep inner shadow frame overlay (z-20) to force shadow on top of background & slats */}
+Line 5901: {/* Floor reflection of the collage using custom Photoshop mask */}
+Line 5930: transformOrigin: 'center 1411px', // Flips about the floor line (y = 1551px / local 1411px) downwards
+Line 5939: {/* Starfield overlay inside reflection */}
+Line 5965: {/* Cosmic cloud SVG overlay inside reflection */}
+Line 5974: {/* Deep inner shadow frame overlay inside reflection (z-20) */}
+Line 5988: {/* Chair depth overlay to let text/tagline sit behind the chair silhouette (extended to 2000px for reflection) */}
+Line 5993: backgroundImage: "url('/cover-bg-portal.png')",
+Line 6036: const scale = rand(1.18, 1.55); // random zoom/scale per column
+Line 6058: {/* Background Glow Wave SVG - Layered soft blurs matching theme colors (no hardcoded purple/blue) */}
+Line 6078: {/* Layer 1: Wide ambient glow */}
+Line 6088: {/* Layer 2: Core glow */}
+Line 6098: {/* Layer 3: Intense white center reflection */}
+Line 6110: {/* Dark Liquid Metal Gloss Reflective Ridges (Reference Image 4) */}
+Line 6133: {/* Background shadow overlay to smoothly transition to the text block */}
+Line 6142: {/* Main Title Glow Intensity Overlay */}
+Line 6164: {/* Collage Slices - 3D Glass Cylindrical Rod Accordion Wall */}
+Line 6184: width: `${100 / colCount}%`,
+Line 6192: {/* Crisp Design Image with random crops and offsets */}
+Line 6205: {/* 3D Cylindrical Glass Rod Highlight/Shadow Overlay */}
+Line 6217: {/* Vertical glossy sheen line */}
+Line 6229: {/* Glowing Cyber Grid Halftone Pattern overlay on Slices (Reference Image 2) */}
+Line 6237: {/* Glass Sheen overlay */}
+Line 6251: {/* ── Blurred replica BG (glass effect from installation image) ── */}
+Line 6270: {/* ── Custom BG image ── */}
+Line 6287: {/* ── Main image ── */}
+Line 6305: className={`transition-shadow duration-150 ${!isExporting && selectedLayerId === 'image' ? 'ring-4 ring-primary/60 ring-offset-2 ring-offset-transparent' : ''}`}
+Line 6325: {/* ── Photoshop-like Transform Bounding Box ── */}
+Line 6341: {/* Dashed inner border */}
+Line 6344: {/* Bounding box handles */}
+Line 6346: const handleSize = Math.max(8, Math.round(10 / zoom));
+Line 6347: const handleOffset = -Math.round(handleSize / 2);
+Line 6359: {/* Corner Handles */}
+Line 6376: {/* Edge Center Handles */}
+Line 6399: {/* ── Panel Transform Bounding Box (double-click on panel) ── */}
+Line 6415: {/* Top handle - resize height upward */}
+Line 6417: const hs = Math.max(10, Math.round(12 / zoom));
+Line 6418: const ho = -Math.round(hs / 2);
+Line 6439: {/* Left / Right edge handles (drag to move) */}
+Line 6448: {/* Label */}
+Line 6458: {/* ── No image placeholder ── */}
+Line 6481: {/* Snap Guidelines */}
+Line 6515: {/* ── Info Bar ── */}
+Line 6535: className={`transition-shadow duration-150 ${!isExporting && !lockMode && selectedLayerId === 'panel' ? 'ring-4 ring-sky-400/60 ring-offset-2 ring-offset-transparent' : ''}`}
+Line 6537: {/* Blurred background replica to simulate backdrop-filter (works in Chrome + html2canvas export) */}
+Line 6572: {/* Divider lines (logo-campaign at 28%, campaign-size at 60%, size-contact at 78%) */}
+Line 6577: {/* Canvas elements inside info bar */}
+Line 6602: ? 'ring-2 ring-primary bg-primary/10 shadow-lg'
+Line 6604: ? 'ring-2 ring-amber-400/70 bg-amber-400/10'
+Line 6673: {/* ── Location strip ── */}
+Line 6702: ? 'ring-4 ring-sky-400/60 ring-offset-2 ring-offset-transparent'
+Line 6706: {/* Blurred background replica to simulate backdrop-filter (works in Chrome + html2canvas export) */}
+Line 6741: {/* Pin icon */}
+Line 6769: className={`transition-shadow p-1 rounded ${!isExporting && !lockMode && selectedLayerId === el.id ? 'ring-2 ring-primary bg-black/10' : ''}`}
+Line 6843: {/* ── Floating Central Quick Dashboard Controls ── */}
+Line 6845: <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[40] w-[95%] max-w-4xl px-2 pointer-events-none">
+Line 6846: <Card className="border-border/40 shadow-2xl bg-card/90 backdrop-blur-md px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 pointer-events-auto rounded-2xl relative">
+Line 6847: {/* Collapse button */}
+Line 6852: className="absolute -top-3 -left-3 h-6 w-6 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/95 shadow-md flex items-center justify-center pointer-events-auto border border-border/20"
+Line 6857: {/* Group 1: Zoom In / Out */}
+Line 6860: <div className="flex items-center border rounded-xl p-0.5 bg-muted/40 border-border/50">
+Line 6874: <div className="h-5 w-px bg-border/60" />
+Line 6876: {/* Group 2: Photo / Item Navigation */}
+Line 6879: <div className="flex items-center gap-1 bg-muted/40 border border-border/50 rounded-xl p-0.5">
+Line 6884: {currentItemIndex + 1} / {taskItems.length || 1}
+Line 6892: <div className="h-5 w-px bg-border/60" />
+Line 6894: {/* Group 3: Face Switcher */}
+Line 6897: <div className="flex bg-muted/40 border border-border/50 rounded-xl p-0.5 gap-0.5">
+Line 6919: <div className="h-5 w-px bg-border/60" />
+Line 6921: {/* Group 4: Download & Upload */}
+Line 6924: className="flex items-center justify-center gap-1 h-8 px-2.5 border border-border/60 hover:bg-accent/40 rounded-xl cursor-pointer text-[10px] font-bold transition-all"
+Line 6928: <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+Line 6943: <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[40] pointer-events-auto">
+Line 6946: className="shadow-xl bg-card/95 hover:bg-accent border border-border/50 text-foreground gap-1.5 px-4 py-2.5 rounded-full font-bold text-[11px] backdrop-blur-md transition-all hover:scale-105"

@@ -1,0 +1,46 @@
+Created At: 2026-06-08T03:42:26Z
+Completed At: 2026-06-08T03:42:27Z
+
+				The command completed successfully.
+				Output:
+				<truncated 49 lines>
+               <div className=\"w-full h-full relative flex flex-col justify-between p-16 select-none bg-gradient-to-b 
+from-[#030a13] via-[#0a1c30] to-[#04090f] text-white\">\n2196:                     {/* Glowing background circles for 
+visual excellence */}\n2197:                     <div className=\"absolute top-[20%] left-[10%] w-[500px] h-[500px] 
+bg-blue-500/10 rounded-full blur-[150px] pointer-events-none\" />\n2198:                     <div className=\"absolute 
+bottom-[20%] right-[10%] w-[600px] h-[600px] bg-cyan-500/10 rounded-full blur-[180px] pointer-events-none\" />\n2199: 
+\n2200:                     {/* Header: Client Info Left, Company Brand Right */}\n2201:                     <div 
+className=\"flex justify-between items-start w-full z-10\">\n2202:                       {/* Client Info (Left) 
+*/}\n2203:                       <div className=\"flex flex-col gap-1 text-left\" style={{ direction: 'ltr', 
+fontFamily: 'sans-serif' }}>\n2204:                         <div className=\"text-[#38bdf8] text-2xl font-bold 
+tracking-wider uppercase\">\n2205:                           Client: {selectedItemDetails?.customer_name || 'Alwaha 
+Paints'}\n2206:                         </div>\n2207:                         <div className=\"text-white/60 text-lg 
+font-medium\">\n2208:                           Location: {selectedItemDetails?.municipality || 
+'Tripoli'}{selectedItemDetails?.region ? `, ${selectedItemDetails.region}` : ''}\n220\n<truncated 511 bytes>\n         
+      <div className=\"text-[#c9a84c] text-3xl font-black font-sans leading-none\">{companyInfo.name}</div>\n2219:     
+                        <div className=\"text-white/40 text-sm font-semibold tracking-wider uppercase 
+mt-1\">{companyInfo.subtitle}</div>\n2220:                           </div>\n2221:                         )}\n2222:   
+                    </div>\n2223:             
+<truncated 4156 bytes>
+                       ];\n2156:                         const renderCards = 
+itemsToShow.length > 0 ? itemsToShow : dummyCards;\n2157: \n2158:                         return 
+renderCards.map((item, idx) => {\n2159:                           let transformStr = '';\n2160:                        
+   let zIndexValue = 10;\n2161:                           if (idx === 0) {\n2162:                             
+transformStr = 'rotateY(24deg) rotateX(4deg) rotateZ(-2deg) scale(0.9) translateZ(-50px)';\n2163:                      
+       zIndexValue = 8;\n2164:                           } else if (idx === 1 && renderCards.length === 3) {\n2165:    
+                         transformStr = 'translateZ(50px) scale(1.03) translateY(-10px)';\n2166:                       
+      zIndexValue = 12;\n2167:                           } else if (idx === 2 || (idx === 1 && renderCards.length === 
+2)) {\n2168:                             transformStr = 'rotateY(-24deg) rotateX(4deg) rotateZ(2deg) scale(0.9) 
+translateZ(-50px)';\n2169:                             zIndexValue = 8;\n2170:                           }\n2171: 
+\n2172:                           let imgUrl = '';\n2173:                           if ('installed_image_url' in item) 
+{\n2174:                             imgUrl = item.installed_image_url || item.installed_image_face_a_url || 
+item.installed_image_face_b_url || '';\n2175:                           }\n2176:                           if 
+(!imgUrl) {\n2177:                             if (idx === 0) imgUrl = 
+'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop';\n2178:                      
+       else if (idx === 1) imgUrl = 
+'https://images.unsplash.com/photo-1634017839464-5c339ebe3cb4?w=600&auto=format&fit=crop';\n2179:                      
+       else imgUrl = 'https://images.unsplash.com/photo\n<truncated 9274 bytes>\n\nNOTE: The output was truncated 
+because it was too long. Use a more targeted query or a smaller range to get the information you need."}
+
+
+
