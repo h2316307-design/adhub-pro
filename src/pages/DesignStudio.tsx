@@ -3946,6 +3946,80 @@ export default function DesignStudio() {
                 <div className="space-y-1">
                   <Label className="text-[10px] text-muted-foreground">شعار الشركة (رابط)</Label>
                   <Input placeholder="https://..." value={companyInfo.logoUrl} onChange={(e) => setCompanyInfo(p => ({ ...p, logoUrl: e.target.value }))} className="h-8 text-[10px] rounded-lg" dir="ltr" />
+                  <div className="flex gap-2 pt-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] rounded-lg flex-1 gap-1 border-primary/30"
+                      onClick={() => document.getElementById('upload-company-logo-input')?.click()}
+                    >
+                      <Upload className="h-3 w-3 text-emerald-500" />
+                      رفع الشعار
+                    </Button>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      id="upload-company-logo-input"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (event) => {
+                          const base64Url = event.target?.result as string;
+                          setCompanyInfo(p => ({ ...p, logoUrl: base64Url }));
+                          // Sync canvas element logo url if it exists
+                          setTextElements(prev => prev.map(ei => ei.id === 'company_logo' ? { ...ei, url: base64Url } : ei));
+                          toast.success('تم رفع شعار الشركة بنجاح');
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] rounded-lg flex-1 gap-1 border-primary/30"
+                      onClick={async () => {
+                        try {
+                          if (!navigator.clipboard || !navigator.clipboard.read) {
+                            toast.error('المتصفح لا يدعم الوصول للحافظة أو يتطلب اتصالاً آمناً (HTTPS)');
+                            return;
+                          }
+                          const clipboardItems = await navigator.clipboard.read();
+                          let imageBlob: Blob | null = null;
+                          for (const item of clipboardItems) {
+                            for (const type of item.types) {
+                              if (type.startsWith('image/')) {
+                                imageBlob = await item.getType(type);
+                                break;
+                              }
+                            }
+                            if (imageBlob) break;
+                          }
+                          if (!imageBlob) {
+                            toast.error('الحافظة لا تحتوي على صورة. يرجى نسخ صورة أولاً.');
+                            return;
+                          }
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const base64Url = event.target?.result as string;
+                            setCompanyInfo(p => ({ ...p, logoUrl: base64Url }));
+                            setTextElements(prev => prev.map(ei => ei.id === 'company_logo' ? { ...ei, url: base64Url } : ei));
+                            toast.success('تم لصق الشعار من الحافظة بنجاح');
+                          };
+                          reader.readAsDataURL(imageBlob);
+                        } catch (err) {
+                          console.error('Failed to read clipboard', err);
+                          toast.error('فشل في قراءة الصورة من الحافظة. تأكد من إعطاء الصلاحية.');
+                        }
+                      }}
+                    >
+                      <Copy className="h-3 w-3 text-blue-500" />
+                      لصق الشعار
+                    </Button>
+                  </div>
                 </div>
                 <Button
                   onClick={() => {
@@ -5053,11 +5127,89 @@ export default function DesignStudio() {
                             </div>
                           )}
 
-                          {/* Custom Image input (URL) */}
+                          {/* Custom Image input (URL & upload & paste) */}
                           {el.type === 'image' && (
-                            <div className="space-y-1">
+                            <div className="space-y-1.5">
                               <Label className="text-[10px]">رابط الصورة</Label>
                               <Input value={el.url || ''} onChange={(e) => setTextElements(prev => prev.map(ei => ei.id === el.id ? { ...ei, url: e.target.value } : ei))} className="h-8 text-[10px] rounded-lg" />
+                              <div className="flex gap-2 pt-0.5">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-[10px] rounded-lg flex-1 gap-1 border-primary/30"
+                                  onClick={() => document.getElementById(`upload-el-image-${el.id}`)?.click()}
+                                >
+                                  <Upload className="h-3.5 w-3.5 text-emerald-500" />
+                                  رفع صورة
+                                </Button>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  id={`upload-el-image-${el.id}`}
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (!file) return;
+                                    const reader = new FileReader();
+                                    reader.onload = (event) => {
+                                      const base64Url = event.target?.result as string;
+                                      setTextElements(prev => prev.map(ei => ei.id === el.id ? { ...ei, url: base64Url } : ei));
+                                      // If this is the company logo element, sync it to the global settings too
+                                      if (el.id === 'company_logo') {
+                                        setCompanyInfo(p => ({ ...p, logoUrl: base64Url }));
+                                      }
+                                      toast.success('تم رفع الصورة بنجاح');
+                                    };
+                                    reader.readAsDataURL(file);
+                                  }}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 text-[10px] rounded-lg flex-1 gap-1 border-primary/30"
+                                  onClick={async () => {
+                                    try {
+                                      if (!navigator.clipboard || !navigator.clipboard.read) {
+                                        toast.error('المتصفح لا يدعم الوصول للحافظة أو يتطلب اتصالاً آمناً (HTTPS)');
+                                        return;
+                                      }
+                                      const clipboardItems = await navigator.clipboard.read();
+                                      let imageBlob: Blob | null = null;
+                                      for (const item of clipboardItems) {
+                                        for (const type of item.types) {
+                                          if (type.startsWith('image/')) {
+                                            imageBlob = await item.getType(type);
+                                            break;
+                                          }
+                                        }
+                                        if (imageBlob) break;
+                                      }
+                                      if (!imageBlob) {
+                                        toast.error('الحافظة لا تحتوي على صورة. يرجى نسخ صورة أولاً.');
+                                        return;
+                                      }
+                                      const reader = new FileReader();
+                                      reader.onload = (event) => {
+                                        const base64Url = event.target?.result as string;
+                                        setTextElements(prev => prev.map(ei => ei.id === el.id ? { ...ei, url: base64Url } : ei));
+                                        if (el.id === 'company_logo') {
+                                          setCompanyInfo(p => ({ ...p, logoUrl: base64Url }));
+                                        }
+                                        toast.success('تم لصق الصورة من الحافظة بنجاح');
+                                      };
+                                      reader.readAsDataURL(imageBlob);
+                                    } catch (err) {
+                                      console.error('Failed to read clipboard', err);
+                                      toast.error('فشل في قراءة الصورة من الحافظة. تأكد من إعطاء الصلاحية.');
+                                    }
+                                  }}
+                                >
+                                  <Copy className="h-3.5 w-3.5 text-blue-500" />
+                                  لصق من الحافظة
+                                </Button>
+                              </div>
                             </div>
                           )}
 
