@@ -697,6 +697,26 @@ export default function DesignStudio() {
   useEffect(() => { companyInfoRef.current = companyInfo; }, [companyInfo]);
   useEffect(() => { imageStyleRef.current = imageStyle; }, [imageStyle]);
 
+  // Helper to change selected item and automatically sync the selectedTaskId
+  const selectItemAndSyncTask = useCallback((itemId: string) => {
+    setSelectedItemId(itemId);
+    const items = taskItemsRef.current;
+    const item = items.find(i => i.id === itemId);
+    if (item && item.task_id) {
+      setSelectedTaskId(item.task_id);
+    }
+  }, []);
+
+  // Helper to change selected task and automatically select the first item of that task
+  const selectTaskAndSyncItem = useCallback((taskId: string) => {
+    setSelectedTaskId(taskId);
+    const items = taskItemsRef.current;
+    const item = items.find(i => i.task_id === taskId);
+    if (item) {
+      setSelectedItemId(item.id);
+    }
+  }, []);
+
   // Auto-populate cover campaign name from selected contract's Ad Type (only if user hasn't customized it)
   const lastAutoCampaignRef = useRef<string>('');
   useEffect(() => {
@@ -1289,6 +1309,9 @@ export default function DesignStudio() {
 
       if (result.length > 0) {
         setSelectedItemId(result[0].id);
+        if (result[0].task_id) {
+          setSelectedTaskId(result[0].task_id);
+        }
         // Immediately load details using the fresh items array (avoid stale closure)
         loadItemDetails(result[0].id, result);
       } else {
@@ -1335,24 +1358,8 @@ export default function DesignStudio() {
     const currentItems = taskItemsRef.current;
     if (currentItems.length > 0) {
       loadItemDetails(selectedItemId, currentItems);
-      
-      // Auto-sync selectedTaskId with the selected item's task_id
-      const item = currentItems.find(i => i.id === selectedItemId);
-      if (item && item.task_id) {
-        setSelectedTaskId(item.task_id);
-      }
     }
   }, [selectedItemId, loadItemDetails]);
-
-  // Sync selectedItemId when selectedTaskId is changed by the user in the task dropdown
-  useEffect(() => {
-    if (!selectedTaskId) return;
-    const currentItems = taskItemsRef.current;
-    const item = currentItems.find(i => i.task_id === selectedTaskId);
-    if (item && item.id !== selectedItemId) {
-      setSelectedItemId(item.id);
-    }
-  }, [selectedTaskId, selectedItemId]);
 
   // Automatically fit image height when switching billboard images
   const prevImageUrlRef = useRef<string>('');
@@ -1593,10 +1600,10 @@ export default function DesignStudio() {
   const canGoNext = currentItemIndex < taskItems.length - 1;
 
   const goToPrevItem = () => {
-    if (canGoPrev) setSelectedItemId(taskItems[currentItemIndex - 1].id);
+    if (canGoPrev) selectItemAndSyncTask(taskItems[currentItemIndex - 1].id);
   };
   const goToNextItem = () => {
-    if (canGoNext) setSelectedItemId(taskItems[currentItemIndex + 1].id);
+    if (canGoNext) selectItemAndSyncTask(taskItems[currentItemIndex + 1].id);
   };
 
   // ══════════════════════════════════════════
@@ -3837,7 +3844,7 @@ export default function DesignStudio() {
                   return (
                     <div className="space-y-1.5">
                       <Label className="text-[11px] text-muted-foreground">المهمة ({contractTasks.length})</Label>
-                      <Select value={selectedTaskId} onValueChange={setSelectedTaskId}>
+                      <Select value={selectedTaskId} onValueChange={selectTaskAndSyncItem}>
                         <SelectTrigger className="h-9 text-xs rounded-xl">
                           <SelectValue placeholder="اختر المهمة..." />
                         </SelectTrigger>
@@ -3861,7 +3868,7 @@ export default function DesignStudio() {
                       <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-xl" disabled={!canGoPrev} onClick={goToPrevItem}>
                         <ChevronRight className="h-4 w-4" />
                       </Button>
-                      <Select value={selectedItemId} onValueChange={setSelectedItemId}>
+                      <Select value={selectedItemId} onValueChange={selectItemAndSyncTask}>
                         <SelectTrigger className="h-9 text-xs flex-1 rounded-xl">
                           <SelectValue placeholder={loadingItems ? "تحميل..." : "اختر اللوحة..."} />
                         </SelectTrigger>
