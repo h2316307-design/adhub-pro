@@ -65,6 +65,7 @@ interface CustomerSummary {
   accountBalance: number;
   remainingDebt: number;   // ✅ المتبقي من الدين باستخدام المنطق الصحيح
   repaymentPercentage: number; // ✅ نسبة السداد الصحيحة
+  friendRentals?: number;  // ✅ الإيجارات الصديقة غير المستعملة
   isSupplier?: boolean;
   isCustomer?: boolean;
   supplierType?: string | null;
@@ -108,6 +109,8 @@ function CustomerRow({
   const rowClassName = isHighlighted
     ? "group hover:bg-destructive/10 transition-all duration-300 bg-destructive/5 border-r-4 border-r-destructive" 
     : "group hover:bg-accent/10 transition-all duration-300";
+
+  const netRemaining = remaining + (customer.friendRentals || 0);
 
   const customerData = {
     ...customer,
@@ -208,6 +211,16 @@ function CustomerRow({
         <div className="flex flex-col items-end">
           <span className={`font-bold font-manrope ${remaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
             {remaining < 0 ? `(${Math.abs(remaining).toLocaleString('ar-LY')})` : remaining.toLocaleString('ar-LY')}
+          </span>
+          <span className="text-[10px] text-muted-foreground">د.ل</span>
+        </div>
+      </TableCell>
+
+      {/* صافي المتبقي */}
+      <TableCell className="py-4">
+        <div className="flex flex-col items-end">
+          <span className={`font-bold font-manrope ${netRemaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {netRemaining < 0 ? `(${Math.abs(netRemaining).toLocaleString('ar-LY')})` : netRemaining.toLocaleString('ar-LY')}
           </span>
           <span className="text-[10px] text-muted-foreground">د.ل</span>
         </div>
@@ -418,16 +431,16 @@ export default function Customers() {
         fbrRes,
         fcRes
       ] = await Promise.all([
-        supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes, method, reference').order('paid_at', { ascending: false }).range(0, 10000),
-        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 10000),
-        supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id').order('name', { ascending: true }).range(0, 10000),
-        supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 10000),
-        supabase.from('printed_invoices').select('id, customer_id, total_amount, print_cost, invoice_type, included_in_contract').range(0, 10000),
-        supabase.from('purchase_invoices').select('id, customer_id, total_amount').range(0, 10000),
+        supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes, method, reference').order('paid_at', { ascending: false }).range(0, 9999),
+        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 9999),
+        supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id').order('name', { ascending: true }).range(0, 9999),
+        supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 9999),
+        supabase.from('printed_invoices').select('id, customer_id, total_amount, print_cost, invoice_type, included_in_contract').range(0, 9999),
+        supabase.from('purchase_invoices').select('id, customer_id, total_amount, used_as_payment').range(0, 9999),
         supabase.from('customer_general_discounts').select('id, customer_id, discount_value').eq('status', 'active'),
-        supabase.from('composite_tasks').select('id, customer_id, combined_invoice_id, print_task_id, customer_total').range(0, 10000),
-        supabase.from('print_tasks').select('id, invoice_id').range(0, 10000),
-        supabase.from('friend_billboard_rentals').select('id, friend_company_id, friend_rental_cost, customer_rental_price, used_as_payment, contract_number, start_date, billboard_id').range(0, 10000),
+        supabase.from('composite_tasks').select('id, customer_id, combined_invoice_id, print_task_id, customer_total').range(0, 9999),
+        supabase.from('print_tasks').select('id, invoice_id').range(0, 9999),
+        supabase.from('friend_billboard_rentals').select('id, friend_company_id, friend_rental_cost, customer_rental_price, used_as_payment, contract_number, start_date, billboard_id').range(0, 9999),
         supabase.from('friend_companies').select('id, name'),
       ]);
 
@@ -836,6 +849,7 @@ export default function Customers() {
       customerData.totalPaid = financials.totalPaid;
       customerData.remainingDebt = financials.remainingDebt;
       customerData.repaymentPercentage = financials.repaymentPercentage;
+      customerData.friendRentals = friendRentals;
       customerData.overdueInfo = overdueMap.get(customerId) || {
         hasOverdue: false,
         oldestDueDate: null,
@@ -1970,6 +1984,7 @@ export default function Customers() {
                   <TableHead className="font-bold text-foreground text-left">المدفوع</TableHead>
                   <TableHead className="font-bold text-foreground text-left">الرصيد</TableHead>
                   <TableHead className="font-bold text-foreground text-left">المتبقي</TableHead>
+                  <TableHead className="font-bold text-foreground text-left">صافي المتبقي</TableHead>
                   <TableHead className="font-bold text-foreground">السداد</TableHead>
                   <TableHead className="font-bold text-foreground">الحالة</TableHead>
                   <TableHead className="font-bold text-foreground">الإجراءات</TableHead>

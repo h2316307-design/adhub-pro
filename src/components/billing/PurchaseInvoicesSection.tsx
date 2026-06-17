@@ -161,71 +161,75 @@ export function PurchaseInvoicesSection({
           return (
             <div
               key={invoice.id}
-              className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-muted/30 rounded-lg border border-border hover:bg-muted/50 transition-colors"
+              className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 bg-slate-900/60 rounded-xl border border-white/10 hover:border-amber-500/20 hover:bg-slate-900/80 transition-all duration-200"
             >
               <div className="space-y-2 flex-1">
                 <div className="flex items-center gap-3 flex-wrap">
-                  <span className="font-bold text-foreground">{invoice.invoice_number}</span>
+                  <span className="font-bold text-white text-base">#{invoice.invoice_number}</span>
                   {invoice.invoice_name && (
-                    <span className="text-primary font-semibold">- {invoice.invoice_name}</span>
+                    <span className="text-amber-400 font-bold text-sm">{invoice.invoice_name}</span>
                   )}
                   <Badge
                     variant={isFullySettled || invoice.paid ? 'default' : remaining > 0 ? 'destructive' : 'secondary'}
-                    className={isFullySettled || invoice.paid ? 'bg-green-600 text-white' : remaining > 0 ? 'bg-red-600 text-white' : ''}
+                    className={isFullySettled || invoice.paid 
+                      ? 'bg-green-500/10 text-green-400 border border-green-500/30' 
+                      : remaining > 0 
+                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/30' 
+                        : 'bg-slate-700/50 text-slate-300 border border-slate-600/30'}
                   >
                     {isFullySettled || invoice.paid ? (usedAsPayment >= totalAmount ? 'مستخدمة كدفعة' : 'مسددة') : remaining > 0 ? 'غير مسددة' : 'جزئي'}
                   </Badge>
                   {invoice.locked && (
-                    <Badge variant="outline" className="border-primary/50 text-primary">مقفلة</Badge>
+                    <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-400">مقفلة</Badge>
                   )}
                   {usedAsPayment > 0 && (
-                    <Badge variant="outline" className="border-green-500 text-green-600">
-                      مستخدمة كدفعة: {formatAmount(usedAsPayment)} د.ل
+                    <Badge variant="outline" className="border-emerald-500/30 bg-emerald-500/5 text-emerald-400 font-medium">
+                      مستعملة كدفعة: {formatAmount(usedAsPayment)} د.ل
                     </Badge>
                   )}
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-2 text-sm">
-                  <div className="text-muted-foreground">
-                    التاريخ: <span className="text-foreground">{new Date(invoice.invoice_date).toLocaleDateString('ar-LY')}</span>
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm pt-1">
+                  <div className="text-white/60">
+                    التاريخ: <span className="text-white font-medium">{new Date(invoice.invoice_date).toLocaleDateString('ar-LY')}</span>
                   </div>
-                  <div className="text-muted-foreground">
-                    الإجمالي: <span className="font-semibold text-foreground">{formatAmount(Number(invoice.total_amount))} د.ل</span>
+                  <div className="text-white/60">
+                    الإجمالي: <span className="font-bold text-white">{formatAmount(Number(invoice.total_amount))} د.ل</span>
                   </div>
-                  <div className="text-muted-foreground">
-                    المتبقي: <span className="font-semibold text-destructive">{formatAmount(remaining)} د.ل</span>
+                  <div className="text-white/60">
+                    المتبقي: <span className={`font-bold ${remaining > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>{formatAmount(remaining)} د.ل</span>
                   </div>
-                  {usedAsPayment > 0 && (
-                    <div className="text-muted-foreground">
-                      الرصيد المتاح: <span className="font-semibold text-green-600">{formatAmount(availableCredit)} د.ل</span>
-                    </div>
-                  )}
+                  <div className="text-white/60">
+                    الرصيد المتاح: <span className="font-bold text-emerald-400">{formatAmount(availableCredit)} د.ل</span>
+                  </div>
                 </div>
 
                 {invoice.notes && (
-                  <div className="text-xs text-muted-foreground">ملاحظات: {invoice.notes}</div>
+                  <div className="text-xs text-white/50 bg-white/5 rounded px-2.5 py-1 border border-white/5 w-fit">
+                    ملاحظات: {invoice.notes}
+                  </div>
                 )}
               </div>
 
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" variant="outline" onClick={() => handlePrint(invoice)} className="border-border text-foreground hover:bg-muted">
+              <div className="flex flex-wrap gap-2 md:justify-end">
+                <Button size="sm" variant="outline" onClick={() => handlePrint(invoice)} className="border-white/10 text-white hover:bg-white/5 cursor-pointer transition-all duration-200">
                   <Printer className="h-4 w-4 ml-2" />طباعة
                 </Button>
-                <Button size="sm" variant="outline" onClick={() => handleEdit(invoice)} className="border-primary/50 text-primary hover:bg-primary/10">
+                <Button size="sm" variant="outline" onClick={() => handleEdit(invoice)} className="border-amber-500/30 text-amber-500 hover:bg-amber-500/10 cursor-pointer transition-all duration-200">
                   <Edit className="h-4 w-4 ml-2" />تعديل
                 </Button>
                 {availableCredit > 0 && (
-                  <Button size="sm" variant="outline" onClick={() => handleUseAsPayment(invoice)} className="border-purple-500 text-purple-600 hover:bg-purple-50">
+                  <Button size="sm" variant="outline" onClick={() => handleUseAsPayment(invoice)} className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10 cursor-pointer transition-all duration-200">
                     <ArrowRightLeft className="h-4 w-4 ml-2" />استخدام كدفعة
                   </Button>
                 )}
                 {!invoice.locked && remaining > 0 && (
-                  <Button size="sm" onClick={() => handleAddPayment(invoice)} className="bg-green-600 text-white hover:bg-green-700">
+                  <Button size="sm" onClick={() => handleAddPayment(invoice)} className="bg-green-600 text-white hover:bg-green-700 cursor-pointer transition-all duration-200">
                     <DollarSign className="h-4 w-4 ml-2" />سداد
                   </Button>
                 )}
                 {!invoice.locked && (
-                  <Button size="sm" variant="destructive" onClick={() => { setInvoiceToDelete(invoice); setDeleteDialogOpen(true); }}>
+                  <Button size="sm" variant="destructive" onClick={() => { setInvoiceToDelete(invoice); setDeleteDialogOpen(true); }} className="cursor-pointer transition-all duration-200">
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 )}

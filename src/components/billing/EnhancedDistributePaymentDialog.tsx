@@ -34,6 +34,23 @@ interface EnhancedDistributePaymentDialogProps {
     total_amount: number;
     used_as_payment: number;
   } | null;
+  friendRental?: {
+    id: string;
+    billboard_id: number;
+    friend_rental_cost: number;
+    used_as_payment: number;
+    billboards?: {
+      Billboard_Name?: string;
+    };
+    _groupRentals?: Array<{
+      id: string;
+      billboard_id: number;
+      contract_number?: number;
+      friend_rental_cost: number;
+      used_as_payment: number;
+    }>;
+    contract_number?: number;
+  } | null;
   editMode?: boolean;
   editingDistributedPaymentId?: string | null;
   editingPayments?: any[];
@@ -50,6 +67,7 @@ export function EnhancedDistributePaymentDialog({
   customerName,
   onSuccess,
   purchaseInvoice = null,
+  friendRental = null,
   editMode = false,
   editingDistributedPaymentId = null,
   editingPayments = [],
@@ -122,9 +140,25 @@ export function EnhancedDistributePaymentDialog({
   editingPaymentsRef.current = editingPayments;
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  const rentalGrouped = friendRental
+    ? (Array.isArray(friendRental._groupRentals) && friendRental._groupRentals.length > 0
+      ? friendRental._groupRentals
+      : [friendRental])
+    : [];
+  const isRentalGrouped = rentalGrouped.length > 1;
+  const rentalTotalCost = rentalGrouped.reduce((s, r) => s + (Number(r.friend_rental_cost) || 0), 0);
+  const rentalUsedAsPayment = rentalGrouped.reduce((s, r) => s + (Number(r.used_as_payment) || 0), 0);
+  const rentalAvailableCredit = rentalTotalCost - rentalUsedAsPayment;
+  
+  const billboardName = friendRental
+    ? (isRentalGrouped
+      ? `عقد ${friendRental.contract_number || ''} (${rentalGrouped.length} لوحات)`
+      : (friendRental.billboards?.Billboard_Name || `لوحة ${friendRental.billboard_id}`))
+    : '';
+
   const availableCredit = purchaseInvoice 
     ? purchaseInvoice.total_amount - purchaseInvoice.used_as_payment 
-    : 0;
+    : (friendRental ? rentalAvailableCredit : 0);
 
   // تحميل بيانات الموظفين المرتبطة بالدفعة عند التعديل
   const loadEditModeEmployeeData = async (distributedPaymentId: string) => {
@@ -275,10 +309,22 @@ export function EnhancedDistributePaymentDialog({
           loadEditModeEmployeeData(distPaymentId);
         }
       } else {
-        setTotalAmount(purchaseInvoice ? String(availableCredit) : (preFilledAmount ? String(preFilledAmount) : ''));
-        setPaymentMethod(purchaseInvoice ? 'مقايضة' : 'نقدي');
+        setTotalAmount(
+          purchaseInvoice 
+            ? String(availableCredit) 
+            : (friendRental 
+              ? String(availableCredit) 
+              : (preFilledAmount ? String(preFilledAmount) : ''))
+        );
+        setPaymentMethod((purchaseInvoice || friendRental) ? 'مقايضة' : 'نقدي');
         setPaymentReference('');
-        setPaymentNotes(purchaseInvoice ? `مقايضة من فاتورة مشتريات ${purchaseInvoice.invoice_number}` : '');
+        setPaymentNotes(
+          purchaseInvoice 
+            ? `مقايضة من فاتورة مشتريات ${purchaseInvoice.invoice_number}` 
+            : (friendRental 
+              ? `مقايضة من إيجار لوحة: ${billboardName}` 
+              : '')
+        );
         setPaymentDate(new Date().toISOString().split('T')[0]);
         // Reset states only for new payment
         setEnableEmployee(false);
@@ -314,7 +360,7 @@ export function EnhancedDistributePaymentDialog({
       }
     }
     // ✅ Fix: removed editingPayments from deps (use ref instead) to prevent infinite loop
-  }, [open, customerId, editMode, purchaseInvoice, editingDistributedPaymentId]);
+  }, [open, customerId, editMode, purchaseInvoice, friendRental, editingDistributedPaymentId]);
 
 
 
@@ -1500,6 +1546,28 @@ export function EnhancedDistributePaymentDialog({
         if (purchaseUpdateError) {
           console.error('Error updating purchase invoice:', purchaseUpdateError);
           toast.info('تم توزيع الدفعة ولكن فشل تحديث فاتورة المشتريات');
+        }
+      }
+
+      // تحديث إيجارات لوحات الأصدقاء في حالة المقايضة
+      if (friendRental) {
+        let remaining = totalAllocated;
+        for (const gr of rentalGrouped) {
+          if (remaining <= 0) break;
+          const grRemaining = Math.max(0, (Number(gr.friend_rental_cost) || 0) - (Number(gr.used_as_payment) || 0));
+          if (grRemaining <= 0) continue;
+          const amount = Math.min(grRemaining, remaining);
+          
+          const { error: err } = await supabase
+            .from('friend_billboard_rentals')
+            .update({ used_as_payment: (Number(gr.used_as_payment) || 0) + amount })
+            .eq('id', gr.id);
+            
+          if (err) {
+            console.error('Error updating friend_billboard_rentals:', err);
+            toast.info('تم توزيع الدفعة ولكن فشل تحديث إيجار اللوحة');
+          }
+          remaining -= amount;
         }
       }
       

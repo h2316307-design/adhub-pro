@@ -408,10 +408,10 @@ export default function DesignStudio() {
   const [coverAccentColor, setCoverAccentColor] = useState('#d6ac40');
   const [coverSecondaryColor, setCoverSecondaryColor] = useState('#ffffff');
   const [coverGlowColor, setCoverGlowColor] = useState('#000000');
-  const [coverTemplate, setCoverTemplate] = useState<'template1' | 'template2' | 'template3' | 'template4' | 'template5' | 'template6' | 'template7'>('template3');
+  const [coverTemplate, setCoverTemplate] = useState<'template1' | 'template2' | 'template3' | 'template4' | 'template5' | 'template6' | 'template7' | 'template8'>('template3');
   // Helper to change templates and load sensible defaults for sliders to avoid clashes
   // Helper to change templates and load sensible defaults for sliders to avoid clashes
-  const handleSelectTemplate = (id: 'template1' | 'template2' | 'template3' | 'template4' | 'template5' | 'template6' | 'template7') => {
+  const handleSelectTemplate = (id: 'template1' | 'template2' | 'template3' | 'template4' | 'template5' | 'template6' | 'template7' | 'template8') => {
     setCoverTemplate(id);
     
     // Check if there are user saved default settings in localStorage
@@ -462,6 +462,8 @@ export default function DesignStudio() {
       setCoverT4({ cardHeight: 1.0, fgBlur: 0.5, bgBlur: 15, zoom: 1.1 });
     } else if (id === 'template7') {
       setCoverT4({ cardHeight: 0.6, fgBlur: 0.6, bgBlur: 20, zoom: 1.3 });
+    } else if (id === 'template8') {
+      setCoverT4({ cardHeight: 0.5, fgBlur: 0.8, bgBlur: 1.0, zoom: 1.25 });
     }
   };
 
@@ -493,7 +495,7 @@ export default function DesignStudio() {
     };
     try {
       localStorage.setItem(`design_studio:default_settings:${coverTemplate}`, JSON.stringify(defaultSettings));
-      const templateNum = coverTemplate === 'template1' ? '1' : coverTemplate === 'template2' ? '2' : coverTemplate === 'template3' ? '3' : coverTemplate === 'template4' ? '4' : coverTemplate === 'template5' ? '5' : coverTemplate === 'template6' ? '6' : '7';
+      const templateNum = coverTemplate === 'template1' ? '1' : coverTemplate === 'template2' ? '2' : coverTemplate === 'template3' ? '3' : coverTemplate === 'template4' ? '4' : coverTemplate === 'template5' ? '5' : coverTemplate === 'template6' ? '6' : coverTemplate === 'template7' ? '7' : '8';
       toast.success(`تم حفظ الإعدادات الحالية كافتراضية لقالب ${templateNum} بنجاح!`);
     } catch (e) {
       toast.error('فشل حفظ الإعدادات الافتراضية');
@@ -521,6 +523,8 @@ export default function DesignStudio() {
         setCoverT4({ cardHeight: 1.0, fgBlur: 0.5, bgBlur: 15, zoom: 1.1 });
       } else if (id === 'template7') {
         setCoverT4({ cardHeight: 0.6, fgBlur: 0.6, bgBlur: 20, zoom: 1.3 });
+      } else if (id === 'template8') {
+        setCoverT4({ cardHeight: 0.5, fgBlur: 0.8, bgBlur: 1.0, zoom: 1.25 });
       }
     } catch (e) {
       toast.error('فشل إعادة تعيين الإعدادات الافتراضية');
@@ -3422,7 +3426,7 @@ export default function DesignStudio() {
   const Header = ({ accent, brandRight = true, align = 'center', imagesSide, showBlurCard = false }: { accent: string; brandRight?: boolean; align?: 'right' | 'center' | 'left'; imagesSide?: 'left' | 'right'; showBlurCard?: boolean }) => {
     const panelLogoEl = textElements.find(el => el.id === 'company_logo');
     const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
-    const isT7 = coverTemplate === 'template7';
+    const isT7 = coverTemplate === 'template7' || coverTemplate === 'template8';
     const showLogo = coverShow.companyLogo && !!logoSrc && !isT7;
     const showName = coverShow.companyName && !isT7;
     const isT5 = coverTemplate === 'template5';
@@ -4298,6 +4302,7 @@ export default function DesignStudio() {
                           { id: 'template5', label: '5 — البوابة الذهبية' },
                           { id: 'template6', label: '6 — أسطوانات ثلاثية الأبعاد' },
                           { id: 'template7', label: '7 — موزاييك سينمائي' },
+                          { id: 'template8', label: '8 — الزجاج المكسور' },
                         ] as const).map((t) => (
                           <Button
                             key={t.id}
@@ -4369,7 +4374,7 @@ export default function DesignStudio() {
                           }}
                         />
                       </div>
-                      {(coverTemplate === 'template4' || coverTemplate === 'template5' || coverTemplate === 'template1' || coverTemplate === 'template6' || coverTemplate === 'template3' || coverTemplate === 'template7') && (
+                      {(coverTemplate === 'template4' || coverTemplate === 'template5' || coverTemplate === 'template1' || coverTemplate === 'template6' || coverTemplate === 'template3' || coverTemplate === 'template7' || coverTemplate === 'template8') && (
                         <div className="space-y-2 pt-2">
                           {coverTemplate === 'template1' ? (
                             <>
@@ -4427,7 +4432,7 @@ export default function DesignStudio() {
                                 </>
                               )}
 
-                              {(coverTemplate === 'template3' || coverTemplate === 'template6' || coverTemplate === 'template7') && (
+                              {(coverTemplate === 'template3' || coverTemplate === 'template6' || coverTemplate === 'template7' || coverTemplate === 'template8') && (
                                 <div className="space-y-3 pt-2 border-t border-border/20 mt-1">
                                   <div className="text-[11px] font-bold text-primary">خيارات وتأثيرات القالب</div>
                                   
@@ -4454,7 +4459,7 @@ export default function DesignStudio() {
 
                                   <div className="space-y-1 pt-1">
                                     <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
-                                      <span>{coverTemplate === 'template7' ? 'شدة العمق ثلاثي الأبعاد للموزاييك' : 'مقياس حجم الكرة ثلاثية الأبعاد'}</span>
+                                      <span>{coverTemplate === 'template7' || coverTemplate === 'template8' ? 'شدة العمق ثلاثي الأبعاد للقطع' : 'مقياس حجم الكرة ثلاثية الأبعاد'}</span>
                                       <span className="text-[10px] text-muted-foreground font-mono">{(coverT4.zoom ?? 1.55).toFixed(2)}x</span>
                                     </div>
                                     <Slider 
@@ -4482,10 +4487,10 @@ export default function DesignStudio() {
                                     </div>
                                   )}
 
-                                  {coverTemplate === 'template7' && (
+                                  {(coverTemplate === 'template7' || coverTemplate === 'template8') && (
                                     <div className="space-y-1 pt-2 border-t border-border/10">
                                       <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
-                                        <span>تباعد قطع الموزاييك (الفجوات)</span>
+                                        <span>{coverTemplate === 'template8' ? 'تباعد شروخ الزجاج (الفجوات)' : 'تباعد قطع الموزاييك (الفجوات)'}</span>
                                         <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.cardHeight ?? 0.6) * 20)}px</span>
                                       </div>
                                       <Slider 
@@ -4494,6 +4499,22 @@ export default function DesignStudio() {
                                         step={0.05} 
                                         value={[coverT4.cardHeight ?? 0.6]} 
                                         onValueChange={([v]) => setCoverT4(p => ({ ...p, cardHeight: v }))} 
+                                      />
+                                    </div>
+                                  )}
+
+                                  {coverTemplate === 'template8' && (
+                                    <div className="space-y-1 pt-2 border-t border-border/10">
+                                      <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                        <span>قوة تفاصيل وتكرار الزجاج</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.bgBlur ?? 1.0) * 100)}%</span>
+                                      </div>
+                                      <Slider 
+                                        min={0.0} 
+                                        max={1.5} 
+                                        step={0.05} 
+                                        value={[coverT4.bgBlur ?? 1.0]} 
+                                        onValueChange={([v]) => setCoverT4(p => ({ ...p, bgBlur: v }))} 
                                       />
                                     </div>
                                   )}
@@ -5666,6 +5687,7 @@ export default function DesignStudio() {
                     { id: 'template5', label: '5' },
                     { id: 'template6', label: '6' },
                     { id: 'template7', label: '7' },
+                    { id: 'template8', label: '8' },
                   ] as const).map((t) => (
                     <Button
                       key={t.id}
@@ -7481,7 +7503,7 @@ export default function DesignStudio() {
 
                       const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
                       const activeIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 0;
-                      const effectIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 1.0;
+                      const effectIntensity = 1.0;
 
                       // Define the 3D cards metadata with dynamic positions and polygon points for glass shards
                       // Adjusted to leave the top center completely empty for the brand logo header
@@ -7613,7 +7635,9 @@ export default function DesignStudio() {
                       const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
 
                       // Dynamic background source from main design image
-                      const bgPhoto = photos[0]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+                      const bgRng = mulberry32(coverShuffleSeed + 999);
+                      const bgPhotoIdx = photos.length > 0 ? Math.floor(bgRng() * photos.length) : 0;
+                      const bgPhoto = photos[bgPhotoIdx]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
 
                       const crackColor = coverT5ColorMode ? accent : '#f4c25a';
                       const bgBrightness = 0.25 - activeIntensity * 0.03;
@@ -8152,7 +8176,9 @@ export default function DesignStudio() {
                       const kickerText = coverKicker;
                       const taglineText = coverTagline;
 
-                      const bgPhoto = photos[0]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+                      const bgRng = mulberry32(coverShuffleSeed + 999);
+                      const bgPhotoIdx = photos.length > 0 ? Math.floor(bgRng() * photos.length) : 0;
+                      const bgPhoto = photos[bgPhotoIdx]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
 
                       return (
                         <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
@@ -8611,7 +8637,9 @@ export default function DesignStudio() {
                       const panelLogoEl = textElements.find(el => el.id === 'company_logo');
                       const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
 
-                      const bgPhoto = photos[0]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+                      const bgRng = mulberry32(coverShuffleSeed + 999);
+                      const bgPhotoIdx = photos.length > 0 ? Math.floor(bgRng() * photos.length) : 0;
+                      const bgPhoto = photos[bgPhotoIdx]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
 
                       // Frosted glass card dimensions
                       const cardW = Math.round(w * 0.68);
@@ -8929,6 +8957,538 @@ export default function DesignStudio() {
                                   padding: '10px 36px', 
                                   fontSize: `${coverFontSizes.tagline * 0.9}px`,
                                   boxShadow: `0 10px 24px ${getRGBAColor(accent, 0.32)}, inset 0 1px 0 rgba(255, 255, 255, 0.4)`,
+                                  fontFamily: "'Tajawal', sans-serif"
+                                }}
+                              >
+                                {taglineText}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[0]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[22]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.38,
+                            }}
+                          />
+
+                          {/* Footer information displayed conditionally */}
+                          <Footer accent={accent} />
+                        </div>
+                      );
+                    }
+
+                    // ============= TEMPLATE 8 — BROKEN GLASS (الزجاج المكسور) =============
+                    if (coverTemplate === 'template8') {
+                      const accent = coverAccentColor;
+                      const glow = coverGlowColor;
+                      const gI = coverGlowIntensity;
+                      const swap = coverSwapSides;
+                      const textAlign: 'left' | 'right' | 'center' = 'center';
+                      const activeIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.8) : 0;
+                      const effectIntensity = 1.0;
+                      const glassIntensity = coverT4.bgBlur ?? 1.0;
+                      
+                      // Depth intensity derived from coverT4.zoom (default to 1.25)
+                      const depthIntensity = coverT4.zoom ?? 1.25;
+                      // Gap size ratio derived from coverT4.cardHeight (default to 0.5)
+                      const gapRatio = coverT4.cardHeight ?? 0.5;
+                      
+                      const photos = pickPhotos(12); // 12 shards
+                      const crops = getTemplateCrops(photos, 12);
+
+                      const w = canvasWidth;
+                      const h = canvasHeight;
+                      const circleSize = Math.round(Math.min(w, h) * 0.48);
+
+                      const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
+
+                      // Define the 12 non-overlapping glass shards partitioning the canvas around center (50%, 50%)
+                      const shards = [
+                        { p: [{x: 0, y: 0}, {x: 35, y: 0}, {x: 48, y: 45}, {x: 0, y: 30}], cx: 20, cy: 18, rotX: -10, rotY: -10, rotZ: -4, tz: -15 },
+                        { p: [{x: 35, y: 0}, {x: 50, y: 0}, {x: 50, y: 43}, {x: 48, y: 45}], cx: 44, cy: 21, rotX: -12, rotY: -3, rotZ: -1, tz: -10 },
+                        { p: [{x: 50, y: 0}, {x: 68, y: 0}, {x: 53, y: 44}, {x: 50, y: 43}], cx: 57, cy: 21, rotX: -12, rotY: 3, rotZ: 1, tz: -10 },
+                        { p: [{x: 68, y: 0}, {x: 100, y: 0}, {x: 100, y: 35}, {x: 55, y: 46}, {x: 53, y: 44}], cx: 80, cy: 18, rotX: -10, rotY: 10, rotZ: 4, tz: -15 },
+                        { p: [{x: 55, y: 46}, {x: 100, y: 35}, {x: 100, y: 55}, {x: 56, y: 50}], cx: 82, cy: 45, rotX: -2, rotY: 12, rotZ: 2, tz: 5 },
+                        { p: [{x: 56, y: 50}, {x: 100, y: 55}, {x: 100, y: 75}, {x: 55, y: 54}], cx: 82, cy: 62, rotX: 2, rotY: 12, rotZ: -2, tz: 5 },
+                        { p: [{x: 55, y: 54}, {x: 100, y: 75}, {x: 100, y: 100}, {x: 75, y: 100}, {x: 53, y: 56}], cx: 80, cy: 82, rotX: 10, rotY: 10, rotZ: -4, tz: -20 },
+                        { p: [{x: 53, y: 56}, {x: 75, y: 100}, {x: 52, y: 100}, {x: 51, y: 57}], cx: 57, cy: 79, rotX: 12, rotY: 3, rotZ: -1, tz: -12 },
+                        { p: [{x: 51, y: 57}, {x: 52, y: 100}, {x: 30, y: 100}, {x: 48, y: 56}], cx: 44, cy: 79, rotX: 12, rotY: -3, rotZ: 1, tz: -12 },
+                        { p: [{x: 48, y: 56}, {x: 30, y: 100}, {x: 0, y: 100}, {x: 0, y: 75}, {x: 47, y: 54}], cx: 20, cy: 82, rotX: 10, rotY: -10, rotZ: 4, tz: -20 },
+                        { p: [{x: 47, y: 54}, {x: 0, y: 75}, {x: 0, y: 52}, {x: 46, y: 50}], cx: 18, cy: 62, rotX: 2, rotY: -12, rotZ: 2, tz: 8 },
+                        { p: [{x: 46, y: 50}, {x: 0, y: 52}, {x: 0, y: 30}, {x: 48, y: 45}], cx: 18, cy: 45, rotX: -2, rotY: -12, rotZ: -2, tz: 8 },
+                      ];
+
+                      const campaignTitle = (adTypeOverride && adTypeOverride.trim()) || ((groupedContracts.find((x:any) => String(x.contract_id) === selectedContractId) as any)?.adType) || coverCampaignName || coverTitle2;
+                      const kickerText = coverKicker;
+                      const taglineText = coverTagline;
+                      const panelLogoEl = textElements.find(el => el.id === 'company_logo');
+                      const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
+
+                      const bgRng = mulberry32(coverShuffleSeed + 999);
+                      const bgPhotoIdx = photos.length > 0 ? Math.floor(bgRng() * photos.length) : 0;
+                      const bgPhoto = photos[bgPhotoIdx]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+
+                      // Frosted glass card dimensions
+                      const cardW = Math.round(w * 0.65);
+                      const cardH = Math.round(h * 0.35);
+
+                      return (
+                        <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
+                          style={{ 
+                            ['--cover-accent' as any]: accent, 
+                            background: '#010103',
+                            padding: '64px' 
+                          }}
+                        >
+                          {/* 0. Blurred design background image replica */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none scale-105"
+                            style={{
+                              backgroundImage: `url('${bgPhoto}')`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              filter: coverT5ColorMode
+                                ? `blur(28px) brightness(0.1) saturate(0.05) grayscale(0.95)`
+                                : 'blur(24px) brightness(0.12) saturate(0.8)',
+                              opacity: 0.95
+                            }}
+                          />
+
+                          {/* Dynamic accent color overlay on background */}
+                          {coverT5ColorMode && (
+                            <div 
+                              className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: getRGBAColor(accent, activeIntensity * 0.35),
+                                mixBlendMode: 'color',
+                              }}
+                            />
+                          )}
+
+                          {/* Cinematic dual light leaks (Cyan and Accent/Amber) */}
+                          <div className="absolute inset-0 z-0 pointer-events-none" style={{ mixBlendMode: 'screen', opacity: 0.7 }}>
+                            {/* Cyan light leak left side */}
+                            <div className="absolute rounded-full" 
+                              style={{ 
+                                left: '-15%', 
+                                top: '10%', 
+                                width: '700px', 
+                                height: '700px', 
+                                background: 'radial-gradient(circle, rgba(6, 182, 212, 0.18) 0%, transparent 70%)', 
+                                filter: 'blur(80px)' 
+                              }} 
+                            />
+                            {/* Amber / Accent light leak right side */}
+                            <div className="absolute rounded-full" 
+                              style={{ 
+                                right: '-15%', 
+                                bottom: '10%', 
+                                width: '700px', 
+                                height: '700px', 
+                                background: `radial-gradient(circle, ${getRGBAColor(spotlightColor, 0.2)} 0%, transparent 70%)`, 
+                                filter: 'blur(80px)' 
+                              }} 
+                            />
+                          </div>
+
+                          {/* Vignette */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none"
+                            style={{
+                              background: 'radial-gradient(circle, transparent 25%, rgba(0, 0, 0, 0.95) 100%), linear-gradient(180deg, rgba(0, 0, 0, 0.4) 0%, rgba(1, 2, 4, 0.85) 100%)'
+                            }}
+                          />
+
+                          {/* 1. Header (Logo & Brand Info) */}
+                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} showBlurCard={true} />
+
+                          {/* SVG Shatter Mask Definition using userSpaceOnUse to fit exactly to the canvas dimensions */}
+                          <svg style={{ position: 'absolute', width: 0, height: 0 }}>
+                            <defs>
+                              <mask id="shatter-mask" maskUnits="userSpaceOnUse" x="0" y="0" width={w} height={h}>
+                                <rect x="0" y="0" width={w} height={h} fill="black" />
+                                <image 
+                                  href="/cover-template8-mask.png" 
+                                  x="0" 
+                                  y="0" 
+                                  width={w} 
+                                  height={h} 
+                                  preserveAspectRatio="xMidYMid slice" 
+                                />
+                              </mask>
+                            </defs>
+                          </svg>
+
+                          {/* 2. Shattered Glass Shards (Z-index: 10) */}
+                          {coverShow.collage && (
+                            <div 
+                              className="absolute inset-0 z-10 pointer-events-none" 
+                              style={{ 
+                                perspective: '1200px', 
+                                transformStyle: 'preserve-3d',
+                                mask: "url(#shatter-mask)",
+                                WebkitMask: "url(#shatter-mask)",
+                              }}
+                            >
+                              {shards.map((c, idx) => {
+                                const photo = photos[idx % photos.length] || photos[0];
+                                if (!photo) return null;
+                                const crop = crops[idx % crops.length] || { x: 50, y: 50 };
+
+                                // Apply gap size mathematically by scaling vertices towards local center
+                                const gapSizeRatio = gapRatio * 0.022; // max ~2.2% gap spacing
+                                const shrunkPoints = c.p.map(pt => {
+                                  const px = c.cx + (pt.x - c.cx) * (1 - gapSizeRatio);
+                                  const py = c.cy + (pt.y - c.cy) * (1 - gapSizeRatio);
+                                  return { x: px, y: py };
+                                });
+
+                                const clipPathVal = `polygon(${shrunkPoints.map(pt => pt.x + '% ' + pt.y + '%').join(', ')})`;
+                                const pointsStr = shrunkPoints.map(pt => Math.round(pt.x * w / 100) + ',' + Math.round(pt.y * h / 100)).join(' ');
+
+                                // Seeded random for glass refraction translation and rotation
+                                const shardRng = mulberry32(coverShuffleSeed + idx * 83);
+                                const zoomFactor = 1.22 + shardRng() * 0.28; // between 1.22x and 1.5x zoom
+                                const rotateAngle = (shardRng() * 14 - 7) * effectIntensity;
+                                const translateX = (shardRng() * 50 - 25) * effectIntensity;
+                                const translateY = (shardRng() * 50 - 25) * effectIntensity;
+
+                                // 3D Rotations and Depth translation
+                                const rx = c.rotX * depthIntensity;
+                                const ry = c.rotY * depthIntensity;
+                                const rz = c.rotZ * depthIntensity;
+                                const tz = c.tz * depthIntensity;
+
+                                return (
+                                  <div
+                                    key={`t8-shard-${idx}`}
+                                    className="absolute inset-0 transition-all duration-300 pointer-events-none"
+                                    style={{
+                                      transform: `perspective(1200px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg) translateZ(${tz}px)`,
+                                      transformStyle: 'preserve-3d',
+                                      filter: `drop-shadow(0 ${8 * effectIntensity}px ${18 * effectIntensity}px rgba(0, 0, 0, ${0.5 * effectIntensity}))`,
+                                    }}
+                                  >
+                                    {/* Clipped image wrapper */}
+                                    <div
+                                      className="w-full h-full absolute inset-0 overflow-hidden"
+                                      style={{
+                                        clipPath: clipPathVal,
+                                        background: '#020306',
+                                      }}
+                                    >
+                                      {/* Image inside shard */}
+                                      <img
+                                        src={coverMixImages ? photo.url : bgPhoto}
+                                        crossOrigin="anonymous"
+                                        alt="Design Shard"
+                                        className="absolute object-cover"
+                                        style={coverMixImages ? {
+                                          left: `${c.cx}%`,
+                                          top: `${c.cy}%`,
+                                          width: '55%',
+                                          height: '55%',
+                                          objectFit: 'cover',
+                                          objectPosition: `${crop.x}% ${crop.y}%`,
+                                          transform: `translate(-50%, -50%) scale(${zoomFactor * (coverT4.zoom ?? 1.25)}) rotate(${rotateAngle}deg) translate(${translateX}px, ${translateY}px)`,
+                                          filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                        } : {
+                                          left: 0,
+                                          top: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          transform: `scale(${zoomFactor}) rotate(${rotateAngle}deg) translate(${translateX}px, ${translateY}px)`,
+                                          transformOrigin: `${c.cx}% ${c.cy}%`,
+                                          filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                        }}
+                                      />
+
+                                      {/* Color grading overlay */}
+                                      <div className="absolute inset-0 pointer-events-none z-[4]"
+                                        style={{
+                                          background: coverT5ColorMode
+                                            ? getRGBAColor(accent, activeIntensity)
+                                            : `linear-gradient(135deg, ${getRGBAColor(accent, 0.12)} 0%, rgba(0,0,0,0.45) 100%)`,
+                                          mixBlendMode: coverT5ColorMode ? 'color' : 'multiply',
+                                          opacity: coverT5ColorMode ? activeIntensity : 0.7
+                                        }}
+                                      />
+
+                                      {/* Specular light overlay 1: Liquid glass/rainbow sheen */}
+                                      <img
+                                        src={LIGHT_LEAK_OVERLAYS[2]}
+                                        alt=""
+                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[7]"
+                                        style={{
+                                          mixBlendMode: 'screen',
+                                          opacity: 0.28,
+                                          transform: `scale(${1.15 + shardRng() * 0.2}) rotate(${shardRng() * 60 - 30}deg)`,
+                                        }}
+                                      />
+
+                                      {/* Specular light overlay 2: Scattered prisms */}
+                                      <img
+                                        src={LIGHT_LEAK_OVERLAYS[4]}
+                                        alt=""
+                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[7]"
+                                        style={{
+                                          mixBlendMode: 'screen',
+                                          opacity: 0.32,
+                                          transform: `scale(${1.2 + shardRng() * 0.15}) rotate(${shardRng() * 90 - 45}deg)`,
+                                        }}
+                                      />
+
+                                      {/* Photorealistic glass reflection texture overlay */}
+                                      <img
+                                        src="/cover-template8-glass.jpg"
+                                        alt=""
+                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[8]"
+                                        style={{
+                                          mixBlendMode: 'screen',
+                                          opacity: 0.35 * Math.min(1.0, glassIntensity),
+                                          transform: `scale(${1.1 + shardRng() * 0.1}) rotate(${shardRng() * 20 - 10}deg)`,
+                                        }}
+                                      />
+
+                                      {/* Edge Bevel SVG Outline Highlight inside the shard clip */}
+                                      <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-[9]">
+                                        {/* Outer bevel shadow */}
+                                        <polygon 
+                                          points={pointsStr} 
+                                          fill="none" 
+                                          stroke="#000000" 
+                                          strokeWidth="3.2" 
+                                          strokeLinejoin="round"
+                                          opacity="0.55"
+                                        />
+                                        {/* Inner white light reflection glint */}
+                                        <polygon 
+                                          points={pointsStr} 
+                                          fill="none" 
+                                          stroke="#ffffff" 
+                                          strokeWidth="1.2" 
+                                          strokeLinejoin="round"
+                                          opacity="0.65"
+                                        />
+                                      </svg>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Global cracks overlay SVG for realistic outlines in 3D gaps */}
+                              <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-[12]" style={{ opacity: Math.min(1.0, glassIntensity) * 0.85 }}>
+                                {shards.map((c, idx) => {
+                                  const gapSizeRatio = gapRatio * 0.022;
+                                  const shrunkPoints = c.p.map(pt => {
+                                    const px = c.cx + (pt.x - c.cx) * (1 - gapSizeRatio);
+                                    const py = c.cy + (pt.y - c.cy) * (1 - gapSizeRatio);
+                                    return { x: px * w / 100, y: py * h / 100 };
+                                  });
+
+                                  const pointsStr = shrunkPoints.map(pt => Math.round(pt.x) + ',' + Math.round(pt.y)).join(' ');
+
+                                  return (
+                                    <g key={`global-edge-${idx}`}>
+                                      {/* Outer dark crack shadow */}
+                                      <polygon points={pointsStr} fill="none" stroke="#010103" strokeWidth={4 + gapRatio * 4} strokeLinecap="round" strokeLinejoin="round" opacity="0.9" />
+                                      {/* Outer glow gold line */}
+                                      <polygon points={pointsStr} fill="none" stroke={accent} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" opacity="0.3" />
+                                    </g>
+                                  );
+                                })}
+                              </svg>
+
+                              {/* Ambient rainbow prisms overlay across all shards */}
+                              <img
+                                src={LIGHT_LEAK_OVERLAYS[4]}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[13]"
+                                style={{
+                                  mixBlendMode: 'screen',
+                                  opacity: 0.35,
+                                }}
+                              />
+
+                              {/* Global realistic glass shards render overlay */}
+                              {/* Global realistic glass shards render overlay */}
+                              <img
+                                src="/cover-template8-glass.jpg"
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[14]"
+                                style={{
+                                  mixBlendMode: 'screen',
+                                  opacity: Math.min(1.0, glassIntensity) * 0.95,
+                                  filter: `brightness(${1.0 + Math.min(1.0, glassIntensity) * 0.2}) contrast(${1.0 + Math.min(1.0, glassIntensity) * 0.15})`,
+                                }}
+                              />
+
+                              {/* Secondary duplicate glass overlay for extra density (rotated to fill gaps) */}
+                              {glassIntensity > 0.8 && (
+                                <img
+                                  src="/cover-template8-glass.jpg"
+                                  alt=""
+                                  className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[14]"
+                                  style={{
+                                    mixBlendMode: 'screen',
+                                    opacity: (glassIntensity - 0.8) * 0.95,
+                                    transform: 'scale(1.05) rotate(180deg)',
+                                    filter: 'brightness(1.1) contrast(1.1)',
+                                  }}
+                                />
+                              )}
+                            </div>
+                          )}
+
+                          {/* Light Leak Layer 1: Warm amber/blue diagonal streak */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[1]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.3,
+                            }}
+                          />
+
+                          {/* 3. Text Backdrop Spotlight (glowing backdrop for centered info panel) */}
+                          <div className="absolute pointer-events-none z-[15]" 
+                            style={{ 
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 1.55}px`,
+                              height: `${circleSize * 1.55}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: `radial-gradient(circle, ${spotlightColor}${alphaToHex(0.32 * gI.opacity)} 0%, ${spotlightColor}${alphaToHex(0.08 * gI.opacity)} 50%, transparent 75%)`, 
+                              filter: `blur(${gI.blur * 1.3}px)`,
+                              opacity: 0.95
+                            }} 
+                          />
+
+                          {/* Soft 3D Sphere shadow backing */}
+                          <div 
+                            className="absolute pointer-events-none rounded-full"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 0.95}px`,
+                              height: `${circleSize * 0.95}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: 'rgba(0, 0, 0, 0.45)',
+                              filter: 'blur(20px)',
+                              zIndex: 16
+                            }}
+                          />
+
+                          {/* 3D Glass Sphere Texture Overlay */}
+                          <img
+                            src="/cover-template3-glass-sphere.png"
+                            alt=""
+                            className="absolute pointer-events-none"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize}px`,
+                              height: `${circleSize}px`,
+                              transform: `translate(-50%, -50%) scale(${coverT4.zoom ?? 1.25})`,
+                              transformOrigin: 'center center',
+                              mixBlendMode: 'screen',
+                              opacity: 0.98,
+                              zIndex: 18
+                            }}
+                          />
+
+                          {/* 4. Centered Glassmorphism Focus Circle (Z-index: 20) */}
+                          <div 
+                            className="absolute pointer-events-none z-20 flex flex-col justify-center items-center p-6 transition-all duration-300"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize}px`,
+                              height: `${circleSize}px`,
+                              transform: 'translate(-50%, -50%)',
+                              borderRadius: '50%',
+                              background: 'radial-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)',
+                              border: `1.2px solid ${getRGBAColor(accent, 0.35)}`,
+                              backdropFilter: 'blur(3px)',
+                              WebkitBackdropFilter: 'blur(3px)',
+                              boxShadow: `inset 0 0 15px rgba(255,255,255,0.1), 0 8px 25px rgba(0,0,0,0.4)`,
+                            }}
+                          >
+                            {/* Inner spotlight behind text */}
+                            <div className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: `radial-gradient(circle at 50% 50%, ${getRGBAColor(accent, 0.15)} 0%, transparent 70%)`,
+                              }}
+                            />
+
+                            {/* Brand Logo inside the Frosted Panel at the Top */}
+                            {coverShow.companyLogo && logoSrc && (
+                              <div className="mb-4 z-10 flex justify-center items-center">
+                                <img
+                                  src={logoSrc}
+                                  className="object-contain"
+                                  style={{
+                                    height: `${coverFontSizes.companyBrandLogo * 0.7}px`,
+                                    maxWidth: `${coverFontSizes.companyBrandLogo * 2.5}px`
+                                  }}
+                                />
+                              </div>
+                            )}
+
+                            {/* Campaign Text Content */}
+                            {coverShow.kicker && kickerText && (
+                              <div 
+                                dir="rtl" 
+                                className="font-bold text-center tracking-wide mb-1 select-none z-10" 
+                                style={{ 
+                                  color: accent,
+                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9)}px`, 
+                                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                }}
+                              >
+                                {kickerText}
+                              </div>
+                            )}
+                            
+                            <div 
+                              dir="rtl" 
+                              className="font-black text-center text-white select-none max-w-[90%] break-words z-10" 
+                              style={{ 
+                                fontFamily: "'Tajawal', sans-serif", 
+                                fontSize: `${coverFontSizes.campaignName * 0.9}px`, 
+                                lineHeight: 1.15,
+                                textShadow: '0 0 20px rgba(255,255,255,0.45), 0 4px 12px rgba(0,0,0,0.9)'
+                              }}
+                            >
+                              {campaignTitle}
+                            </div>
+
+                            {/* Small horizontal gold line divider */}
+                            <div className="w-14 h-[2px] mx-auto my-3.5 rounded-full z-10"
+                              style={{
+                                background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+                                boxShadow: `0 0 8px ${getRGBAColor(accent, 0.7)}`
+                              }}
+                            />
+
+                            {coverShow.tagline && taglineText && (
+                              <div 
+                                dir="rtl"
+                                className="inline-flex items-center justify-center font-black text-center select-none z-10" 
+                                style={{ 
+                                  color: '#010103', 
+                                  background: `linear-gradient(135deg, #ffd700 0%, ${accent} 50%, #b8860b 100%)`, 
+                                  borderRadius: '9999px', 
+                                  padding: '8px 28px', 
+                                  fontSize: `${coverFontSizes.tagline * 0.85}px`,
+                                  boxShadow: `0 10px 20px ${getRGBAColor(accent, 0.3)}, inset 0 1px 0 rgba(255, 255, 255, 0.4)`,
                                   fontFamily: "'Tajawal', sans-serif"
                                 }}
                               >

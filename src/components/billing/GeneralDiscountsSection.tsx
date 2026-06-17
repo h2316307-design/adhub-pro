@@ -179,39 +179,49 @@ export default function GeneralDiscountsSection({
 
   return (
     <>
-      <Card className="mt-6">
-        <CardHeader className="pb-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Percent className="h-5 w-5" />
-                الخصومات
-              </CardTitle>
+      <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl mt-6">
+        <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/10">
+                <Percent className="h-6 w-6 text-amber-500" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold text-white">الخصومات</CardTitle>
+                <p className="text-white/70 text-sm mt-0.5">سجل الخصومات العامة الممنوحة للعميل</p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-4 flex-wrap">
               {/* إجمالي الخصومات */}
               {discounts.length > 0 && (percentageTotal > 0 || fixedTotal > 0) && (
-                <div className="mt-2 flex gap-3 text-sm">
+                <div className="flex gap-3 text-sm bg-white/5 border border-white/10 rounded-lg p-2">
                   {percentageTotal > 0 && (
-                    <div className="flex items-center gap-1 text-primary">
+                    <div className="flex items-center gap-1 text-amber-400">
                       <Percent className="h-4 w-4" />
-                      <span className="font-semibold">{percentageTotal}%</span>
+                      <span className="font-semibold">{percentageTotal}% نسبة مئوية</span>
                     </div>
                   )}
                   {fixedTotal > 0 && (
-                    <div className="flex items-center gap-1 text-primary">
+                    <div className="flex items-center gap-1 text-amber-400">
                       <DollarSign className="h-4 w-4" />
-                      <span className="font-semibold">{fixedTotal.toLocaleString()} د.ل</span>
+                      <span className="font-semibold">{fixedTotal.toLocaleString('ar-LY')} د.ل مبلغ ثابت</span>
                     </div>
                   )}
                 </div>
               )}
+              
+              <Button 
+                onClick={openAddDialog} 
+                className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
+              >
+                <Plus className="h-4 w-4 ml-2" />
+                إضافة خصم
+              </Button>
             </div>
-            <Button onClick={openAddDialog} size="sm">
-              <Plus className="h-4 w-4 ml-2" />
-              إضافة خصم
-            </Button>
           </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {discounts.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <Percent className="h-12 w-12 mx-auto mb-3 opacity-50" />
@@ -221,19 +231,19 @@ export default function GeneralDiscountsSection({
             <>
               {/* ملخص الخصومات النشطة */}
               {(percentageTotal > 0 || fixedTotal > 0) && (
-                <div className="mb-4 p-4 bg-success/10 border border-success rounded-lg">
-                  <h4 className="font-semibold text-sm mb-2">إجمالي الخصومات النشطة:</h4>
-                  <div className="flex gap-4 text-sm">
+                <div className="mb-4 p-4 bg-emerald-500/10 border border-emerald-500/25 rounded-xl">
+                  <h4 className="font-bold text-emerald-400 text-sm mb-2">إجمالي الخصومات النشطة:</h4>
+                  <div className="flex gap-4 text-sm text-emerald-300">
                     {percentageTotal > 0 && (
-                      <div className="flex items-center gap-1">
-                        <Percent className="h-4 w-4" />
+                      <div className="flex items-center gap-1 bg-emerald-500/5 px-3 py-1.5 rounded-lg border border-emerald-500/10">
+                        <Percent className="h-4 w-4 text-emerald-400" />
                         <span>{percentageTotal}% نسبة مئوية</span>
                       </div>
                     )}
                     {fixedTotal > 0 && (
-                      <div className="flex items-center gap-1">
-                        <DollarSign className="h-4 w-4" />
-                        <span>{fixedTotal.toLocaleString()} د.ل مبلغ ثابت</span>
+                      <div className="flex items-center gap-1 bg-emerald-500/5 px-3 py-1.5 rounded-lg border border-emerald-500/10">
+                        <DollarSign className="h-4 w-4 text-emerald-400" />
+                        <span>{fixedTotal.toLocaleString('ar-LY')} د.ل مبلغ ثابت</span>
                       </div>
                     )}
                   </div>
@@ -241,47 +251,51 @@ export default function GeneralDiscountsSection({
               )}
 
               {/* جدول الخصومات */}
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border border-white/10 rounded-xl overflow-hidden mt-4 bg-slate-900/40">
                 <table className="w-full text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="text-right p-3 font-semibold">نوع الخصم</th>
-                      <th className="text-right p-3 font-semibold">القيمة</th>
-                      <th className="text-right p-3 font-semibold">السبب</th>
-                      <th className="text-right p-3 font-semibold">تاريخ التطبيق</th>
-                      <th className="text-right p-3 font-semibold">الحالة</th>
-                      <th className="text-center p-3 font-semibold">الإجراءات</th>
+                  <thead>
+                    <tr className="bg-muted/50 hover:bg-muted/50 border-b border-white/10">
+                      <th className="text-right p-4 font-bold text-white">نوع الخصم</th>
+                      <th className="text-right p-4 font-bold text-white">القيمة</th>
+                      <th className="text-right p-4 font-bold text-white">السبب</th>
+                      <th className="text-right p-4 font-bold text-white">تاريخ التطبيق</th>
+                      <th className="text-right p-4 font-bold text-white">الحالة</th>
+                      <th className="text-center p-4 font-bold text-white">الإجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
                     {discounts.map((discount) => (
-                      <tr key={discount.id} className="border-t hover:bg-muted/50">
-                        <td className="p-3">
+                      <tr key={discount.id} className="border-b border-white/5 hover:bg-white/5 transition-all duration-150">
+                        <td className="p-4">
                           <div className="flex items-center gap-2">
                             {discount.discount_type === 'percentage' ? (
-                              <Percent className="h-4 w-4 text-primary" />
+                              <Percent className="h-4 w-4 text-amber-500" />
                             ) : (
-                              <DollarSign className="h-4 w-4 text-primary" />
+                              <DollarSign className="h-4 w-4 text-amber-500" />
                             )}
-                            <span>
+                            <span className="text-white">
                               {discount.discount_type === 'percentage' ? 'نسبة مئوية' : 'مبلغ ثابت'}
                             </span>
                           </div>
                         </td>
-                        <td className="p-3 font-semibold">{formatDiscount(discount)}</td>
-                        <td className="p-3">{discount.reason || '-'}</td>
-                        <td className="p-3">{new Date(discount.applied_date).toLocaleDateString('ar-LY')}</td>
-                        <td className="p-3">
-                          <Badge variant={discount.status === 'active' ? 'default' : 'secondary'}>
+                        <td className="p-4 font-semibold text-white">{formatDiscount(discount)}</td>
+                        <td className="p-4 text-white/70">{discount.reason || '-'}</td>
+                        <td className="p-4 text-white/70">{new Date(discount.applied_date).toLocaleDateString('ar-LY')}</td>
+                        <td className="p-4">
+                          <Badge 
+                            variant={discount.status === 'active' ? 'default' : 'secondary'}
+                            className={discount.status === 'active' ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-slate-700/50 text-slate-300 border border-slate-600/30'}
+                          >
                             {discount.status === 'active' ? 'نشط' : 'غير نشط'}
                           </Badge>
                         </td>
-                        <td className="p-3">
+                        <td className="p-4">
                           <div className="flex items-center justify-center gap-2">
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => openEditDialog(discount)}
+                              className="text-amber-500 hover:text-amber-400 hover:bg-white/5 cursor-pointer transition-all duration-200"
                             >
                               <Edit2 className="h-4 w-4" />
                             </Button>
@@ -289,7 +303,7 @@ export default function GeneralDiscountsSection({
                               variant="ghost"
                               size="sm"
                               onClick={() => handleDelete(discount.id)}
-                              className="text-destructive hover:text-destructive"
+                              className="text-red-500 hover:text-red-400 hover:bg-white/5 cursor-pointer transition-all duration-200"
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>

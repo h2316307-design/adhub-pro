@@ -355,12 +355,12 @@ export function ContractSection({
 
   return (
     <div className="container mx-auto px-6 mb-6">
-      <Card className="border-0 shadow-lg overflow-hidden">
-        <CardHeader className="bg-gradient-to-r from-slate-900 to-slate-800 text-white py-5">
+      <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl">
+        <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-                <FileText className="h-6 w-6 text-white" />
+              <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg">
+                <FileText className="h-6 w-6 text-amber-500" />
               </div>
               <div>
                 <CardTitle className="text-xl font-bold text-white">العقود</CardTitle>

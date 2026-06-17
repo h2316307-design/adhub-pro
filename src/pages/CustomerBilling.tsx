@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
-import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft } from 'lucide-react';
+import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft, Layers, Trash2, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllBillboards } from '@/services/supabaseService';
 // Legacy print imports removed - unified engine used via PrintInvoicePrint
@@ -39,7 +39,6 @@ import { PrintInvoicePaymentDialog } from '@/components/billing/PrintInvoicePaym
 import { PurchaseInvoiceDialog } from '@/components/billing/PurchaseInvoiceDialog';
 import { SalesInvoiceDialog } from '@/components/billing/SalesInvoiceDialog';
 import { FriendCompanyManager } from '@/components/customers/FriendCompanyManager';
-import { UseRentalAsPaymentDialog } from '@/components/billing/UseRentalAsPaymentDialog';
 import { FriendRentalsGroupedSection } from '@/components/billing/FriendRentalsGroupedSection';
 
 // Import types and utilities
@@ -781,10 +780,10 @@ export default function CustomerBilling() {
   // إجمالي الخصومات (مب��لغ ثابتة فقط)
   const [totalDiscounts, setTotalDiscounts] = useState(0);
 
-  // ✅ إجمالي إيجارات اللوحات (شركة صديقة) — تعتبر مشتريات من الزبون
+  // ✅ إجمالي إيجارات اللوحات الصديقة المتبقية (غير المستعملة)
   const totalFriendRentals = useMemo(() => {
     return friendBillboardRentals.reduce((sum, rental) => {
-      return sum + (Number(rental.friend_rental_cost) || 0);
+      return sum + Math.max(0, (Number(rental.friend_rental_cost) || 0) - (Number(rental.used_as_payment) || 0));
     }, 0);
   }, [friendBillboardRentals]);
 
@@ -1077,9 +1076,77 @@ export default function CustomerBilling() {
     }
   };
 
+  const refundRentalPayment = async (amount: number, notes: string) => {
+    if (!notes || !notes.includes('مقايضة من إيجار لوحة:')) return;
+    
+    try {
+      const { data: rentals } = await supabase
+        .from('friend_billboard_rentals')
+        .select(`
+          id,
+          friend_rental_cost,
+          used_as_payment,
+          contract_number,
+          billboard_id,
+          billboards (
+            Billboard_Name
+          )
+        `)
+        .gt('used_as_payment', 0);
+
+      if (!rentals || rentals.length === 0) return;
+
+      const matchedRentals = rentals.filter((rental: any) => {
+        if (rental.contract_number && notes.includes(`عقد ${rental.contract_number}`)) {
+          return true;
+        }
+        if (notes.includes(`لوحة ${rental.billboard_id}`)) {
+          return true;
+        }
+        if (rental.billboards?.Billboard_Name && notes.includes(rental.billboards.Billboard_Name)) {
+          return true;
+        }
+        return false;
+      });
+
+      if (matchedRentals.length === 0) return;
+
+      let remainingRefund = amount;
+      for (const rental of matchedRentals) {
+        if (remainingRefund <= 0) break;
+        const currentUsed = Number(rental.used_as_payment) || 0;
+        if (currentUsed <= 0) continue;
+        
+        const refundAmount = Math.min(currentUsed, remainingRefund);
+        const { error: updateErr } = await supabase
+          .from('friend_billboard_rentals')
+          .update({ used_as_payment: Math.max(0, currentUsed - refundAmount) })
+          .eq('id', rental.id);
+          
+        if (updateErr) {
+          console.error('Error updating rental used_as_payment:', updateErr);
+        }
+        remainingRefund -= refundAmount;
+      }
+    } catch (err) {
+      console.error('Error refunding rental payment:', err);
+    }
+  };
+
   const deleteReceipt = async (id: string) => {
     if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'تأكيد حذف الإيصال؟', variant: 'destructive', confirmText: 'حذف' })) return;
     try {
+      // إرجاع قيمة إيجار اللوحات الصديقة إذا كانت مقايضة
+      const { data: payment } = await supabase
+        .from('customer_payments')
+        .select('amount, notes')
+        .eq('id', id)
+        .single();
+      
+      if (payment) {
+        await refundRentalPayment(Number(payment.amount) || 0, payment.notes || '');
+      }
+
       const { error } = await supabase.from('customer_payments').delete().eq('id', id);
       if (error) { 
         toast.error('فشل الحذف'); 
@@ -1187,7 +1254,16 @@ export default function CustomerBilling() {
         console.log('ملاحظة: لا توجد سلف لحذفها أو خطأ:', advancesError);
       }
 
-      // 4. حذف الدفعات نفسها
+      // 4. إرجاع مبالغ إيجار لوحات الأصدقاء إذا كانت مقايضة
+      if (paymentsToDelete && paymentsToDelete.length > 0) {
+        for (const p of paymentsToDelete) {
+          if (p.method === 'مقايضة' && p.notes) {
+            await refundRentalPayment(Number(p.amount) || 0, p.notes);
+          }
+        }
+      }
+
+      // 4.b حذف الدفعات نفسها
       const { error: deleteError } = await supabase
         .from('customer_payments')
         .delete()
@@ -1578,14 +1654,14 @@ export default function CustomerBilling() {
               <Button 
                 variant="outline" 
                 onClick={() => navigate('/admin/customers')} 
-                className="gap-2 hover:bg-accent/50 transition-all duration-200"
+                className="gap-2 hover:bg-accent/50 transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 رجوع للزبائن
               </Button>
               <Button 
                 onClick={openAccountStatement}
-                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 <Printer className="h-4 w-4" />
@@ -1593,7 +1669,7 @@ export default function CustomerBilling() {
               </Button>
               <Button 
                 onClick={() => setSendAccountStatementOpen(true)}
-                className="gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                className="gap-2 bg-sky-600 hover:bg-sky-700 text-white shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 <FileText className="h-4 w-4" />
@@ -1601,7 +1677,7 @@ export default function CustomerBilling() {
               </Button>
               <Button 
                 onClick={() => setUnpaidContractsDialogOpen(true)}
-                className="gap-2 bg-rose-600 hover:bg-rose-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                className="gap-2 bg-rose-600 hover:bg-rose-700 text-white shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 <AlertCircle className="h-4 w-4" />
@@ -1609,7 +1685,7 @@ export default function CustomerBilling() {
               </Button>
               <Button 
                 onClick={() => setEnhancedDistributePaymentOpen(true)}
-                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                className="gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 <Calculator className="h-4 w-4" />
@@ -1617,14 +1693,14 @@ export default function CustomerBilling() {
               </Button>
               <Button 
                 onClick={() => setPurchaseInvoiceDialogOpen(true)}
-                className="gap-2 bg-orange-600 hover:bg-orange-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                className="gap-2 bg-orange-600 hover:bg-orange-700 text-white shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 فاتورة مشتريات
               </Button>
               <Button
                 onClick={() => setSalesInvoiceDialogOpen(true)}
-                className="gap-2 bg-teal-600 hover:bg-teal-700 text-white shadow-md hover:shadow-lg transition-all duration-200"
+                className="gap-2 bg-teal-600 hover:bg-teal-700 text-white shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer"
                 size="sm"
               >
                 <Receipt className="h-4 w-4" />
@@ -1636,7 +1712,7 @@ export default function CustomerBilling() {
                   setSelectedContractsForInv(contracts[0]?.Contract_Number ? [String(contracts[0]?.Contract_Number)] : []);
                   setPrintContractInvoiceOpen(true);
                 }} 
-                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300"
+                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer"
                 size="sm"
               >
                 <Calculator className="h-4 w-4" />
@@ -1658,7 +1734,7 @@ export default function CustomerBilling() {
         totalPurchases={totalPurchases}
         totalSales={totalSales}
         totalPrintedInvoices={totalPrintedInvoices}
-        totalFriendRentals={friendBillboardRentals.reduce((sum, r) => sum + (Number(r.friend_rental_cost) || 0), 0)}
+        totalFriendRentals={totalFriendRentals}
         totalCompositeTasks={totalCompositeTasks}
         totalDebits={totalDebits}
         lastContractDate={contracts.length > 0 ? contracts[0]['Contract Date'] : undefined}
@@ -1708,12 +1784,86 @@ export default function CustomerBilling() {
         </div>
       </div>
 
+      {/* ✅ قسم الأرصدة والدفعات على الحساب (غير الموزعة) */}
+      {(() => {
+        const accountPaymentsList = payments.filter(p => p.entry_type === 'account_payment');
+        if (accountPaymentsList.length === 0) return null;
+
+        return (
+          <Card className="border border-indigo-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-indigo-500/30 rounded-2xl mb-6">
+            <CardHeader className="bg-gradient-to-r from-indigo-500/10 via-indigo-500/5 to-transparent border-b border-indigo-500/20 text-white py-5">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-indigo-500/15 border border-indigo-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-500/10">
+                    <Wallet className="h-6 w-6 text-indigo-450" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold text-white">أرصدة ودفعات على الحساب (غير الموزعة)</CardTitle>
+                    <p className="text-white/70 text-sm mt-0.5">{accountPaymentsList.length} رصيد متاح لم يتم توزيعه بعد لتسديد المستحقات</p>
+                  </div>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <div className="border border-white/10 rounded-xl overflow-hidden bg-slate-900/40">
+                <table className="w-full text-sm text-right">
+                  <thead>
+                    <tr className="bg-muted/50 hover:bg-muted/50 border-b border-white/10 text-white font-bold">
+                      <th className="py-4 px-4">التاريخ</th>
+                      <th className="py-4 px-4">المبلغ</th>
+                      <th className="py-4 px-4">ملاحظات</th>
+                      <th className="py-4 px-4 text-left">الإجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-slate-300">
+                    {accountPaymentsList.map((p) => (
+                      <tr key={p.id} className="hover:bg-indigo-500/5 transition-all duration-300 border-b border-white/5">
+                        <td className="py-4 px-4">{p.paid_at ? new Date(p.paid_at).toLocaleDateString('ar-LY') : '—'}</td>
+                        <td className="py-4 px-4 font-bold text-indigo-400 font-manrope">{Number(p.amount || 0).toLocaleString('ar-LY')} د.ل</td>
+                        <td className="py-4 px-4">{p.notes || '—'}</td>
+                        <td className="py-4 px-4 text-left">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer shadow-sm flex items-center gap-1.5"
+                              onClick={() => {
+                                setPreFilledAmountForDistribute(Number(p.amount) || 0);
+                                setSourceAccountPaymentIdForDistribute(p.id);
+                                setEnhancedDistributePaymentOpen(true);
+                                setSelectedContractsForDistribute(new Set());
+                              }}
+                            >
+                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                              توزيع الدفعة على الفواتير
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              className="cursor-pointer shadow-sm"
+                              onClick={() => deleteReceipt(p.id)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5 ml-1" />
+                              حذف الرصيد
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
       {/* Payments Section - فلترة فواتير الطباعة والمشتريات */}
       <PaymentSection
         payments={payments.filter(p => 
           p.entry_type !== 'invoice' && 
           p.entry_type !== 'purchase_invoice' &&
-          p.entry_type !== 'printed_invoice'
+          p.entry_type !== 'printed_invoice' &&
+          p.entry_type !== 'account_payment'
         )}
         onEditReceipt={openEditReceipt}
         onDeleteReceipt={deleteReceipt}
@@ -1735,19 +1885,27 @@ export default function CustomerBilling() {
       />
 
       {/* ✅ قسم فواتير المشتريات - يظهر دائماً مع زر إضافة */}
-      <Card className="bg-card border-border mt-6">
-        <CardHeader className="border-b border-border pb-4 flex flex-row items-center justify-between">
-          <CardTitle className="flex items-center gap-2 text-primary">
-            <Receipt className="h-5 w-5" />
-            فواتير المشتريات ({purchaseInvoices.length})
-          </CardTitle>
-          <Button
-            onClick={() => setPurchaseInvoiceDialogOpen(true)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Calculator className="h-4 w-4 ml-2" />
-            إضافة فاتورة مشتريات
-          </Button>
+      <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl mt-6">
+        <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/10">
+                <Receipt className="h-6 w-6 text-amber-500" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold text-white">فواتير المشتريات</CardTitle>
+                <p className="text-white/70 text-sm mt-0.5">{purchaseInvoices.length} فاتورة مسجلة</p>
+              </div>
+            </div>
+            
+            <Button
+              onClick={() => setPurchaseInvoiceDialogOpen(true)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90 cursor-pointer shadow-md hover:shadow-lg transition-all duration-200"
+            >
+              <Calculator className="h-4 w-4 ml-2" />
+              إضافة فاتورة مشتريات
+            </Button>
+          </div>
         </CardHeader>
         <CardContent className="pt-6">
           {purchaseInvoices.length > 0 ? (
@@ -1806,45 +1964,53 @@ export default function CustomerBilling() {
         if (invoiceRecords.length === 0) return null;
         
         return (
-          <Card className="mt-6 border-orange-500/30">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-xl flex items-center gap-2">
-                <AlertCircle className="h-5 w-5 text-orange-500" />
-                سجلات فواتير أخرى ({invoiceRecords.length})
-              </CardTitle>
+          <Card className="border border-orange-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-orange-500/30 rounded-2xl mt-6">
+            <CardHeader className="bg-gradient-to-r from-orange-500/10 via-orange-500/5 to-transparent border-b border-orange-500/20 text-white py-5">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-orange-500/15 border border-orange-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/10">
+                    <AlertCircle className="h-6 w-6 text-orange-500" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold text-white">سجلات فواتير أخرى</CardTitle>
+                    <p className="text-white/70 text-sm mt-0.5">{invoiceRecords.length} سجل فواتير غير مصنفة</p>
+                  </div>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full">
+            <CardContent className="pt-6">
+              <div className="border border-white/10 rounded-xl overflow-hidden bg-slate-900/40">
+                <table className="w-full text-sm text-right">
                   <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-right py-2 px-3">التاريخ</th>
-                      <th className="text-right py-2 px-3">المبلغ</th>
-                      <th className="text-right py-2 px-3">طريقة الدفع</th>
-                      <th className="text-right py-2 px-3">الملاحظات</th>
-                      <th className="text-center py-2 px-3">إجراءات</th>
+                    <tr className="bg-muted/50 hover:bg-muted/50 border-b border-white/10 text-white font-bold">
+                      <th className="py-4 px-4">التاريخ</th>
+                      <th className="py-4 px-4">المبلغ</th>
+                      <th className="py-4 px-4">طريقة الدفع</th>
+                      <th className="py-4 px-4">الملاحظات</th>
+                      <th className="text-center py-4 px-4">إجراءات</th>
                     </tr>
                   </thead>
                   <tbody>
                     {invoiceRecords.map((record) => (
-                      <tr key={record.id} className="border-b border-border/50 hover:bg-muted/50">
-                        <td className="py-2 px-3">
+                      <tr key={record.id} className="border-b border-white/5 hover:bg-white/5 transition-all duration-150">
+                        <td className="py-3 px-4 text-white/70">
                           {record.paid_at ? new Date(record.paid_at).toLocaleDateString('ar-LY') : '—'}
                         </td>
-                        <td className="py-2 px-3 font-mono">
+                        <td className="py-3 px-4 font-mono text-white font-semibold">
                           {Math.abs(Number(record.amount) || 0).toLocaleString('ar-LY')} د.ل
                           {Number(record.amount) < 0 && (
-                            <Badge variant="secondary" className="mr-2 text-xs">دائن</Badge>
+                            <Badge variant="secondary" className="mr-2 text-xs bg-slate-700 text-slate-300 border border-slate-600/30">دائن</Badge>
                           )}
                         </td>
-                        <td className="py-2 px-3">{record.method || '—'}</td>
-                        <td className="py-2 px-3 max-w-[300px] truncate" title={record.notes || ''}>
+                        <td className="py-3 px-4 text-white/70">{record.method || '—'}</td>
+                        <td className="py-3 px-4 text-white/70 max-w-[300px] truncate" title={record.notes || ''}>
                           {record.notes || '—'}
                         </td>
-                        <td className="py-2 px-3 text-center">
+                        <td className="py-3 px-4 text-center">
                           <Button
                             variant="destructive"
                             size="sm"
+                            className="cursor-pointer transition-all duration-200"
                             onClick={async () => {
                               if (!await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف هذا السجل؟', variant: 'destructive', confirmText: 'حذف' })) return;
                               try {
@@ -1877,55 +2043,78 @@ export default function CustomerBilling() {
       {/* قسم المعاملات العامة (الواردات/الصادرات) تم إخفاؤه حسب طلب العميل */}
 
       {/* Composite Tasks Section */}
-      <Card className="mt-6">
-        <CardHeader>
-          <CardTitle className="text-xl">المهام المجمعة (تركيب + طباعة + قص)</CardTitle>
+      <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl mt-6">
+        <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/10">
+                <Layers className="h-6 w-6 text-amber-500" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold text-white">المهام المجمعة (تركيب + طباعة + قص)</CardTitle>
+                <p className="text-white/70 text-sm mt-0.5">المهام الفنية والتشغيلية المجمعة للعميل</p>
+              </div>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <CompositeTasksList customerId={customerId} />
         </CardContent>
       </Card>
 
       {/* Printed Invoices Section */}
-      <Card className="expenses-preview-card mt-6">
-        <CardHeader>
-          <CardTitle className="expenses-preview-title">
-            {customerType.supplierType === 'printer' 
-              ? 'فواتير الطباعة للمطبعة' 
-              : 'فواتير الطباعة والتركيب المحفوظة'}
-          </CardTitle>
+      {/* Printed Invoices Section */}
+      <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl mt-6">
+        <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/10">
+                <Printer className="h-6 w-6 text-amber-500" />
+              </div>
+              <div>
+                <CardTitle className="text-xl font-bold text-white">
+                  {customerType.supplierType === 'printer' 
+                    ? 'فواتير الطباعة للمطبعة' 
+                    : 'فواتير الطباعة والتركيب المحفوظة'}
+                </CardTitle>
+                <p className="text-white/70 text-sm mt-0.5">سجل فواتير الطباعة والتركيب الخاصة بالزبون</p>
+              </div>
+            </div>
+          </div>
         </CardHeader>
-        <CardContent>
-          <div className="expenses-table-container">
-            <table className="w-full">
+        <CardContent className="pt-6">
+          <div className="border border-white/10 rounded-xl overflow-hidden bg-slate-900/40">
+            <table className="w-full text-sm text-right">
               <thead>
-                <tr className="expenses-table-header">
-                  <th>رقم الفاتورة</th>
-                  <th>التاريخ</th>
-                  <th>النوع</th>
-                  <th>{customerType.supplierType === 'printer' ? 'اسم الزبون' : 'أرقام العقود'}</th>
-                  <th>الإجمالي</th>
-                  <th>الحالة</th>
-                  <th>الملاحظات</th>
-                  <th>الإجراءات</th>
+                <tr className="bg-muted/50 hover:bg-muted/50 border-b border-white/10 text-white font-bold">
+                  <th className="py-4 px-4">رقم الفاتورة</th>
+                  <th className="py-4 px-4">التاريخ</th>
+                  <th className="py-4 px-4">النوع</th>
+                  <th className="py-4 px-4">{customerType.supplierType === 'printer' ? 'اسم الزبون' : 'أرقام العقود'}</th>
+                  <th className="py-4 px-4">الإجمالي</th>
+                  <th className="py-4 px-4">الحالة</th>
+                  <th className="py-4 px-4">الملاحظات</th>
+                  <th className="text-center py-4 px-4">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {printedInvoices.length > 0 ? (
                   printedInvoices.map((invoice) => (
-                    <tr key={invoice.id} className="expenses-table-row">
-                      <td className="num">{invoice.invoice_number}</td>
-                      <td>{invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-LY') : ''}</td>
-                      <td><Badge variant="outline">{invoice.invoice_type}</Badge></td>
-                      <td className="num">
+                    <tr key={invoice.id} className="border-b border-white/5 hover:bg-white/5 transition-all duration-150">
+                      <td className="p-4 num font-semibold text-white">#{invoice.invoice_number}</td>
+                      <td className="p-4 text-white/70">{invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-LY') : ''}</td>
+                      <td className="p-4">
+                        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-400">{invoice.invoice_type}</Badge>
+                      </td>
+                      <td className="p-4 num text-white/70">
                         {customerType.supplierType === 'printer' 
                           ? (invoice.customer_name || '—')
                           : (Array.isArray(invoice.contract_numbers) ? invoice.contract_numbers.join(', ') : (invoice.contract_numbers ?? invoice.contract_number ?? ''))}
                       </td>
-                      <td className="expenses-amount-calculated num">
+                      <td className="p-4 font-mono font-semibold text-white">
                         {((invoice.total_amount ?? 0) as number).toLocaleString('ar-LY')} د.ل
                       </td>
-                      <td>
+                      <td className="p-4">
                         <div className="space-y-1">
                           {(() => {
                             const totalAmount = Number(invoice.total_amount || 0);
@@ -1934,11 +2123,11 @@ export default function CustomerBilling() {
                             const isPaid = remaining <= 0.01;
                             
                             return isPaid ? (
-                              <Badge variant="default" className="bg-green-600">مسددة</Badge>
+                              <Badge variant="default" className="bg-green-500/10 text-green-400 border border-green-500/30">مسددة</Badge>
                             ) : (
                               <>
-                                <Badge variant="destructive">غير مسددة</Badge>
-                                <div className="text-xs text-muted-foreground">
+                                <Badge variant="destructive" className="bg-rose-500/10 text-rose-400 border border-rose-500/30">غير مسددة</Badge>
+                                <div className="text-xs text-white/50">
                                   المدفوع: {paidAmount.toLocaleString('ar-LY')} د.ل
                                   <br />
                                   المتبقي: {remaining.toLocaleString('ar-LY')} د.ل
@@ -1948,14 +2137,15 @@ export default function CustomerBilling() {
                           })()}
                         </div>
                       </td>
-                      <td className="text-sm text-muted-foreground max-w-[150px] truncate" title={invoice.notes || ''}>
+                      <td className="p-4 text-sm text-white/50 max-w-[150px] truncate" title={invoice.notes || ''}>
                         {invoice.notes || '—'}
                       </td>
-                      <td className="flex items-center justify-center gap-2 py-2">
+                      <td className="p-4 flex items-center justify-center gap-2">
                         {customerType.supplierType === 'printer' && (
                           <Button 
                             variant="outline" 
                             size="sm" 
+                            className="cursor-pointer border-white/10 text-white hover:bg-white/5 transition-all duration-200"
                             onClick={() => {
                               setSelectedInvoiceDetails(invoice);
                               setPrintInvoiceDetailsOpen(true);
@@ -1974,7 +2164,7 @@ export default function CustomerBilling() {
                           return !isPaid && customerType.supplierType !== 'printer' && (
                             <Button
                               size="sm"
-                              className="bg-green-600 hover:bg-green-700 text-white"
+                              className="bg-green-600 hover:bg-green-700 text-white cursor-pointer transition-all duration-200"
                               onClick={() => {
                                 setSelectedPrintInvoice(invoice);
                                 setPrintInvoicePaymentOpen(true);
@@ -1986,18 +2176,18 @@ export default function CustomerBilling() {
                         })()}
                         {customerType.supplierType !== 'printer' && (
                           <>
-                            <Button variant="outline" size="sm" onClick={() => printSavedInvoice(invoice)}>
+                            <Button variant="outline" size="sm" className="cursor-pointer border-white/10 text-white hover:bg-white/5 transition-all duration-200" onClick={() => printSavedInvoice(invoice)}>
                               <Printer className="h-4 w-4 ml-1" />
                               طباعة
                             </Button>
-                            <Button variant="secondary" size="sm" onClick={() => printSavedInvoiceForPrinter(invoice)}>
+                            <Button variant="secondary" size="sm" className="cursor-pointer bg-slate-800 hover:bg-slate-700 text-white border border-white/5 transition-all duration-200" onClick={() => printSavedInvoiceForPrinter(invoice)}>
                               <FileText className="h-4 w-4 ml-1" />
                               للمطبعة
                             </Button>
-                            <Button variant="ghost" size="sm" onClick={() => openEditPrintedInvoice(invoice)}>
+                            <Button variant="ghost" size="sm" className="cursor-pointer text-amber-500 hover:text-amber-400 hover:bg-white/5 transition-all duration-200" onClick={() => openEditPrintedInvoice(invoice)}>
                               تعديل
                             </Button>
-                            <Button variant="destructive" size="sm" onClick={() => deletePrintedInvoice(invoice)}>
+                            <Button variant="destructive" size="sm" className="cursor-pointer transition-all duration-200" onClick={() => deletePrintedInvoice(invoice)}>
                               حذف
                             </Button>
                           </>
@@ -2006,8 +2196,8 @@ export default function CustomerBilling() {
                     </tr>
                   ))
                 ) : (
-                <tr className="expenses-table-row">
-                    <td colSpan={8} className="text-center text-muted-foreground py-6">
+                  <tr className="border-b border-white/5">
+                    <td colSpan={8} className="text-center text-white/55 py-6">
                       {customerType.supplierType === 'printer' 
                         ? 'لا توجد فواتير طباعة لهذه المطبعة.' 
                         : 'لا توجد فواتير طباعة محفوظة لهذا العميل.'}
@@ -2870,14 +3060,19 @@ export default function CustomerBilling() {
         getContractRemaining={getContractRemaining}
       />
 
-      {/* ✅ Use Rental As Payment Dialog */}
+      {/* ✅ Use Rental As Payment Dialog (now uses EnhancedDistributePaymentDialog) */}
       {selectedRentalForPayment && (
-        <UseRentalAsPaymentDialog
+        <EnhancedDistributePaymentDialog
           open={useRentalAsPaymentOpen}
-          onOpenChange={setUseRentalAsPaymentOpen}
+          onOpenChange={(open) => {
+            setUseRentalAsPaymentOpen(open);
+            if (!open) {
+              setSelectedRentalForPayment(null);
+            }
+          }}
           customerId={customerId}
           customerName={customerName}
-          rental={selectedRentalForPayment}
+          friendRental={selectedRentalForPayment}
           onSuccess={loadData}
         />
       )}

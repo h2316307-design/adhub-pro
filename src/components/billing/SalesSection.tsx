@@ -123,12 +123,12 @@ export function SalesSection({
 
   return (
     <>
-    <Card className="border-0 shadow-lg overflow-hidden mt-6">
-      <CardHeader className="bg-gradient-to-r from-green-700 to-green-600 text-white py-5">
+    <Card className="border border-emerald-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-emerald-500/30 rounded-2xl mt-6">
+      <CardHeader className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border-b border-emerald-500/20 text-white py-5">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-white/10 rounded-xl flex items-center justify-center">
-              <DollarSign className="h-6 w-6 text-white" />
+            <div className="w-12 h-12 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg">
+              <DollarSign className="h-6 w-6 text-emerald-500" />
             </div>
             <div>
               <CardTitle className="text-xl font-bold text-white">فواتير المبيعات</CardTitle>

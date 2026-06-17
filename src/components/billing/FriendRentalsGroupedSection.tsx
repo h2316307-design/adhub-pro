@@ -410,58 +410,68 @@ export function FriendRentalsGroupedSection({
   if (friendBillboardRentals.length === 0) return null;
 
   return (
-    <Card className="mt-6 border-amber-500/30">
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
-        <CardTitle className="text-xl flex items-center gap-2">
-          <Building2 className="h-5 w-5 text-amber-500" />
-          إيجارات اللوحات (شركة صديقة) ({friendBillboardRentals.length})
-        </CardTitle>
-        <Badge className="bg-amber-500/20 text-amber-700 border-amber-500/30">
-          إجمالي: {totalAll.toLocaleString('ar-LY')} د.ل
-        </Badge>
+    <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl mt-6">
+      <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg shadow-amber-500/10">
+              <Building2 className="h-6 w-6 text-amber-500" />
+            </div>
+            <div>
+              <CardTitle className="text-xl font-bold text-white">إيجارات اللوحات (شركة صديقة)</CardTitle>
+              <p className="text-white/70 text-sm mt-0.5">{friendBillboardRentals.length} لوحة مؤجرة من شركات صديقة</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <Badge className="bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 text-sm font-bold px-3 py-1.5 rounded-lg shadow-sm">
+              إجمالي: {totalAll.toLocaleString('ar-LY')} د.ل
+            </Badge>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 pt-6">
         {contractGroups.map((group) => {
           const isOpen = openGroups.has(group.contractNumber);
           return (
-            <div key={group.contractNumber} className="rounded-xl border border-border bg-card overflow-hidden">
+            <div key={group.contractNumber} className="rounded-xl border border-white/10 bg-slate-900/40 overflow-hidden hover:border-amber-500/20 transition-colors duration-200">
               <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center xl:justify-between">
-                <button type="button" onClick={() => toggleGroup(group.contractNumber)} className="flex flex-1 items-start gap-4 text-right">
+                <button type="button" onClick={() => toggleGroup(group.contractNumber)} className="flex flex-1 items-start gap-4 text-right cursor-pointer hover:opacity-95">
                   {group.designImage && (
-                    <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-border bg-muted">
+                    <div className="h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-muted">
                       <img src={group.designImage} alt="" className="h-full w-full object-cover" loading="lazy" onError={(ev) => { ev.currentTarget.style.display = 'none'; }} />
                     </div>
                   )}
                   <div className="flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-lg font-bold">عقد #{group.contractNumber}</span>
-                      <Badge variant={group.isActive ? 'default' : 'secondary'}>{group.isActive ? 'نشط' : 'منتهي'}</Badge>
-                      <Badge variant="outline">{group.rentals.length} لوحات</Badge>
+                      <span className="text-lg font-bold text-white">عقد #{group.contractNumber}</span>
+                      <Badge variant={group.isActive ? 'default' : 'secondary'} className={group.isActive ? 'bg-green-500/15 text-green-400 border border-green-500/30' : 'bg-slate-700/50 text-slate-300 border border-slate-600/30'}>{group.isActive ? 'نشط' : 'منتهي'}</Badge>
+                      <Badge variant="outline" className="border-white/10 text-white/70">{group.rentals.length} لوحات</Badge>
                       {group.contractAdType && (
-                        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-700 font-medium">
+                        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-400 font-medium">
                           نوع الإعلان: {group.contractAdType}
                         </Badge>
                       )}
                     </div>
-                    <div className="grid grid-cols-1 gap-1 text-sm text-muted-foreground sm:grid-cols-3">
-                      <span>التكلفة: <b className="text-foreground">{group.totalFriendCost.toLocaleString('ar-LY')} د.ل</b></span>
-                      <span>سعر الزبون: <b className="text-foreground">{group.totalCustomerPrice.toLocaleString('ar-LY')} د.ل</b></span>
-                      <span>الربح: <b className="text-foreground">{group.totalProfit.toLocaleString('ar-LY')} د.ل</b></span>
+                    <div className="grid grid-cols-1 gap-1 text-sm text-white/60 sm:grid-cols-3">
+                      <span>التكلفة: <b className="text-white">{group.totalFriendCost.toLocaleString('ar-LY')} د.ل</b></span>
+                      <span>سعر الزبون: <b className="text-white">{group.totalCustomerPrice.toLocaleString('ar-LY')} د.ل</b></span>
+                      <span>الربح: <b className="text-emerald-400">{group.totalProfit.toLocaleString('ar-LY')} د.ل</b></span>
                     </div>
                     {group.remainingForPayment > 0 && (
-                      <p className="text-sm text-amber-600">المتاح كدفعة: {group.remainingForPayment.toLocaleString('ar-LY')} د.ل</p>
+                      <p className="text-sm font-semibold text-amber-400">المتاح كدفعة: {group.remainingForPayment.toLocaleString('ar-LY')} د.ل</p>
                     )}
                   </div>
-                  <div className="pt-1 text-muted-foreground">{isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
+                  <div className="pt-1 text-white/40">{isOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}</div>
                 </button>
 
                 <div className="flex flex-wrap gap-2 xl:justify-end" onClick={(ev) => ev.stopPropagation()}>
-                  <Button variant="outline" size="sm" className="gap-2" onClick={() => handlePrintContractInvoice(group.contractNumber, group.rentals, group.designImage)}>
+                  <Button variant="outline" size="sm" className="gap-2 cursor-pointer border-white/10 text-white hover:bg-white/5 transition-all duration-200" onClick={() => handlePrintContractInvoice(group.contractNumber, group.rentals, group.designImage)}>
                     <Printer className="h-4 w-4" />
                     طباعة فاتورة
                   </Button>
                   {group.remainingForPayment > 0 && (
-                    <Button variant="outline" size="sm" className="gap-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10" onClick={() => onUseAsPayment(group.rentals)}>
+                    <Button variant="outline" size="sm" className="gap-2 cursor-pointer border-amber-500/50 text-amber-500 hover:bg-amber-500/10 transition-all duration-200" onClick={() => onUseAsPayment(group.rentals)}>
                       <ArrowRightLeft className="h-4 w-4" />
                       استخدام كدفعة ({group.remainingForPayment.toLocaleString('ar-LY')} د.ل)
                     </Button>

@@ -8,10 +8,12 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Separator } from '@/components/ui/separator';
 import { 
   DollarSign, Calculator, Ruler, ChevronDown, ChevronUp, 
-  Box, Building2, Landmark, LayoutGrid, Check, Pencil, X, Save, Gift, Square, Zap, CheckCircle2
+  Box, Building2, Landmark, LayoutGrid, Check, Pencil, X, Save, Gift, Square, Zap, CheckCircle2, MapPin
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { cn } from '@/lib/utils';
+import { Switch } from '@/components/ui/switch';
 
 interface SizeData {
   id: number;
@@ -25,6 +27,8 @@ interface TaskItem {
   billboard_id: number;
   customer_installation_cost: number;
   company_installation_cost?: number | null;
+  company_additional_cost?: number | null;
+  company_additional_cost_notes?: string | null;
   has_cutout?: boolean;
   additional_cost?: number;
   additional_cost_notes?: string | null;
@@ -40,7 +44,52 @@ interface Billboard {
   Billboard_Name?: string;
   billboard_type?: string;
   Nearest_Landmark?: string;
+  Image_URL?: string | null;
 }
+
+// ════════════ Reusable Inline Price Input with Controls ════════════
+const InlinePriceInput = ({ value, onChange, label, step = 1, showLabel = true, className }: {
+  value: number;
+  onChange: (val: number) => void;
+  label: string;
+  step?: number;
+  showLabel?: boolean;
+  className?: string;
+}) => (
+  <div dir="rtl" className={cn("flex items-center justify-start gap-3 bg-background border border-border/15 rounded-xl p-1.5 shadow-sm shrink-0 min-w-0 transition-all focus-within:border-primary/30 text-right", className)}>
+    {showLabel && <span className="text-sm font-semibold text-muted-foreground/80 px-2 shrink-0 text-right whitespace-nowrap">{label}</span>}
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-9 w-9 hover:bg-muted text-lg font-bold shrink-0 p-0 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
+      onClick={() => onChange(value + step)}
+      aria-label="زيادة"
+    >
+      +
+    </Button>
+    <div dir="ltr" className="flex-1 flex items-center gap-1.5 bg-muted/30 rounded-lg px-2.5 h-10 min-w-[9.5rem] border border-border/10">
+      <Input
+        type="number"
+        inputMode="numeric"
+        value={value}
+        onChange={e => onChange(Number(e.target.value) || 0)}
+        className="h-9 flex-1 min-w-0 text-center border-0 bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 font-bold font-mono text-base text-foreground px-1"
+      />
+      <span className="text-xs font-semibold text-muted-foreground/70 pointer-events-none shrink-0 px-1 whitespace-nowrap">د.ل</span>
+    </div>
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-9 w-9 hover:bg-muted text-lg font-bold shrink-0 p-0 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
+      onClick={() => onChange(Math.max(0, value - step))}
+      aria-label="نقصان"
+    >
+      -
+    </Button>
+  </div>
+);
 
 interface TaskTotalCostSummaryProps {
   taskId: string;
@@ -100,7 +149,18 @@ export function TaskTotalCostSummary({
     customerCost: number;
     additionalCost: number;
     additionalNotes: string;
-  }>({ companyCost: 0, customerCost: 0, additionalCost: 0, additionalNotes: '' });
+    companyAdditionalCost: number;
+    companyAdditionalNotes: string;
+    hasCutout: boolean;
+  }>({
+    companyCost: 0,
+    customerCost: 0,
+    additionalCost: 0,
+    additionalNotes: '',
+    companyAdditionalCost: 0,
+    companyAdditionalNotes: '',
+    hasCutout: false
+  });
   
   // تخزين تكاليف الشركة المعدلة محلياً
   const [customCompanyCosts, setCustomCompanyCosts] = useState<Record<string, number>>({});
@@ -180,6 +240,8 @@ export function TaskTotalCostSummary({
       totalArea: number;
       companyCost: number;
       customerCost: number;
+      cutoutCount: number;
+      normalCount: number;
     }> = {};
 
     taskItems.forEach(item => {
@@ -216,7 +278,9 @@ export function TaskTotalCostSummary({
           totalItems: 0,
           totalArea: 0,
           companyCost: 0,
-          customerCost: 0
+          customerCost: 0,
+          cutoutCount: 0,
+          normalCount: 0
         };
       }
 
@@ -245,8 +309,10 @@ export function TaskTotalCostSummary({
       
       if (item.has_cutout) {
         grouped[billboardType].sizes[sizeName].cutoutCount++;
+        grouped[billboardType].cutoutCount++;
       } else {
         grouped[billboardType].sizes[sizeName].normalCount++;
+        grouped[billboardType].normalCount++;
       }
 
       grouped[billboardType].totalItems++;
@@ -291,7 +357,10 @@ export function TaskTotalCostSummary({
       companyCost: existingCompanyCost,
       customerCost: item.customer_installation_cost || 0,
       additionalCost: item.additional_cost || 0,
-      additionalNotes: item.additional_cost_notes || ''
+      additionalNotes: item.additional_cost_notes || '',
+      companyAdditionalCost: item.company_additional_cost || 0,
+      companyAdditionalNotes: item.company_additional_cost_notes || '',
+      hasCutout: item.has_cutout || false
     });
   };
 
@@ -313,7 +382,10 @@ export function TaskTotalCostSummary({
           company_installation_cost: editValues.companyCost,
           customer_installation_cost: editValues.customerCost,
           additional_cost: editValues.additionalCost || null,
-          additional_cost_notes: editValues.additionalNotes || null
+          additional_cost_notes: editValues.additionalNotes || null,
+          company_additional_cost: editValues.companyAdditionalCost || null,
+          company_additional_cost_notes: editValues.companyAdditionalNotes || null,
+          has_cutout: editValues.hasCutout
         })
         .eq('id', editingItemId);
 
@@ -719,47 +791,51 @@ export function TaskTotalCostSummary({
                             <Zap className="h-4 w-4" />
                             تسعير {type} بالكامل:
                           </span>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-muted-foreground whitespace-nowrap">عادي/م²:</Label>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              placeholder="0"
-                              className="h-8 w-24 text-sm"
-                              value={typeMeterPrices[type]?.normal || ''}
-                              onChange={e => setTypeMeterPrices(prev => ({
-                                ...prev,
-                                [type]: {
-                                  ...prev[type],
-                                  normal: Number(e.target.value) || 0,
-                                  cutout: prev[type]?.cutout || 0
-                                }
-                              }))}
-                            />
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-amber-600 whitespace-nowrap flex items-center gap-1">
-                              <Box className="h-3 w-3" />
-                              مجسم/م²:
-                            </Label>
-                            <Input
-                              type="number"
-                              min="0"
-                              step="0.1"
-                              placeholder="0"
-                              className="h-8 w-24 text-sm border-amber-300"
-                              value={typeMeterPrices[type]?.cutout || ''}
-                              onChange={e => setTypeMeterPrices(prev => ({
-                                ...prev,
-                                [type]: {
-                                  ...prev[type],
-                                  normal: prev[type]?.normal || 0,
-                                  cutout: Number(e.target.value) || 0
-                                }
-                              }))}
-                            />
-                          </div>
+                          {typeData.normalCount > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-muted-foreground whitespace-nowrap">عادي/م²:</Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                placeholder="0"
+                                className="h-8 w-24 text-sm"
+                                value={typeMeterPrices[type]?.normal || ''}
+                                onChange={e => setTypeMeterPrices(prev => ({
+                                  ...prev,
+                                  [type]: {
+                                    ...prev[type],
+                                    normal: Number(e.target.value) || 0,
+                                    cutout: prev[type]?.cutout || 0
+                                  }
+                                }))}
+                              />
+                            </div>
+                          )}
+                          {typeData.cutoutCount > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Label className="text-xs text-amber-600 whitespace-nowrap flex items-center gap-1">
+                                <Box className="h-3 w-3" />
+                                مجسم/م²:
+                              </Label>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                placeholder="0"
+                                className="h-8 w-24 text-sm border-amber-300"
+                                value={typeMeterPrices[type]?.cutout || ''}
+                                onChange={e => setTypeMeterPrices(prev => ({
+                                  ...prev,
+                                  [type]: {
+                                    ...prev[type],
+                                    normal: prev[type]?.normal || 0,
+                                    cutout: Number(e.target.value) || 0
+                                  }
+                                }))}
+                              />
+                            </div>
+                          )}
                           <Button
                             size="sm"
                             onClick={() => handleApplyMeterToType(type)}
@@ -967,231 +1043,242 @@ export function TaskTotalCostSummary({
                                 </div>
                               )}
 
-                              {/* قائمة اللوحات */}
-                              {!isSizeCollapsed && (
-                                <div className="divide-y divide-border/30">
-                                  {sizeData.items.map(item => (
-                                    <div 
-                                      key={item.id} 
-                                      className={`p-3 ${
-                                        editingItemId === item.id ? 'bg-card' : 'bg-muted/10'
-                                      }`}
-                                    >
-                                      {editingItemId === item.id ? (
-                                        // وضع التعديل
-                                        <div className="space-y-4">
-                                          <div className="flex items-center justify-between">
-                                            <span className="font-semibold text-sm text-foreground">
-                                              {item.billboard.Billboard_Name || `لوحة ${item.billboard_id}`}
-                                            </span>
-                                            <div className="flex items-center gap-2">
-                                              <Button
-                                                size="sm"
-                                                className="h-8 px-3 bg-primary hover:bg-primary/90 text-primary-foreground"
-                                                onClick={handleSaveItemEdit}
-                                                disabled={distributing}
-                                              >
-                                                <Save className="h-3.5 w-3.5 ml-1" />
-                                                حفظ
-                                              </Button>
-                                              <Button
-                                                size="sm"
-                                                variant="outline"
-                                                className="h-8 px-3"
-                                                onClick={() => setEditingItemId(null)}
-                                              >
-                                                <X className="h-3.5 w-3.5" />
-                                              </Button>
-                                            </div>
-                                          </div>
-                                          
-                                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                                            {/* تكلفة الشركة */}
-                                            <div className="space-y-1.5">
-                                              <Label className="text-xs font-medium text-foreground">تكلفة الشركة</Label>
-                                              <Input
-                                                type="number"
-                                                min="0"
-                                                value={editValues.companyCost}
-                                                onChange={e => setEditValues(prev => ({
-                                                  ...prev,
-                                                  companyCost: Number(e.target.value) || 0
-                                                }))}
-                                                className="h-9 text-sm"
-                                              />
-                                            </div>
+                               {/* قائمة اللوحات */}
+                               {!isSizeCollapsed && (
+                                 <div className="divide-y divide-border/30">
+                                  {sizeData.items.map(item => {
+                                    const faces = item.faces_to_install ?? (item.billboard.Faces_Count || 2);
+                                    const basicCompanyCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined
+                                      ? item.company_installation_cost
+                                      : (customCompanyCosts[item.id] ?? (() => {
+                                          const fullCompanyCost = installationPrices[item.billboard_id] || 0;
+                                          const totalFaces = item.billboard?.Faces_Count || 1;
+                                          return (totalFaces > 1 && faces === 1) ? fullCompanyCost / 2 : fullCompanyCost;
+                                        })());
+                                    const itemCompanyCost = basicCompanyCost + (item.company_additional_cost || 0);
 
-                                            {/* تكلفة الزبون */}
-                                            <div className="space-y-1.5">
-                                              <Label className="text-xs font-medium text-foreground">تكلفة الزبون</Label>
-                                              <div className="flex gap-1.5">
-                                                <Input
-                                                  type="number"
-                                                  min="0"
-                                                  value={editValues.customerCost}
-                                                  onChange={e => setEditValues(prev => ({
-                                                    ...prev,
-                                                    customerCost: Number(e.target.value) || 0
-                                                  }))}
-                                                  className="h-9 text-sm"
-                                                />
-                                                <Button
-                                                  size="sm"
-                                                  variant="outline"
-                                                  className="h-9 px-2.5"
-                                                  onClick={() => setEditValues(prev => ({ ...prev, customerCost: 0 }))}
-                                                  title="تحويل لمجاني"
-                                                >
-                                                  <Gift className="h-4 w-4" />
+                                    return (
+                                      <div 
+                                        key={item.id} 
+                                        className={`p-3 ${
+                                          editingItemId === item.id ? 'bg-card' : 'bg-muted/10'
+                                        }`}
+                                      >
+                                        {editingItemId === item.id ? (
+                                          // وضع التعديل
+                                          <div className="rounded-2xl border border-primary/20 bg-primary/[0.01] p-5 space-y-4 shadow-sm animate-in fade-in duration-200">
+                                            <div className="flex items-center justify-between pb-3 border-b border-border/10 gap-4 text-right">
+                                              <div className="flex items-center gap-3">
+                                                {item.billboard.Image_URL ? (
+                                                  <img src={item.billboard.Image_URL} alt="" className="w-14 h-14 rounded-xl object-cover border border-primary/20 shadow-sm" />
+                                                ) : (
+                                                  <div className="w-14 h-14 rounded-xl bg-muted flex items-center justify-center border border-border/15">
+                                                    <LayoutGrid className="h-6 w-6 text-muted-foreground/45" />
+                                                  </div>
+                                                )}
+                                                <div>
+                                                  <span className="font-semibold text-sm block text-foreground">{item.billboard.Billboard_Name || `لوحة رمز #${String(item.billboard_id).padStart(4, '0')}`}</span>
+                                                  <span className="text-xs text-muted-foreground block mt-0.5">{faces} أوجه • {item.area.toFixed(1)} م²</span>
+                                                </div>
+                                              </div>
+                                              <div className="flex gap-2">
+                                                <Button size="sm" className="h-9 text-xs font-semibold gap-1.5 rounded-lg" onClick={handleSaveItemEdit} disabled={distributing}>
+                                                  <Save className="h-3.5 w-3.5" /> 
+                                                  <span>حفظ</span>
+                                                </Button>
+                                                <Button size="sm" variant="outline" className="h-9 w-9 p-0 rounded-lg" onClick={() => setEditingItemId(null)}>
+                                                  <X className="h-4 w-4" />
                                                 </Button>
                                               </div>
                                             </div>
-
-                                            {/* الزبون سدد التكاليف */}
-                                            <div className="col-span-2 sm:col-span-4 flex items-center justify-between gap-3 bg-amber-500/[0.03] border border-amber-500/10 p-2.5 rounded-xl shadow-sm mt-1">
-                                              <div className="flex flex-col text-right">
-                                                <span className="text-xs font-bold text-amber-700 dark:text-amber-400">حالة سداد التكاليف للزبون</span>
-                                                <span className="text-[10px] text-muted-foreground mt-0.5">تصفير التكاليف للشركة وللزبون (بدون تكاليف)</span>
+                                            
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 text-right">
+                                              <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-amber-600 block leading-relaxed text-right">تكلفة الشركة (التركيب الأساسي)</Label>
+                                                <InlinePriceInput 
+                                                  value={editValues.companyCost}
+                                                  onChange={val => setEditValues(prev => ({...prev, companyCost: val}))}
+                                                  label=""
+                                                  showLabel={false}
+                                                  className="w-full"
+                                                />
                                               </div>
-                                              <Button
-                                                size="sm"
-                                                variant={editValues.customerCost === 0 && editValues.companyCost === 0 ? "default" : "outline"}
-                                                className={`h-8 px-3 text-xs font-semibold gap-1.5 rounded-lg transition-all cursor-pointer ${
-                                                  editValues.customerCost === 0 && editValues.companyCost === 0
-                                                    ? "bg-amber-500 hover:bg-amber-600 text-black border-0 shadow-sm animate-pulse"
-                                                    : "border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
-                                                }`}
-                                                onClick={() => setEditValues(prev => ({ ...prev, customerCost: 0, companyCost: 0 }))}
-                                                type="button"
-                                              >
-                                                <CheckCircle2 className="h-3.5 w-3.5" />
-                                                <span>{editValues.customerCost === 0 && editValues.companyCost === 0 ? "تم السداد والتصفير" : "سدد التكاليف / بدون تكاليف"}</span>
-                                              </Button>
-                                            </div>
+                                              <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-primary block leading-relaxed text-right">سعر الزبون (التركيب الأساسي)</Label>
+                                                <div className="flex gap-2 items-center">
+                                                  <InlinePriceInput 
+                                                    value={editValues.customerCost}
+                                                    onChange={val => setEditValues(prev => ({...prev, customerCost: val}))}
+                                                    label=""
+                                                    showLabel={false}
+                                                    className="flex-1"
+                                                  />
+                                                  <Button 
+                                                    size="sm" 
+                                                    variant="outline" 
+                                                    className="h-11 w-11 p-0 shrink-0 rounded-xl text-purple-650 border-purple-250 hover:bg-purple-50/50 transition-colors" 
+                                                    onClick={() => setEditValues(prev => ({ ...prev, customerCost: 0 }))} 
+                                                    title="مجاني"
+                                                  >
+                                                    <Gift className="h-5 w-5" />
+                                                  </Button>
+                                                </div>
+                                              </div>
+                                              
+                                              <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed text-right">مصاريف إضافية على الشركة</Label>
+                                                <InlinePriceInput 
+                                                  value={editValues.companyAdditionalCost}
+                                                  onChange={val => setEditValues(prev => ({...prev, companyAdditionalCost: val}))}
+                                                  label=""
+                                                  showLabel={false}
+                                                  className="w-full"
+                                                />
+                                              </div>
+                                              <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed text-right">مصاريف إضافية على العميل</Label>
+                                                <InlinePriceInput 
+                                                  value={editValues.additionalCost}
+                                                  onChange={val => setEditValues(prev => ({...prev, additionalCost: val}))}
+                                                  label=""
+                                                  showLabel={false}
+                                                  className="w-full"
+                                                />
+                                              </div>
+                                              <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed text-right">ملاحظات وسبب إضافية العميل</Label>
+                                                <Input dir="rtl" value={editValues.additionalNotes} onChange={e => setEditValues(prev => ({...prev, additionalNotes: e.target.value}))} placeholder="تجهيزات معينة للموقع، عمل ليلي..." className="h-11 text-xs rounded-xl text-right" />
+                                              </div>
+                                              <div className="space-y-2">
+                                                <Label className="text-sm font-semibold text-muted-foreground block leading-relaxed text-right">ملاحظات وسبب إضافية الشركة</Label>
+                                                <Input dir="rtl" value={editValues.companyAdditionalNotes} onChange={e => setEditValues(prev => ({...prev, companyAdditionalNotes: e.target.value}))} placeholder="تراخيص، رافعة تلسكوبية..." className="h-11 text-xs rounded-xl text-right" />
+                                              </div>
 
-                                            {/* تكلفة إضافية */}
-                                            <div className="space-y-1.5">
-                                              <Label className="text-xs font-medium text-foreground">تكلفة إضافية</Label>
-                                              <Input
-                                                type="number"
-                                                min="0"
-                                                value={editValues.additionalCost || ''}
-                                                onChange={e => setEditValues(prev => ({
-                                                  ...prev,
-                                                  additionalCost: Number(e.target.value) || 0
-                                                }))}
-                                                placeholder="0"
-                                                className="h-9 text-sm"
-                                              />
-                                            </div>
-
-                                            {/* سبب التكلفة الإضافية */}
-                                            <div className="space-y-1.5">
-                                              <Label className="text-xs font-medium text-muted-foreground">سبب الإضافية</Label>
-                                              <Input
-                                                type="text"
-                                                value={editValues.additionalNotes}
-                                                onChange={e => setEditValues(prev => ({
-                                                  ...prev,
-                                                  additionalNotes: e.target.value
-                                                }))}
-                                                placeholder="موقع صعب..."
-                                                className="h-9 text-sm"
-                                              />
-                                            </div>
-                                          </div>
-                                        </div>
-                                      ) : (
-                                        // وضع العرض
-                                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                                          <div className="flex flex-col gap-0.5">
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-sm font-medium">
-                                                {item.billboard.Billboard_Name || `لوحة ${item.billboard_id}`}
-                                              </span>
-                                              {item.has_cutout && (
-                                                <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-300">
-                                                  <Box className="h-3 w-3 ml-1" />
-                                                  مجسم
-                                                </Badge>
-                                              )}
-                                              <span className="text-xs text-muted-foreground">
-                                                {item.area.toFixed(1)} م²
-                                              </span>
-                                            </div>
-                                            {item.billboard.Nearest_Landmark && (
-                                              <span className="text-xs text-muted-foreground pr-1">
-                                                📍 {item.billboard.Nearest_Landmark}
-                                              </span>
-                                            )}
-                                          </div>
-                                          
-                                          <div className="flex items-center gap-3">
-                                            {/* التكاليف */}
-                                            <div className="flex items-center gap-2 text-sm flex-wrap">
-                                              <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700">
-                                                 الشركة: {(() => {
-                                                   const hasCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
-                                                   const cost = hasCost 
-                                                     ? item.company_installation_cost! 
-                                                     : (customCompanyCosts[item.id] ?? (() => {
-                                                         const fullCompanyCost = installationPrices[item.billboard_id] || 0;
-                                                         const totalFaces = item.billboard?.Faces_Count || 1;
-                                                         const facesToInstall = item.faces_to_install ?? totalFaces;
-                                                         return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
-                                                       })());
-                                                   return cost.toLocaleString('ar-LY');
-                                                 })()}
-                                              </Badge>
-                                              {item.customer_installation_cost === 0 ? (
-                                                <Badge className="bg-purple-100 text-purple-700 border-0 dark:bg-purple-950/50 dark:text-purple-300">
-                                                  <Gift className="h-3 w-3 ml-1" />
-                                                  مجاني
-                                                </Badge>
-                                              ) : (
-                                                <Badge className="bg-primary/10 text-primary border-0">
-                                                  الزبون: {item.customer_installation_cost.toLocaleString('ar-LY')}
-                                                </Badge>
-                                              )}
-                                              {item.additional_cost && item.additional_cost > 0 && (
-                                                <Badge className="bg-orange-100 text-orange-700 border-0 dark:bg-orange-950/50 dark:text-orange-300">
-                                                  +{item.additional_cost.toLocaleString('ar-LY')}
-                                                  {item.additional_cost_notes && (
-                                                    <span className="mr-1 text-[10px]">({item.additional_cost_notes})</span>
+                                              {/* تصفير / سداد التكاليف */}
+                                              <div className="col-span-1 sm:col-span-2 flex items-center justify-between gap-3 bg-amber-500/[0.03] border border-amber-500/10 p-3 rounded-xl shadow-sm mt-1 text-right">
+                                                <div className="flex flex-col text-right">
+                                                  <span className="text-xs font-bold text-amber-700 dark:text-amber-400">حالة سداد التكاليف للزبون</span>
+                                                  <span className="text-[10px] text-muted-foreground mt-0.5">تصفير التكاليف للشركة وللزبون (بدون تكاليف)</span>
+                                                </div>
+                                                <Button
+                                                  size="sm"
+                                                  variant={editValues.customerCost === 0 && editValues.companyCost === 0 ? "default" : "outline"}
+                                                  className={cn(
+                                                    "h-9 px-4 text-xs font-bold gap-2 rounded-xl transition-all cursor-pointer",
+                                                    editValues.customerCost === 0 && editValues.companyCost === 0
+                                                      ? "bg-amber-500 hover:bg-amber-600 text-black border-0 shadow-sm animate-pulse"
+                                                      : "border-amber-500/20 text-amber-700 dark:text-amber-400 hover:bg-amber-500/10"
                                                   )}
-                                                </Badge>
+                                                  onClick={() => setEditValues(prev => ({ ...prev, customerCost: 0, companyCost: 0 }))}
+                                                  type="button"
+                                                >
+                                                  <CheckCircle2 className="h-4 w-4" />
+                                                  <span>{editValues.customerCost === 0 && editValues.companyCost === 0 ? "تم السداد والتصفير" : "سدد التكاليف / بدون تكاليف"}</span>
+                                                </Button>
+                                              </div>
+
+                                              <div className="space-y-2 col-span-2 border-t border-border/10 pt-4 mt-2">
+                                                <Label className="text-sm font-semibold text-purple-650 block leading-relaxed">هل تحتوي هذه اللوحة على مجسم؟</Label>
+                                                <div className="flex items-center gap-3.5 h-11 px-4 bg-background border border-border/15 rounded-xl">
+                                                  <Switch 
+                                                    checked={editValues.hasCutout} 
+                                                    onCheckedChange={val => setEditValues(prev => ({...prev, hasCutout: val}))} 
+                                                  />
+                                                  <span className="text-xs sm:text-sm text-muted-foreground font-semibold leading-relaxed">نعم، تفعيل خيارات ومواصفات المجسمات لهذه اللوحة</span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ) : (
+                                          // وضع العرض
+                                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                                            <div className="flex flex-col gap-0.5">
+                                              <div className="flex items-center gap-2">
+                                                <span className="text-sm font-medium text-right text-foreground">
+                                                  {item.billboard.Billboard_Name || `لوحة ${item.billboard_id}`}
+                                                </span>
+                                                {item.has_cutout && (
+                                                  <Badge variant="outline" className="text-[10px] bg-amber-500/10 text-amber-600 border-amber-300">
+                                                    <Box className="h-3 w-3 ml-1" />
+                                                    مجسم
+                                                  </Badge>
+                                                )}
+                                                <span className="text-xs text-muted-foreground">
+                                                  {item.area.toFixed(1)} م²
+                                                </span>
+                                              </div>
+                                              {item.billboard.Nearest_Landmark && (
+                                                <span className="text-xs text-muted-foreground pr-1 flex items-center gap-1 text-right">
+                                                  <MapPin className="h-3 w-3 text-muted-foreground/75" />
+                                                  <span>{item.billboard.Nearest_Landmark}</span>
+                                                </span>
                                               )}
                                             </div>
+                                            
+                                            <div className="flex items-center gap-3">
+                                              {/* التكاليف */}
+                                              <div className="flex items-center gap-2 text-sm flex-wrap">
+                                                <Badge variant="outline" className="bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/30 dark:text-emerald-300 dark:border-emerald-700">
+                                                   الشركة: {basicCompanyCost.toLocaleString('ar-LY')}
+                                                </Badge>
+                                                {item.company_additional_cost && item.company_additional_cost > 0 ? (
+                                                  <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/30 dark:text-amber-300 dark:border-amber-700">
+                                                     إضافي شركة: +{item.company_additional_cost.toLocaleString('ar-LY')}
+                                                     {item.company_additional_cost_notes && (
+                                                       <span className="mr-1 text-[10px]">({item.company_additional_cost_notes})</span>
+                                                     )}
+                                                  </Badge>
+                                                ) : null}
+                                                {item.customer_installation_cost === 0 ? (
+                                                  <Badge className="bg-purple-100 text-purple-755 border-none dark:bg-purple-950/50 dark:text-purple-300">
+                                                    <Gift className="h-3 w-3 ml-1" />
+                                                    مجاني
+                                                  </Badge>
+                                                ) : (
+                                                  <Badge className="bg-primary/10 text-primary border-none">
+                                                    الزبون: {item.customer_installation_cost.toLocaleString('ar-LY')}
+                                                  </Badge>
+                                                )}
+                                                {item.additional_cost && item.additional_cost > 0 ? (
+                                                  <Badge className="bg-orange-100 text-orange-700 border-none dark:bg-orange-950/50 dark:text-orange-300">
+                                                    +{item.additional_cost.toLocaleString('ar-LY')}
+                                                    {item.additional_cost_notes && (
+                                                      <span className="mr-1 text-[10px]">({item.additional_cost_notes})</span>
+                                                    )}
+                                                  </Badge>
+                                                ) : null}
+                                              </div>
 
-                                            {/* أزرار التحكم */}
-                                            <div className="flex items-center gap-1">
-                                              <Button
-                                                size="icon"
-                                                variant="ghost"
-                                                className="h-7 w-7"
-                                                onClick={() => startEditingItem(item)}
-                                                title="تعديل"
-                                              >
-                                                <Pencil className="h-3 w-3" />
-                                              </Button>
-                                              {item.customer_installation_cost > 0 && (
+                                              {/* أزرار التحكم */}
+                                              <div className="flex items-center gap-1">
                                                 <Button
                                                   size="icon"
                                                   variant="ghost"
                                                   className="h-7 w-7"
-                                                  onClick={() => handleSetFree(item.id)}
-                                                  disabled={distributing}
-                                                  title="تحويل لمجاني"
+                                                  onClick={() => startEditingItem(item)}
+                                                  title="تعديل"
                                                 >
-                                                  <Gift className="h-3 w-3 text-purple-600" />
+                                                  <Pencil className="h-3 w-3" />
                                                 </Button>
-                                              )}
+                                                {item.customer_installation_cost > 0 && (
+                                                  <Button
+                                                    size="icon"
+                                                    variant="ghost"
+                                                    className="h-7 w-7"
+                                                    onClick={() => handleSetFree(item.id)}
+                                                    disabled={distributing}
+                                                    title="تحويل لمجاني"
+                                                  >
+                                                    <Gift className="h-3 w-3 text-purple-600" />
+                                                  </Button>
+                                                )}
+                                              </div>
                                             </div>
                                           </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                  ))}
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
                               )}
                             </div>
