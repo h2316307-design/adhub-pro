@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Monitor, Layers, Tag, Save, X, MapPin, RefreshCw, DollarSign, Ruler, Image, Link2 } from 'lucide-react';
+import { Plus, Edit, Trash2, Monitor, Layers, Tag, Save, X, MapPin, RefreshCw, DollarSign, Ruler, Image, Link2, Building } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -54,6 +54,7 @@ export default function BillboardSettings() {
   const [faces, setFaces] = useState<BillboardFaces[]>([]);
   const [types, setTypes] = useState<BillboardType[]>([]);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
+  const [cities, setCities] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   
@@ -62,6 +63,7 @@ export default function BillboardSettings() {
   const [faceDialog, setFaceDialog] = useState(false);
   const [typeDialog, setTypeDialog] = useState(false);
   const [municipalityDialog, setMunicipalityDialog] = useState(false);
+  const [cityDialog, setCityDialog] = useState(false);
   
   // Form states - Updated to include sort_order
   const [sizeForm, setSizeForm] = useState({ 
@@ -76,6 +78,7 @@ export default function BillboardSettings() {
   const [faceForm, setFaceForm] = useState({ id: 0, name: '', count: 1, description: '' });
   const [typeForm, setTypeForm] = useState({ id: 0, name: '', description: '', color: '#3B82F6' });
   const [municipalityForm, setMunicipalityForm] = useState({ id: 0, name: '', code: '', logo_url: '', sort_order: 999 });
+  const [cityForm, setCityForm] = useState({ id: 0, name: '' });
   const [logoPreviewError, setLogoPreviewError] = useState(false);
   
   const [editMode, setEditMode] = useState(false);
@@ -164,6 +167,20 @@ export default function BillboardSettings() {
       } else {
         console.log('✅ تم تحميل البلديات:', municipalitiesData?.length || 0, 'بلدية');
         setMunicipalities(municipalitiesData || []);
+      }
+
+      // Load cities
+      const { data: citiesData, error: citiesError } = await supabase
+        .from('cities')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (citiesError) {
+        console.error('❌ خطأ في تحميل المدن:', citiesError);
+        toast.error('فشل في تحميل المدن');
+      } else {
+        console.log('✅ تم تحميل المدن:', citiesData?.length || 0, 'مدينة');
+        setCities(citiesData || []);
       }
 
       console.log('🎉 تم الانتهاء من تحميل جميع بيانات الإعدادات');
@@ -501,6 +518,63 @@ export default function BillboardSettings() {
     }
   };
 
+  // City functions
+  const handleCitySubmit = async () => {
+    try {
+      if (!cityForm.name.trim()) {
+        toast.error('يرجى إدخال اسم المدينة');
+        return;
+      }
+
+      if (editMode) {
+        const { error } = await supabase
+          .from('cities')
+          .update({ name: cityForm.name.trim() })
+          .eq('id', cityForm.id);
+
+        if (error) throw error;
+        toast.success('تم تحديث المدينة بنجاح');
+      } else {
+        const { error } = await supabase
+          .from('cities')
+          .insert({ name: cityForm.name.trim() });
+
+        if (error) throw error;
+        toast.success('تم إضافة المدينة بنجاح');
+      }
+
+      setCityDialog(false);
+      setCityForm({ id: 0, name: '' });
+      setEditMode(false);
+      loadData();
+    } catch (error: any) {
+      console.error('Error saving city:', error);
+      toast.error(`حدث خطأ في حفظ المدينة: ${error.message || 'خطأ غير معروف'}`);
+    }
+  };
+
+  const handleCityEdit = (city: any) => {
+    setCityForm({ id: city.id, name: city.name });
+    setEditMode(true);
+    setCityDialog(true);
+  };
+
+  const handleCityDelete = async (id: number) => {
+    try {
+      const { error } = await supabase
+        .from('cities')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('تم حذف المدينة بنجاح');
+      loadData();
+    } catch (error: any) {
+      console.error('Error deleting city:', error);
+      toast.error(`فشل في حذف المدينة: ${error.message || 'خطأ غير معروف'}`);
+    }
+  };
+
   const handleMunicipalitySubmit = async () => {
     try {
       if (!municipalityForm.name.trim() || !municipalityForm.code.trim()) {
@@ -608,22 +682,26 @@ export default function BillboardSettings() {
 
       {/* Tabs */}
       <Tabs defaultValue="sizes" className="w-full">
-        <TabsList className="grid w-full grid-cols-4 mb-6">
-          <TabsTrigger value="sizes" className="flex items-center gap-2">
+        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-2 mb-6 h-auto bg-transparent">
+          <TabsTrigger value="sizes" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
             <Ruler className="h-4 w-4" />
             أحجام اللوحات ({sizes.length})
           </TabsTrigger>
-          <TabsTrigger value="faces" className="flex items-center gap-2">
+          <TabsTrigger value="faces" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
             <Layers className="h-4 w-4" />
             عدد الأوجه ({faces.length})
           </TabsTrigger>
-          <TabsTrigger value="types" className="flex items-center gap-2">
+          <TabsTrigger value="types" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
             <Tag className="h-4 w-4" />
             أنواع اللوحات ({types.length})
           </TabsTrigger>
-          <TabsTrigger value="municipalities" className="flex items-center gap-2">
+          <TabsTrigger value="municipalities" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
             <MapPin className="h-4 w-4" />
             البلديات ({municipalities.length})
+          </TabsTrigger>
+          <TabsTrigger value="cities" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
+            <Building className="h-4 w-4" />
+            المدن ({cities.length})
           </TabsTrigger>
         </TabsList>
 
@@ -1276,8 +1354,8 @@ export default function BillboardSettings() {
                   <Table>
                     <TableHeader>
                       <TableRow>
+                        <TableHead className="text-center w-16">الترتيب</TableHead>
                         <TableHead className="text-right">الشعار</TableHead>
-                        <TableHead className="text-right w-16">الترتيب</TableHead>
                         <TableHead className="text-right">اسم البلدية</TableHead>
                         <TableHead className="text-right">الكود</TableHead>
                         <TableHead className="text-right">تاريخ الإضافة</TableHead>
@@ -1348,6 +1426,130 @@ export default function BillboardSettings() {
                                     >
                                       حذف
                                     </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+         {/* Cities Tab */}
+        <TabsContent value="cities">
+          <Card className="expenses-preview-card">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="expenses-preview-title">
+                  <Building className="inline-block ml-2 h-5 w-5" />
+                  إدارة المدن ({cities.length} مدينة)
+                </CardTitle>
+                <Dialog open={cityDialog} onOpenChange={setCityDialog}>
+                  <DialogTrigger asChild>
+                    <Button 
+                      onClick={() => {
+                        setCityForm({ id: 0, name: '' });
+                        setEditMode(false);
+                      }}
+                      className="btn-primary"
+                    >
+                      <Plus className="h-4 w-4 ml-1" />
+                      إضافة مدينة جديدة
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="expenses-dialog-content">
+                    <DialogHeader>
+                      <DialogTitle className="text-right">
+                        {editMode ? 'تعديل المدينة' : 'إضافة مدينة جديدة'}
+                      </DialogTitle>
+                    </DialogHeader>
+                    <div className="expenses-dialog-form space-y-4 text-right" dir="rtl">
+                      <div>
+                        <Label className="expenses-form-label">اسم المدينة *</Label>
+                        <Input
+                          value={cityForm.name}
+                          onChange={(e) => setCityForm({ ...cityForm, name: e.target.value })}
+                          placeholder="مثال: طرابلس، بنغازي، مصراتة"
+                          className="text-right"
+                        />
+                      </div>
+                      <div className="flex gap-2 pt-4 justify-start flex-row-reverse">
+                        <Button onClick={handleCitySubmit} className="flex-1">
+                          <Save className="h-4 w-4 ml-1" />
+                          {editMode ? 'تحديث' : 'إضافة'}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setCityDialog(false)}
+                          className="flex-1"
+                        >
+                          <X className="h-4 w-4 ml-1" />
+                          إلغاء
+                        </Button>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {cities.length === 0 ? (
+                <div className="expenses-empty-state">
+                  <p>لا توجد مدن مضافة بعد</p>
+                </div>
+              ) : (
+                <div className="expenses-table-container">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-right w-16">الرقم</TableHead>
+                        <TableHead className="text-right">اسم المدينة</TableHead>
+                        <TableHead className="text-right">الإجراءات</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {cities.map((city, index) => (
+                        <TableRow key={city.id}>
+                          <TableCell className="font-bold text-muted-foreground w-16">
+                            {index + 1}
+                          </TableCell>
+                          <TableCell className="font-medium">{city.name}</TableCell>
+                          <TableCell>
+                            <div className="expenses-actions-cell">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleCityEdit(city)}
+                                className="card-hover"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button size="sm" variant="destructive">
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle className="text-right">تأكيد الحذف</AlertDialogTitle>
+                                    <AlertDialogDescription className="text-right">
+                                      هل أنت متأكد من حذف المدينة "{city.name}"؟ لا يمكن التراجع عن هذا الإجراء.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter className="justify-start flex-row-reverse gap-2">
+                                    <AlertDialogAction
+                                      onClick={() => handleCityDelete(city.id)}
+                                      className="bg-destructive hover:bg-destructive/90"
+                                    >
+                                      حذف
+                                    </AlertDialogAction>
+                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
                                   </AlertDialogFooter>
                                 </AlertDialogContent>
                               </AlertDialog>

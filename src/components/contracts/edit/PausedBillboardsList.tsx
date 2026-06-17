@@ -24,6 +24,8 @@ interface Props extends PausedPricingOptions {
   pricingMode?: 'months' | 'days';
   durationMonths?: number;
   durationDays?: number;
+  previousContractNumber?: number | null;
+  previousContractBillboardIds?: Set<string>;
 }
 
 export function PausedBillboardsList({
@@ -40,6 +42,8 @@ export function PausedBillboardsList({
   pricingMode,
   durationMonths,
   durationDays,
+  previousContractNumber,
+  previousContractBillboardIds,
   // Pricing options
   calculateBillboardPrice,
   printCostDetails,
@@ -310,6 +314,8 @@ export function PausedBillboardsList({
                 pricingMode={pricingMode}
                 durationMonths={durationMonths}
                 durationDays={durationDays}
+                previousContractNumber={previousContractNumber}
+                previousContractBillboardIds={previousContractBillboardIds}
               />
             ))}
           </div>

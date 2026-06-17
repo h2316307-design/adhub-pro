@@ -13,6 +13,7 @@ import {
   DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
 import { ExportWithContractsDialog } from './billboards/ExportWithContractsDialog';
+import { ExportMunicipalityDialog } from './billboards/ExportMunicipalityDialog';
 
 interface BillboardActionsProps {
   exportToExcel: () => void;
@@ -33,14 +34,15 @@ interface BillboardActionsProps {
   uploadFollowUpToSite?: () => void;
   uploadAllToSite?: () => void;
   syncToGoogleSheets: () => Promise<void>;
-  setPrintFiltersOpen: (open: boolean) => void;
-  setAdvancedPrintOpen?: (open: boolean) => void;
+  onAdvancedPrintClick?: () => void;
   availableBillboardsCount: number;
   initializeAddForm: () => void;
   setAddOpen: (open: boolean) => void;
   setBulkAddOpen?: (open: boolean) => void;
   setExcelImportOpen?: (open: boolean) => void;
   setExcelImageImportOpen?: (open: boolean) => void;
+  exportMunicipalityToExcel: (excludeHidden: boolean, selectedMunicipality: string) => void;
+  municipalities: string[];
 }
 
 export const BillboardActions: React.FC<BillboardActionsProps> = ({
@@ -62,19 +64,21 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
   uploadFollowUpToSite,
   uploadAllToSite,
   syncToGoogleSheets,
-  setPrintFiltersOpen,
-  setAdvancedPrintOpen,
+  onAdvancedPrintClick,
   availableBillboardsCount,
   initializeAddForm,
   setAddOpen,
   setBulkAddOpen,
   setExcelImportOpen,
   setExcelImageImportOpen,
+  exportMunicipalityToExcel,
+  municipalities,
 }) => {
   const navigate = useNavigate();
   const [isSyncing, setIsSyncing] = useState(false);
   const [contractsDialogOpen, setContractsDialogOpen] = useState(false);
   const [upcomingContractsDialogOpen, setUpcomingContractsDialogOpen] = useState(false);
+  const [municipalityDialogOpen, setMunicipalityDialogOpen] = useState(false);
   const [monthsAhead, setMonthsAhead] = useState<number>(4);
 
   const handleSync = async () => {
@@ -105,6 +109,10 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
           <DropdownMenuItem onClick={exportToExcel} className="cursor-pointer gap-2">
             <Download className="h-4 w-4 text-blue-500" />
             تصدير جميع اللوحات
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setMunicipalityDialogOpen(true)} className="cursor-pointer gap-2">
+            <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
+            تنزيل لوحات البلدية Excel
           </DropdownMenuItem>
           <DropdownMenuItem onClick={copyAllToClipboard} className="cursor-pointer gap-2">
             <Copy className="h-4 w-4 text-blue-500" />
@@ -222,12 +230,12 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
 
       {/* Print Button */}
       <Button 
-        onClick={() => setPrintFiltersOpen(true)}
+        onClick={onAdvancedPrintClick}
         variant="outline"
         className="gap-2 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-950 dark:to-purple-950 hover:shadow-md transition-all border-violet-200 dark:border-violet-800"
       >
         <Printer className="h-4 w-4 text-violet-600" />
-        <span className="hidden sm:inline">طباعة</span>
+        <span className="hidden sm:inline">طباعة اللوحات</span>
         <span className="bg-violet-100 dark:bg-violet-900 text-violet-700 dark:text-violet-300 text-xs px-2 py-0.5 rounded-full font-medium">
           {availableBillboardsCount}
         </span>
@@ -251,8 +259,8 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
             <Camera className="h-4 w-4 text-orange-600" />
             إعادة تصوير
           </DropdownMenuItem>
-          {setAdvancedPrintOpen && (
-            <DropdownMenuItem onClick={() => setAdvancedPrintOpen(true)} className="cursor-pointer gap-2">
+          {onAdvancedPrintClick && (
+            <DropdownMenuItem onClick={onAdvancedPrintClick} className="cursor-pointer gap-2">
               <Settings2 className="h-4 w-4 text-indigo-600" />
               طباعة متقدمة
             </DropdownMenuItem>
@@ -349,6 +357,14 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
           description="اختر العقود التي تريد إضافة لوحاتها إلى ملف اللوحات المتاحة والقادمة (بدون تاريخ انتهاء)"
         />
       )}
+
+      {/* Dialog for municipality export */}
+      <ExportMunicipalityDialog
+        open={municipalityDialogOpen}
+        onOpenChange={setMunicipalityDialogOpen}
+        onExport={exportMunicipalityToExcel}
+        municipalities={municipalities}
+      />
     </div>
   );
 };

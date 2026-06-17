@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MapPin, Calendar, Building, Building2, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History, EyeOff, Wrench, CalendarPlus, Pencil, ImageIcon, Check, ZoomIn, X, Copy, Layers, MapPinned, AlertTriangle } from 'lucide-react';
+import { MapPin, Calendar, Building, Building2, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History, EyeOff, Wrench, CalendarPlus, Pencil, ImageIcon, Check, ZoomIn, X, Copy, Layers, MapPinned, AlertTriangle, Wallet } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate, formatLongArabicDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -121,6 +121,38 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   
   // ✅ NEW: اللون الغالب من التصميم
   const [dominantColor, setDominantColor] = useState<string | null>(null);
+  
+  // Fetch corporate price from the pricing list for شركات
+  const [corporatePrice, setCorporatePrice] = useState<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    const fetchCorporatePrice = async () => {
+      const sizeName = billboard.Size || billboard.size || '';
+      const levelName = billboard.Level || billboard.level || 'A';
+      if (!sizeName) return;
+      try {
+        const { data, error } = await supabase
+          .from('pricing')
+          .select('one_month, "2_months", "3_months", "6_months", full_year, one_day')
+          .eq('size', sizeName)
+          .eq('billboard_level', levelName)
+          .eq('customer_category', 'شركات')
+          .maybeSingle();
+
+        if (active && !error && data) {
+          const price = data.one_month || data['2_months'] || data['3_months'] || data['6_months'] || data.full_year || data.one_day || null;
+          setCorporatePrice(price);
+        }
+      } catch (e) {
+        console.error('Error fetching corporate price for card:', e);
+      }
+    };
+    fetchCorporatePrice();
+    return () => {
+      active = false;
+    };
+  }, [billboard.Size, billboard.Level]);
 
   // ✅ استخراج اللون الغالب من تصميم الوجه الأمامي (من latestTask أو billboard)
   useEffect(() => {
@@ -1234,6 +1266,20 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                 </span>
               )}
             </div>
+            {/* Price Row */}
+            {!hasActiveContract && Number(corporatePrice !== null ? corporatePrice : (billboard.Price || 0)) > 0 && (
+              <div className="flex items-center justify-between text-[11px] bg-primary/5 border border-primary/10 rounded-lg px-2 py-1 mt-1">
+                <span className="text-[10px] text-muted-foreground font-semibold flex items-center gap-1">
+                  <Wallet className="h-3 w-3 text-primary" /> سعر الإيجار شهرياً
+                </span>
+                <span className="flex items-baseline gap-0.5">
+                  <span className="font-extrabold text-[12px] text-primary font-manrope">
+                    {Number(corporatePrice !== null ? corporatePrice : (billboard.Price || 0)).toLocaleString()}
+                  </span>
+                  <span className="text-[9px] text-muted-foreground font-semibold">د.ل/شهرياً</span>
+                </span>
+              </div>
+            )}
           </div>
             <CardContent className="flex flex-col flex-1 p-2.5 sm:p-3 space-y-3">
               {/* 1. معلومات العقد والتصميم النشط (تذكرة مثقوبة بأسلوب أوبن ديزاين رأسية) */}
@@ -1462,12 +1508,12 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                     هذه اللوحة شاغرة حالياً وممتازة لحملتكم القادمة. يمكنك حجزها فوراً أو تعديل أسعار المستويات.
                   </p>
                   
-                  {billboard.Price && (
+                  {Number(corporatePrice !== null ? corporatePrice : (billboard.Price || 0)) > 0 && (
                     <div className="flex items-center justify-between border-t border-emerald-500/10 pt-2 mt-2 tabular-nums">
                       <span className="text-[10px] text-muted-foreground">السعر الأساسي:</span>
                       <span className="flex items-baseline gap-0.5">
                         <span className="font-extrabold text-[13px] text-emerald-600 dark:text-emerald-400 font-manrope">
-                          {Number(billboard.Price).toLocaleString()}
+                          {Number(corporatePrice !== null ? corporatePrice : (billboard.Price || 0)).toLocaleString()}
                         </span>
                         <span className="text-[9px] text-muted-foreground font-semibold">د.ل/شهرياً</span>
                       </span>

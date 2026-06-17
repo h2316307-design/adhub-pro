@@ -173,19 +173,42 @@ const MapSearchBar = memo(function MapSearchBar({
     });
     return all;
   }, [localSuggestions, placeSuggestions]);
-
   const handleSelect = useCallback((suggestion: SearchSuggestion) => {
     setShowDropdown(false);
     if ((suggestion.type === 'coordinates' || suggestion.type === 'place') && suggestion.coords && onNavigateToCoords) {
       onNavigateToCoords(suggestion.coords.lat, suggestion.coords.lng);
+      onChange('');
     } else if (suggestion.type === 'billboard' && suggestion.billboard && onSelectBillboard) {
       onSelectBillboard(suggestion.billboard);
+      onChange('');
     } else if (suggestion.type === 'landmark' && suggestion.billboard && onSelectBillboard) {
       onSelectBillboard(suggestion.billboard);
+      onChange('');
     } else if (suggestion.type === 'district') {
-      onChange(suggestion.label);
+      // Calculate geographic center of billboards in this district/municipality
+      const districtBillboards = billboards.filter(b => 
+        String((b as any).District || '').trim() === String(suggestion.label).trim() || 
+        String((b as any).Municipality || '').trim() === String(suggestion.label).trim()
+      );
+      if (districtBillboards.length > 0) {
+        let latSum = 0;
+        let lngSum = 0;
+        let count = 0;
+        districtBillboards.forEach(b => {
+          const coords = parseCoords(b);
+          if (coords) {
+            latSum += coords.lat;
+            lngSum += coords.lng;
+            count++;
+          }
+        });
+        if (count > 0 && onNavigateToCoords) {
+          onNavigateToCoords(latSum / count, lngSum / count);
+        }
+      }
+      onChange('');
     }
-  }, [onNavigateToCoords, onSelectBillboard, onChange]);
+  }, [onNavigateToCoords, onSelectBillboard, onChange, billboards]);
 
   const getIcon = (type: string) => {
     switch (type) {

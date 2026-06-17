@@ -8,7 +8,7 @@ import { BillboardImage } from '@/components/BillboardImage';
 import { BillboardImageZoom } from './BillboardImageZoom';
 import {
   PauseCircle, Trash2, Save, Calendar, RotateCcw,
-  Printer, Wrench, Clock, Repeat2, X as XIcon,
+  Printer, Wrench, Clock, Repeat2, X as XIcon, MapPin,
 } from 'lucide-react';
 import { formatAmount } from '@/lib/formatUtils';
 import { updatePausedBillboard, deletePausedBillboard, resumePausedBillboard } from '@/services/pausedBillboardsService';
@@ -39,6 +39,8 @@ interface Props {
   pricingMode?: 'months' | 'days';
   durationMonths?: number;
   durationDays?: number;
+  previousContractNumber?: number | null;
+  previousContractBillboardIds?: Set<string>;
 }
 
 function PausedBillboardCardImpl({
@@ -55,6 +57,8 @@ function PausedBillboardCardImpl({
   pricingMode = 'months',
   durationMonths = 0,
   durationDays = 0,
+  previousContractNumber,
+  previousContractBillboardIds = new Set(),
 }: Props) {
   const { confirm } = useSystemDialog();
   const raw = item.raw;
@@ -162,6 +166,7 @@ function PausedBillboardCardImpl({
     (manualRefund !== null && Number(manualRefund) !== Number(raw.manual_refund || 0));
 
   const isSingleFace = item.isSingleFace;
+  const isRenewed = previousContractBillboardIds.has(billboardId);
 
   const handleSave = async () => {
     try {
@@ -297,17 +302,167 @@ function PausedBillboardCardImpl({
   return (
     <div
       data-paused-bb={raw.billboard_id}
-      className={`group relative h-full flex flex-col bg-card border-2 rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 min-w-0 ${
+      className={`group relative h-full flex flex-col bg-card border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-all duration-300 min-w-0 ${
         highlight
-          ? 'border-emerald-500 ring-4 ring-emerald-400/40 shadow-2xl'
-          : 'border-amber-500/60 hover:border-amber-500'
+          ? 'border-emerald-500 ring-2 ring-emerald-500/50 bg-gradient-to-br from-emerald-500/[0.02] to-transparent'
+          : isRenewed
+            ? 'border-emerald-500/40 shadow-emerald-500/5 bg-gradient-to-br from-emerald-500/[0.02] to-transparent'
+            : 'border-amber-500/40 bg-gradient-to-br from-amber-500/[0.01] to-transparent'
       }`}
     >
-      {/* Top Pause Strip — bold red banner so it cannot be missed */}
-      <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white px-3 py-2 flex items-center justify-between gap-2 shadow-md">
+      {/* Header: Billboard Name, ID & Action Buttons */}
+      <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-muted/20 shrink-0">
+        <div className="flex items-center gap-1.5 overflow-hidden">
+          <span className="text-[10px] bg-primary/10 text-primary font-manrope font-extrabold px-2 py-0.5 rounded-full border border-primary/20 shrink-0">
+            {billboardId}
+          </span>
+          <h4 className="text-sm font-bold text-foreground truncate max-w-[90px]" title={name}>
+            {name}
+          </h4>
+          {isRenewed && (
+            <Badge className="bg-emerald-500/10 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold px-1.5 py-0.5 shrink-0 select-none flex items-center gap-1">
+              <RotateCcw className="h-2.5 w-2.5 ml-1" />
+              مجدد {previousContractNumber ? `#${previousContractNumber}` : ''}
+            </Badge>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {/* Save Action */}
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={!dirty || saving}
+            onClick={handleSave}
+            className={`h-7 w-7 p-0 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200 ${
+              dirty 
+                ? 'text-emerald-600 bg-emerald-500/10 hover:bg-emerald-500/20 hover:text-emerald-700' 
+                : 'text-muted-foreground/40 hover:bg-muted/10 cursor-not-allowed'
+            }`}
+            title={dirty ? "حفظ التغييرات" : "محفوظ"}
+          >
+            <Save className="h-4 w-4" />
+          </Button>
+
+          {/* Resume Action */}
+          {(bb?.Contract_Number && Number(bb.Contract_Number) !== Number(raw.contract_number)) ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResume}
+              className="h-7 w-7 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+              title={`إيقاف اللوحة من العقد الآخر رقم ${bb.Contract_Number}`}
+            >
+              <PauseCircle className="h-4 w-4" />
+            </Button>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleResume}
+              disabled={!canResume}
+              className={`h-7 w-7 p-0 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 ${
+                canResume
+                  ? 'text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10 cursor-pointer'
+                  : 'text-muted-foreground/40 hover:bg-muted/10 cursor-not-allowed'
+              }`}
+              title="استئناف اللوحة في العقد الحالي"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Replacement Action */}
+          {replacement ? (
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button 
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50/10 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+                  title="البديل المخصص للوحة"
+                >
+                  <Repeat2 className="h-4 w-4" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent align="end" className="w-72 p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400">
+                  <Repeat2 className="h-4 w-4" /> لوحة بديلة
+                </div>
+                <div className="flex items-center gap-3">
+                  {replacementBillboard?.Image_URL && (
+                    <img src={replacementBillboard.Image_URL} alt="" className="w-16 h-16 object-cover rounded border border-border" />
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="font-bold text-sm truncate">
+                      {replacementBillboard?.Billboard_Name || replacement.replacement_billboard_name || `#${replacement.replacement_billboard_id}`}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {replacementBillboard?.City || ''} {replacementBillboard?.Size ? `• ${replacementBillboard.Size}` : ''}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground truncate">
+                      {replacementBillboard?.Nearest_Landmark || ''}
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="bg-background/60 rounded px-2 py-1.5 border border-blue-500/20">
+                    <div className="text-muted-foreground">تبدأ من</div>
+                    <div className="font-bold tabular-nums" dir="ltr">{replacement.start_date}</div>
+                  </div>
+                  <div className="bg-background/60 rounded px-2 py-1.5 border border-blue-500/20">
+                    <div className="text-muted-foreground">المبلغ المخصص</div>
+                    <div className="font-bold text-primary tabular-nums" dir="ltr">
+                      {formatAmount(Number(replacement.allocated_amount) || 0)} {currencySymbol}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-1 pt-1">
+                  <button
+                    onClick={() => setReplaceDialogOpen(true)}
+                    className="flex-1 text-[11px] px-2 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 cursor-pointer"
+                  >
+                    تغيير البديل
+                  </button>
+                  <button
+                    onClick={handleRemoveReplacement}
+                    className="flex-1 text-[11px] px-2 py-1.5 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 flex items-center justify-center gap-1 cursor-pointer"
+                  >
+                    <XIcon className="h-3 w-3" /> إلغاء التبديل
+                  </button>
+                </div>
+              </PopoverContent>
+            </Popover>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setReplaceDialogOpen(true)}
+              className="h-7 w-7 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50/10 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+              title="تخصيص لوحة بديلة"
+            >
+              <Repeat2 className="h-4 w-4" />
+            </Button>
+          )}
+
+          {/* Delete Action */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDelete}
+            className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+            title="حذف اللوحة الموقوفة"
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Paused Banner: Red-orange gradient banner directly below the header showing pause status */}
+      <div className="bg-gradient-to-r from-red-600 via-red-500 to-orange-500 text-white px-3 py-2 flex items-center justify-between gap-2 shadow-inner border-b border-red-700/30">
         <div className="flex items-center gap-2 text-xs font-extrabold">
-          <PauseCircle className="h-5 w-5 animate-pulse" />
-          <span className="uppercase tracking-wider">موقوفة</span>
+          <PauseCircle className="h-4 w-4 animate-pulse" />
+          <span className="uppercase tracking-wider">موقوفة:</span>
           <span className="opacity-95 tabular-nums bg-black/25 rounded px-2 py-0.5" dir="ltr">
             {pauseDate || raw.pause_date || '—'}
           </span>
@@ -316,179 +471,102 @@ function PausedBillboardCardImpl({
           </span>
         </div>
         {sourceContract ? (
-          <Badge className="bg-white/25 text-white border-0 text-[10px] font-bold">من العقد #{sourceContract}</Badge>
+          <Badge className="bg-white/20 text-white border-0 text-[10px] font-bold">من العقد #{sourceContract}</Badge>
         ) : (
-          <Badge className="bg-white/25 text-white border-0 text-[10px] font-bold">مضافة للعقد</Badge>
+          <Badge className="bg-white/20 text-white border-0 text-[10px] font-bold">مضافة للعقد</Badge>
         )}
       </div>
 
-      {/* Top Action Bar — primary actions sit above everything, never overlap image */}
-      <div className="border-b border-border bg-muted/40 px-2 py-2 flex items-center gap-1 h-12 shrink-0">
-        <Button
-          size="sm"
-          onClick={handleSave}
-          disabled={!dirty || saving}
-          className={`flex-1 h-8 text-xs gap-1 ${dirty ? 'bg-emerald-600 hover:bg-emerald-700 text-white' : ''}`}
-        >
-          <Save className="h-3.5 w-3.5" />
-          {saving ? '...' : dirty ? 'حفظ' : 'محفوظ'}
-        </Button>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleResume}
-          disabled={!canResume}
-          className="h-8 px-2 text-xs gap-1 text-emerald-700 border-emerald-500/40 hover:bg-emerald-500/10"
-          title={canResume ? 'استئناف اللوحة' : 'محجوزة في عقد آخر'}
-        >
-          <RotateCcw className="h-3.5 w-3.5" /> استئناف
-        </Button>
-        {replacement ? (
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button size="sm" variant="outline" className="h-8 px-2 text-xs gap-1 text-blue-700 border-blue-500/40 hover:bg-blue-500/10">
-                <Repeat2 className="h-3.5 w-3.5" /> البديل
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-72 p-3 space-y-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-blue-700 dark:text-blue-400">
-                <Repeat2 className="h-4 w-4" /> لوحة بديلة
-              </div>
-              <div className="flex items-center gap-3">
-                {replacementBillboard?.Image_URL && (
-                  <img src={replacementBillboard.Image_URL} alt="" className="w-16 h-16 object-cover rounded border border-border" />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="font-bold text-sm truncate">
-                    {replacementBillboard?.Billboard_Name || replacement.replacement_billboard_name || `#${replacement.replacement_billboard_id}`}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    {replacementBillboard?.City || ''} {replacementBillboard?.Size ? `• ${replacementBillboard.Size}` : ''}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground truncate">
-                    {replacementBillboard?.Nearest_Landmark || ''}
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px]">
-                <div className="bg-background/60 rounded px-2 py-1.5 border border-blue-500/20">
-                  <div className="text-muted-foreground">تبدأ من</div>
-                  <div className="font-bold tabular-nums" dir="ltr">{replacement.start_date}</div>
-                </div>
-                <div className="bg-background/60 rounded px-2 py-1.5 border border-blue-500/20">
-                  <div className="text-muted-foreground">المبلغ المخصص</div>
-                  <div className="font-bold text-primary tabular-nums" dir="ltr">
-                    {formatAmount(Number(replacement.allocated_amount) || 0)} {currencySymbol}
-                  </div>
-                </div>
-              </div>
-              <div className="flex gap-1 pt-1">
-                <button
-                  onClick={() => setReplaceDialogOpen(true)}
-                  className="flex-1 text-[11px] px-2 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
-                >
-                  تغيير البديل
-                </button>
-                <button
-                  onClick={handleRemoveReplacement}
-                  className="flex-1 text-[11px] px-2 py-1.5 rounded bg-destructive/10 text-destructive hover:bg-destructive/20 flex items-center justify-center gap-1"
-                >
-                  <XIcon className="h-3 w-3" /> إلغاء التبديل
-                </button>
-              </div>
-            </PopoverContent>
-          </Popover>
-        ) : (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setReplaceDialogOpen(true)}
-            className="h-8 px-2 text-xs gap-1 text-blue-700 border-blue-500/40 hover:bg-blue-500/10"
-            title="تبديل ببديلة"
-          >
-            <Repeat2 className="h-3.5 w-3.5" /> بديل
-          </Button>
-        )}
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={handleDelete}
-          className="h-8 w-8 p-0 text-destructive border-destructive/40 hover:bg-destructive/10"
-          title="حذف"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </Button>
-      </div>
-
-      {/* Image — clean, click to zoom */}
-      <div className="relative h-44 bg-muted shrink-0">
-        <BillboardImageZoom billboard={item.billboard} alt={name} />
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent pointer-events-none" />
-        <div className="absolute bottom-3 right-3 text-white pointer-events-none">
-          <h4 className="text-lg font-bold drop-shadow-lg">{name}</h4>
-        </div>
-        {replacement && (
-          <div className="absolute top-2 left-2 pointer-events-none">
-            <Badge className="bg-blue-600 text-white border-0 text-[10px] font-bold flex items-center gap-1">
-              <Repeat2 className="h-3 w-3" /> بديلة
+      {/* Image Section — click to zoom */}
+      <div className="relative h-44 bg-muted overflow-hidden shrink-0">
+        <BillboardImageZoom
+          billboard={item.billboard}
+          alt={name}
+        />
+        {/* Gradient Overlay */}
+        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
+        
+        {/* Badges overlayed on top-right of image */}
+        <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 items-end max-w-[90%] pointer-events-none">
+          {isSingleFace && (
+            <Badge className="bg-amber-600/90 text-white text-[10px] font-bold px-2 py-0.5 shadow-md border border-amber-500/20 backdrop-blur-sm">
+              وجه واحد
             </Badge>
-          </div>
-        )}
+          )}
+          {replacement && (
+            <Badge className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-0.5 shadow-md flex items-center gap-1 border border-blue-500/20 backdrop-blur-sm">
+              <Repeat2 className="h-3.5 w-3.5" /> بديلة
+            </Badge>
+          )}
+        </div>
       </div>
 
       {/* Content */}
       <div className="p-4 space-y-4 flex-1 flex flex-col min-w-0">
-        {/* Location */}
-        <p className="text-sm text-foreground/80 line-clamp-2 leading-relaxed min-h-[2.5rem]">
-          {bb.location || bb.Nearest_Landmark || raw.billboard_name || 'لا يوجد موقع'}
-        </p>
-
-        {/* Details Grid */}
-        <div className="grid grid-cols-4 gap-2">
-          <div className="text-center bg-primary/10 border border-primary/20 rounded-lg py-2.5 px-1">
-            <div className="text-[10px] text-primary/70 mb-0.5 font-medium">الحجم</div>
-            <div className="text-sm font-bold text-primary font-manrope">{getDisplaySize(bb)}</div>
-          </div>
-          <div className="text-center bg-muted border border-border rounded-lg py-2.5 px-1">
-            <div className="text-[10px] text-muted-foreground mb-0.5 font-medium">الوجوه</div>
-            <div className="text-sm font-bold text-foreground font-manrope">{getFacesCount(bb)}</div>
-          </div>
-          <div className="text-center bg-muted border border-border rounded-lg py-2.5 px-1">
-            <div className="text-[10px] text-muted-foreground mb-0.5 font-medium">المدينة</div>
-            <div className="text-sm font-bold text-foreground">{bb.city || bb.City || '-'}</div>
-          </div>
-          <div className="text-center bg-primary/10 border border-primary/30 rounded-lg py-2.5 px-1">
-            <div className="text-[10px] text-primary/80 mb-0.5 font-medium">المستوى</div>
-            <div className="text-sm font-bold text-primary">{bb.level || bb.Level || '-'}</div>
+        {/* Location / Nearest Landmark */}
+        <div className="flex items-start gap-2 bg-muted/30 p-2.5 rounded-xl border border-border/40 shrink-0">
+          <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+          <div className="space-y-0.5">
+            <span className="text-[10px] text-muted-foreground block font-medium">أقرب نقطة دالة</span>
+            <p className="text-sm font-extrabold text-foreground leading-snug">
+              {bb.location || bb.Nearest_Landmark || raw.billboard_name || 'غير محدد'}
+            </p>
           </div>
         </div>
 
-        {/* Single face toggle */}
+        {/* Details Grid - Using site identity colors (4 columns) */}
+        <div className="grid grid-cols-4 gap-1.5 shrink-0">
+          <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
+            <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المقاس</div>
+            <div className="text-xs font-extrabold text-foreground font-manrope">{getDisplaySize(bb)}</div>
+          </div>
+          <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
+            <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المنطقة</div>
+            <div className="text-xs font-bold text-foreground truncate" title={bb.District || bb.district || '-'}>
+              {bb.District || bb.district || '-'}
+            </div>
+          </div>
+          <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
+            <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المدينة</div>
+            <div className="text-xs font-bold text-foreground truncate">{bb.city || bb.City || '-'}</div>
+          </div>
+          <div className="text-center bg-primary/5 border border-primary/20 rounded-xl py-2 px-1">
+            <div className="text-[9px] text-primary/70 mb-0.5 font-medium">المستوى</div>
+            <div className="text-xs font-extrabold text-primary font-manrope">{bb.level || bb.Level || '-'}</div>
+          </div>
+        </div>
+
+        {/* Segmented Selector for Face Count */}
         {onToggleSingleFace && (
-          <button
-            onClick={() => onToggleSingleFace(billboardId)}
-            className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl border-2 transition-all duration-200 font-medium text-sm ${
-              isSingleFace
-                ? 'bg-amber-500/15 border-amber-500 text-amber-600'
-                : 'bg-muted/50 border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600'
-            }`}
-          >
-            <span className="flex items-center gap-2">
-              <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
-                isSingleFace ? 'bg-amber-500 border-amber-500 text-white' : 'border-border text-muted-foreground'
-              }`}>
-                {isSingleFace ? '١' : '٢'}
-              </span>
-              عدد الوجوه
-            </span>
-            <span className="text-xs">
-              {isSingleFace ? '⚡ وجه واحد' : 'انقر للتغيير'}
-            </span>
-          </button>
+          <div className="flex items-center justify-between bg-muted/40 p-1 rounded-xl border border-border/50 text-xs shrink-0 select-none">
+            <span className="font-bold text-foreground/75 mr-2">عدد الوجوه</span>
+            <div className="flex bg-muted/80 rounded-lg p-0.5 border border-border/20">
+              <button
+                onClick={() => isSingleFace && onToggleSingleFace(billboardId)}
+                className={`px-3 py-1 rounded-md font-bold text-[11px] transition-all duration-200 cursor-pointer ${
+                  !isSingleFace
+                    ? 'bg-primary text-primary-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                وجهين
+              </button>
+              <button
+                onClick={() => !isSingleFace && onToggleSingleFace(billboardId)}
+                className={`px-3 py-1 rounded-md font-bold text-[11px] transition-all duration-200 cursor-pointer ${
+                  isSingleFace
+                    ? 'bg-amber-500 text-white shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                وجه واحد
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Pricing Section */}
-        <div className="bg-card border border-border rounded-xl p-4 space-y-2.5 min-h-[180px]">
+        <div className="bg-muted/20 border border-border/60 rounded-xl p-3.5 space-y-2 shrink-0">
           <div className="flex justify-between items-center">
             <span className="text-sm font-medium text-muted-foreground">الإيجار الأساسي</span>
             <span className="text-lg font-bold text-primary font-manrope">
@@ -716,6 +794,8 @@ export const PausedBillboardCard = React.memo(PausedBillboardCardImpl, (prev, ne
   if (prev.durationMonths !== next.durationMonths) return false;
   if (prev.durationDays !== next.durationDays) return false;
   if (prev.contractStartDate !== next.contractStartDate) return false;
+  if (prev.previousContractNumber !== next.previousContractNumber) return false;
+  if (prev.previousContractBillboardIds !== next.previousContractBillboardIds) return false;
   // ⚠️ نتعمد تجاهل تغيّر مرجع الدوال (onChanged/onToggleSingleFace)
   // لأنها تُعاد كل render من الأب وتسبب اهتزاز الكروت دون أي تغيير مرئي.
   const a: any = prev.item, b: any = next.item;

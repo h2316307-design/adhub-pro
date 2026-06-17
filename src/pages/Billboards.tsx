@@ -97,8 +97,9 @@ export default function Billboards() {
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [excelImageImportOpen, setExcelImageImportOpen] = useState(false);
   // ✅ Billboard selection state
-  // ✅ Billboard selection state
   const [selectedBillboardIds, setSelectedBillboardIds] = useState<Set<number>>(new Set());
+  const [excludeFriendlyAndHidden, setExcludeFriendlyAndHidden] = useState(true);
+  const [selectAvailableOnly, setSelectAvailableOnly] = useState(false);
   const { data: activeStatusesMap = {} } = useAllActiveBillboardStatuses();
   const [printFilters, setPrintFilters] = useState({
     municipality: 'all',
@@ -181,6 +182,12 @@ export default function Billboards() {
         const billboard = list.find((b: any) => String(b.ID) === String(billboardId));
         if (billboard) {
           setSelectedBillboard(billboard);
+          setMaintenanceForm({
+            status: billboard.maintenance_status || '',
+            type: billboard.maintenance_type || '',
+            description: billboard.maintenance_notes || '',
+            priority: billboard.maintenance_priority || 'normal'
+          });
           setIsMaintenanceDialogOpen(true);
         }
       }
@@ -685,6 +692,132 @@ export default function Billboards() {
     });
   }, [filteredBillboards, sizeRankMap]);
 
+  // ✅ NEW: Map billboards memo - shows maintenance and removal by default unless filtered
+  const mapBillboards = useMemo(() => {
+    const searched = enhancedSearchBillboards(billboards, searchQuery);
+    const afterFilters = searched.filter((billboard) => {
+      const statusValue = String(((billboard as any).Status ?? (billboard as any).status ?? '')).trim();
+      const statusLower = statusValue.toLowerCase();
+      const maintRaw = (billboard as any).maintenance_status ?? '';
+      const maintenanceStatus = String(maintRaw).trim();
+      
+      const hasContract = !!(getCurrentContractNumber(billboard) && getCurrentContractNumber(billboard) !== '0');
+      const contractExpired = isContractExpired((billboard as any).Rent_End_Date ?? (billboard as any).rent_end_date);
+      
+      const isAvailable = isBillboardAvailable(billboard as any);
+      const isBooked = !isAvailable && (((statusLower === 'rented' || statusValue === 'مؤجر' || statusValue === 'محجوز') || hasContract) && !contractExpired);
+      
+      let isNearExpiry = false;
+      const end = (billboard as any).Rent_End_Date ?? (billboard as any).rent_end_date;
+      if (end && !contractExpired) {
+        try {
+          const endDate = new Date(end);
+          const diffDays = Math.ceil((endDate.getTime() - Date.now()) / 86400000);
+          isNearExpiry = diffDays > 0 && diffDays <= 20;
+        } catch {}
+      }
+
+      const isExpired = contractExpired && hasContract;
+      
+      const isNotInstalled = maintenanceStatus === 'لم يتم التركيب';
+      const needsRemoval = maintenanceStatus === 'تحتاج ازالة لغرض التطوير';
+      const isUnderMaintenance = maintenanceStatus === 'maintenance' || maintenanceStatus === 'repair_needed' || maintenanceStatus === 'out_of_service';
+      const isDamaged = maintenanceStatus === 'متضررة اللوحة';
+      
+      const isRemoved = statusValue === 'إزالة' || statusLower === 'ازالة' || maintenanceStatus === 'removed' || maintenanceStatus === 'تمت الإزالة' || maintenanceStatus === 'تحتاج ازالة لغرض التطوير' || maintenanceStatus === 'لم يتم التركيب';
+      const isRemovalStatus = isRemoved; // إزالة status
+      
+      const isHiddenFromAvailable = (billboard as any).is_visible_in_available === false;
+      const isFriendBillboard = !!(billboard as any).friend_company_id;
+      
+      const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.some(s => (
+        (s === 'متاحة' && isAvailable) ||
+        (s === 'محجوز' && isBooked) ||
+        (s === 'قريبة الانتهاء' && isNearExpiry) ||
+        (s === 'منتهي' && isExpired) ||
+        (s === 'إزالة' && isRemovalStatus) ||
+        (s === 'لم يتم التركيب' && isNotInstalled) ||
+        (s === 'تحتاج ازالة لغرض التطوير' && needsRemoval) ||
+        (s === 'قيد الصيانة' && (isUnderMaintenance || statusValue === 'صيانة' || statusValue === 'تحتاج صيانة' || statusValue === 'قيد الصيانة' || maintenanceStatus === 'قيد الصيانة')) ||
+        (s === 'متضررة اللوحة' && isDamaged) ||
+        (s === 'مخفية من المتاح' && isHiddenFromAvailable) ||
+        (s === 'لوحات صديقة' && isFriendBillboard) ||
+        (s === 'ممزقة' && !!(activeStatusesMap[Number((billboard as any).ID || (billboard as any).id)] || []).some((x: any) => x.status_type === 'torn_ad'))
+      ));
+      
+      const matchesCity = selectedCities.length === 0 || selectedCities.includes((billboard as any).City || billboard.city || '');
+      const sizeVal = String((billboard as any).Size || billboard.size || '').trim();
+      const matchesSize = selectedSizes.length === 0 || selectedSizes.includes(sizeVal);
+      const municipalityVal = String((billboard as any).Municipality || (billboard as any).municipality || '').trim();
+      const matchesMunicipality = selectedMunicipalities.length === 0 || selectedMunicipalities.includes(municipalityVal);
+      
+      const districtVal = String((billboard as any).District || (billboard as any).district || '').trim();
+      const matchesDistrict = selectedDistricts.length === 0 || selectedDistricts.includes(districtVal);
+      
+      const adTypeVal = String(billboard.Ad_Type || billboard.adType || billboard.ad_type || billboard.AdType || 
+                              (billboard.contracts && billboard.contracts[0]?.['Ad Type']) || '').trim();
+      const matchesAdType = selectedAdTypes.length === 0 || selectedAdTypes.includes(adTypeVal);
+      
+      const customerVal = String((billboard as any).Customer_Name ?? (billboard as any).clientName ?? '');
+      const matchesCustomer = selectedCustomers.length === 0 || selectedCustomers.includes(customerVal);
+      
+      const contractNoVal = getCurrentContractNumber(billboard);
+      let matchesContractNo = true;
+      
+      if (selectedContractNumbers.length > 0) {
+        if (!contractNoVal || contractNoVal === '0') {
+          matchesContractNo = false;
+        } else {
+          matchesContractNo = selectedContractNumbers.some(selectedContract => {
+            const selected = String(selectedContract).trim();
+            const current = String(contractNoVal).trim();
+            if (current === selected) return true;
+            const selectedNum = parseInt(selected);
+            const currentNum = parseInt(current);
+            if (!isNaN(selectedNum) && !isNaN(currentNum) && selectedNum === currentNum) {
+              return true;
+            }
+            return false;
+          });
+        }
+      }
+      
+      const matchesOwnerCompany = selectedOwnerCompanies.length === 0 || selectedOwnerCompanies.includes((billboard as any).own_company_id || '');
+      const result = matchesStatus && matchesCity && matchesSize && matchesMunicipality && matchesDistrict && matchesAdType && matchesCustomer && matchesContractNo && matchesOwnerCompany;
+      
+      return result;
+    });
+
+    if (isMarketer) {
+      return afterFilters.filter((billboard: any) => {
+        if (billboard.friend_company_id && billboard.is_visible_in_available === false) return false;
+        const isAvailable = isBillboardAvailable(billboard);
+        if (isAvailable) return true;
+        if (marketerCustomerId) {
+          const billboardId = String(billboard.ID || billboard.id);
+          return marketerBillboardIds.has(billboardId);
+        }
+        return false;
+      });
+    }
+
+    return afterFilters;
+  }, [billboards, searchQuery, selectedStatuses, selectedCities, selectedSizes, selectedMunicipalities, selectedDistricts, selectedAdTypes, selectedCustomers, selectedContractNumbers, selectedOwnerCompanies, isContractExpired, isMarketer, marketerCustomerId, marketerBillboardIds, activeStatusesMap]);
+
+  const sortedMapBillboards = useMemo(() => {
+    if (mapBillboards.length === 0) return [];
+    return [...mapBillboards].sort((a, b) => {
+      const sizeA = (a as any).Size || a.size || '';
+      const sizeB = (b as any).Size || b.size || '';
+      const orderA = getSizeRank(sizeA);
+      const orderB = getSizeRank(sizeB);
+      if (orderA !== orderB) return orderA - orderB;
+      const idA = (a as any).ID || a.id || 0;
+      const idB = (b as any).ID || b.id || 0;
+      return idA - idB;
+    });
+  }, [mapBillboards, sizeRankMap]);
+
 
   const totalPages = Math.max(1, Math.ceil(sortedFilteredBillboards.length / PAGE_SIZE));
   const startIndex = (currentPage - 1) * PAGE_SIZE;
@@ -732,10 +865,28 @@ export default function Billboards() {
     });
   };
 
-  const selectAllFilteredBillboards = () => {
+  // التحقق مما إذا كانت اللوحة قابلة للاختيار (ليست صديقة وليست مخفية، ومتاحة إذا تم تفعيل الفلتر)
+  const isBillboardSelectable = (b: any, excludeFriendlyHidden = true, availableOnly = false) => {
+    const isFriendly = !!b.friend_company_id;
+    const isHidden = b.is_visible_in_available === false || b.is_visible === false;
+    const isAvailable = isBillboardAvailable(b);
+
+    if (excludeFriendlyHidden && (isFriendly || isHidden)) {
+      return false;
+    }
+    if (availableOnly && !isAvailable) {
+      return false;
+    }
+    return true;
+  };
+
+  const selectAllFilteredBillboards = (exclude = true, availableOnly = false) => {
     setSelectedBillboardIds(prev => {
       const next = new Set(prev);
-      sortedFilteredBillboards.forEach((b: any) => next.add(b.ID || b.id));
+      sortedFilteredBillboards.forEach((b: any) => {
+        if (!isBillboardSelectable(b, exclude, availableOnly)) return;
+        next.add(b.ID || b.id);
+      });
       return next;
     });
   };
@@ -748,7 +899,27 @@ export default function Billboards() {
     return billboards.filter((b: any) => selectedBillboardIds.has(b.ID || b.id));
   }, [billboards, selectedBillboardIds]);
 
-  const isAllSelected = sortedFilteredBillboards.length > 0 && sortedFilteredBillboards.every((b: any) => selectedBillboardIds.has(b.ID || b.id));
+  const isAllSelected = useMemo(() => {
+    const selectableFiltered = sortedFilteredBillboards.filter((b: any) => {
+      return isBillboardSelectable(b, excludeFriendlyAndHidden, selectAvailableOnly);
+    });
+    return selectableFiltered.length > 0 && selectableFiltered.every((b: any) => selectedBillboardIds.has(b.ID || b.id));
+  }, [sortedFilteredBillboards, selectedBillboardIds, excludeFriendlyAndHidden, selectAvailableOnly]);
+
+  // استدعاء الطباعة الفورية لكامل اللوحات مع التحديد التلقائي
+  const handleTopPrintClick = () => {
+    // 1. تحديد كل اللوحات
+    setSelectedBillboardIds(prev => {
+      const next = new Set(prev);
+      sortedFilteredBillboards.forEach((b: any) => {
+        if (!isBillboardSelectable(b, excludeFriendlyAndHidden, selectAvailableOnly)) return;
+        next.add(b.ID || b.id);
+      });
+      return next;
+    });
+    // 2. فتح نافذة الطباعة المتقدمة مباشرة
+    setAdvancedPrintOpen(true);
+  };
 
   // ✅ حذف اللوحات المحددة
   const deleteSelectedBillboards = async () => {
@@ -904,6 +1075,8 @@ export default function Billboards() {
               <BillboardActions
                 exportToExcel={() => billboardExport.exportToExcel(billboards)}
                 exportAvailableToExcel={() => billboardExport.exportAvailableToExcel(billboards, isContractExpired)}
+                exportMunicipalityToExcel={(excludeHidden, selectedMunicipality) => billboardExport.exportMunicipalityToExcel(billboards, excludeHidden, selectedMunicipality)}
+                municipalities={dbMunicipalities}
                 copyAvailableToClipboard={() => billboardExport.copyAvailableToClipboard(billboards, isContractExpired)}
                 copyAllToClipboard={() => billboardExport.copyAllToClipboard(billboards)}
                 copyAvailableAndUpcomingToClipboard={(months) => billboardExport.copyAvailableAndUpcomingToClipboard(billboards, isContractExpired, months)}
@@ -929,8 +1102,7 @@ export default function Billboards() {
                     toast.error(error.message || 'فشلت عملية المزامنة');
                   }
                 }}
-                setPrintFiltersOpen={setPrintFiltersOpen}
-                setAdvancedPrintOpen={setAdvancedPrintOpen}
+                onAdvancedPrintClick={handleTopPrintClick}
                 availableBillboardsCount={availableBillboardsCount}
                 initializeAddForm={billboardForm.initializeAddForm}
                 setAddOpen={billboardForm.setAddOpen}
@@ -1049,28 +1221,53 @@ export default function Billboards() {
             <Suspense fallback={<MapSkeleton className="h-[560px] sm:h-[640px] lg:h-[720px]" />}>
               <AdminBillboardsMap
                 className="h-[560px] sm:h-[640px] lg:h-[720px]"
-                billboards={sortedFilteredBillboards
+                billboards={sortedMapBillboards
                   .filter((b: any) => {
                     const coords = (b as any).GPS_Coordinates || '';
                     return !!coords;
                   })
                   .map(b => {
                     const statusRaw = String(b.Status ?? b.status ?? '').trim();
+                    const maintStatusRaw = String((b as any).maintenance_status ?? '').trim().toLowerCase();
+                    const maintTypeRaw = String((b as any).maintenance_type ?? '').trim().toLowerCase();
                     const contractNumRaw = String(b.Contract_Number ?? b.contractNumber ?? '').trim();
                     const hasContract = !!contractNumRaw && contractNumRaw !== '0';
                     const endDate = b.Rent_End_Date ?? b.rent_end_date ?? (b as any).expiryDate ?? null;
                     const isExpired = !!endDate && !isNaN(new Date(endDate).getTime()) && new Date(endDate) < new Date();
                     
-                    let displayStatus: 'available' | 'maintenance' | 'rented' = 'available';
-                    if (statusRaw === 'صيانة' || statusRaw.toLowerCase() === 'maintenance') {
+                    let displayStatus: 'available' | 'maintenance' | 'rented' | 'removal' | 'out_of_service' = 'available';
+                    
+                    const isRemoved = statusRaw === 'إزالة' || statusRaw === 'ازالة' || statusRaw.toLowerCase() === 'removed' || 
+                                      maintStatusRaw === 'removed' || maintStatusRaw === 'تمت الإزالة' ||
+                                      maintStatusRaw === 'تحتاج ازالة لغرض التطوير' || maintStatusRaw === 'لم يتم التركيب' ||
+                                      maintTypeRaw === 'تمت الإزالة' || maintTypeRaw === 'تحتاج إزالة' || maintTypeRaw === 'لم يتم التركيب';
+                                      
+                    const isMaint = statusRaw === 'صيانة' || statusRaw.toLowerCase() === 'maintenance' || 
+                                    maintStatusRaw === 'maintenance' || maintStatusRaw === 'repair_needed' || 
+                                    maintStatusRaw === 'out_of_service' || maintStatusRaw === 'قيد الصيانة' || 
+                                    maintStatusRaw === 'متضررة اللوحة' || statusRaw === 'تحتاج صيانة' || statusRaw === 'قيد الصيانة';
+                                    
+                    const isOutOfService = maintStatusRaw === 'out_of_service' || maintStatusRaw === 'خارج الخدمة';
+                    
+                    if (isRemoved) {
+                      displayStatus = 'removal';
+                    } else if (isOutOfService) {
+                      displayStatus = 'out_of_service';
+                    } else if (isMaint) {
                       displayStatus = 'maintenance';
                     } else if (hasContract && !isExpired) {
                       displayStatus = 'rented';
                     }
                     
-                    const arabicStatus = displayStatus === 'rented' ? 'مؤجر' : displayStatus === 'maintenance' ? 'صيانة' : 'متاح';
+                    const arabicStatus = 
+                      displayStatus === 'rented' ? 'مؤجر' : 
+                      displayStatus === 'maintenance' ? 'صيانة' : 
+                      displayStatus === 'removal' ? 'إزالة' : 
+                      displayStatus === 'out_of_service' ? 'خارج الخدمة' : 
+                      'متاح';
                     
                     return {
+                      ...b,
                       ID: (b as any).ID || 0,
                       Billboard_Name: (b as any).Billboard_Name || '',
                       City: (b as any).City || '',
@@ -1086,9 +1283,9 @@ export default function Billboards() {
                       Faces_Count: (b as any).Faces_Count || '1',
                       Municipality: (b as any).Municipality || '',
                       Rent_End_Date: (b as any).Rent_End_Date || null,
-                      Customer_Name: (b as any).Customer_Name || '',
-                      Ad_Type: (b as any).Ad_Type || '',
-                      Contract_Number: (b as any).Contract_Number || null,
+                      Customer_Name: (b as any).Customer_Name || (b as any).clientName || (b as any).customer_name || ((b as any).contracts && (b as any).contracts[0]?.['Customer Name']) || '',
+                      Ad_Type: (b as any).Ad_Type || (b as any).adType || (b as any).ad_type || (b as any).AdType || ((b as any).contracts && (b as any).contracts[0]?.['Ad Type']) || '',
+                      Contract_Number: (b as any).Contract_Number || (b as any).contract_number || (b as any).contractNumber || ((b as any).contracts && ((b as any).contracts[0]?.Contract_Number || (b as any).contracts[0]?.contract_number || (b as any).contracts[0]?.['Contract Number'] || (b as any).contracts[0]?.id)) || null,
                       is_visible_in_available: (b as any).is_visible_in_available,
                       design_face_a: (b as any).design_face_a || '',
                       design_face_b: (b as any).design_face_b || '',
@@ -1098,7 +1295,7 @@ export default function Billboards() {
                       name: (b as any).Billboard_Name || '',
                       location: (b as any).Nearest_Landmark || '',
                       size: (b as any).Size || '',
-                      status: displayStatus,
+                      status: displayStatus as any,
                       coordinates: (b as any).GPS_Coordinates || '',
                       imageUrl: (b as any).Image_URL || '',
                       expiryDate: (b as any).Rent_End_Date || null,
@@ -1354,10 +1551,14 @@ export default function Billboards() {
         selectedBillboards={selectedBillboards}
         filteredBillboards={sortedFilteredBillboards}
         onClearSelection={clearBillboardSelection}
-        onSelectAll={selectAllFilteredBillboards}
+        onSelectAll={() => selectAllFilteredBillboards(excludeFriendlyAndHidden, selectAvailableOnly)}
         isAllSelected={isAllSelected}
         onDeleteSelected={canEditBillboards ? deleteSelectedBillboards : undefined}
         onToggleVisibility={canEditBillboards ? toggleSelectedVisibility : undefined}
+        excludeFriendlyAndHidden={excludeFriendlyAndHidden}
+        onSetExcludeFriendlyAndHidden={setExcludeFriendlyAndHidden}
+        selectAvailableOnly={selectAvailableOnly}
+        onSetSelectAvailableOnly={setSelectAvailableOnly}
       />
       </div>
     </div>

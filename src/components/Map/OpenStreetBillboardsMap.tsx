@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet.markercluster";
 import type { Billboard } from "@/types";
-import { parseCoords } from '@/utils/parseCoords';
+import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
 import type { SatelliteProvider } from "@/types/map";
 import { SATELLITE_TILE_URLS, SATELLITE_PROVIDERS } from "@/types/map";
 import { Button } from "@/components/ui/button";
@@ -71,32 +71,40 @@ interface OpenStreetBillboardsMapProps {
 
 type MapStyle = "standard" | "satellite" | "hybrid";
 
-// Color palette matching Google Maps InteractiveMap
+// Highly distinct colors for each size category - alternating dark/light for maximum contrast
 const colorPalette = [
-  { bg: "#ef4444", border: "#fca5a5", text: "#fff", name: "أحمر" },
-  { bg: "#f97316", border: "#fdba74", text: "#fff", name: "برتقالي" },
-  { bg: "#eab308", border: "#fde047", text: "#000", name: "أصفر" },
-  { bg: "#22c55e", border: "#86efac", text: "#fff", name: "أخضر" },
-  { bg: "#06b6d4", border: "#67e8f9", text: "#fff", name: "سماوي" },
-  { bg: "#3b82f6", border: "#93c5fd", text: "#fff", name: "أزرق" },
-  { bg: "#8b5cf6", border: "#c4b5fd", text: "#fff", name: "بنفسجي" },
-  { bg: "#ec4899", border: "#f9a8d4", text: "#fff", name: "وردي" },
-  { bg: "#14b8a6", border: "#5eead4", text: "#fff", name: "تركوازي" },
-  { bg: "#f43f5e", border: "#fda4af", text: "#fff", name: "قرمزي" },
-];
+  { bg: "#e11d48", border: "#fecdd3", text: "#fff" },       // Crimson Red (Dark)
+  { bg: "#fef08a", border: "#eab308", text: "#1e293b" },    // Lemon Yellow (Light)
+  { bg: "#1d4ed8", border: "#dbeafe", text: "#fff" },       // Royal Blue (Dark)
+  { bg: "#bef264", border: "#65a30d", text: "#365314" },    // Lime Green (Light)
+  { bg: "#7c3aed", border: "#ede9fe", text: "#fff" },       // Purple (Dark)
+  { bg: "#ffffff", border: "#94a3b8", text: "#0f172a" },    // White (Light)
+  { bg: "#ea580c", border: "#ffedd5", text: "#fff" },       // Orange (Dark)
+  { bg: "#a5f3fc", border: "#0891b2", text: "#0e7490" },    // Cyan (Light)
+  { bg: "#1e293b", border: "#cbd5e1", text: "#f8fafc" },    // Charcoal Black (Dark)
+  { bg: "#ffd6e8", border: "#db2777", text: "#9d174d" },    // Pastel Pink (Light)
+  { bg: "#047857", border: "#d1fae5", text: "#fff" },       // Emerald Green (Dark)
+  { bg: "#ffedd5", border: "#f97316", text: "#9a3412" },    // Apricot/Peach (Light)
+  { bg: "#0369a1", border: "#e0f2fe", text: "#fff" },       // Sky Blue (Dark)
+  { bg: "#fbcfe8", border: "#ec4899", text: "#86198f" },    // Pink/Magenta (Light)
+  { bg: "#78350f", border: "#fef08a", text: "#fff" },       // Brown (Dark)
+  { bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },    // Lavender (Light)
+]
 
 const sizeColorMap: Record<string, { bg: string; border: string; text: string }> = {};
 
 const getSizeColor = (size: string): { bg: string; border: string; text: string } => {
-  if (!sizeColorMap[size]) {
-    let hash = 0;
-    for (let i = 0; i < size.length; i++) {
-      hash = size.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colorPalette.length;
-    sizeColorMap[size] = colorPalette[index];
+  const norm = size.trim().toLowerCase().replace(/\s+/g, '').replace('×', 'x').replace('*', 'x');
+  if (sizeColorMap[norm]) return sizeColorMap[norm];
+  if (sizeColorMap[size]) return sizeColorMap[size];
+
+  let hash = 0;
+  for (let i = 0; i < norm.length; i++) {
+    hash = norm.charCodeAt(i) + ((hash << 5) - hash);
   }
-  return sizeColorMap[size];
+  const index = Math.abs(hash) % colorPalette.length;
+  sizeColorMap[norm] = colorPalette[index];
+  return sizeColorMap[norm];
 };
 
 // Helper function to calculate days remaining
@@ -418,7 +426,7 @@ export default function OpenStreetBillboardsMap({ billboards, className, onReady
     () =>
       billboards
         .map((b) => {
-          const coords = parseCoords(b);
+          const coords = getJitteredCoords(b, billboards);
           if (!coords) return null;
           return { b, coords };
         })
@@ -447,6 +455,7 @@ export default function OpenStreetBillboardsMap({ billboards, className, onReady
         scrollWheelZoom: true,
         wheelDebounceTime: 40,
         wheelPxPerZoomLevel: 120,
+        preferCanvas: true
       });
 
       if (!map.getPane('field-photos-pane')) {

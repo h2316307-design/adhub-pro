@@ -12,7 +12,7 @@ import { getPriceFor, getDailyPriceFor, CustomerType } from '@/data/pricing';
 import { ContractPDFDialog } from '@/components/Contract';
 import type { Billboard } from '@/types';
 import { Button } from '@/components/ui/button';
-import { RefreshCw, DollarSign, Settings, Wrench, FileText, List, Map as MapIcon, Trash2, Calculator, PauseCircle } from 'lucide-react';
+import { RefreshCw, DollarSign, Settings, Wrench, FileText, List, Map as MapIcon, Trash2, Calculator, PauseCircle, AlertTriangle } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -95,6 +95,8 @@ export default function ContractEdit() {
   const [borrowDialogOpen, setBorrowDialogOpen] = useState(false);
   const [pausedFromContractOpen, setPausedFromContractOpen] = useState(false);
   const [swapBillboard, setSwapBillboard] = useState<{ id: string; name: string; size: string; imageUrl: string; landmark: string } | null>(null);
+  const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false);
+  const [pendingMaintenanceBillboard, setPendingMaintenanceBillboard] = useState<Billboard | null>(null);
 
   // ✅ FIXED: Default to stored prices for existing contracts (true)
   // Will be set to false only for new contracts (no saved prices)
@@ -136,6 +138,9 @@ export default function ContractEdit() {
 
   // ✅ NEW: Installation enable/disable toggle
   const [installationEnabled, setInstallationEnabled] = useState<boolean>(true);
+
+  // Previous contract billboard IDs for renewal contracts
+  const [previousContractBillboardIds, setPreviousContractBillboardIds] = useState<Set<string>>(new Set());
 
   // Single face billboards
   const [singleFaceBillboards, setSingleFaceBillboards] = useState<Set<string>>(new Set());
@@ -284,7 +289,7 @@ export default function ContractEdit() {
   const [installmentsLoaded, setInstallmentsLoaded] = useState<boolean>(false); // ✅ NEW: Track if installments were loaded from DB
   
   // ✅ NEW: Installment distribution settings (saved to DB)
-  const [installmentDistributionType, setInstallmentDistributionType] = useState<'single' | 'multiple'>('multiple');
+  const [installmentDistributionType, setInstallmentDistributionType] = useState<'single' | 'multiple' | 'periods'>('multiple');
   const [installmentFirstPaymentAmount, setInstallmentFirstPaymentAmount] = useState<number>(0);
   const [installmentFirstPaymentType, setInstallmentFirstPaymentType] = useState<'amount' | 'percent'>('amount');
   const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>('month');
@@ -508,6 +513,31 @@ export default function ContractEdit() {
         console.log('installments_data from contract:', c.installments_data);
         
         setCurrentContract(c);
+
+        // Fetch billboard IDs of previous contract if this is a renewal
+        if (c.previous_contract_number) {
+          try {
+            const { data: prevContract, error: prevErr } = await supabase
+              .from('Contract')
+              .select('billboard_ids')
+              .eq('Contract_Number', c.previous_contract_number)
+              .maybeSingle();
+            
+            if (!prevErr && prevContract && prevContract.billboard_ids) {
+              const prevIds = prevContract.billboard_ids.split(',').map((id: string) => id.trim()).filter(Boolean);
+              setPreviousContractBillboardIds(new Set(prevIds));
+              console.log('Loaded previous contract billboard IDs:', prevIds);
+            } else {
+              setPreviousContractBillboardIds(new Set());
+            }
+          } catch (prevCatchErr) {
+            console.error('Failed to load previous contract details:', prevCatchErr);
+            setPreviousContractBillboardIds(new Set());
+          }
+        } else {
+          setPreviousContractBillboardIds(new Set());
+        }
+
         setCustomerName(c.customer_name || c['Customer Name'] || '');
         setCustomerId(c.customer_id ?? null);
         setAdType(c.ad_type || c['Ad Type'] || '');
@@ -839,7 +869,7 @@ export default function ContractEdit() {
         const savedAutoCalculate = c.installment_auto_calculate === true;
         const savedFirstAtSigning = c.installment_first_at_signing !== false; // default true
         
-        setInstallmentDistributionType(savedDistributionType as 'single' | 'multiple');
+        setInstallmentDistributionType(savedDistributionType as 'single' | 'multiple' | 'periods');
         setInstallmentFirstPaymentAmount(savedFirstPaymentAmount);
         setInstallmentFirstPaymentType(savedFirstPaymentType as 'amount' | 'percent');
         setInstallmentInterval(savedInterval as 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months');
@@ -1406,6 +1436,37 @@ export default function ContractEdit() {
       date.setDate(date.getDate() + 7);
     } else if (paymentType === 'نهاية العقد') {
       return endDate || '';
+    } else if (paymentType === 'بعد 20% من العقد') {
+      const targetEndDate = endDate;
+      if (baseDate && targetEndDate) {
+        const start = new Date(baseDate);
+        const end = new Date(targetEndDate);
+        const duration = end.getTime() - start.getTime();
+        if (duration > 0) {
+          const offset = duration * 0.20;
+          const target = new Date(start.getTime() + offset);
+          return target.toISOString().split('T')[0];
+        }
+      }
+      // Fallback: 15 days from start date
+      date.setDate(date.getDate() + 15);
+      return date.toISOString().split('T')[0];
+    } else if (paymentType && paymentType.startsWith('بعد مرور ') && paymentType.endsWith('% من العقد')) {
+      const match = paymentType.match(/بعد مرور\s+(\d+)%\s+من\s+العقد/);
+      if (match) {
+        const percent = parseInt(match[1], 10);
+        const targetEndDate = endDate;
+        if (baseDate && targetEndDate) {
+          const start = new Date(baseDate);
+          const end = new Date(targetEndDate);
+          const duration = end.getTime() - start.getTime();
+          if (duration > 0) {
+            const offset = duration * (percent / 100);
+            const target = new Date(start.getTime() + offset);
+            return target.toISOString().split('T')[0];
+          }
+        }
+      }
     }
     
     return date.toISOString().split('T')[0];
@@ -2078,22 +2139,43 @@ export default function ContractEdit() {
     
     // Only create default installments if none exist
     if (installments.length === 0) {
-      const half = Math.round((finalTotal / 2) * 100) / 100;
+      const cleanAmount = roundToCleanValue(finalTotal / 2);
+      const firstAmount = Math.round((finalTotal - cleanAmount) * 100) / 100;
+      
+      let finalFirst = firstAmount;
+      let finalSecond = cleanAmount;
+      
+      if (roundToCleanValue(firstAmount) !== firstAmount) {
+        let cleanFirst = roundToCleanValue(firstAmount);
+        const payment2 = Math.round((finalTotal - cleanFirst) * 100) / 100;
+        
+        if (cleanFirst < payment2) {
+          let step = 500;
+          if (cleanFirst < 100) step = 1;
+          else if (cleanFirst < 1000) step = 10;
+          else if (cleanFirst < 10000) step = 100;
+          
+          cleanFirst += step;
+        }
+        finalFirst = cleanFirst;
+        finalSecond = Math.round((finalTotal - cleanFirst) * 100) / 100;
+      }
+      
       setInstallments([
         { 
-          amount: half, 
+          amount: finalFirst, 
           paymentType: 'عند التوقيع', 
           description: 'الدفعة الأولى',
           dueDate: calculateDueDate('عند التوقيع', 0)
         },
         { 
-          amount: finalTotal - half, 
-          paymentType: 'عند التركيب', 
+          amount: finalSecond, 
+          paymentType: 'بعد 20% من العقد', 
           description: 'الدفعة الثانية',
-          dueDate: calculateDueDate('عند التركيب', 1)
+          dueDate: calculateDueDate('بعد 20% من العقد', 1)
         },
       ]);
-      console.log('✅ Created default installments (first: عند التوقيع, second: عند التركيب)');
+      console.log('✅ Created default installments (first:', finalFirst, 'second:', finalSecond, ')');
     }
   }, [finalTotal, installmentsLoaded]);
 
@@ -2267,6 +2349,14 @@ export default function ContractEdit() {
       const isNotRemoved = billboardStatus !== 'إزالة' && billboardStatus !== 'removed';
       const isAvailableForContract = (!hasContract || contractExpired) && !isOccupiedByActiveContract && isNotRemoved;
       const isUnrentedHidden = isHidden && isAvailableForContract;
+      const isUnderMaintenance = 
+        statusValue === 'صيانة' || 
+        statusLower === 'maintenance' || 
+        maintenanceStatus === 'maintenance' || 
+        maintenanceStatus === 'repair_needed' || 
+        maintenanceStatus === 'out_of_service' || 
+        maintenanceStatus === 'قيد الصيانة' || 
+        maintenanceStatus === 'متضررة اللوحة';
 
       // Check if billboard is in current contract selection
       const isInContract = selected.includes(String((billboard as any).ID ?? (billboard as any).id));
@@ -2274,15 +2364,17 @@ export default function ContractEdit() {
       // Status filter logic
       let matchesStatus = false;
       if (statusFilter === 'all') {
-        matchesStatus = !isHidden;
+        matchesStatus = !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'available') {
-        matchesStatus = isAvailable && !isHidden;
+        matchesStatus = isAvailable && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'nearExpiry') {
-        matchesStatus = isNearExpiry && !isHidden;
+        matchesStatus = isNearExpiry && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'rented') {
-        matchesStatus = isBooked && !isHidden;
+        matchesStatus = isBooked && !isHidden && !isUnderMaintenance;
+      } else if (statusFilter === 'maintenance') {
+        matchesStatus = isUnderMaintenance;
       } else if (statusFilter === 'hidden') {
-        matchesStatus = isHidden;
+        matchesStatus = isHidden && !isUnderMaintenance;
       }
 
       // Always keep selected billboards visible
@@ -2345,7 +2437,37 @@ export default function ContractEdit() {
   // Event handlers
   const toggleSelect = (b: Billboard) => {
     const id = String((b as any).ID);
+    const isSelected = selected.includes(id);
+
+    if (!isSelected) {
+      const statusValue = String((b as any).Status || '').trim().toLowerCase();
+      const maintStatus = String((b as any).maintenance_status || '').trim().toLowerCase();
+      const isUnderMaint = 
+        statusValue === 'صيانة' || 
+        statusValue === 'maintenance' || 
+        maintStatus === 'maintenance' || 
+        maintStatus === 'repair_needed' || 
+        maintStatus === 'out_of_service' || 
+        maintStatus === 'قيد الصيانة' || 
+        maintStatus === 'متضررة اللوحة';
+
+      if (isUnderMaint) {
+        setPendingMaintenanceBillboard(b);
+        setMaintenanceConfirmOpen(true);
+        return;
+      }
+    }
+
     setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const handleConfirmMaintenanceSelect = () => {
+    if (pendingMaintenanceBillboard) {
+      const id = String((pendingMaintenanceBillboard as any).ID);
+      setSelected((prev) => [...prev, id]);
+      setPendingMaintenanceBillboard(null);
+    }
+    setMaintenanceConfirmOpen(false);
   };
 
   const removeSelected = async (id: string) => {
@@ -2464,18 +2586,77 @@ export default function ContractEdit() {
     }
   };
 
-  // Installment management
+  // Helper to round installment values down to clean/closed numbers (nearest 500 for >=10k, nearest 100 for >=1k, etc.) to ensure the first payment is always the largest.
+  const roundToCleanValue = (value: number): number => {
+    if (value <= 0) return 0;
+    if (value < 100) {
+      return Math.floor(value);
+    }
+    if (value < 1000) {
+      return Math.floor(value / 10) * 10;
+    }
+    if (value < 10000) {
+      return Math.floor(value / 100) * 100;
+    }
+    return Math.floor(value / 500) * 500;
+  };
+
   const distributeEvenly = (count: number) => {
-    count = Math.max(1, Math.min(6, Math.floor(count)));
-    const even = Math.floor((finalTotal / count) * 100) / 100;
-    const list = Array.from({ length: count }).map((_, i) => ({
-      amount: i === count - 1 ? Math.round((finalTotal - even * (count - 1)) * 100) / 100 : even,
-      paymentType: i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'),
-      description: `الدفعة ${i + 1}`,
-      dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'), i)
-    }));
+    count = Math.max(1, Math.min(12, Math.floor(count)));
+    
+    let list;
+    if (count === 1) {
+      list = [{
+        amount: finalTotal,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة كامل قيمة العقد',
+        dueDate: calculateDueDate('عند التوقيع', 0)
+      }];
+    } else {
+      const cleanAmount = roundToCleanValue(finalTotal / count);
+      const firstAmount = Math.round((finalTotal - cleanAmount * (count - 1)) * 100) / 100;
+      
+      let finalFirst = firstAmount;
+      
+      if (roundToCleanValue(firstAmount) !== firstAmount) {
+        let cleanFirst = roundToCleanValue(firstAmount);
+        const lastPayment = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
+        
+        if (cleanFirst < lastPayment) {
+          let step = 500;
+          if (cleanFirst < 100) step = 1;
+          else if (cleanFirst < 1000) step = 10;
+          else if (cleanFirst < 10000) step = 100;
+          
+          cleanFirst += step;
+        }
+        finalFirst = cleanFirst;
+      }
+      
+      let runningTotal = 0;
+      list = Array.from({ length: count }).map((_, i) => {
+        const isLast = i === count - 1;
+        let amount = cleanAmount;
+        if (i === 0) amount = finalFirst;
+        
+        if (isLast) {
+          amount = Math.round((finalTotal - runningTotal) * 100) / 100;
+        } else {
+          runningTotal += amount;
+        }
+        
+        return {
+          amount,
+          paymentType: i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'),
+          description: `الدفعة ${i + 1}`,
+          dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'), i)
+        };
+      });
+    }
+    
     setInstallments(list);
     setInstallmentsLoaded(false); // ✅ Allow future redistribution
+    toast.success(`تم توزيع المبلغ على ${count} أقساط مغلقة بنجاح`);
   };
 
   const addInstallment = () => {
@@ -2509,6 +2690,85 @@ export default function ContractEdit() {
     setInstallments([]);
     setInstallmentsLoaded(false); // ✅ Allow auto-distribution after clearing
   };
+
+  const distributeByDurationPeriods = React.useCallback((count: number) => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.info('يرجى تحديد تاريخ بداية ونهاية العقد أولاً');
+      return;
+    }
+
+    count = Math.max(2, Math.min(12, Math.floor(count)));
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDuration = end.getTime() - start.getTime();
+    
+    if (totalDuration <= 0) {
+      toast.info('تاريخ نهاية العقد يجب أن يكون بعد تاريخ البداية');
+      return;
+    }
+
+    const intervalDuration = totalDuration / count;
+    const cleanAmount = roundToCleanValue(finalTotal / count);
+    const firstAmount = Math.round((finalTotal - cleanAmount * (count - 1)) * 100) / 100;
+    
+    let finalFirst = firstAmount;
+    
+    if (roundToCleanValue(firstAmount) !== firstAmount) {
+      let cleanFirst = roundToCleanValue(firstAmount);
+      const lastPayment = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
+      
+      if (cleanFirst < lastPayment) {
+        let step = 500;
+        if (cleanFirst < 100) step = 1;
+        else if (cleanFirst < 1000) step = 10;
+        else if (cleanFirst < 10000) step = 100;
+        
+        cleanFirst += step;
+      }
+      finalFirst = cleanFirst;
+    }
+    
+    let runningTotal = 0;
+    const newInstallments = Array.from({ length: count }).map((_, i) => {
+      const offset = i * intervalDuration;
+      const targetDate = new Date(start.getTime() + offset);
+      const dueDateStr = targetDate.toISOString().split('T')[0];
+      
+      const isLast = i === count - 1;
+      let amount = cleanAmount;
+      if (i === 0) amount = finalFirst;
+      
+      if (isLast) {
+        amount = Math.round((finalTotal - runningTotal) * 100) / 100;
+      } else {
+        runningTotal += amount;
+      }
+      
+      let percentageLabel = '';
+      if (i === 0) {
+        percentageLabel = 'عند التوقيع';
+      } else {
+        const percentPassed = Math.round((i / count) * 100);
+        percentageLabel = `بعد مرور ${percentPassed}% من العقد`;
+      }
+
+      return {
+        amount,
+        paymentType: percentageLabel,
+        description: `الدفعة ${i + 1} (${Math.round(100 / count)}%)`,
+        dueDate: dueDateStr
+      };
+    });
+
+    setInstallments(newInstallments);
+    setInstallmentsLoaded(false);
+    toast.success(`تم توزيع الدفعات بالتساوي على ${count} فترات من مدة العقد بقيم مغلقة`);
+  }, [finalTotal, startDate, endDate]);
 
   // ✅ NEW: Create manual/uneven installments
   const createManualInstallments = (count: number) => {
@@ -2574,24 +2834,7 @@ export default function ContractEdit() {
     
     // ✅ FIX: إذا كانت الدفعة الأولى صفر، نبدأ مباشرة بالدفعات المتكررة
     const hasFirstPayment = actualFirstPayment > 0;
-    
-    if (hasFirstPayment) {
-      newInstallments.push({
-        amount: actualFirstPayment,
-        // ✅ Always keep first installment as "عند التوقيع" per business rule
-        paymentType: 'عند التوقيع',
-        description: 'الدفعة الأولى',
-        dueDate: firstDate
-      });
-    }
-
     const remaining = finalTotal - actualFirstPayment;
-
-    if (remaining <= 0) {
-      setInstallments(newInstallments);
-      toast.success('تم إنشاء الدفعة الأولى فقط');
-      return;
-    }
 
     let numberOfRecurringPayments: number;
     if (numPayments && numPayments > 0) {
@@ -2605,12 +2848,83 @@ export default function ContractEdit() {
       numberOfRecurringPayments = Math.max(1, Math.floor(6 / intervalMonths));
     }
 
-    const recurringAmount = Math.round((remaining / numberOfRecurringPayments) * 100) / 100;
+    // حساب قيمة الدفعة الأولى والدفعات المتكررة مغلقة ونظيفة
+    let finalFirstPayment = actualFirstPayment;
+    let cleanRecurringAmount = Math.round((remaining / numberOfRecurringPayments) * 100) / 100;
+    let firstRecurringAmount = cleanRecurringAmount;
+
+    if (hasFirstPayment) {
+      const cleanRec = roundToCleanValue(remaining / numberOfRecurringPayments);
+      const adjFirst = Math.round((finalTotal - cleanRec * numberOfRecurringPayments) * 100) / 100;
+      if (adjFirst >= 0) {
+        let finalFirst = adjFirst;
+        
+        if (roundToCleanValue(adjFirst) !== adjFirst) {
+          let cleanFirst = roundToCleanValue(adjFirst);
+          const lastPayment = Math.round((finalTotal - cleanFirst - cleanRec * (numberOfRecurringPayments - 1)) * 100) / 100;
+          
+          if (cleanFirst < lastPayment) {
+            let step = 500;
+            if (cleanFirst < 100) step = 1;
+            else if (cleanFirst < 1000) step = 10;
+            else if (cleanFirst < 10000) step = 100;
+            
+            cleanFirst += step;
+          }
+          finalFirst = cleanFirst;
+        }
+        
+        finalFirstPayment = finalFirst;
+        cleanRecurringAmount = cleanRec;
+      }
+    } else {
+      const cleanRec = roundToCleanValue(finalTotal / numberOfRecurringPayments);
+      const firstRec = Math.round((finalTotal - cleanRec * (numberOfRecurringPayments - 1)) * 100) / 100;
+      
+      let finalFirst = firstRec;
+      
+      if (roundToCleanValue(firstRec) !== firstRec) {
+        let cleanFirst = roundToCleanValue(firstRec);
+        const lastPayment = Math.round((finalTotal - cleanFirst - cleanRec * (numberOfRecurringPayments - 2)) * 100) / 100;
+        
+        if (cleanFirst < lastPayment) {
+          let step = 500;
+          if (cleanFirst < 100) step = 1;
+          else if (cleanFirst < 1000) step = 10;
+          else if (cleanFirst < 10000) step = 100;
+          
+          cleanFirst += step;
+        }
+        finalFirst = cleanFirst;
+      }
+      
+      firstRecurringAmount = finalFirst;
+      cleanRecurringAmount = cleanRec;
+    }
     
-    let runningTotal = actualFirstPayment;
+    if (hasFirstPayment) {
+      newInstallments.push({
+        amount: finalFirstPayment,
+        // ✅ Always keep first installment as "عند التوقيع" per business rule
+        paymentType: 'عند التوقيع',
+        description: 'الدفعة الأولى',
+        dueDate: firstDate
+      });
+    }
+
+    let runningTotal = hasFirstPayment ? finalFirstPayment : 0;
     for (let i = 0; i < numberOfRecurringPayments; i++) {
       const isLast = i === numberOfRecurringPayments - 1;
-      const amount = isLast ? (finalTotal - runningTotal) : recurringAmount;
+      let amount = cleanRecurringAmount;
+      if (!hasFirstPayment && i === 0) {
+        amount = firstRecurringAmount;
+      }
+      
+      if (isLast) {
+        amount = Math.round((finalTotal - runningTotal) * 100) / 100;
+      } else {
+        runningTotal += amount;
+      }
       
       // ✅ FIX: بدء التواريخ من أول فترة بعد الدفعة الأولى
       const monthOffset = hasFirstPayment ? (i + 1) : (i === 0 ? 0 : i);
@@ -2648,9 +2962,9 @@ export default function ContractEdit() {
     setInstallmentsLoaded(false); // ✅ Allow future redistribution
     
     if (hasFirstPayment) {
-      toast.success(`تم توزيع الدفعات: دفعة أولى (${actualFirstPayment.toLocaleString('ar-LY')} د.ل) + ${numberOfRecurringPayments} دفعات متكررة`);
+      toast.success(`تم توزيع الدفعات: دفعة أولى (${finalFirstPayment.toLocaleString('ar-LY')} د.ل) + ${numberOfRecurringPayments} أقساط مغلقة (${cleanRecurringAmount.toLocaleString('ar-LY')} د.ل)`);
     } else {
-      toast.success(`تم توزيع المبلغ على ${numberOfRecurringPayments} دفعات متساوية`);
+      toast.success(`تم توزيع المبلغ على ${numberOfRecurringPayments} أقساط مغلقة بنجاح`);
     }
   }, [finalTotal, startDate, calculateDueDate]);
 
@@ -3220,6 +3534,8 @@ export default function ContractEdit() {
             {/* اللوحات المرتبطة */}
             <SelectedBillboardsCard
               contractNumber={Number(contractNumber) || undefined}
+              previousContractNumber={currentContract?.previous_contract_number}
+              previousContractBillboardIds={previousContractBillboardIds}
               onAddPausedFromContractClick={() => setPausedFromContractOpen(true)}
               selected={selected}
               billboards={billboards}
@@ -3329,6 +3645,7 @@ export default function ContractEdit() {
                         billboards={billboards
                           .filter((b) => selected.includes(String((b as any).ID)))
                           .map(b => ({
+                            ...b,
                             ID: (b as any).ID || 0,
                             Billboard_Name: (b as any).Billboard_Name || '',
                             City: (b as any).City || '',
@@ -3459,6 +3776,7 @@ export default function ContractEdit() {
                       const statusLabel = isAvailable ? 'متاح' : isNearExpiry ? 'قريباً' : 'محجوز';
 
                       return {
+                        ...b,
                         ID: (b as any).ID || 0,
                         Billboard_Name: (b as any).Billboard_Name || '',
                         City: (b as any).City || '',
@@ -4019,10 +4337,12 @@ export default function ContractEdit() {
               installments={installments}
               finalTotal={finalTotal}
               startDate={startDate}
+              endDate={endDate}
               // ✅ Prevent auto-redistribution when installments are loaded from DB
               disableAutoRedistribute={installmentsLoaded}
               onDistributeEvenly={distributeEvenly}
               onDistributeWithInterval={distributeWithInterval}
+              onDistributeByDurationPeriods={distributeByDurationPeriods}
               onCreateManualInstallments={createManualInstallments}
               onApplyUnequalDistribution={handleApplyUnequalDistribution}
               onAddInstallment={addInstallment}
@@ -4258,6 +4578,42 @@ export default function ContractEdit() {
                 }}
               >
                 إلغاء التغيير
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Confirmation dialog for billboards under maintenance */}
+        <Dialog open={maintenanceConfirmOpen} onOpenChange={setMaintenanceConfirmOpen}>
+          <DialogContent dir="rtl" className="max-w-md bg-card border border-border shadow-2xl rounded-xl">
+            <DialogHeader className="space-y-3 text-right">
+              <DialogTitle className="text-xl font-bold flex items-center gap-2 text-amber-500">
+                <AlertTriangle className="h-6 w-6 text-amber-500" />
+                تأكيد اختيار لوحة تحت الصيانة
+              </DialogTitle>
+              <div className="text-sm text-muted-foreground leading-relaxed mt-2">
+                هذه اللوحة قيد الصيانة حالياً:
+                <br /><br />
+                - نوع الصيانة: <strong className="text-foreground">{(pendingMaintenanceBillboard as any)?.maintenance_type || 'غير محدد'}</strong>
+                <br />
+                - السبب: <strong className="text-foreground">{(pendingMaintenanceBillboard as any)?.maintenance_notes || 'غير محدد'}</strong>
+                <br /><br />
+                هل أنت متأكد من رغبتك في اختيار هذه اللوحة وإضافتها للعقد؟
+              </div>
+            </DialogHeader>
+            <DialogFooter className="flex flex-row-reverse justify-end gap-2 mt-6">
+              <Button 
+                variant="default" 
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+                onClick={handleConfirmMaintenanceSelect}
+              >
+                تأكيد الاختيار
+              </Button>
+              <Button variant="outline" className="border-border hover:bg-muted" onClick={() => {
+                setMaintenanceConfirmOpen(false);
+                setPendingMaintenanceBillboard(null);
+              }}>
+                إلغاء
               </Button>
             </DialogFooter>
           </DialogContent>

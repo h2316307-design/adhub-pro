@@ -255,6 +255,37 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
       d.setDate(d.getDate() + 7);
     } else if (paymentType === 'نهاية العقد') {
       return formData.endDate || '';
+    } else if (paymentType === 'بعد 20% من العقد') {
+      const targetEndDate = formData.endDate;
+      if (baseDate && targetEndDate) {
+        const start = new Date(baseDate);
+        const end = new Date(targetEndDate);
+        const duration = end.getTime() - start.getTime();
+        if (duration > 0) {
+          const offset = duration * 0.20;
+          const target = new Date(start.getTime() + offset);
+          return target.toISOString().split('T')[0];
+        }
+      }
+      // Fallback: 15 days from start date
+      d.setDate(d.getDate() + 15);
+      return d.toISOString().split('T')[0];
+    } else if (paymentType && paymentType.startsWith('بعد مرور ') && paymentType.endsWith('% من العقد')) {
+      const match = paymentType.match(/بعد مرور\s+(\d+)%\s+من\s+العقد/);
+      if (match) {
+        const percent = parseInt(match[1], 10);
+        const targetEndDate = formData.endDate;
+        if (baseDate && targetEndDate) {
+          const start = new Date(baseDate);
+          const end = new Date(targetEndDate);
+          const duration = end.getTime() - start.getTime();
+          if (duration > 0) {
+            const offset = duration * (percent / 100);
+            const target = new Date(start.getTime() + offset);
+            return target.toISOString().split('T')[0];
+          }
+        }
+      }
     }
     
     return d.toISOString().split('T')[0];

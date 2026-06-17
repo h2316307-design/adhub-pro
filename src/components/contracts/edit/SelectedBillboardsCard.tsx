@@ -7,8 +7,9 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, X, Wrench, Building2, Users, TrendingUp, Pencil, Search, Filter, Printer, Square, CheckSquare, ArrowLeftRight, MoveRight, Trash2, PauseCircle, History as HistoryIcon } from 'lucide-react';
+import { Calendar, X, Wrench, Building2, Users, TrendingUp, Pencil, Search, Filter, Printer, Square, CheckSquare, ArrowLeftRight, MoveRight, Trash2, PauseCircle, History as HistoryIcon, RefreshCw, MoreVertical, MapPin } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import type { Billboard } from '@/types';
@@ -129,6 +130,8 @@ interface SelectedBillboardsCardProps {
   pricingByBillboardOverride?: Map<string, any>;
   /** Map of billboard_id -> actual installation date in current contract (from installation_task_items) */
   installDatesByBillboard?: Map<string, string>;
+  previousContractNumber?: number | null;
+  previousContractBillboardIds?: Set<string>;
 }
 
 export function SelectedBillboardsCard({
@@ -172,8 +175,71 @@ export function SelectedBillboardsCard({
   onAddPausedFromContractClick,
   pricingByBillboardOverride,
   installDatesByBillboard,
+  previousContractNumber,
+  previousContractBillboardIds = new Set(),
 }: SelectedBillboardsCardProps) {
   const { map: activeLoansByBillboard } = useActiveLoansByBillboard();
+
+  // ✅ Check if billboards have installation tasks in the current contract
+  const { data: billboardsWithTasks = new Set<string>() } = useQuery({
+    queryKey: ['contract-installation-tasks-billboards', contractNumber],
+    queryFn: async () => {
+      if (!contractNumber) return new Set<string>();
+      
+      const { data: tasks, error: tasksError } = await supabase
+        .from('installation_tasks')
+        .select('id')
+        .eq('contract_id', contractNumber);
+        
+      if (tasksError) throw tasksError;
+      const taskIds = (tasks || []).map((t: any) => t.id);
+      if (taskIds.length === 0) return new Set<string>();
+      
+      const { data: items, error: itemsError } = await supabase
+        .from('installation_task_items')
+        .select('billboard_id')
+        .in('task_id', taskIds);
+        
+      if (itemsError) throw itemsError;
+      
+      return new Set<string>((items || []).map((it: any) => String(it.billboard_id)));
+    },
+    enabled: !!contractNumber,
+  });
+
+  const computeCanDelete = (b: any): boolean => {
+    if (!contractNumber) return true;
+    
+    const billboardId = String(b.ID || b.id);
+    if (billboardsWithTasks.has(billboardId)) {
+      return false;
+    }
+
+    if (!startDate || !endDate) return true;
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
+
+    const bStartStr = b.Rent_Start_Date || startDate;
+    const rentStart = new Date(bStartStr);
+    const today = new Date();
+
+    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const rentStartDateOnly = new Date(rentStart.getFullYear(), rentStart.getMonth(), rentStart.getDate());
+
+    const diffTime = todayDateOnly.getTime() - rentStartDateOnly.getTime();
+    const elapsedDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+
+    const limit = Math.min(30, totalDays / 3);
+
+    if (elapsedDays > limit) {
+      return false;
+    }
+
+    return true;
+  };
+
   const [partnershipInfoMap, setPartnershipInfoMap] = useState<Map<string, PartnershipInfo>>(new Map());
   const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [editingBillboard, setEditingBillboard] = useState<any>(null);
@@ -212,11 +278,28 @@ export function SelectedBillboardsCard({
 
   const handleBulkRemove = () => {
     const ids = Array.from(bulkSelectedIds);
-    if (onBulkRemove) {
-      onBulkRemove(ids);
-    } else {
-      ids.forEach(id => onRemoveSelected(id));
+    
+    // Find billboards that cannot be deleted
+    const nonDeletableBillboards = billboards.filter(b => ids.includes(String(b.ID)) && !computeCanDelete(b));
+    const deletableIds = ids.filter(id => {
+      const b = billboards.find(x => String(x.ID) === id);
+      return !b || computeCanDelete(b);
+    });
+
+    if (nonDeletableBillboards.length > 0) {
+      toast.error(
+        `لا يمكن حذف بعض اللوحات (${nonDeletableBillboards.map(b => b.Billboard_Name || b.name || `لوحة ${b.ID}`).join(', ')}) لوجود مهمة تركيب أو لتجاوز المدة المسموح بها. يمكنك فقط إيقافها.`
+      );
     }
+
+    if (deletableIds.length > 0) {
+      if (onBulkRemove) {
+        onBulkRemove(deletableIds);
+      } else {
+        deletableIds.forEach(id => onRemoveSelected(id));
+      }
+    }
+
     setBulkSelectedIds(new Set());
     setBulkSelectMode(false);
   };
@@ -1031,7 +1114,7 @@ export function SelectedBillboardsCard({
                 const fallbackPrint = isSingleFace ? Math.round(fallbackPrintRaw / 2) : fallbackPrintRaw;
 
                 const baseTotalForBoard = pricingData?.baseRentalPrice ?? calculateBillboardPrice(b);
-                const installPrice = pricingData?.installationPrice ?? fallbackInstall;
+                  const installPrice = pricingData?.installationPrice ?? fallbackInstall;
                 const printCostForBillboard = pricingData?.printCost ?? fallbackPrint;
                 const includedPrintCost = pricingData?.includedPrintCost ?? ((printCostEnabled && includePrintInPrice) ? printCostForBillboard : 0);
                 const includedInstallCost = pricingData?.includedInstallCost ?? ((installationEnabled && includeInstallationInPrice) ? installPrice : 0);
@@ -1054,6 +1137,9 @@ export function SelectedBillboardsCard({
                 const partnershipInfo = partnershipInfoMap.get(billboardId);
                 const isPartnership = !!partnershipInfo;
 
+                // Renewal check
+                const isRenewed = previousContractBillboardIds.has(billboardId);
+
 
                 return (
                   <div 
@@ -1063,60 +1149,143 @@ export function SelectedBillboardsCard({
                         ? 'border-destructive ring-2 ring-destructive/30' 
                         : replacementsMap.has(billboardId)
                           ? 'border-blue-500 ring-2 ring-blue-500/50 bg-gradient-to-br from-blue-500/5 to-transparent'
-                          : 'border-border'
+                          : isRenewed
+                            ? 'border-emerald-500/40 shadow-emerald-500/5 bg-gradient-to-br from-emerald-500/[0.02] to-transparent'
+                            : 'border-border'
                     }`}
                     onClick={bulkSelectMode ? () => toggleBulkSelect(billboardId) : undefined}
                     style={bulkSelectMode ? { cursor: 'pointer' } : undefined}
                   >
-                    {/* Bulk Select Checkbox */}
-                    {bulkSelectMode && (
-                      <div className="absolute top-2 right-2 z-20">
-                        <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-colors ${
-                          bulkSelectedIds.has(billboardId)
-                            ? 'bg-destructive border-destructive text-destructive-foreground'
-                            : 'bg-background/90 border-muted-foreground/40'
-                        }`}>
-                          {bulkSelectedIds.has(billboardId) && <CheckSquare className="h-4 w-4" />}
-                        </div>
+                    {/* Header: Billboard Name, ID & Dropdown Actions */}
+                    <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-muted/20 shrink-0">
+                      <div className="flex items-center gap-1.5 overflow-hidden">
+                        <span className="text-[10px] bg-primary/10 text-primary font-manrope font-extrabold px-2 py-0.5 rounded-full border border-primary/20 shrink-0">
+                          {billboardId}
+                        </span>
+                        <h4 className="text-sm font-bold text-foreground truncate max-w-[90px]" title={(b as any).name || (b as any).Billboard_Name}>
+                          {(b as any).name || (b as any).Billboard_Name}
+                        </h4>
+                        {isRenewed && (
+                          <Badge className="bg-emerald-500/10 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold px-1.5 py-0.5 shrink-0 select-none flex items-center gap-1">
+                            <RefreshCw className="h-2.5 w-2.5 ml-1" />
+                            مجدد {previousContractNumber ? `#${previousContractNumber}` : ''}
+                          </Badge>
+                        )}
                       </div>
-                    )}
-                    {/* Badges - Top Right (only badges over image, no action buttons) */}
-                    <div className="absolute top-2 right-2 z-10 flex flex-col gap-1">
-                      {isPartnership && (
-                        <Badge className="bg-primary/90 text-primary-foreground text-[10px] px-2 py-0.5 shadow-sm">
-                          <Users className="h-2.5 w-2.5 ml-1" />
-                          مشتركة
-                        </Badge>
-                      )}
-                      {isPartnership && partnershipInfo && partnershipInfo.partnerShares.length > 0 && (
-                        <Badge className="bg-purple-500/90 text-white text-[10px] px-2 py-0.5 shadow-sm max-w-[150px] truncate">
-                          {partnershipInfo.partnerShares.map(ps => ps.partnerName).join(' • ')}
-                        </Badge>
-                      )}
-                      {isFriendBillboard && (
-                        <FriendCompanyBadge billboardId={billboardId} billboard={b} />
-                      )}
-                      {isSingleFace && (
-                        <Badge className="bg-amber-500/90 text-white text-[10px] px-2 py-0.5 shadow-sm">
-                          وجه واحد
-                        </Badge>
-                      )}
-                      {activeLoansByBillboard.get(billboardId) && (
-                        <BillboardLoanBadge loan={activeLoansByBillboard.get(billboardId)!} />
-                      )}
-                      {replacementsMap.has(billboardId) && (
-                        <Badge className="bg-blue-600 text-white text-[10px] px-2 py-0.5 shadow-md flex items-center gap-1 animate-pulse">
-                          <ArrowLeftRight className="h-2.5 w-2.5" />
-                          لوحة بديلة
-                        </Badge>
-                      )}
+                      
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* Bulk Select Checkbox */}
+                        {bulkSelectMode && (
+                          <div className="flex items-center justify-center ml-1">
+                            <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${
+                              bulkSelectedIds.has(billboardId)
+                                ? 'bg-destructive border-destructive text-destructive-foreground scale-105'
+                                : 'bg-background border-muted-foreground/40 hover:border-destructive/50'
+                            }`}>
+                              {bulkSelectedIds.has(billboardId) && <CheckSquare className="h-3 w-3" />}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Pause button directly visible */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-amber-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!b) return;
+                            setPausingBillboard(b);
+                            const pCost = printCostDetails.find(p => p.billboardId === billboardId)?.printCost || 0;
+                            setPausingPrintCost(pCost);
+                            const iCost = installationDetails.find(i => i.billboardId === billboardId)?.adjustedPrice || 0;
+                            setPausingInstallCost(iCost);
+                            setPauseDialogOpen(true);
+                          }}
+                          title="إيقاف مؤقت للوحة"
+                        >
+                          <PauseCircle className="h-4 w-4" />
+                        </Button>
+
+                        {/* Remove button directly visible */}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive hover:bg-destructive/10 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!computeCanDelete(b)) {
+                              toast.error('لا يمكن حذف هذه اللوحة لوجود مهمة تركيب أو لتجاوز المدة المسموح بها. يمكنك فقط إيقافها أو استبدالها.');
+                              setPausingBillboard(b);
+                              const pCost = printCostDetails.find(p => p.billboardId === billboardId)?.printCost || 0;
+                              setPausingPrintCost(pCost);
+                              const iCost = installationDetails.find(i => i.billboardId === billboardId)?.adjustedPrice || 0;
+                              setPausingInstallCost(iCost);
+                              setPauseDialogOpen(true);
+                              return;
+                            }
+                            onRemoveSelected(billboardId);
+                          }}
+                          title="إزالة من العقد"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-7 w-7 p-0 hover:bg-muted/80 rounded-full cursor-pointer flex items-center justify-center shrink-0 transition-all duration-200"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreVertical className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-52">
+                            <DropdownMenuItem 
+                              onClick={(e) => { e.stopPropagation(); handleQuickEdit(b, e as any); }}
+                              className="cursor-pointer gap-2"
+                            >
+                              <Pencil className="h-4 w-4" />
+                              <span>تعديل السعر والمستوى</span>
+                            </DropdownMenuItem>
+
+                            {onSwapBillboard && (
+                              <DropdownMenuItem 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  onSwapBillboard(billboardId, (b as any).Billboard_Name || (b as any).name || `لوحة ${billboardId}`); 
+                                }}
+                                className="cursor-pointer gap-2 text-blue-600 focus:text-blue-600 focus:bg-blue-50/10"
+                              >
+                                <ArrowLeftRight className="h-4 w-4" />
+                                <span>تبديل مع لوحة أخرى</span>
+                              </DropdownMenuItem>
+                            )}
+
+                            {onMoveBillboard && (
+                              <DropdownMenuItem 
+                                onClick={(e) => { 
+                                  e.stopPropagation(); 
+                                  onMoveBillboard(billboardId, (b as any).Billboard_Name || (b as any).name || `لوحة ${billboardId}`); 
+                                }}
+                                className="cursor-pointer gap-2 text-green-600 focus:text-green-600 focus:bg-green-50/10"
+                              >
+                                <MoveRight className="h-4 w-4" />
+                                <span>نقل إلى عقد آخر</span>
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </div>
 
                     {/* 🔵 Strong replacement banner across the top of the card */}
                     {replacementsMap.has(billboardId) && (() => {
                       const info = replacementsMap.get(billboardId)!;
                       return (
-                        <div className="relative z-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-3 py-2 border-b-2 border-blue-700 shadow-inner">
+                        <div className="relative z-10 bg-gradient-to-r from-blue-600 to-blue-500 text-white px-3 py-2 border-b border-blue-700 shadow-inner">
                           <div className="flex items-center gap-2 text-[11px] font-bold">
                             <ArrowLeftRight className="h-3.5 w-3.5 shrink-0" />
                             <span>بديلة عن:</span>
@@ -1134,136 +1303,114 @@ export function SelectedBillboardsCard({
                       );
                     })()}
 
-                    {/* Top Action Bar — primary actions above image, never overlap */}
-                    <div className="border-b border-border bg-muted/40 px-2 py-2 flex items-center gap-1 h-12 shrink-0">
-                      <Button
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (!b) return;
-                          setPausingBillboard(b);
-                          const pCost = printCostDetails.find(p => p.billboardId === billboardId)?.printCost || 0;
-                          setPausingPrintCost(pCost);
-                          const iCost = installationDetails.find(i => i.billboardId === billboardId)?.adjustedPrice || 0;
-                          setPausingInstallCost(iCost);
-                          setPauseDialogOpen(true);
-                        }}
-                        className="flex-1 h-8 text-xs gap-1 bg-amber-500 hover:bg-amber-600 text-white"
-                        title="إيقاف اللوحة"
-                      >
-                        <PauseCircle className="h-3.5 w-3.5" /> إيقاف
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => { e.stopPropagation(); handleQuickEdit(b, e as any); }}
-                        className="h-8 px-2 text-xs gap-1"
-                        title="تعديل السعر والمستوى"
-                      >
-                        <Pencil className="h-3.5 w-3.5" /> تعديل
-                      </Button>
-                      {onSwapBillboard && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => { e.stopPropagation(); onSwapBillboard(billboardId, (b as any).Billboard_Name || (b as any).name || `لوحة ${billboardId}`); }}
-                          className="h-8 w-8 p-0 text-blue-600 border-blue-500/40 hover:bg-blue-500/10"
-                          title="تبديل مع لوحة أخرى"
-                        >
-                          <ArrowLeftRight className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      {onMoveBillboard && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={(e) => { e.stopPropagation(); onMoveBillboard(billboardId, (b as any).Billboard_Name || (b as any).name || `لوحة ${billboardId}`); }}
-                          className="h-8 w-8 p-0 text-green-600 border-green-500/40 hover:bg-green-500/10"
-                          title="نقل إلى عقد آخر"
-                        >
-                          <MoveRight className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={(e) => { e.stopPropagation(); onRemoveSelected(billboardId); }}
-                        className="h-8 w-8 p-0 text-destructive border-destructive/40 hover:bg-destructive/10"
-                        title="إزالة"
-                      >
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-
                     {/* Image Section — click to zoom */}
-                    <div className="relative h-40 bg-muted">
+                    <div className="relative h-44 bg-muted overflow-hidden shrink-0">
                       <BillboardImageZoom
                         billboard={b}
                         alt={(b as any).name || (b as any).Billboard_Name || 'لوحة'}
                       />
                       {/* Gradient Overlay */}
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                      {/* Billboard Code on Image */}
-                      <div className="absolute bottom-3 right-3 text-white pointer-events-none">
-                        <h4 className="text-lg font-bold drop-shadow-lg">
-                          {(b as any).name || (b as any).Billboard_Name}
-                        </h4>
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent pointer-events-none" />
+                      
+                      {/* Badges overlayed on top-right of image */}
+                      <div className="absolute top-3 right-3 z-10 flex flex-col gap-1.5 items-end max-w-[90%] pointer-events-none">
+                        {isPartnership && (
+                          <Badge className="bg-primary/90 text-primary-foreground text-[10px] font-bold px-2 py-0.5 shadow-md flex items-center gap-1 border border-primary/20 backdrop-blur-sm">
+                            <Users className="h-3 w-3 ml-1" />
+                            مشتركة
+                          </Badge>
+                        )}
+                        {isPartnership && partnershipInfo && partnershipInfo.partnerShares.length > 0 && (
+                          <Badge className="bg-purple-600/90 text-white text-[10px] font-bold px-2 py-0.5 shadow-md max-w-[150px] truncate border border-purple-500/20 backdrop-blur-sm">
+                            {partnershipInfo.partnerShares.map(ps => ps.partnerName).join(' • ')}
+                          </Badge>
+                        )}
+                        {isFriendBillboard && (
+                          <FriendCompanyBadge billboardId={billboardId} billboard={b} />
+                        )}
+                        {isSingleFace && (
+                          <Badge className="bg-amber-600/90 text-white text-[10px] font-bold px-2 py-0.5 shadow-md border border-amber-500/20 backdrop-blur-sm">
+                            وجه واحد
+                          </Badge>
+                        )}
+                        {activeLoansByBillboard.get(billboardId) && (
+                          <BillboardLoanBadge loan={activeLoansByBillboard.get(billboardId)!} />
+                        )}
+                        {replacementsMap.has(billboardId) && (
+                          <Badge className="bg-blue-600/90 text-white text-[10px] font-bold px-2 py-0.5 shadow-md flex items-center gap-1 border border-blue-500/20 backdrop-blur-sm">
+                            <ArrowLeftRight className="h-3 w-3" />
+                            لوحة بديلة
+                          </Badge>
+                        )}
                       </div>
                     </div>
 
                     {/* Content Section */}
-                    <div className="p-4 space-y-4">
-                      {/* Location */}
-                      <p className="text-sm text-foreground/80 line-clamp-2 leading-relaxed">
-                        {(b as any).location || (b as any).Nearest_Landmark || 'لا يوجد موقع'}
-                      </p>
-
-                      {/* Details Grid - Using site identity colors */}
-                      <div className="grid grid-cols-4 gap-2">
-                        <div className="text-center bg-primary/10 border border-primary/20 rounded-lg py-2.5 px-1">
-                          <div className="text-[10px] text-primary/70 mb-0.5 font-medium">الحجم</div>
-                          <div className="text-sm font-bold text-primary font-manrope">{getDisplaySize(b)}</div>
-                        </div>
-                        <div className="text-center bg-muted border border-border rounded-lg py-2.5 px-1">
-                          <div className="text-[10px] text-muted-foreground mb-0.5 font-medium">الوجوه</div>
-                          <div className="text-sm font-bold text-foreground font-manrope">{getFacesCount(b)}</div>
-                        </div>
-                        <div className="text-center bg-muted border border-border rounded-lg py-2.5 px-1">
-                          <div className="text-[10px] text-muted-foreground mb-0.5 font-medium">المدينة</div>
-                          <div className="text-sm font-bold text-foreground">{(b as any).city || (b as any).City || '-'}</div>
-                        </div>
-                        <div className="text-center bg-primary/10 border border-primary/30 rounded-lg py-2.5 px-1">
-                          <div className="text-[10px] text-primary/80 mb-0.5 font-medium">المستوى</div>
-                          <div className="text-sm font-bold text-primary">{(b as any).level || (b as any).Level || '-'}</div>
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
+                      {/* Location / Nearest Landmark */}
+                      <div className="flex items-start gap-2 bg-muted/30 p-2.5 rounded-xl border border-border/40 shrink-0">
+                        <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                        <div className="space-y-0.5">
+                          <span className="text-[10px] text-muted-foreground block font-medium">أقرب نقطة دالة</span>
+                          <p className="text-sm font-extrabold text-foreground leading-snug">
+                            {(b as any).location || (b as any).Nearest_Landmark || (b as any).Nearest_landmark || 'غير محدد'}
+                          </p>
                         </div>
                       </div>
 
-                      {/* Single Face Toggle Button - Always visible */}
+                      {/* Details Grid - Using site identity colors (4 columns) */}
+                      <div className="grid grid-cols-4 gap-1.5 shrink-0">
+                        <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
+                          <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المقاس</div>
+                          <div className="text-xs font-extrabold text-foreground font-manrope">{getDisplaySize(b)}</div>
+                        </div>
+                        <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
+                          <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المنطقة</div>
+                          <div className="text-xs font-bold text-foreground truncate" title={(b as any).District || (b as any).district || '-'}>
+                            {(b as any).District || (b as any).district || '-'}
+                          </div>
+                        </div>
+                        <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
+                          <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المدينة</div>
+                          <div className="text-xs font-bold text-foreground truncate">{(b as any).city || (b as any).City || '-'}</div>
+                        </div>
+                        <div className="text-center bg-primary/5 border border-primary/20 rounded-xl py-2 px-1">
+                          <div className="text-[9px] text-primary/70 mb-0.5 font-medium">المستوى</div>
+                          <div className="text-xs font-extrabold text-primary font-manrope">{(b as any).level || (b as any).Level || '-'}</div>
+                        </div>
+                      </div>
+
+                      {/* Interactive Segmented Selector for Face Count - Replaces redundant displays */}
                       {onToggleSingleFace && (
-                        <button
-                          onClick={() => onToggleSingleFace(billboardId)}
-                          className={`w-full flex items-center justify-between px-4 py-3 rounded-xl border-2 transition-all duration-200 font-medium text-sm ${
-                            isSingleFace
-                              ? 'bg-amber-500/15 border-amber-500 text-amber-600'
-                              : 'bg-muted/50 border-border text-muted-foreground hover:border-amber-400 hover:text-amber-600 hover:bg-amber-500/5'
-                          }`}
-                        >
-                          <span className="flex items-center gap-2">
-                            <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold border-2 ${
-                              isSingleFace ? 'bg-amber-500 border-amber-500 text-white' : 'border-border text-muted-foreground'
-                            }`}>
-                              {isSingleFace ? '١' : '٢'}
-                            </span>
-                            عدد الوجوه
-                          </span>
-                          <span className="text-xs">
-                            {isSingleFace ? '⚡ وجه واحد (طباعة وتركيب ×٥٠٪)' : 'انقر لتغيير إلى وجه واحد'}
-                          </span>
-                        </button>
+                        <div className="flex items-center justify-between bg-muted/40 p-1 rounded-xl border border-border/50 text-xs shrink-0 select-none">
+                          <span className="font-bold text-foreground/75 mr-2">عدد الوجوه</span>
+                          <div className="flex bg-muted/80 rounded-lg p-0.5 border border-border/20">
+                            <button
+                              onClick={() => isSingleFace && onToggleSingleFace(billboardId)}
+                              className={`px-3 py-1 rounded-md font-bold text-[11px] transition-all duration-200 cursor-pointer ${
+                                !isSingleFace
+                                  ? 'bg-primary text-primary-foreground shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              وجهين
+                            </button>
+                            <button
+                              onClick={() => !isSingleFace && onToggleSingleFace(billboardId)}
+                              className={`px-3 py-1 rounded-md font-bold text-[11px] transition-all duration-200 cursor-pointer ${
+                                isSingleFace
+                                  ? 'bg-amber-500 text-white shadow-sm'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                            >
+                              وجه واحد
+                            </button>
+                          </div>
+                        </div>
                       )}
 
                       {/* Pricing Section */}
-                      <div className="bg-card border border-border rounded-xl p-4 space-y-2.5">
+                      <div className="bg-muted/20 border border-border/60 rounded-xl p-3.5 space-y-2 shrink-0">
                         {/* Base Rental */}
                         <div className="flex justify-between items-center">
                           <span className="text-sm font-medium text-muted-foreground">الإيجار الأساسي</span>
@@ -1531,6 +1678,8 @@ export function SelectedBillboardsCard({
           pricingMode={pricingMode}
           durationMonths={durationMonths}
           durationDays={durationDays}
+          previousContractNumber={previousContractNumber}
+          previousContractBillboardIds={previousContractBillboardIds}
         />
       )}
 

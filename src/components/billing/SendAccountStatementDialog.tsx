@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import html2pdf from 'html2pdf.js';
+import { cleanStatementNote } from '@/lib/printUtils';
 import {
   Dialog,
   DialogContent,
@@ -57,12 +58,56 @@ export function SendAccountStatementDialog({
     const { data: salesInvoices } = await supabase.from('sales_invoices').select('*').eq('customer_id', customerId).order('created_at', { ascending: true });
     const { data: generalDiscounts } = await supabase.from('customer_general_discounts').select('*').eq('customer_id', customerId).eq('status', 'active').order('applied_date', { ascending: true });
 
+    // تحميل لوحات الإيقاف لحساب خصومات الإيقاف
+    let pausedBillboards: any[] = [];
+    const contractsData = contracts || [];
+    if (contractsData.length > 0) {
+      const contractNums = contractsData.map(c => Number(c.Contract_Number)).filter(Boolean);
+      const { data: pausedData } = await supabase
+        .from('paused_billboards' as any)
+        .select('*')
+        .in('contract_number', contractNums);
+      if (pausedData) pausedBillboards = pausedData;
+    }
+
     const transactions: any[] = [];
-    (contracts || []).forEach(c => transactions.push({ date: c['Contract Date'], type: 'contract', description: `عقد رقم ${c.Contract_Number}`, debit: Number(c['Total']) || 0, credit: 0, reference: `عقد-${c.Contract_Number}`, notes: c['Ad Type'] || '—' }));
-    (payments || []).forEach(p => { const isDebit = p.entry_type === 'invoice' || p.entry_type === 'debt'; transactions.push({ date: p.paid_at, type: p.entry_type, description: p.entry_type === 'receipt' ? 'إيصال' : 'فاتورة', debit: isDebit ? Number(p.amount) || 0 : 0, credit: isDebit ? 0 : Number(p.amount) || 0, reference: p.reference || '—', notes: p.notes || '—' }); });
-    (printedInvoices || []).forEach(inv => transactions.push({ date: inv.created_at, type: 'print_invoice', description: `فاتورة طباعة ${inv.invoice_number}`, debit: Number(inv.total_amount) || 0, credit: 0, reference: inv.invoice_number, notes: inv.notes || '—' }));
-    (salesInvoices || []).forEach(inv => transactions.push({ date: inv.created_at, type: 'sales', description: `فاتورة مبيعات ${inv.invoice_number}`, debit: Number(inv.total_amount) || 0, credit: 0, reference: inv.invoice_number, notes: inv.notes || '—' }));
-    (generalDiscounts || []).forEach(d => transactions.push({ date: d.applied_date, type: 'discount', description: 'خصم', debit: 0, credit: d.discount_type === 'fixed' ? Number(d.discount_value) : 0, reference: 'خصم عام', notes: d.reason || '—' }));
+    contractsData.forEach(c => {
+      const contractPaused = pausedBillboards.filter(pb => Number(pb.contract_number) === Number(c.Contract_Number));
+      const totalSuspensionDiscount = contractPaused.reduce((sum, pb) => sum + (Number(pb.refund_amount) || 0), 0);
+      const originalContractTotal = (Number(c['Total']) || 0) + totalSuspensionDiscount;
+
+      transactions.push({ 
+        date: c['Contract Date'], 
+        type: 'contract', 
+        description: `عقد رقم ${c.Contract_Number}`, 
+        debit: originalContractTotal, 
+        credit: 0, 
+        reference: `عقد-${c.Contract_Number}`, 
+        notes: cleanStatementNote(c['Ad Type'] || '—') 
+      });
+
+      if (totalSuspensionDiscount > 0) {
+        const sortedPaused = [...contractPaused].sort((a, b) => new Date(b.pause_date).getTime() - new Date(a.pause_date).getTime());
+        const latestPaused = sortedPaused[0];
+        const latestPauseDate = latestPaused ? latestPaused.pause_date : c['End Date'];
+        const latestBoardName = latestPaused ? (latestPaused.billboard_name || `لوحة #${latestPaused.billboard_id}`) : '';
+
+        transactions.push({
+          date: latestPauseDate,
+          type: 'discount',
+          description: `خصم إيقاف لوحات عقد رقم ${c.Contract_Number}${latestBoardName ? ` - ${latestBoardName}` : ''}`,
+          debit: 0,
+          credit: totalSuspensionDiscount,
+          reference: `عقد-${c.Contract_Number}`,
+          notes: cleanStatementNote(`خصم إيقاف اللوحات حسب آخر إيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`)
+        });
+      }
+    });
+
+    (payments || []).forEach(p => { const isDebit = p.entry_type === 'invoice' || p.entry_type === 'debt'; transactions.push({ date: p.paid_at, type: p.entry_type, description: p.entry_type === 'receipt' ? 'إيصال' : 'فاتورة', debit: isDebit ? Number(p.amount) || 0 : 0, credit: isDebit ? 0 : Number(p.amount) || 0, reference: p.reference || '—', notes: cleanStatementNote(p.notes || '—') }); });
+    (printedInvoices || []).forEach(inv => transactions.push({ date: inv.created_at, type: 'print_invoice', description: `فاتورة طباعة ${inv.invoice_number}`, debit: Number(inv.total_amount) || 0, credit: 0, reference: inv.invoice_number, notes: cleanStatementNote(inv.notes || '—') }));
+    (salesInvoices || []).forEach(inv => transactions.push({ date: inv.created_at, type: 'sales', description: `فاتورة مبيعات ${inv.invoice_number}`, debit: Number(inv.total_amount) || 0, credit: 0, reference: inv.invoice_number, notes: cleanStatementNote(inv.notes || '—') }));
+    (generalDiscounts || []).forEach(d => transactions.push({ date: d.applied_date, type: 'discount', description: 'خصم', debit: 0, credit: d.discount_type === 'fixed' ? Number(d.discount_value) : 0, reference: 'خصم عام', notes: cleanStatementNote(d.reason || '—') }));
 
     transactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
     let balance = 0;

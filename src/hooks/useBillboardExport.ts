@@ -1578,9 +1578,108 @@ export const useBillboardExport = () => {
     }
   };
 
+  // ✅ Export Municipality Billboards to Excel
+  const exportMunicipalityToExcel = async (billboards: any[], excludeHidden: boolean, selectedMunicipality: string) => {
+    try {
+      toast.info('جاري تحضير ملف Excel للوحات البلدية...');
+      await loadActiveContractsByBillboard();
+      
+      // ✅ Sort billboards by database size order
+      const sortedBillboards = await sortBillboardsBySize(billboards);
+      
+      // ✅ Filter: Exclude hidden from available if excludeHidden is true & filter by municipality
+      const filteredBillboards = sortedBillboards.filter((billboard: any) => {
+        // Filter by municipality if not "all"
+        if (selectedMunicipality && selectedMunicipality !== 'all') {
+          const mVal = String(billboard.Municipality || billboard.municipality || '').trim();
+          if (mVal !== selectedMunicipality.trim()) {
+            return false;
+          }
+        }
+
+        const isAvailable = isBillboardAvailable(billboard);
+        const isHidden = (billboard.is_visible_in_available === false) || 
+                         (billboard.Status === 'مخفي' || billboard.status === 'مخفي') ||
+                         (billboard.maintenance_status === 'hidden' || billboard.maintenance_status === 'مخفي');
+                         
+        if (excludeHidden && isAvailable && isHidden) {
+          return false;
+        }
+        return true;
+      });
+
+      if (filteredBillboards.length === 0) {
+        toast.warning('لا توجد لوحات للتصدير');
+        return;
+      }
+
+      // Prepare data for export
+      const exportData = await Promise.all(
+        filteredBillboards.map(async (billboard: any) => {
+          const billboardName = billboard.Billboard_Name || billboard.name || '';
+          
+          return {
+            'رقم اللوحة': billboard.ID || billboard.id || '',
+            'اسم اللوحة': billboardName,
+            'المدينة': billboard.City || billboard.city || '',
+            'البلدية': billboard.Municipality || billboard.municipality || '',
+            'المنطقة': billboard.District || billboard.district || '',
+            'أقرب معلم': billboard.Nearest_Landmark || billboard.location || '',
+            'المقاس': billboard.Size || billboard.size || '',
+            'الحالة': billboard.Status || billboard.status || '',
+            'إحداثيات GPS': billboard.GPS_Coordinates || billboard.gps_coordinates || '',
+            'رابط صورة اللوحة': normalizeGoogleImageUrl(billboard.Image_URL || billboard.image || ''),
+            'رابط صورة الإعلان (أمام)': billboard.design_face_a || '',
+            'رابط صورة الإعلان (خلف)': billboard.design_face_b || ''
+          };
+        })
+      );
+
+      // Create workbook and worksheet
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.json_to_sheet(exportData);
+
+      // Set column widths
+      const colWidths = [
+        { wch: 12 }, // رقم اللوحة
+        { wch: 20 }, // اسم اللوحة
+        { wch: 12 }, // المدينة
+        { wch: 15 }, // البلدية
+        { wch: 15 }, // المنطقة
+        { wch: 20 }, // أقرب معلم
+        { wch: 10 }, // المقاس
+        { wch: 12 }, // الحالة
+        { wch: 25 }, // إحداثيات GPS
+        { wch: 35 }, // رابط صورة اللوحة
+        { wch: 35 }, // رابط صورة الإعلان (أمام)
+        { wch: 35 }  // رابط صورة الإعلان (خلف)
+      ];
+      ws['!cols'] = colWidths;
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, 'لوحات البلدية');
+
+      // Generate filename with current date
+      const now = new Date();
+      const dateStr = now.toISOString().split('T')[0];
+      const mName = selectedMunicipality !== 'all' ? `${selectedMunicipality}_` : '';
+      const filename = `لوحات_البلدية_${mName}${excludeHidden ? 'مستبعد_المخفي_' : ''}${dateStr}.xlsx`;
+
+      // Save file
+      XLSX.writeFile(wb, filename);
+      
+      toast.success(`تم تنزيل ملف Excel لوحات البلدية: ${filename}`);
+      console.log('✅ Municipality billboards Excel exported');
+    } catch (error) {
+      console.error('Error exporting municipality billboards to Excel:', error);
+      toast.error('فشل في تصدير ملف Excel');
+    }
+  };
+
   return {
     exportToExcel,
     exportAvailableToExcel,
+    exportMunicipalityToExcel,
     copyAvailableToClipboard,
     copyAllToClipboard,
     copyAvailableAndUpcomingToClipboard,

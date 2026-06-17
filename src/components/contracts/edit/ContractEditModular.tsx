@@ -461,6 +461,37 @@ export default function ContractEditModular() {
       date.setDate(date.getDate() + 7);
     } else if (paymentType === 'نهاية العقد') {
       return endDate || '';
+    } else if (paymentType === 'بعد 20% من العقد') {
+      const targetEndDate = endDate;
+      if (baseDate && targetEndDate) {
+        const start = new Date(baseDate);
+        const end = new Date(targetEndDate);
+        const duration = end.getTime() - start.getTime();
+        if (duration > 0) {
+          const offset = duration * 0.20;
+          const target = new Date(start.getTime() + offset);
+          return target.toISOString().split('T')[0];
+        }
+      }
+      // Fallback: 15 days from start date
+      date.setDate(date.getDate() + 15);
+      return date.toISOString().split('T')[0];
+    } else if (paymentType && paymentType.startsWith('بعد مرور ') && paymentType.endsWith('% من العقد')) {
+      const match = paymentType.match(/بعد مرور\s+(\d+)%\s+من\s+العقد/);
+      if (match) {
+        const percent = parseInt(match[1], 10);
+        const targetEndDate = endDate;
+        if (baseDate && targetEndDate) {
+          const start = new Date(baseDate);
+          const end = new Date(targetEndDate);
+          const duration = end.getTime() - start.getTime();
+          if (duration > 0) {
+            const offset = duration * (percent / 100);
+            const target = new Date(start.getTime() + offset);
+            return target.toISOString().split('T')[0];
+          }
+        }
+      }
     }
     
     return date.toISOString().split('T')[0];
@@ -720,6 +751,7 @@ export default function ContractEditModular() {
     includeInstallationInPrice,
     singleFaceBillboards: stableSingleFaceBillboards,
     pricingByBillboard: stableSelectedPricingByBillboardMap,
+    useStoredPrices: true,
   }), [
     calculateBillboardPrice,
     stablePerBillboardPrintCosts,
@@ -843,13 +875,13 @@ export default function ContractEditModular() {
           amount: half, 
           paymentType: 'عند التوقيع', 
           description: 'الدفعة الأولى',
-          dueDate: calculateDueDate('عند ال��وقيع', 0)
+          dueDate: calculateDueDate('عند التوقيع', 0)
         },
         { 
           amount: finalTotal - half, 
-          paymentType: 'شهري', 
+          paymentType: 'بعد 20% من العقد', 
           description: 'الدفعة الثانية',
-          dueDate: calculateDueDate('شهري', 1)
+          dueDate: calculateDueDate('بعد 20% من العقد', 1)
         },
       ]);
     }
@@ -1060,17 +1092,72 @@ export default function ContractEditModular() {
     console.log('🔄 Refreshed prices from table, now using calculated:', calculatedEstimatedTotal);
   };
 
+  // Helper to round installment values down to clean/closed numbers (nearest 500 for >=10k, nearest 100 for >=1k, etc.) to ensure the first payment is always the largest.
+  const roundToCleanValue = (value: number): number => {
+    if (value <= 0) return 0;
+    if (value < 100) {
+      return Math.floor(value);
+    }
+    if (value < 1000) {
+      return Math.floor(value / 10) * 10;
+    }
+    if (value < 10000) {
+      return Math.floor(value / 100) * 100;
+    }
+    return Math.floor(value / 500) * 500;
+  };
+
   // Installment management
   const distributeEvenly = (count: number) => {
-    count = Math.max(1, Math.min(6, Math.floor(count)));
-    const even = Math.floor((finalTotal / count) * 100) / 100;
-    const list = Array.from({ length: count }).map((_, i) => ({
-      amount: i === count - 1 ? Math.round((finalTotal - even * (count - 1)) * 100) / 100 : even,
-      paymentType: i === 0 ? 'عند التوقيع' : 'شهري',
-      description: `الدفعة ${i + 1}`,
-      dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : 'شهري', i)
-    }));
+    count = Math.max(1, Math.min(12, Math.floor(count)));
+    
+    let list;
+    if (count === 1) {
+      list = [{
+        amount: finalTotal,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة كامل قيمة العقد',
+        dueDate: calculateDueDate('عند التوقيع', 0)
+      }];
+    } else {
+      const cleanAmount = roundToCleanValue(finalTotal / count);
+      const firstAmount = Math.round((finalTotal - cleanAmount * (count - 1)) * 100) / 100;
+      
+      let finalFirst = firstAmount;
+      let finalSecond = cleanAmount;
+      
+      if (roundToCleanValue(firstAmount) !== firstAmount) {
+        let cleanFirst = roundToCleanValue(firstAmount);
+        const payment2 = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
+        
+        if (cleanFirst < payment2) {
+          let step = 500;
+          if (cleanFirst < 100) step = 1;
+          else if (cleanFirst < 1000) step = 10;
+          else if (cleanFirst < 10000) step = 100;
+          
+          cleanFirst += step;
+        }
+        finalFirst = cleanFirst;
+        finalSecond = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
+      }
+      
+      list = Array.from({ length: count }).map((_, i) => {
+        let amount = cleanAmount;
+        if (i === 0) amount = finalFirst;
+        else if (i === 1) amount = finalSecond;
+        
+        return {
+          amount,
+          paymentType: i === 0 ? 'عند التوقيع' : 'شهري',
+          description: `الدفعة ${i + 1}`,
+          dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : 'شهري', i)
+        };
+      });
+    }
+    
     setInstallments(list);
+    toast.success(`تم توزيع المبلغ على ${count} أقساط مغلقة بنجاح`);
   };
 
   const distributeWithInterval = (config: {
@@ -1087,60 +1174,134 @@ export default function ContractEditModular() {
       return;
     }
 
-    const { firstPayment, interval, numPayments, lastPaymentDate, firstPaymentDate, firstAtSigning = true } = config;
+    const { firstPayment, firstPaymentType, interval, numPayments, lastPaymentDate, firstPaymentDate, firstAtSigning = true } = config;
 
-    if (firstPayment < 0 || firstPayment > finalTotal) {
+    let actualFirstPayment = firstPayment;
+    if (firstPaymentType === 'percent') {
+      actualFirstPayment = Math.round((finalTotal * Math.min(100, Math.max(0, firstPayment)) / 100) * 100) / 100;
+    }
+
+    if (actualFirstPayment < 0 || actualFirstPayment > finalTotal) {
       toast.error('قيمة الدفعة الأولى غير صحيحة');
       return;
     }
 
-    const remaining = finalTotal - firstPayment;
+    const remaining = finalTotal - actualFirstPayment;
     const intervalMonthsMap: Record<string, number> = { 'month': 1, '2months': 2, '3months': 3, '4months': 4, '5months': 5, '6months': 6, '7months': 7 };
     const intervalLabelMap: Record<string, string> = { 'month': 'شهري', '2months': 'كل شهرين', '3months': 'كل 3 أشهر', '4months': 'كل 4 أشهر', '5months': 'كل 5 أشهر', '6months': 'كل 6 أشهر', '7months': 'كل 7 أشهر' };
     const intervalMonths = intervalMonthsMap[interval] || 1;
     const intervalLabel = intervalLabelMap[interval] || 'شهري';
 
     const newInstallments: Array<{ amount: number; paymentType: string; description: string; dueDate: string; }> = [];
+    const firstDate = firstPaymentDate || startDate;
+
+    let numberOfPayments: number;
+    const start = new Date(firstDate);
+    if (numPayments) {
+      numberOfPayments = numPayments;
+    } else if (lastPaymentDate) {
+      const calculatedEndDate = new Date(lastPaymentDate);
+      const monthsDiff = Math.max(intervalMonths, Math.round((calculatedEndDate.getTime() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+      numberOfPayments = Math.max(1, Math.floor(monthsDiff / intervalMonths));
+    } else {
+      const calculatedEndDate = new Date(endDate || startDate);
+      const monthsDiff = Math.max(intervalMonths, Math.round((calculatedEndDate.getTime() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
+      numberOfPayments = Math.max(1, Math.floor(monthsDiff / intervalMonths));
+    }
+
+    const hasFirstPayment = actualFirstPayment > 0;
+
+    // حساب قيمة الدفعة الأولى والدفعات المتكررة مغلقة ونظيفة
+    let finalFirstPayment = actualFirstPayment;
+    let cleanRecurringAmount = Math.round((remaining / numberOfPayments) * 100) / 100;
+    let firstRecurringAmount = cleanRecurringAmount;
+
+    if (hasFirstPayment) {
+      const cleanRec = roundToCleanValue(remaining / numberOfPayments);
+      const adjFirst = Math.round((finalTotal - cleanRec * numberOfPayments) * 100) / 100;
+      if (adjFirst >= 0) {
+        let finalFirst = adjFirst;
+        
+        if (roundToCleanValue(adjFirst) !== adjFirst) {
+          let cleanFirst = roundToCleanValue(adjFirst);
+          const lastPayment = Math.round((finalTotal - cleanFirst - cleanRec * (numberOfPayments - 1)) * 100) / 100;
+          
+          if (cleanFirst < lastPayment) {
+            let step = 500;
+            if (cleanFirst < 100) step = 1;
+            else if (cleanFirst < 1000) step = 10;
+            else if (cleanFirst < 10000) step = 100;
+            
+            cleanFirst += step;
+          }
+          finalFirst = cleanFirst;
+        }
+        
+        finalFirstPayment = finalFirst;
+        cleanRecurringAmount = cleanRec;
+      }
+    } else {
+      const cleanRec = roundToCleanValue(finalTotal / numberOfPayments);
+      const firstRec = Math.round((finalTotal - cleanRec * (numberOfPayments - 1)) * 100) / 100;
+      
+      let finalFirst = firstRec;
+      
+      if (roundToCleanValue(firstRec) !== firstRec) {
+        let cleanFirst = roundToCleanValue(firstRec);
+        const lastPayment = Math.round((finalTotal - cleanFirst - cleanRec * (numberOfPayments - 2)) * 100) / 100;
+        
+        if (cleanFirst < lastPayment) {
+          let step = 500;
+          if (cleanFirst < 100) step = 1;
+          else if (cleanFirst < 1000) step = 10;
+          else if (cleanFirst < 10000) step = 100;
+          
+          cleanFirst += step;
+        }
+        finalFirst = cleanFirst;
+      }
+      
+      firstRecurringAmount = finalFirst;
+      cleanRecurringAmount = cleanRec;
+    }
 
     // Add first payment if different
-    if (firstPayment > 0) {
+    if (hasFirstPayment) {
       newInstallments.push({
-        amount: Math.round(firstPayment * 100) / 100,
+        amount: finalFirstPayment,
         paymentType: firstAtSigning ? 'عند التوقيع' : 'مقدم',
         description: 'الدفعة الأولى',
-        dueDate: firstPaymentDate || startDate
+        dueDate: firstDate
       });
     }
 
-    if (remaining > 0) {
-      const start = new Date(firstPaymentDate || startDate);
-      let numberOfPayments: number;
-
-      if (numPayments) {
-        numberOfPayments = numPayments;
-      } else if (lastPaymentDate) {
-        const calculatedEndDate = new Date(lastPaymentDate);
-        const monthsDiff = Math.max(intervalMonths, Math.round((calculatedEndDate.getTime() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
-        numberOfPayments = Math.max(1, Math.floor(monthsDiff / intervalMonths));
+    let runningTotal = hasFirstPayment ? finalFirstPayment : 0;
+    for (let i = 0; i < numberOfPayments; i++) {
+      const isLast = i === numberOfPayments - 1;
+      let amount = cleanRecurringAmount;
+      if (!hasFirstPayment && i === 0) {
+        amount = firstRecurringAmount;
+      }
+      
+      if (isLast) {
+        amount = Math.round((finalTotal - runningTotal) * 100) / 100;
       } else {
-        const calculatedEndDate = new Date(endDate || startDate);
-        const monthsDiff = Math.max(intervalMonths, Math.round((calculatedEndDate.getTime() - start.getTime()) / (30 * 24 * 60 * 60 * 1000)));
-        numberOfPayments = Math.max(1, Math.floor(monthsDiff / intervalMonths));
+        runningTotal += amount;
       }
 
-      const recurringPayment = Math.round((remaining / numberOfPayments) * 100) / 100;
-      const lastPaymentAmount = Math.round((remaining - (recurringPayment * (numberOfPayments - 1))) * 100) / 100;
+      const paymentDate = new Date(start);
+      // ✅ FIX: بدء التواريخ من أول فترة بعد الدفعة الأولى
+      const monthOffset = hasFirstPayment ? (i + 1) : i;
+      paymentDate.setMonth(paymentDate.getMonth() + (monthOffset * intervalMonths));
+      
+      newInstallments.push({
+        amount: Math.round(amount * 100) / 100,
+        paymentType: intervalLabel,
+        description: `الدفعة ${newInstallments.length + 1}`,
+        dueDate: paymentDate.toISOString().split('T')[0]
+      });
 
-      for (let i = 0; i < numberOfPayments; i++) {
-        const paymentDate = new Date(start);
-        paymentDate.setMonth(paymentDate.getMonth() + ((i + 1) * intervalMonths));
-        newInstallments.push({
-          amount: i === numberOfPayments - 1 ? lastPaymentAmount : recurringPayment,
-          paymentType: intervalLabel,
-          description: `الدفعة ${newInstallments.length + 1}`,
-          dueDate: paymentDate.toISOString().split('T')[0]
-        });
-      }
+      runningTotal += amount;
     }
 
     // If no installments created, create single payment
@@ -1214,6 +1375,85 @@ export default function ContractEditModular() {
   const clearAllInstallments = () => {
     setInstallments([]);
   };
+
+  const distributeByDurationPeriods = React.useCallback((count: number) => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.info('يرجى تحديد تاريخ بداية ونهاية العقد أولاً');
+      return;
+    }
+
+    count = Math.max(2, Math.min(12, Math.floor(count)));
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDuration = end.getTime() - start.getTime();
+    
+    if (totalDuration <= 0) {
+      toast.info('تاريخ نهاية العقد يجب أن يكون بعد تاريخ البداية');
+      return;
+    }
+
+    const intervalDuration = totalDuration / count;
+    const cleanAmount = roundToCleanValue(finalTotal / count);
+    const firstAmount = Math.round((finalTotal - cleanAmount * (count - 1)) * 100) / 100;
+    
+    let finalFirst = firstAmount;
+    
+    if (roundToCleanValue(firstAmount) !== firstAmount) {
+      let cleanFirst = roundToCleanValue(firstAmount);
+      const lastPayment = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
+      
+      if (cleanFirst < lastPayment) {
+        let step = 500;
+        if (cleanFirst < 100) step = 1;
+        else if (cleanFirst < 1000) step = 10;
+        else if (cleanFirst < 10000) step = 100;
+        
+        cleanFirst += step;
+      }
+      finalFirst = cleanFirst;
+    }
+    
+    let runningTotal = 0;
+    const newInstallments = Array.from({ length: count }).map((_, i) => {
+      const offset = i * intervalDuration;
+      const targetDate = new Date(start.getTime() + offset);
+      const dueDateStr = targetDate.toISOString().split('T')[0];
+      
+      const isLast = i === count - 1;
+      let amount = cleanAmount;
+      if (i === 0) amount = finalFirst;
+      
+      if (isLast) {
+        amount = Math.round((finalTotal - runningTotal) * 100) / 100;
+      } else {
+        runningTotal += amount;
+      }
+      
+      let percentageLabel = '';
+      if (i === 0) {
+        percentageLabel = 'عند التوقيع';
+      } else {
+        const percentPassed = Math.round((i / count) * 100);
+        percentageLabel = `بعد مرور ${percentPassed}% من العقد`;
+      }
+
+      return {
+        amount,
+        paymentType: percentageLabel,
+        description: `الدفعة ${i + 1} (${Math.round(100 / count)}%)`,
+        dueDate: dueDateStr
+      };
+    });
+
+    setInstallments(newInstallments);
+    toast.success(`تم توزيع الدفعات بالتساوي على ${count} فترات من مدة العقد بقيم مغلقة`);
+  }, [finalTotal, startDate, endDate]);
+
 
   const validateInstallments = () => {
     if (installments.length === 0) {
@@ -1574,8 +1814,10 @@ export default function ContractEditModular() {
                 installments={installments}
                 finalTotal={finalTotal}
                 startDate={startDate}
+                endDate={endDate}
                 onDistributeEvenly={distributeEvenly}
                 onDistributeWithInterval={distributeWithInterval}
+                onDistributeByDurationPeriods={distributeByDurationPeriods}
                 onAddInstallment={addInstallment}
                 onRemoveInstallment={removeInstallment}
                 onUpdateInstallment={updateInstallment}

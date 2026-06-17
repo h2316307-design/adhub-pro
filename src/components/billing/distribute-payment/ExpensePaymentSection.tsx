@@ -230,10 +230,10 @@ export function ExpensePaymentSection({
             onCheckedChange={(v) => { setEnabled(!!v); if (v) setIsOpen(true); else { setExpensePayments([]); setSelectedEmployeeId(''); } }}
             onClick={(e) => e.stopPropagation()}
           />
-          <Wallet className="h-4 w-4 text-orange-600" />
+          <Wallet className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold">سداد مصروفات موظفين</span>
           {enabled && totalSelected > 0 && (
-            <Badge variant="outline" className="text-xs bg-orange-100 text-orange-700 border-orange-300">
+            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
               {totalSelected.toFixed(0)} د.ل
             </Badge>
           )}
@@ -242,16 +242,16 @@ export function ExpensePaymentSection({
       </CollapsibleTrigger>
       <CollapsibleContent>
         {enabled && (
-          <div className="space-y-2 p-3 mt-1 bg-orange-50/50 dark:bg-orange-950/10 rounded-lg border border-orange-200/50">
+          <div className="space-y-2 p-3 mt-1 bg-primary/5 dark:bg-primary/5 rounded-lg border border-primary/20">
             {loading ? (
-              <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-orange-600" /></div>
+              <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
             ) : employees.length === 0 ? (
               <div className="text-xs text-center text-muted-foreground py-3">لا يوجد موظفون لديهم مصروفات غير مسددة</div>
             ) : (
               <>
                 {/* Employee selector */}
                 <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-orange-800 dark:text-orange-300">اختر الموظف</label>
+                  <label className="text-[11px] font-semibold text-primary dark:text-white">اختر الموظف</label>
                   <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
                     <SelectTrigger className="h-8 text-xs bg-background">
                       <SelectValue placeholder="-- اختر موظف --" />
@@ -272,9 +272,9 @@ export function ExpensePaymentSection({
                 {selectedEmployeeId && visibleExpenses.length > 0 && (
                   <>
                     {/* Available amount + auto distribute */}
-                    <div className="flex items-end gap-2 p-2 rounded border border-orange-200/60 bg-background">
+                    <div className="flex items-end gap-2 p-2 rounded border border-primary/20 bg-background">
                       <div className="flex-1 space-y-1">
-                        <label className="text-[10px] font-semibold text-orange-800 dark:text-orange-300">
+                        <label className="text-[10px] font-semibold text-primary dark:text-white">
                           المبلغ المتاح لتوزيعه على هذا الموظف
                         </label>
                         <div className="flex items-center gap-1.5">
@@ -297,7 +297,7 @@ export function ExpensePaymentSection({
                             size="sm"
                             variant="outline"
                             onClick={() => setAvailableAmount(String(availableMaxCap))}
-                            className="text-[10px] h-7 border-orange-300 text-orange-700 hover:bg-orange-50"
+                            className="text-[10px] h-7 border-primary/30 text-primary hover:bg-primary/10"
                             disabled={availableMaxCap <= 0}
                             title={`الحد الأقصى: ${availableMaxCap.toFixed(2)}`}
                           >
@@ -310,7 +310,7 @@ export function ExpensePaymentSection({
                         size="sm"
                         onClick={autoDistribute}
                         disabled={availableNum <= 0}
-                        className="h-8 text-[11px] gap-1 bg-orange-600 hover:bg-orange-700 text-white"
+                        className="h-8 text-[11px] gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
                       >
                         <Zap className="h-3 w-3" />
                         توزيع تلقائي
@@ -319,18 +319,18 @@ export function ExpensePaymentSection({
 
                     {/* Status bar */}
                     {availableNum > 0 && (
-                      <div className="grid grid-cols-3 gap-1 text-[10px] p-1.5 rounded bg-orange-100/60 dark:bg-orange-950/30">
+                      <div className="grid grid-cols-3 gap-1 text-[10px] p-1.5 rounded bg-primary/10 dark:bg-primary/20">
                         <div className="text-center">
                           <div className="text-muted-foreground">المُختار</div>
-                          <div className="font-bold text-orange-700">{totalSelected.toFixed(2)}</div>
+                          <div className="font-bold text-primary">{totalSelected.toFixed(2)}</div>
                         </div>
                         <div className="text-center">
                           <div className="text-muted-foreground">المتبقي من المبلغ</div>
-                          <div className="font-bold text-orange-700">{remainingFromAvailable.toFixed(2)}</div>
+                          <div className="font-bold text-primary">{remainingFromAvailable.toFixed(2)}</div>
                         </div>
                         <div className="text-center">
                           <div className="text-muted-foreground">مستحقات الموظف</div>
-                          <div className="font-bold text-orange-700">{employeeTotalRemaining.toFixed(2)}</div>
+                          <div className="font-bold text-primary">{employeeTotalRemaining.toFixed(2)}</div>
                         </div>
                       </div>
                     )}
@@ -341,7 +341,7 @@ export function ExpensePaymentSection({
                         {allSelected ? 'إلغاء الكل' : 'تحديد الكل'}
                       </Button>
                       <span className="text-[10px] text-muted-foreground">
-                        إجمالي مستحقات الموظف: <strong className="text-orange-700">{employeeTotalRemaining.toLocaleString('ar-LY')} د.ل</strong>
+                        إجمالي مستحقات الموظف: <strong className="text-primary">{employeeTotalRemaining.toLocaleString('ar-LY')} د.ل</strong>
                       </span>
                     </div>
 
@@ -352,7 +352,7 @@ export function ExpensePaymentSection({
                         const max = rowMax(e);
                         const poolFull = !sel && Math.max(0, sectionPool - totalSelected) <= 0;
                         return (
-                          <div key={e.id} className="flex items-center gap-2 p-1.5 bg-background rounded border border-orange-200/40">
+                          <div key={e.id} className="flex items-center gap-2 p-1.5 bg-background rounded border border-primary/20">
                             <Checkbox checked={!!sel} onCheckedChange={(v) => toggle(e, !!v)} disabled={poolFull} title={poolFull ? 'تم بلوغ سقف الدفعة' : undefined} />
                             <div className="flex-1 min-w-0">
                               <div className="text-xs truncate">{e.description}</div>
@@ -378,7 +378,7 @@ export function ExpensePaymentSection({
                                   size="sm"
                                   variant="outline"
                                   onClick={() => updateAmount(e.id, String(max), e.remaining)}
-                                  className="text-[10px] h-7 px-1.5 border-orange-300 text-orange-700 hover:bg-orange-50"
+                                  className="text-[10px] h-7 px-1.5 border-primary/30 text-primary hover:bg-primary/10"
                                   disabled={max <= 0}
                                   title={`الحد الأقصى: ${max.toFixed(2)}`}
                                 >
@@ -398,9 +398,9 @@ export function ExpensePaymentSection({
                 )}
               </>
             )}
-            <div className="flex justify-between pt-1.5 border-t border-orange-200 text-xs">
-              <span className="text-orange-700">إجمالي السداد:</span>
-              <span className="font-bold text-orange-700">{totalSelected.toFixed(2)} د.ل</span>
+            <div className="flex justify-between pt-1.5 border-t border-primary/20 text-xs">
+              <span className="text-primary">إجمالي السداد:</span>
+              <span className="font-bold text-primary">{totalSelected.toFixed(2)} د.ل</span>
             </div>
           </div>
         )}

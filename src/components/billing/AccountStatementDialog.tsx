@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { formatArabicNumber, formatDate } from '@/lib/printHtmlGenerator';
 import { useAccountStatementPrint } from './AccountStatementPrint';
 import { filterTransactionsByDateRange } from '@/lib/accountStatementGenerator';
+import { cleanStatementNote } from '@/lib/printUtils';
 
 interface AccountStatementDialogProps {
   open: boolean;
@@ -87,6 +88,11 @@ const formatPaymentType = (entryType: string, hasDistributedPaymentId?: boolean)
       return { 
         text: 'إيجار لوحة (صديق)', 
         className: 'bg-gradient-to-r from-amber-500/20 to-amber-600/20 text-amber-400 px-3 py-1 rounded-full text-xs font-semibold border border-amber-500/30' 
+      };
+    case 'discount':
+      return { 
+        text: 'خصم', 
+        className: 'bg-gradient-to-r from-rose-500/20 to-rose-600/20 text-rose-400 px-3 py-1 rounded-full text-xs font-semibold border border-rose-500/30' 
       };
     case 'opening_balance':
       return { 
@@ -298,7 +304,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const { data, error } = await supabase
           .from('Contract')
           .select('*')
-          .ilike('Customer Name', `%${customerName}%`)
+          .eq('Customer Name', customerName)
           .order('Contract Date', { ascending: false });
 
         if (!error && data) {
@@ -332,7 +338,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const paymentsQuery = supabase
           .from('customer_payments')
           .select('*')
-          .ilike('customer_name', `%${customerName}%`)
+          .eq('customer_name', customerName)
           .order('paid_at', { ascending: true });
 
         const { data, error } = await paymentsQuery;
@@ -363,7 +369,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const { data, error } = await supabase
           .from('printed_invoices')
           .select('*')
-          .ilike('customer_name', `%${customerName}%`)
+          .eq('customer_name', customerName)
           .order('created_at', { ascending: true });
 
         if (!error && data) {
@@ -411,7 +417,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const { data, error } = await supabase
           .from('purchase_invoices')
           .select('*')
-          .ilike('customer_name', `%${customerName}%`)
+          .eq('customer_name', customerName)
           .order('created_at', { ascending: true });
 
         if (!error && data) {
@@ -441,7 +447,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const { data, error } = await supabase
           .from('sales_invoices')
           .select('*')
-          .ilike('customer_name', `%${customerName}%`)
+          .eq('customer_name', customerName)
           .order('created_at', { ascending: true });
 
         if (!error && data) {
@@ -564,19 +570,50 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
 
+      // تحميل اللوحات الموقوفة لحساب خصومات الإيقاف
+      let pausedBillboardsData: any[] = [];
+      if (contractsData.length > 0) {
+        const contractNumbers = contractsData.map(c => Number(c.Contract_Number)).filter(Boolean);
+        const { data: pausedData, error: pausedError } = await supabase
+          .from('paused_billboards' as any)
+          .select('*')
+          .in('contract_number', contractNumbers);
+        if (!pausedError && pausedData) {
+          pausedBillboardsData = pausedData;
+        }
+      }
+
+      // تحديث حالة العقود بالتفاصيل الأصلية ومجموع خصم الإيقاف لعرضها بالجدول والكروت
+      setContracts(prev => {
+        return prev.map(c => {
+          const contractPaused = pausedBillboardsData.filter(pb => Number(pb.contract_number) === Number(c.Contract_Number));
+          const totalSuspensionDiscount = contractPaused.reduce((sum, pb) => sum + (Number(pb.refund_amount) || 0), 0);
+          return {
+            ...c,
+            totalSuspensionDiscount,
+            originalContractTotal: (Number(c['Total']) || 0) + totalSuspensionDiscount
+          };
+        });
+      });
+
       // إنشاء قائمة موحدة لجميع الحركات
       const compositeTaskInvoiceIds = new Set(compositeTasksData.map(t => t.combined_invoice_id).filter(Boolean));
       const transactions: any[] = [];
       
       // إضافة العقود - مع حساب المدفوع والمتبقي
       customerOwnContracts.forEach(contract => {
+        const contractPaused = pausedBillboardsData.filter(pb => Number(pb.contract_number) === Number(contract.Contract_Number));
+        const totalSuspensionDiscount = contractPaused.reduce((sum, pb) => sum + (Number(pb.refund_amount) || 0), 0);
+        
         const contractTotal = Number(contract['Total']) || 0;
+        const originalContractTotal = contractTotal + totalSuspensionDiscount;
+
         // حساب المدفوع الفعلي من الدفعات
         const contractPaid = paymentsData
           .filter(p => String(p.contract_number) === String(contract.Contract_Number) && 
                        (p.entry_type === 'receipt' || p.entry_type === 'account_payment' || p.entry_type === 'payment'))
           .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        const contractRemaining = Math.max(0, contractTotal - contractPaid);
+        const contractRemaining = Math.max(0, originalContractTotal - contractPaid);
         
         // ✅ إضافة نوع الإعلان في المرجع
         const adType = contract['Ad Type'] || 'غير محدد';
@@ -585,20 +622,43 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           date: contract['Contract Date'],
           type: 'contract',
           description: `عقد رقم ${contract.Contract_Number} - ${adType}`,
-          debit: contractTotal,
+          debit: originalContractTotal,
           credit: 0,
           balance: 0,
           reference: `عقد-${contract.Contract_Number} (${adType})`,
           notes: '',
-          details: `القيمة: ${contractTotal.toLocaleString()} | المدفوع: ${contractPaid.toLocaleString()} | المتبقي: ${contractRemaining.toLocaleString()}`,
-          originalAmount: contractTotal,
+          details: `القيمة: ${originalContractTotal.toLocaleString()} | المدفوع: ${contractPaid.toLocaleString()} | المتبقي: ${contractRemaining.toLocaleString()}`,
+          originalAmount: originalContractTotal,
           paidAmount: contractPaid,
           remainingAmount: contractRemaining,
-          itemTotal: contractTotal,
+          itemTotal: originalContractTotal,
           itemRemaining: null, // سيتم حسابه لاحقاً حسب التسلسل الزمني
           adType: adType,
           contractNumber: contract.Contract_Number,
         });
+
+        // إدراج خصم الإيقاف كحركة منفصلة عند وجوده
+        if (totalSuspensionDiscount > 0) {
+          const sortedPaused = [...contractPaused].sort((a, b) => new Date(b.pause_date).getTime() - new Date(a.pause_date).getTime());
+          const latestPaused = sortedPaused[0];
+          const latestPauseDate = latestPaused ? latestPaused.pause_date : contract['End Date'];
+          const latestBoardName = latestPaused ? (latestPaused.billboard_name || `لوحة #${latestPaused.billboard_id}`) : '';
+
+          transactions.push({
+            id: `suspension-discount-${contract.Contract_Number}`,
+            date: latestPauseDate,
+            type: 'discount',
+            description: `خصم إيقاف لوحات عقد رقم ${contract.Contract_Number}${latestBoardName ? ` - ${latestBoardName}` : ''}`,
+            debit: 0,
+            credit: totalSuspensionDiscount,
+            balance: 0,
+            reference: `عقد-${contract.Contract_Number}`,
+            notes: cleanStatementNote(`خصم إيقاف اللوحات حسب آخر إيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
+            itemTotal: originalContractTotal,
+            itemRemaining: null, // سيتم حسابه لاحقاً حسب التسلسل الزمني
+            targetContractNumber: contract.Contract_Number,
+          });
+        }
       });
 
       // إضافة الخصومات
@@ -617,7 +677,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           credit: discount.discount_type === 'fixed' ? amount : 0,
           balance: 0,
           reference: 'خصم عام',
-          notes: discount.reason || '—',
+          notes: cleanStatementNote(discount.reason || '—'),
         });
       });
 
@@ -647,7 +707,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           credit: 0,
           balance: 0,
           reference: `فاتورة-${invoice.invoice_number || invoice.id}`,
-          notes: invoice.notes || '—',
+          notes: cleanStatementNote(invoice.notes || '—'),
           details: `القيمة: ${invoiceTotal.toLocaleString()} | المدفوع: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()}`,
           originalAmount: invoiceTotal,
           paidAmount: invoicePaid,
@@ -736,7 +796,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           credit: remainingAmount,
           balance: 0,
           reference: invoice.invoice_name ? `مشتريات-${invoice.invoice_number || invoice.id}` : '—',
-          notes: notesText,
+          notes: cleanStatementNote(notesText),
         });
       });
 
@@ -762,7 +822,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           credit: 0,
           balance: 0,
           reference: invoice.invoice_name ? `مبيعات-${invoice.invoice_number || invoice.id}` : '—',
-          notes: invoice.notes || '—',
+          notes: cleanStatementNote(invoice.notes || '—'),
           details: `القيمة: ${invoiceTotal.toLocaleString()} | المدفوع: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()}`,
           originalAmount: invoiceTotal,
           paidAmount: invoicePaid,
@@ -1139,12 +1199,10 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           paymentRef = `عقد-${targetContractNumber} (${linkedContractAdType})`;
         }
 
-        // ✅ إضافة نوع الإعلان للملاحظات إذا وُجد
-        let enrichedNotes = paymentNotes;
-        if (linkedContractAdType && !paymentNotes.includes(linkedContractAdType)) {
-          enrichedNotes = paymentNotes !== '—' 
-            ? `${paymentNotes} | نوع: ${linkedContractAdType}`
-            : `نوع: ${linkedContractAdType}`;
+        // ✅ تنظيف وتنسيق الملاحظات ومنع تكرار نوع الإعلان
+        let enrichedNotes = cleanStatementNote(paymentNotes);
+        if ((enrichedNotes === '—' || !enrichedNotes) && linkedContractAdType) {
+          enrichedNotes = `نوع الإعلان: ${linkedContractAdType}`;
         }
 
         transactions.push({
@@ -1670,6 +1728,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                         {contracts.map((contract, index) => {
                           const status = getContractStatus(contract['End Date']);
                           const contractTotal = Number(contract['Total']) || 0;
+                          const totalSuspensionDiscount = Number(contract.totalSuspensionDiscount) || 0;
+                          const originalContractTotal = Number(contract.originalContractTotal) || contractTotal;
                           const contractPaid = Number(contract['Total Paid']) || 0;
                           const contractRemaining = contractTotal - contractPaid;
                           return (
@@ -1680,7 +1740,14 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                               </td>
                               <td className="border border-border p-2 text-center">{contract['Ad Type'] || '—'}</td>
                               <td className="border border-border p-2 text-center text-primary font-medium">
-                                {formatArabicNumber(contractTotal)} {currency.symbol}
+                                {totalSuspensionDiscount > 0 ? (
+                                  <div className="flex flex-col items-center">
+                                    <span className="line-through text-xs text-muted-foreground">{formatArabicNumber(originalContractTotal)} {currency.symbol}</span>
+                                    <span>{formatArabicNumber(contractTotal)} {currency.symbol}</span>
+                                  </div>
+                                ) : (
+                                  `${formatArabicNumber(contractTotal)} ${currency.symbol}`
+                                )}
                               </td>
                               <td className="border border-border p-2 text-center text-green-400 font-medium">
                                 {formatArabicNumber(contractPaid)} {currency.symbol}

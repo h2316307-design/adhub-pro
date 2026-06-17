@@ -151,3 +151,46 @@ export function numberToArabicWords(num: number): string {
   
   return num.toLocaleString('en-US');
 }
+
+/**
+ * تنظيف وتنسيق ملاحظات كشف الحساب لتجنب تشويه النصوص ثنائية الاتجاه (BiDi)
+ */
+export function cleanStatementNote(note: string | null | undefined): string {
+  if (!note || note === '—') return '—';
+
+  let clean = note.trim();
+
+  // 1. معالجة ملاحظات خصومات الإيقاف
+  if (clean.includes('خصم إيقاف اللوحات')) {
+    const dateMatch = clean.match(/(?:بتاريخ|يوم)\s*([\d٠-٩/.-]+)/) || clean.match(/([\d٠-٩/.-]+)/);
+    if (dateMatch) {
+      return `إيقاف بتاريخ: ${dateMatch[1]}`;
+    }
+    return 'خصم إيقاف اللوحات';
+  }
+
+  // 2. معالجة ملاحظات الدفعات الموزعة الافتراضية
+  if (clean.includes('توزيع على') && (clean.includes('دفعة بمبلغ') || clean.includes('بمبلغ'))) {
+    const amountMatch = clean.match(/(?:بمبلغ|دفعة بمبلغ)\s*([\d,.]+)/);
+    if (amountMatch) {
+      const parsedAmount = parseFloat(amountMatch[1].replace(/,/g, ''));
+      if (!isNaN(parsedAmount)) {
+        const formattedAmount = parsedAmount.toLocaleString('en-US', {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 2
+        });
+        return `من دفعة كلية بقيمة ${formattedAmount} د.ل`;
+      }
+    }
+  }
+
+  // 3. إزالة الرموز التي تسبب مشاكل في التنسيق العربي مثل # و |
+  clean = clean.replace(/#/g, '').trim();
+  clean = clean.replace(/\s*\|\s*/g, ' - ').trim();
+
+  // 4. تحسين شكل بادئة "نوع: "
+  clean = clean.replace(/^نوع:\s*/, 'نوع الإعلان: ');
+
+  return clean || '—';
+}
+

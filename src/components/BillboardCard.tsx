@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Dialog, DialogContent } from '@/components/ui/dialog';
-import { MapPin, Calendar, Building, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, History, CheckCircle2, XCircle, ZoomIn, X, Copy, Check } from 'lucide-react';
+import { MapPin, Calendar, Building, Eye, EyeOff, User, FileText, Clock, Camera, ChevronDown, ChevronUp, History, CheckCircle2, XCircle, ZoomIn, X, Copy, Check } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate, formatLongArabicDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -68,6 +68,14 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   const [latestHistory, setLatestHistory] = useState<any>(null);
   const [loadingTask, setLoadingTask] = useState(false);
   const [activeContract, setActiveContract] = useState<any>(null);
+  
+  const [isVisibleInAvailable, setIsVisibleInAvailable] = useState(
+    (billboard as any).is_visible_in_available !== false
+  );
+
+  useEffect(() => {
+    setIsVisibleInAvailable((billboard as any).is_visible_in_available !== false);
+  }, [(billboard as any).is_visible_in_available]);
   
   // جلب آخر مهمة تركيب وآخر سجل تاريخي للوحة
   useEffect(() => {
@@ -297,6 +305,27 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
   };
 
   const needsRephotography = localNeedsRephotography;
+
+  const handleToggleVisibility = async () => {
+    try {
+      const newStatus = !isVisibleInAvailable;
+      const { error } = await supabase
+        .from('billboards')
+        .update({ is_visible_in_available: newStatus })
+        .eq('ID', billboard.ID);
+
+      if (error) throw error;
+
+      toast.success(newStatus ? 'ستظهر اللوحة في قائمة المتاح' : 'لن تظهر اللوحة في قائمة المتاح');
+      setIsVisibleInAvailable(newStatus);
+      (billboard as any).is_visible_in_available = newStatus;
+      
+      window.dispatchEvent(new CustomEvent('billboard-toggle-visibility', { detail: billboard.ID }));
+    } catch (error) {
+      console.error('Error updating visibility status:', error);
+      toast.error('فشل في تحديث حالة الظهور');
+    }
+  };
 
   return (
     <>
@@ -779,17 +808,6 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
             )}
           </div>
 
-          {/* زر عرض تاريخ اللوحة - متاح للجميع */}
-          <Button
-            onClick={() => setHistoryDialogOpen(true)}
-            variant="outline"
-            size="sm"
-            className="w-full mb-4 border-primary text-primary hover:bg-primary/10"
-          >
-            <History className="ml-2 h-4 w-4" />
-            عرض تاريخ اللوحة
-          </Button>
-
           {/* أزرار الإجراءات */}
           {showBookingActions && (
             <div className="space-y-2">
@@ -825,14 +843,29 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
 
                 {/* ✅ زر إعادة التصوير */}
                 {isAdmin && (
-                  <Button 
-                    size="sm" 
-                    variant={needsRephotography ? "destructive" : "outline"}
-                    onClick={handleMarkForRephotography}
-                    title={needsRephotography ? "إزالة من قائمة إعادة التصوير" : "إضافة لقائمة إعادة التصوير"}
-                  >
-                    <Camera className="h-4 w-4" />
-                  </Button>
+                  <>
+                    <Button 
+                      size="sm" 
+                      variant={needsRephotography ? "destructive" : "outline"}
+                      onClick={handleMarkForRephotography}
+                      title={needsRephotography ? "إزالة من قائمة إعادة التصوير" : "إضافة لقائمة إعادة التصوير"}
+                    >
+                      <Camera className="h-4 w-4" />
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleToggleVisibility}
+                      title={isVisibleInAvailable ? 'إخفاء من المتاحة' : 'إظهار في المتاحة'}
+                      className={isVisibleInAvailable
+                        ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20'
+                        : 'border-rose-500/40 bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20'
+                      }
+                    >
+                      {isVisibleInAvailable ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                    </Button>
+                  </>
                 )}
               </div>
               

@@ -83,7 +83,8 @@ function LeafletHomeMapComponent({
       zoomControl: false,
       attributionControl: false,
       maxZoom: 21,
-      minZoom: 5
+      minZoom: 5,
+      preferCanvas: true
     })
 
     mapRef.current = map

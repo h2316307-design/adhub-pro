@@ -221,8 +221,12 @@ function renderDataCell(
 ): string {
   const isHighlighted = (tblSettings.highlightedColumns || ['index']).includes(col.key);
   const isEven = rowIndex % 2 === 0;
-  const rowBgColor = isEven ? 'white' : tblSettings.alternateRowColor;
-  const cellBg = isHighlighted ? (tblSettings.highlightedColumnBgColor || '#1a1a2e') : rowBgColor;
+  const rowBgColor = tblSettings.cellTransparent 
+    ? 'transparent' 
+    : (isEven ? 'white' : tblSettings.alternateRowColor);
+  const cellBg = isHighlighted 
+    ? (tblSettings.cellTransparent ? 'transparent' : (tblSettings.highlightedColumnBgColor || '#1a1a2e')) 
+    : rowBgColor;
   const cellTextColor = isHighlighted 
     ? (tblSettings.highlightedColumnTextColor || '#ffffff') 
     : (tblSettings.cellTextColor || '#000000');
@@ -489,11 +493,15 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
   const dataRows = billboards.map((row, rowIndex) => {
     const globalIndex = pageIndex * rowsPerPage + rowIndex;
     const isEven = rowIndex % 2 === 0;
-    const rowBgColor = isEven ? 'white' : tblSettings.alternateRowColor;
+    const rowBgColor = tblSettings.cellTransparent 
+      ? 'transparent' 
+      : (isEven ? 'white' : tblSettings.alternateRowColor);
 
     const cells = visibleColumns.map((col) => {
       const isHighlighted = (tblSettings.highlightedColumns || ['index']).includes(col.key);
-      const cellBg = isHighlighted ? (tblSettings.highlightedColumnBgColor || '#1a1a2e') : rowBgColor;
+      const cellBg = isHighlighted 
+        ? (tblSettings.cellTransparent ? 'transparent' : (tblSettings.highlightedColumnBgColor || '#1a1a2e')) 
+        : rowBgColor;
       const cellTextColor = isHighlighted ? (tblSettings.highlightedColumnTextColor || '#ffffff') : (tblSettings.cellTextColor || '#000000');
       const noPadding = col.key === 'image' || col.key === 'location';
       const cellContent = getCellContent(col, row, globalIndex, tblSettings, rowHeightPx);

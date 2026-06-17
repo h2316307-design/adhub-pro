@@ -16,7 +16,7 @@ import type { Billboard } from '@/types';
 import { isBillboardAvailable, getDaysUntilExpiry } from '@/utils/contractUtils';
 import type { MapProvider } from '@/types/map';
 import { OSM_TILE_LAYERS } from '@/types/map';
-import { parseCoords } from '@/utils/parseCoords';
+import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
 import { getBillboardStatus, getSizeColor, getDaysRemaining } from '@/hooks/useMapMarkers';
 import { supabase } from '@/integrations/supabase/client';
 import { loadGoogleMapsKeyless } from '@/lib/loadExternalScript';
@@ -38,10 +38,40 @@ interface SelectableGoogleHomeMapProps {
   calculateBillboardPrice?: (billboard: Billboard) => number;
   // ✅ Hide the internal filter/search bar (used when parent provides its own filters)
   hideInternalFilters?: boolean;
+  // ✅ Map containing final pricing results (including installation, print, discount)
+  billboardPricingResults?: Map<string, any>;
+  // ✅ Map containing active rental details
+  occupiedBillboardsMap?: Map<number, { endDate: string; customerName: string; contractNumber: string }>;
 }
 
 
 const LIBYA_CENTER = { lat: 32.8872, lng: 13.1913 };
+
+const styledMapStyles: google.maps.MapTypeStyle[] = [
+  { elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#d4af37' }] },
+  { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#d4af37' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#fbbf24' }] },
+  { featureType: 'administrative.neighborhood', elementType: 'labels.text.fill', stylers: [{ color: '#ca8a04' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f0f' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3d3d' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#3d3d3d' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#d4af37' }, { lightness: -40 }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#d4af37' }, { lightness: -60 }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#3d3d3d' }] },
+  { featureType: 'road.local', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'poi', elementType: 'geometry', stylers: [{ color: '#252525' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#1a2a1a' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+  { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] }
+];
+
+const detailedMapStyles: google.maps.MapTypeStyle[] = [
+  { elementType: 'labels', stylers: [{ visibility: 'off' }] },
+];
 
 export default function SelectableGoogleHomeMap({ 
   billboards, 
@@ -57,6 +87,8 @@ export default function SelectableGoogleHomeMap({
   pricingCategory = 'عادي',
   calculateBillboardPrice,
   hideInternalFilters = false,
+  billboardPricingResults,
+  occupiedBillboardsMap,
 }: SelectableGoogleHomeMapProps) {
   // Google Maps refs
   const googleMapRef = useRef<HTMLDivElement>(null);
@@ -78,6 +110,29 @@ export default function SelectableGoogleHomeMap({
   const leafletLabelsRef = useRef<L.TileLayer | null>(null);
   const leafletSelectedMarkersRef = useRef<L.Marker[]>([]);
   
+  // Caching refs for marker reuse
+  const googleMarkerMapRef = useRef<Map<string, google.maps.Marker>>(new Map());
+  const leafletMarkerMapRef = useRef<Map<string, L.Marker>>(new Map());
+
+  // Search pin and circle highlight refs
+  const googleSearchPinRef = useRef<google.maps.Marker | null>(null);
+  const leafletSearchPinRef = useRef<L.Marker | null>(null);
+  const googleSearchCircleRef = useRef<google.maps.Circle | null>(null);
+  const leafletSearchCircleRef = useRef<L.Circle | null>(null);
+
+  // Callback and State refs to avoid stale closures in listeners
+  const selectedBillboardsRef = useRef(selectedBillboards);
+  const onToggleSelectionRef = useRef(onToggleSelection);
+  const createSelectablePopupContentRef = useRef<any>(null);
+
+  useEffect(() => {
+    selectedBillboardsRef.current = selectedBillboards;
+  }, [selectedBillboards]);
+
+  useEffect(() => {
+    onToggleSelectionRef.current = onToggleSelection;
+  }, [onToggleSelection]);
+
   // Container ref for fullscreen
   const containerRef = useRef<HTMLDivElement>(null);
   
@@ -96,9 +151,64 @@ export default function SelectableGoogleHomeMap({
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
   const [googleMapReady, setGoogleMapReady] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [placeSuggestions, setPlaceSuggestions] = useState<any[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
   const [currentZoom, setCurrentZoom] = useState(8);
   const [visibleHeightMeters, setVisibleHeightMeters] = useState(0);
+  
+  const getMapStyles = useCallback(() => {
+    if (mapType === 'styled') return styledMapStyles;
+    if (mapType === 'detailed') return detailedMapStyles;
+    if (mapType === 'roadmap') {
+      return [
+        { elementType: 'geometry', stylers: [{ color: '#1a1a1a' }] },
+        { elementType: 'labels.text.stroke', stylers: [{ color: '#1a1a1a' }] },
+        { elementType: 'labels.text.fill', stylers: [{ color: '#d4af37' }] },
+        { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0f0f0f' }] },
+        { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2a2a' }] },
+        { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3d3d3d' }] }
+      ];
+    }
+    return [];
+  }, [mapType]);
+
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const handleChange = useCallback((val: string) => {
+    setSearchQuery(val);
+    setShowSuggestions(true);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (!val || val.length < 3) {
+      setPlaceSuggestions([]);
+      return;
+    }
+
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&accept-language=ar&countrycodes=ly,sa,eg,ae,tn,dz,ma`,
+          { headers: { 'User-Agent': 'BillboardApp/1.0' } }
+        );
+        if (res.ok) {
+          const data = await res.json();
+          const places = data.map((item: any) => ({
+            type: 'place',
+            value: item.display_name,
+            label: `🌍 ${item.display_name?.split(',').slice(0, 2).join(',') || item.display_name}`,
+            coords: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) }
+          }));
+          setPlaceSuggestions(places);
+        }
+      } catch (err) {
+        console.error('Nominatim search error:', err);
+      }
+    }, 400);
+  }, []);
 
   // Listen for image lightbox events
   useEffect(() => {
@@ -227,28 +337,61 @@ export default function SelectableGoogleHomeMap({
     billboards.forEach(b => {
       const name = (b as any).Billboard_Name || '';
       if (name.toLowerCase().includes(query) && suggestions.length < 5) {
-        suggestions.push({ type: 'billboard', value: name, label: `🎯 ${name}` });
+        suggestions.push({ type: 'billboard', value: name, label: `🎯 ${name}`, coords: parseCoords(b) || undefined });
       }
     });
     
     // ✅ Nearest landmarks
     landmarks.forEach(landmark => {
       if (landmark.toLowerCase().includes(query) && suggestions.length < 8) {
-        suggestions.push({ type: 'landmark', value: landmark, label: `📍 ${landmark}` });
+        const matched = billboards.filter(bb => (bb as any).Nearest_Landmark === landmark);
+        let latSum = 0, lngSum = 0, count = 0;
+        matched.forEach(bb => {
+          const c = parseCoords(bb);
+          if (c) { latSum += c.lat; lngSum += c.lng; count++; }
+        });
+        suggestions.push({
+          type: 'landmark',
+          value: landmark,
+          label: `📍 ${landmark}`,
+          coords: count > 0 ? { lat: latSum / count, lng: lngSum / count } : undefined
+        });
       }
     });
     
     // ✅ Districts
     districts.forEach(district => {
       if (district.toLowerCase().includes(query) && suggestions.length < 10) {
-        suggestions.push({ type: 'district', value: district, label: `🏘️ ${district}` });
+        const matched = billboards.filter(bb => (bb as any).District === district);
+        let latSum = 0, lngSum = 0, count = 0;
+        matched.forEach(bb => {
+          const c = parseCoords(bb);
+          if (c) { latSum += c.lat; lngSum += c.lng; count++; }
+        });
+        suggestions.push({
+          type: 'district',
+          value: district,
+          label: `🏘️ ${district} (${matched.length} لوحة)`,
+          coords: count > 0 ? { lat: latSum / count, lng: lngSum / count } : undefined
+        });
       }
     });
     
     // ✅ Municipalities
     municipalities.forEach(mun => {
       if (mun.toLowerCase().includes(query) && suggestions.length < 12) {
-        suggestions.push({ type: 'municipality', value: mun, label: `🏛️ ${mun}` });
+        const matched = billboards.filter(bb => (bb as any).Municipality === mun);
+        let latSum = 0, lngSum = 0, count = 0;
+        matched.forEach(bb => {
+          const c = parseCoords(bb);
+          if (c) { latSum += c.lat; lngSum += c.lng; count++; }
+        });
+        suggestions.push({
+          type: 'municipality',
+          value: mun,
+          label: `🏛️ ${mun} (${matched.length} لوحة)`,
+          coords: count > 0 ? { lat: latSum / count, lng: lngSum / count } : undefined
+        });
       }
     });
     
@@ -273,8 +416,15 @@ export default function SelectableGoogleHomeMap({
       }
     });
     
-    return suggestions.slice(0, 10);
-  }, [searchQuery, billboards, customerNames, cities, adTypes, landmarks, districts, municipalities]);
+    const all = [...suggestions.slice(0, 10)];
+    placeSuggestions.forEach(p => {
+      if (all.length < 12) {
+        all.push(p);
+      }
+    });
+
+    return all;
+  }, [searchQuery, billboards, customerNames, cities, adTypes, landmarks, districts, municipalities, placeSuggestions]);
 
   // Filter billboards
   const filteredBillboards = useMemo(() => {
@@ -381,7 +531,19 @@ export default function SelectableGoogleHomeMap({
     const status = getBillboardStatus(billboard);
     const sizeColor = getSizeColor((billboard as any).Size || '');
     const statusColor = status.color;
-    const statusBg = status.label === 'متاحة' ? 'rgba(34,197,94,0.15)' : status.label === 'محجوزة' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
+    
+    const maintenanceStatus = String((billboard as any).maintenance_status || '').trim();
+    const maintenanceType = String((billboard as any).maintenance_type || '').trim();
+    const maintenanceNotes = String((billboard as any).maintenance_notes || '').trim();
+    const isUnderMaintenance = 
+      status.label === 'صيانة' || 
+      maintenanceStatus === 'maintenance' || 
+      maintenanceStatus === 'repair_needed' || 
+      maintenanceStatus === 'out_of_service' || 
+      maintenanceStatus === 'قيد الصيانة' || 
+      maintenanceStatus === 'متضررة اللوحة';
+
+    const statusBg = isUnderMaintenance ? 'rgba(245,158,11,0.15)' : status.label === 'متاحة' ? 'rgba(34,197,94,0.15)' : status.label === 'محجوزة' ? 'rgba(245,158,11,0.15)' : 'rgba(239,68,68,0.15)';
     
     const name = (billboard as any).Billboard_Name || `لوحة ${(billboard as any).ID}`;
     const location = (billboard as any).Nearest_Landmark || '';
@@ -391,14 +553,19 @@ export default function SelectableGoogleHomeMap({
     const imageUrl = (billboard as any).Image_URL || '';
     const billboardId = String((billboard as any).ID || billboard.ID);
     const designFaceA = (billboard as any).design_face_a || '';
-    const daysRemaining = getDaysRemaining((billboard as any).Rent_End_Date);
+    let daysRemaining = getDaysRemaining((billboard as any).Rent_End_Date);
     const district = (billboard as any).District || '';
 
-    // ✅ Calculate price based on duration
+    // ✅ Calculate price based on duration, and use custom pricing results if available
     let displayPrice = '0';
     let priceLabel = 'السعر';
     
-    if (calculateBillboardPrice) {
+    const pricingResult = billboardPricingResults?.get(billboardId);
+    
+    if (pricingResult) {
+      displayPrice = Number(pricingResult.totalForBoard || 0).toLocaleString('ar-LY');
+      priceLabel = 'المجموع المستحق';
+    } else if (calculateBillboardPrice) {
       const calculatedPrice = calculateBillboardPrice(billboard);
       displayPrice = calculatedPrice.toLocaleString('ar-LY');
       if (pricingMode === 'months') {
@@ -426,6 +593,15 @@ export default function SelectableGoogleHomeMap({
     const adType = (billboard as any).Ad_Type || '';
     const level = (billboard as any).Level || '';
 
+    // Check if rented by occupiedBillboardsMap
+    const bId = Number(billboardId);
+    const occupation = occupiedBillboardsMap?.get(bId);
+    const isOccupied = !!occupation;
+    const customerName = occupation?.customerName || '';
+    const occContractNumber = occupation?.contractNumber || '';
+    const occEndDate = occupation?.endDate || (billboard as any).Rent_End_Date;
+    daysRemaining = getDaysRemaining(occEndDate);
+
     return `
       <div style="
         font-family: 'Tajawal', sans-serif; direction: rtl; width: 260px; max-width: 85vw;
@@ -445,7 +621,7 @@ export default function SelectableGoogleHomeMap({
             ${level ? `<div style="background: rgba(0,0,0,0.6); padding: 2px 6px; border-radius: 8px; font-size: 9px; font-weight: 600; color: #d4af37; backdrop-filter: blur(4px);">${level}</div>` : ''}
           </div>
           <div style="position: absolute; top: 6px; left: 6px; background: ${statusBg}; backdrop-filter: blur(4px); padding: 2px 8px; border-radius: 8px; font-size: 9px; font-weight: 700; color: ${statusColor}; display: flex; align-items: center; gap: 4px;">
-            <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor}; ${status.label === 'متاحة' ? 'box-shadow: 0 0 6px ' + statusColor + ';' : ''}"></span>${status.label}
+            <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor}; ${status.label === 'متاحة' ? 'box-shadow: 0 0 6px ' + statusColor + ';' : ''}"></span>${isOccupied ? 'مؤجرة' : status.label}
           </div>
           ${isSelected ? `<div style="position: absolute; bottom: 6px; left: 6px; background: linear-gradient(135deg, #fbbf24, #f59e0b); padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 800; color: #1a1a2e; box-shadow: 0 2px 8px rgba(251,191,36,0.4);">✓ محددة</div>` : ''}
           <div style="position: absolute; bottom: 6px; right: 6px; color: rgba(255,255,255,0.8); font-size: 11px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.8);">${name}</div>
@@ -458,18 +634,50 @@ export default function SelectableGoogleHomeMap({
             <p style="color: #aaa; font-size: 10px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${location || city || 'موقع غير محدد'}</p>
             ${municipality ? `<span style="color: #666; font-size: 9px;">${municipality}</span>` : ''}
           </div>
+
+          <!-- Ad Type -->
+          ${adType ? `
+          <div style="display: inline-block; background: rgba(212,175,55,0.15); padding: 3px 8px; border-radius: 6px; font-size: 10px; font-weight: 700; color: #fbbf24; border: 1px solid rgba(212,175,55,0.3); margin-bottom: 6px;">
+            نوع الإعلان: ${adType}
+          </div>
+          ` : ''}
           
-          ${hasContract ? `
+          ${occupation ? `
+          <div style="display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; padding: 6px 8px; background: rgba(239,68,68,0.08); border-radius: 6px; border: 1px solid rgba(239,68,68,0.15); font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 9px; color: #ef4444; font-weight: 700;">مؤجرة لـ:</span>
+              <span style="font-size: 11px; font-weight: 800; color: #fff; text-decoration: underline;">${customerName}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 9px; color: #999;">عقد:</span>
+              <span style="font-size: 10px; font-weight: 700; color: #ef4444;">#${occContractNumber}</span>
+            </div>
+          </div>
+          ` : (hasContract ? `
           <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 6px; padding: 4px 8px; background: rgba(239,68,68,0.08); border-radius: 6px; border: 1px solid rgba(239,68,68,0.15);">
             <span style="font-size: 9px; color: #999;">عقد</span>
             <span style="font-size: 11px; font-weight: 800; color: #ef4444;">#${contractNumber}</span>
             ${adType ? `<span style="font-size: 9px; color: #999; margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100px;">${adType}</span>` : ''}
           </div>
+          ` : '')}
+          ${isUnderMaintenance ? `
+          <div style="display: flex; flex-direction: column; gap: 2px; margin-bottom: 6px; padding: 6px 8px; background: rgba(245,158,11,0.08); border-radius: 6px; border: 1px solid rgba(245,158,11,0.25); font-size: 11px;">
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 9px; color: #f59e0b; font-weight: 700;">تحت الصيانة:</span>
+              <span style="font-size: 10px; font-weight: 800; color: #fff;">${maintenanceType || 'صيانة عامة'}</span>
+            </div>
+            ${maintenanceNotes ? `
+            <div style="display: flex; align-items: flex-start; gap: 4px;">
+              <span style="font-size: 9px; color: #999;">السبب:</span>
+              <span style="font-size: 10px; font-weight: 600; color: #ddd; word-break: break-all;">${maintenanceNotes}</span>
+            </div>
+            ` : ''}
+          </div>
           ` : ''}
-          
-          ${status.label !== 'متاحة' && daysRemaining !== null && daysRemaining > 0 ? `
+
+          ${(isOccupied || status.label !== 'متاحة') && daysRemaining !== null && daysRemaining > 0 ? `
             <div style="background: rgba(245,158,11,0.08); padding: 4px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 10px; font-weight: 600; color: #f59e0b; border: 1px solid rgba(245,158,11,0.15); display: flex; align-items: center; gap: 4px;">
-              <span>⏱</span> متبقي ${daysRemaining} يوم
+              <span>⏱</span> متبقي على الإيجار ${daysRemaining} يوم
             </div>
           ` : ''}
           
@@ -496,18 +704,23 @@ export default function SelectableGoogleHomeMap({
         </div>
       </div>
     `;
-  }, [calculateBillboardPrice, pricingMode, durationMonths, durationDays]);
+  }, [calculateBillboardPrice, pricingMode, durationMonths, durationDays, billboardPricingResults, occupiedBillboardsMap]);
+
+  useEffect(() => {
+    createSelectablePopupContentRef.current = createSelectablePopupContent;
+  }, [createSelectablePopupContent]);
 
   // Listen for toggle events
   useEffect(() => {
-    const handleToggle = (e: CustomEvent) => {
-      if (onToggleSelection) {
-        onToggleSelection(e.detail);
+    const handleToggle = (e: any) => {
+      const detail = e.detail;
+      if (onToggleSelectionRef.current) {
+        onToggleSelectionRef.current(detail);
       }
     };
-    window.addEventListener('toggleBillboard' as any, handleToggle);
-    return () => window.removeEventListener('toggleBillboard' as any, handleToggle);
-  }, [onToggleSelection]);
+    window.addEventListener('toggleBillboard', handleToggle);
+    return () => window.removeEventListener('toggleBillboard', handleToggle);
+  }, []);
 
   // Initialize Google Maps with keyless loader
   useEffect(() => {
@@ -530,19 +743,17 @@ export default function SelectableGoogleHomeMap({
           return;
         }
         
+        const mapStyles = getMapStyles();
+        const mapTypeId = mapType === 'styled' ? 'roadmap' : mapType === 'satellite' ? (showLabels ? 'hybrid' : 'satellite') : mapType === 'detailed' ? 'satellite' : mapType;
+
         googleMapInstanceRef.current = new google.maps.Map(googleMapRef.current, {
           center: LIBYA_CENTER,
           zoom: 8,
-          mapTypeId: mapType === 'satellite' ? (showLabels ? 'hybrid' : 'satellite') : 'roadmap',
+          mapTypeId: mapTypeId,
           disableDefaultUI: true,
           gestureHandling: 'greedy',
           disableDoubleClickZoom: true, // ✅ Disable default double-click zoom since we use it for selection
-          styles: mapType === 'roadmap' ? [
-            { elementType: 'geometry', stylers: [{ color: '#1a1a2e' }] },
-            { elementType: 'labels.text.fill', stylers: [{ color: '#8b8b8b' }] },
-            { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#2a2a4a' }] },
-            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#0e1626' }] },
-          ] : []
+          styles: mapStyles.length > 0 ? mapStyles : undefined
         });
         
         // ✅ Close InfoWindow when clicking on the map
@@ -568,6 +779,18 @@ export default function SelectableGoogleHomeMap({
     
     return () => {
       isMounted = false;
+      if (googleMapInstanceRef.current) {
+        googleMarkerMapRef.current.forEach(m => m.setMap(null));
+        googleMarkerMapRef.current.clear();
+        if (googleClustererRef.current) {
+          try {
+            googleClustererRef.current.clearMarkers();
+          } catch (e) {}
+          googleClustererRef.current = null;
+        }
+        googleMapInstanceRef.current = null;
+        setGoogleMapReady(false);
+      }
     };
   }, [mapProvider, mapType, showLabels]);
 
@@ -581,7 +804,8 @@ export default function SelectableGoogleHomeMap({
       zoomControl: false,
       attributionControl: false,
       maxZoom: 21,
-      minZoom: 5
+      minZoom: 5,
+      preferCanvas: true
     });
 
     leafletMapInstanceRef.current = map;
@@ -655,6 +879,8 @@ export default function SelectableGoogleHomeMap({
 
     return () => {
       if (leafletMapInstanceRef.current) {
+        leafletMarkerMapRef.current.clear();
+        leafletSelectedMarkersRef.current = [];
         leafletMapInstanceRef.current.remove();
         leafletMapInstanceRef.current = null;
         leafletClusterRef.current = null;
@@ -700,23 +926,63 @@ export default function SelectableGoogleHomeMap({
     const isLeafletFilterChange = leafletFilterKey !== prevFilterKeyRef.current;
     prevFilterKeyRef.current = leafletFilterKey;
 
-    // ✅ Save current view before clearing
+    // ✅ Save current view before updating
     const savedCenter = leafletMapInstanceRef.current.getCenter();
     const savedZoom = leafletMapInstanceRef.current.getZoom();
 
-    leafletClusterRef.current.clearLayers();
-    leafletSelectedMarkersRef.current.forEach(m => m.remove());
-    leafletSelectedMarkersRef.current = [];
+    const map = leafletMapInstanceRef.current;
+    const cluster = leafletClusterRef.current;
+
+    // 1. Clear the cluster group first to ensure clean state
+    cluster.clearLayers();
+
+    // 2. Build a map of current filtered billboard IDs
+    const newBillboardMap = new Map<string, Billboard>();
+    filteredBillboards.forEach(b => {
+      const id = String((b as any).ID || (b as any).id || '');
+      if (id && getJitteredCoords(b, billboards)) {
+        newBillboardMap.set(id, b);
+      }
+    });
+
+    const existingIds = new Set(leafletMarkerMapRef.current.keys());
+    const newIds = new Set(newBillboardMap.keys());
+
+    // Find IDs to remove and add
+    const toRemove: string[] = [];
+    const toAdd: string[] = [];
+
+    existingIds.forEach(id => {
+      if (!newIds.has(id)) toRemove.push(id);
+    });
+    newIds.forEach(id => {
+      if (!existingIds.has(id)) toAdd.push(id);
+    });
+
+    // Remove old markers from map DOM
+    toRemove.forEach(id => {
+      const marker = leafletMarkerMapRef.current.get(id);
+      if (marker) {
+        try {
+          map.removeLayer(marker);
+          marker.remove();
+        } catch (e) {}
+        leafletMarkerMapRef.current.delete(id);
+      }
+    });
 
     const bounds = L.latLngBounds([]);
     let hasMarkers = false;
 
-    filteredBillboards.forEach((b) => {
-      const coords = parseCoords(b);
+    // Add new markers
+    toAdd.forEach(id => {
+      const b = newBillboardMap.get(id);
+      if (!b) return;
+      const coords = getJitteredCoords(b, billboards);
       if (!coords) return;
 
       const billboardId = String((b as any).ID || b.ID);
-      const isSelected = selectedBillboards?.has(billboardId) || false;
+      const isSelected = selectedBillboardsRef.current?.has(billboardId) || false;
       const pinData = createPinWithLabel(b, isSelected);
       
       const icon = L.icon({
@@ -731,7 +997,7 @@ export default function SelectableGoogleHomeMap({
         zIndexOffset: isSelected ? 2000 : 0
       });
       
-      const popupContent = createSelectablePopupContent(b, isSelected);
+      const popupContent = createSelectablePopupContentRef.current(b, isSelected);
       marker.bindPopup(popupContent, { 
         className: 'leaflet-popup-dark',
         maxWidth: 300
@@ -739,30 +1005,67 @@ export default function SelectableGoogleHomeMap({
       
       marker.on('dblclick', (e) => {
         L.DomEvent.stopPropagation(e);
-        if (onToggleSelection) {
-          onToggleSelection(billboardId);
+        if (onToggleSelectionRef.current) {
+          onToggleSelectionRef.current(billboardId);
         }
       });
 
-      if (isSelected) {
-        marker.addTo(leafletMapInstanceRef.current!);
-        leafletSelectedMarkersRef.current.push(marker);
-      } else {
-        leafletClusterRef.current?.addLayer(marker);
+      leafletMarkerMapRef.current.set(id, marker);
+    });
+
+    // Update ALL Leaflet markers' icons, popups, and positions in map/cluster
+    const unselectedMarkers: L.Marker[] = [];
+    const selectedMarkers: L.Marker[] = [];
+
+    leafletMarkerMapRef.current.forEach((marker, id) => {
+      const b = newBillboardMap.get(id);
+      if (!b) return;
+
+      const coords = getJitteredCoords(b, billboards);
+      if (coords) bounds.extend([coords.lat, coords.lng]);
+      hasMarkers = true;
+
+      const isSelected = selectedBillboards?.has(id) || false;
+      const markerAny = marker as any;
+
+      if (markerAny._lastSelected !== isSelected) {
+        markerAny._lastSelected = isSelected;
+        const pinData = createPinWithLabel(b, isSelected);
+        const icon = L.icon({
+          iconUrl: pinData.url,
+          iconSize: [pinData.width, pinData.height],
+          iconAnchor: [pinData.anchorX, pinData.anchorY],
+          popupAnchor: [0, -pinData.anchorY]
+        });
+        marker.setIcon(icon);
+        marker.setZIndexOffset(isSelected ? 2000 : 0);
+        
+        const popupContent = createSelectablePopupContentRef.current(b, isSelected);
+        marker.setPopupContent(popupContent);
       }
 
-      bounds.extend([coords.lat, coords.lng]);
-      hasMarkers = true;
+      if (isSelected) {
+        selectedMarkers.push(marker);
+        marker.addTo(map); // Add directly to map if selected
+      } else {
+        try {
+          map.removeLayer(marker); // Ensure it is removed from map
+        } catch (e) {}
+        cluster.addLayer(marker); // Add to cluster
+        unselectedMarkers.push(marker);
+      }
     });
+
+    leafletSelectedMarkersRef.current = selectedMarkers;
 
     // ✅ Only fitBounds on filter changes
     if (hasMarkers && bounds.isValid() && isLeafletFilterChange) {
-      leafletMapInstanceRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 13 });
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 13 });
     } else if (!isLeafletFilterChange && savedCenter && savedZoom) {
       // ✅ Restore view on selection-only changes
-      leafletMapInstanceRef.current.setView(savedCenter, savedZoom, { animate: false });
+      map.setView(savedCenter, savedZoom, { animate: false });
     }
-  }, [filteredBillboards, mapProvider, selectedBillboards, createPinWithLabel, createSelectablePopupContent, onToggleSelection, searchQuery, filterCity, filterSize, filterStatus]);
+  }, [filteredBillboards, mapProvider, selectedBillboards, createPinWithLabel, searchQuery, filterCity, filterSize, filterStatus, filterRentalStatus]);
 
   // Update Google Maps markers - Selected markers excluded from cluster
   useEffect(() => {
@@ -781,36 +1084,64 @@ export default function SelectableGoogleHomeMap({
 
     const map = googleMapInstanceRef.current;
     
-    // ✅ Save current view BEFORE clearing markers (prevents zoom-out on selection change)
+    // ✅ Save current view BEFORE updating markers (prevents zoom-out on selection change)
     const savedCenter = map.getCenter();
     const savedZoom = map.getZoom();
 
-    // Clear existing markers
-    googleMarkersRef.current.forEach(m => m.setMap(null));
-    googleMarkersRef.current = [];
-    googleSelectedMarkersRef.current.forEach(m => m.setMap(null));
-    googleSelectedMarkersRef.current = [];
-    if (googleClustererRef.current) {
-      googleClustererRef.current.clearMarkers();
-      googleClustererRef.current.setMap(null);
-      googleClustererRef.current = null;
-    }
-    if (googleInfoWindowRef.current) {
+    // 1. Build a map of current filtered billboard IDs
+    const newBillboardMap = new Map<string, Billboard>();
+    filteredBillboards.forEach(b => {
+      const id = String((b as any).ID || (b as any).id || '');
+      if (id && getJitteredCoords(b, billboards)) {
+        newBillboardMap.set(id, b);
+      }
+    });
+
+    const existingIds = new Set(googleMarkerMapRef.current.keys());
+    const newIds = new Set(newBillboardMap.keys());
+
+    // Find IDs to remove and add
+    const toRemove: string[] = [];
+    const toAdd: string[] = [];
+
+    existingIds.forEach(id => {
+      if (!newIds.has(id)) toRemove.push(id);
+    });
+    newIds.forEach(id => {
+      if (!existingIds.has(id)) toAdd.push(id);
+    });
+
+    // Remove old markers
+    toRemove.forEach(id => {
+      const marker = googleMarkerMapRef.current.get(id);
+      if (marker) {
+        if (googleClustererRef.current) {
+          try {
+            googleClustererRef.current.removeMarker(marker, true);
+          } catch (e) {}
+        }
+        try { marker.setMap(null); } catch (e) {}
+        googleMarkerMapRef.current.delete(id);
+      }
+    });
+
+    const hasChanges = toRemove.length > 0 || toAdd.length > 0;
+    if (googleInfoWindowRef.current && hasChanges) {
       googleInfoWindowRef.current.close();
     }
 
     const bounds = new google.maps.LatLngBounds();
     let hasMarkers = false;
 
-    const unselectedMarkers: google.maps.Marker[] = [];
-    const selectedMarkers: google.maps.Marker[] = [];
-
-    filteredBillboards.forEach(b => {
-      const coords = parseCoords(b);
+    // Add new markers
+    toAdd.forEach(id => {
+      const b = newBillboardMap.get(id);
+      if (!b) return;
+      const coords = getJitteredCoords(b, billboards);
       if (!coords) return;
 
       const billboardId = String((b as any).ID || b.ID);
-      const isSelected = selectedBillboards?.has(billboardId) || false;
+      const isSelected = selectedBillboardsRef.current?.has(billboardId) || false;
       const pinData = createPinWithLabel(b, isSelected);
 
       const marker = new google.maps.Marker({
@@ -839,8 +1170,9 @@ export default function SelectableGoogleHomeMap({
           if (googleInfoWindowRef.current) {
             googleInfoWindowRef.current.close();
           }
+          const latestSelected = selectedBillboardsRef.current?.has(billboardId) || false;
           googleInfoWindowRef.current = new google.maps.InfoWindow({
-            content: createSelectablePopupContent(b, isSelected)
+            content: createSelectablePopupContentRef.current(b, latestSelected)
           });
           googleInfoWindowRef.current.open(map, marker);
         }, 250);
@@ -852,62 +1184,111 @@ export default function SelectableGoogleHomeMap({
           clearTimeout(clickTimeout);
           clickTimeout = null;
         }
-        if (onToggleSelection) {
-          onToggleSelection(billboardId);
+        if (onToggleSelectionRef.current) {
+          onToggleSelectionRef.current(billboardId);
         }
       });
 
-      bounds.extend(coords);
+      googleMarkerMapRef.current.set(id, marker);
+    });
+
+    // 2. Update ALL markers' icons, Z-Index, and map attachment
+    const unselectedMarkers: google.maps.Marker[] = [];
+    const selectedMarkers: google.maps.Marker[] = [];
+
+    googleMarkerMapRef.current.forEach((marker, id) => {
+      const b = newBillboardMap.get(id);
+      if (!b) return;
+
+      const coords = getJitteredCoords(b, billboards);
+      if (coords) bounds.extend(coords);
       hasMarkers = true;
+
+      const isSelected = selectedBillboards?.has(id) || false;
+      const markerAny = marker as any;
+
+      const isNew = markerAny._lastSelected === undefined;
+      const selectionChanged = markerAny._lastSelected !== isSelected;
+
+      if (selectionChanged) {
+        markerAny._lastSelected = isSelected;
+        const pinData = createPinWithLabel(b, isSelected);
+        marker.setIcon({
+          url: pinData.url,
+          scaledSize: new google.maps.Size(pinData.width, pinData.height),
+          anchor: new google.maps.Point(pinData.anchorX, pinData.anchorY),
+        });
+        marker.setZIndex(isSelected ? 2000 : 1);
+      }
 
       if (isSelected) {
         selectedMarkers.push(marker);
+        if (selectionChanged || isNew) {
+          if (googleClustererRef.current) {
+            try { googleClustererRef.current.removeMarker(marker, true); } catch (e) {}
+          }
+          marker.setMap(map); // Show selected marker directly on the map
+        }
       } else {
         unselectedMarkers.push(marker);
+        if (selectionChanged || isNew) {
+          marker.setMap(null); // Ensure it is detached from the map so the clusterer has complete control
+          if (googleClustererRef.current) {
+            try { googleClustererRef.current.addMarker(marker, true); } catch (e) {}
+          }
+        }
       }
     });
 
-    googleMarkersRef.current = unselectedMarkers;
-    
-    // Create clusterer for unselected markers
+    // 3. Update or recreate the clusterer
     if (unselectedMarkers.length > 0) {
-      googleClustererRef.current = new MarkerClusterer({
-        map,
-        markers: unselectedMarkers,
-        renderer: {
-          render: ({ count, position }) => {
-            const size = count > 50 ? 56 : count > 20 ? 48 : 44;
-            const svg = `
-              <svg width="${size}" height="${size}" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
-                <defs>
-                  <linearGradient id="clusterGradG" x1="0%" y1="0%" x2="100%" y2="100%">
-                    <stop offset="0%" style="stop-color:#d4af37"/>
-                    <stop offset="100%" style="stop-color:#b8860b"/>
-                  </linearGradient>
-                </defs>
-                <circle cx="25" cy="25" r="23" fill="url(#clusterGradG)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
-                <circle cx="25" cy="25" r="16" fill="#1a1a2e"/>
-                <text x="25" y="30" text-anchor="middle" fill="#d4af37" font-size="14" font-weight="800" font-family="Tajawal, sans-serif">${count > 99 ? '99+' : count}</text>
-              </svg>
-            `;
-            return new google.maps.Marker({
-              position,
-              icon: {
-                url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-                scaledSize: new google.maps.Size(size, size),
-                anchor: new google.maps.Point(size / 2, size / 2)
-              },
-              zIndex: 500
-            });
+      if (!googleClustererRef.current) {
+        googleClustererRef.current = new MarkerClusterer({
+          map,
+          markers: unselectedMarkers,
+          renderer: {
+            render: ({ count, position }) => {
+              const size = count > 50 ? 56 : count > 20 ? 48 : 44;
+              const svg = `
+                <svg width="${size}" height="${size}" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+                  <defs>
+                    <linearGradient id="clusterGradG" x1="0%" y1="0%" x2="100%" y2="100%">
+                      <stop offset="0%" style="stop-color:#d4af37"/>
+                      <stop offset="100%" style="stop-color:#b8860b"/>
+                    </linearGradient>
+                  </defs>
+                  <circle cx="25" cy="25" r="23" fill="url(#clusterGradG)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+                  <circle cx="25" cy="25" r="16" fill="#1a1a2e"/>
+                  <text x="25" y="30" text-anchor="middle" fill="#d4af37" font-size="14" font-weight="800" font-family="Tajawal, sans-serif">${count > 99 ? '99+' : count}</text>
+                </svg>
+              `;
+              return new google.maps.Marker({
+                position,
+                icon: {
+                  url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
+                  scaledSize: new google.maps.Size(size, size),
+                  anchor: new google.maps.Point(size / 2, size / 2)
+                },
+                zIndex: 500
+              });
+            }
           }
-        }
-      });
+        });
+      } else {
+        // Redraw clusterer once to apply all batch additions/removals
+        googleClustererRef.current.render();
+      }
+    } else {
+      if (googleClustererRef.current) {
+        try {
+          googleClustererRef.current.clearMarkers();
+          googleClustererRef.current.setMap(null);
+          googleClustererRef.current = null;
+        } catch (e) {}
+      }
     }
 
-    // Add selected markers directly to map
-    selectedMarkers.forEach(marker => {
-      marker.setMap(map);
-    });
+    googleMarkersRef.current = unselectedMarkers;
     googleSelectedMarkersRef.current = selectedMarkers;
 
     // ✅ Only fitBounds on initial load or filter changes
@@ -933,14 +1314,17 @@ export default function SelectableGoogleHomeMap({
         }
       });
     }
-  }, [filteredBillboards, mapProvider, selectedBillboards, createPinWithLabel, createSelectablePopupContent, googleMapReady, onToggleSelection, searchQuery, filterCity, filterSize, filterStatus, filterRentalStatus]);
+  }, [filteredBillboards, mapProvider, selectedBillboards, createPinWithLabel, googleMapReady, searchQuery, filterCity, filterSize, filterStatus, filterRentalStatus]);
 
   // Update map type
   useEffect(() => {
     if (mapProvider === 'google' && googleMapInstanceRef.current) {
-      googleMapInstanceRef.current.setMapTypeId(mapType === 'satellite' ? (showLabels ? 'hybrid' : 'satellite') : 'roadmap');
+      const mapStyles = getMapStyles();
+      const mapTypeId = mapType === 'styled' ? 'roadmap' : mapType === 'satellite' ? (showLabels ? 'hybrid' : 'satellite') : mapType === 'detailed' ? 'satellite' : mapType;
+      googleMapInstanceRef.current.setMapTypeId(mapTypeId);
+      googleMapInstanceRef.current.setOptions({ styles: mapStyles.length > 0 ? mapStyles : null });
     }
-  }, [mapType, mapProvider, showLabels]);
+  }, [mapType, mapProvider, showLabels, getMapStyles]);
 
   useEffect(() => {
     if (mapProvider === 'google') {
@@ -991,11 +1375,112 @@ export default function SelectableGoogleHomeMap({
   const selectedCount = selectedBillboards?.size || 0;
 
   const navigateToCoords = useCallback((lat: number, lng: number) => {
+    // 1. Clear old search pin and circle
+    if (googleSearchPinRef.current) {
+      googleSearchPinRef.current.setMap(null);
+      googleSearchPinRef.current = null;
+    }
+    if (googleSearchCircleRef.current) {
+      googleSearchCircleRef.current.setMap(null);
+      googleSearchCircleRef.current = null;
+    }
+    if (leafletSearchPinRef.current && leafletMapInstanceRef.current) {
+      leafletMapInstanceRef.current.removeLayer(leafletSearchPinRef.current);
+      leafletSearchPinRef.current = null;
+    }
+    if (leafletSearchCircleRef.current && leafletMapInstanceRef.current) {
+      leafletMapInstanceRef.current.removeLayer(leafletSearchCircleRef.current);
+      leafletSearchCircleRef.current = null;
+    }
+
     if (mapProvider === 'google' && googleMapInstanceRef.current && window.google?.maps) {
+      const pin = new google.maps.Marker({
+        position: { lat, lng },
+        map: googleMapInstanceRef.current,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: '#d6ac40',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 3
+        },
+        zIndex: 9999,
+        title: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+      });
+      googleSearchPinRef.current = pin;
+
+      const circle = new google.maps.Circle({
+        strokeColor: '#d6ac40',
+        strokeOpacity: 0.8,
+        strokeWeight: 1.5,
+        fillColor: '#d6ac40',
+        fillOpacity: 0.12,
+        map: googleMapInstanceRef.current,
+        center: { lat, lng },
+        radius: 200
+      });
+      googleSearchCircleRef.current = circle;
+
       googleMapInstanceRef.current.setCenter({ lat, lng });
-      googleMapInstanceRef.current.setZoom(16);
+      googleMapInstanceRef.current.setZoom(17);
+
+      // Auto-remove after 45s
+      setTimeout(() => {
+        if (pin && googleSearchPinRef.current === pin) {
+          pin.setMap(null);
+          googleSearchPinRef.current = null;
+        }
+        if (circle && googleSearchCircleRef.current === circle) {
+          circle.setMap(null);
+          googleSearchCircleRef.current = null;
+        }
+      }, 45000);
     } else if (mapProvider === 'openstreetmap' && leafletMapInstanceRef.current) {
-      leafletMapInstanceRef.current.setView([lat, lng], 16);
+      const pulseHtml = `
+        <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px;">
+          <div style="position: absolute; width: 40px; height: 40px; border-radius: 50%; background: rgba(214, 172, 64, 0.2); border: 2px solid #d6ac40; animation: pulseRadar 2s infinite ease-out;"></div>
+          <div style="position: absolute; top: 10px; left: 10px; width: 20px; height: 20px; border-radius: 50%; background: #d6ac40; border: 3px solid #fff; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>
+          <style>
+            @keyframes pulseRadar {
+              0% { transform: scale(0.5); opacity: 1; }
+              100% { transform: scale(1.8); opacity: 0; }
+            }
+          </style>
+        </div>
+      `;
+      const pin = L.marker([lat, lng], {
+        icon: L.divIcon({
+          className: '',
+          html: pulseHtml,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        }),
+      }).addTo(leafletMapInstanceRef.current);
+      leafletSearchPinRef.current = pin;
+
+      const circle = L.circle([lat, lng], {
+        color: '#d6ac40',
+        fillColor: '#d6ac40',
+        fillOpacity: 0.12,
+        radius: 200,
+        weight: 1.5
+      }).addTo(leafletMapInstanceRef.current);
+      leafletSearchCircleRef.current = circle;
+
+      leafletMapInstanceRef.current.setView([lat, lng], 17);
+
+      // Auto-remove after 45s
+      setTimeout(() => {
+        if (pin && leafletSearchPinRef.current === pin && leafletMapInstanceRef.current) {
+          leafletMapInstanceRef.current.removeLayer(pin);
+          leafletSearchPinRef.current = null;
+        }
+        if (circle && leafletSearchCircleRef.current === circle && leafletMapInstanceRef.current) {
+          leafletMapInstanceRef.current.removeLayer(circle);
+          leafletSearchCircleRef.current = null;
+        }
+      }, 45000);
     }
   }, [mapProvider]);
 
@@ -1004,6 +1489,11 @@ export default function SelectableGoogleHomeMap({
       case 'billboard': return 'لوحة';
       case 'landmark': return 'معلم';
       case 'district': return 'منطقة';
+      case 'municipality': return 'بلدية';
+      case 'customer': return 'عميل';
+      case 'city': return 'مدينة';
+      case 'adType': return 'نوع الإعلان';
+      case 'coords':
       case 'coordinates': return 'إحداثي';
       case 'place': return 'مكان';
       default: return '';
@@ -1060,10 +1550,7 @@ export default function SelectableGoogleHomeMap({
             ref={searchInputRef}
             type="text"
             value={searchQuery}
-            onChange={(e) => {
-              setSearchQuery(e.target.value);
-              setShowSuggestions(true);
-            }}
+            onChange={(e) => handleChange(e.target.value)}
             onFocus={() => setShowSuggestions(true)}
             placeholder="ابحث بالاسم، الرقم، المنطقة..."
             className="w-full h-7 pr-8 pl-6 text-[10px] font-bold bg-slate-900/80 border-amber-500/20 text-slate-200 placeholder:text-slate-400/50 rounded-lg focus-visible:ring-1 focus-visible:ring-amber-500 focus-visible:border-amber-500 text-right"
@@ -1088,6 +1575,7 @@ export default function SelectableGoogleHomeMap({
                     e.preventDefault();
                     if (s.coords) {
                       navigateToCoords(s.coords.lat, s.coords.lng);
+                      setSearchQuery('');
                     } else {
                       setSearchQuery(s.value);
                     }
@@ -1205,40 +1693,52 @@ export default function SelectableGoogleHomeMap({
 
       {/* Layer Selector */}
       {showLayers && (
-        <div className="absolute left-4 top-[360px] z-[1000] bg-slate-950/90 backdrop-blur rounded-2xl border border-amber-500/20 p-2.5 shadow-xl min-w-[140px] flex flex-col gap-1">
-          <Button
-            size="sm"
-            variant={mapType === 'roadmap' ? 'default' : 'ghost'}
-            onClick={() => setMapType('roadmap')}
-            className={`h-8 text-xs justify-start rounded-xl ${mapType === 'roadmap' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
-            style={{ fontFamily: 'Tajawal, sans-serif' }}
-          >
-            <MapIcon className="h-4 w-4 ml-2" />
-            خريطة عادية
-          </Button>
-          <Button
-            size="sm"
-            variant={mapType === 'satellite' ? 'default' : 'ghost'}
-            onClick={() => setMapType('satellite')}
-            className={`h-8 text-xs justify-start rounded-xl ${mapType === 'satellite' ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
-            style={{ fontFamily: 'Tajawal, sans-serif' }}
-          >
-            <Globe className="h-4 w-4 ml-2" />
-            قمر صناعي
-          </Button>
-          
-          <div className="border-t border-white/5 mt-1 pt-1">
-            <Button
-              size="sm"
-              variant={showLabels ? 'default' : 'ghost'}
-              onClick={() => setShowLabels(!showLabels)}
-              className={`h-8 text-xs justify-start w-full rounded-xl ${showLabels ? 'bg-amber-600 text-white' : 'text-slate-300 hover:text-white hover:bg-white/5'}`}
-              style={{ fontFamily: 'Tajawal, sans-serif' }}
-            >
-              <Tag className="h-4 w-4 ml-2" />
-              {showLabels ? 'مسميات ✓' : 'بدون مسميات'}
-            </Button>
+        <div 
+          className={cn(
+            "absolute left-[60px] z-[1000] bg-slate-950/95 backdrop-blur-xl border border-amber-500/30 shadow-2xl rounded-2xl p-3 w-40 flex flex-col gap-1 pointer-events-auto animate-in fade-in slide-in-from-left-2 duration-200",
+            hideInternalFilters ? "top-[270px]" : "top-[320px]"
+          )}
+          style={{ fontFamily: 'Tajawal, sans-serif' }}
+        >
+          <h4 className="text-amber-500 font-extrabold mb-1.5 text-right border-b border-white/5 pb-1 text-[11px]">الطبقات والخرائط</h4>
+          <div className="space-y-1">
+            {[
+              { type: 'satellite' as const, label: 'قمر صناعي' },
+              { type: 'roadmap' as const, label: 'خريطة عادية' },
+              { type: 'styled' as const, label: 'خريطة ذهبية' },
+              { type: 'detailed' as const, label: 'بدون مسميات' }
+            ].map((layer) => (
+              <button
+                key={layer.type}
+                onClick={() => setMapType(layer.type)}
+                className={`w-full flex items-center justify-end gap-1 rounded-xl transition-all cursor-pointer px-2.5 py-1.5 text-[10px] font-bold ${
+                  mapType === layer.type 
+                    ? 'bg-amber-600 text-white shadow-md' 
+                    : 'bg-white/5 text-slate-300 hover:bg-white/10 hover:text-white'
+                }`}
+              >
+                {layer.label}
+              </button>
+            ))}
           </div>
+
+          {/* Labels toggle */}
+          {mapType === 'satellite' && (
+            <>
+              <div className="border-t border-white/5 my-1.5" />
+              <button
+                onClick={() => setShowLabels(!showLabels)}
+                className={`w-full flex items-center justify-between rounded-xl font-bold cursor-pointer transition-all px-2.5 py-1.5 text-[10px] ${
+                  showLabels
+                    ? 'bg-amber-600 text-white'
+                    : 'bg-white/5 text-slate-300 hover:bg-white/10'
+                }`}
+              >
+                <span>{showLabels ? '✓ مفعّل' : 'ملغى'}</span>
+                <span>المسميات</span>
+              </button>
+            </>
+          )}
         </div>
       )}
 

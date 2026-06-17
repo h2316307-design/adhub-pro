@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { User, Calendar as CalendarIcon, DollarSign } from 'lucide-react';
 import { CustomerSelector } from './CustomerSelector';
-import { InstallmentManager } from './InstallmentManager';
+import { InstallmentsManager } from './edit/InstallmentsManager';
 import { CostCalculator } from './CostCalculator';
 import type { ContractFormData, Installment } from '@/hooks/useContractForm';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -45,6 +45,28 @@ interface ContractFormSidebarProps {
   calculateDueDate: (paymentType: string, index: number) => string;
   use30DayMonth?: boolean;
   setUse30DayMonth?: (v: boolean) => void;
+  currencySymbol?: string;
+
+  // New Installment Settings Props
+  onDistributeWithInterval?: (config: any) => void;
+  onDistributeByDurationPeriods?: (count: number) => void;
+  onCreateManualInstallments?: (count: number) => void;
+  onApplyUnequalDistribution?: (payments: any[]) => void;
+  installmentSummary?: string | null;
+  savedDistributionType?: 'single' | 'multiple' | 'periods';
+  savedFirstPaymentAmount?: number;
+  savedFirstPaymentType?: 'amount' | 'percent';
+  savedInterval?: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months';
+  savedCount?: number;
+  savedHasDifferentFirstPayment?: boolean;
+  savedFirstAtSigning?: boolean;
+  onDistributionTypeChange?: (type: 'single' | 'multiple' | 'periods') => void;
+  onFirstPaymentAmountChange?: (amount: number) => void;
+  onFirstPaymentTypeChange?: (type: 'amount' | 'percent') => void;
+  onIntervalChange?: (interval: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months') => void;
+  onCountChange?: (count: number) => void;
+  onHasDifferentFirstPaymentChange?: (has: boolean) => void;
+  onFirstAtSigningChange?: (value: boolean) => void;
 }
 
 export const ContractFormSidebar: React.FC<ContractFormSidebarProps> = ({
@@ -77,7 +99,27 @@ export const ContractFormSidebar: React.FC<ContractFormSidebarProps> = ({
   clearAllInstallments,
   calculateDueDate,
   use30DayMonth = true,
-  setUse30DayMonth
+  setUse30DayMonth,
+  currencySymbol,
+  onDistributeWithInterval,
+  onDistributeByDurationPeriods,
+  onCreateManualInstallments,
+  onApplyUnequalDistribution,
+  installmentSummary,
+  savedDistributionType,
+  savedFirstPaymentAmount,
+  savedFirstPaymentType,
+  savedInterval,
+  savedCount,
+  savedHasDifferentFirstPayment,
+  savedFirstAtSigning,
+  onDistributionTypeChange,
+  onFirstPaymentAmountChange,
+  onFirstPaymentTypeChange,
+  onIntervalChange,
+  onCountChange,
+  onHasDifferentFirstPaymentChange,
+  onFirstAtSigningChange,
 }) => {
   return (
     <div className="w-full lg:w-[360px] space-y-4">
@@ -234,16 +276,35 @@ export const ContractFormSidebar: React.FC<ContractFormSidebarProps> = ({
       </Card>
 
       {/* Installment Manager */}
-      <InstallmentManager
+      <InstallmentsManager
         installments={installments}
-        setInstallments={setInstallments}
-        updateInstallment={updateInstallment}
         finalTotal={finalTotal}
-        distributeEvenly={distributeEvenly}
-        addInstallment={addInstallment}
-        removeInstallment={removeInstallment}
-        clearAllInstallments={clearAllInstallments}
-        calculateDueDate={calculateDueDate}
+        startDate={formData.startDate}
+        endDate={formData.endDate}
+        onDistributeEvenly={distributeEvenly}
+        onDistributeWithInterval={onDistributeWithInterval}
+        onDistributeByDurationPeriods={onDistributeByDurationPeriods}
+        onCreateManualInstallments={onCreateManualInstallments}
+        onApplyUnequalDistribution={onApplyUnequalDistribution}
+        onAddInstallment={addInstallment}
+        onRemoveInstallment={removeInstallment}
+        onUpdateInstallment={updateInstallment}
+        onClearAll={clearAllInstallments}
+        installmentSummary={installmentSummary}
+        savedDistributionType={savedDistributionType}
+        savedFirstPaymentAmount={savedFirstPaymentAmount}
+        savedFirstPaymentType={savedFirstPaymentType}
+        savedInterval={savedInterval}
+        savedCount={savedCount}
+        savedHasDifferentFirstPayment={savedHasDifferentFirstPayment}
+        savedFirstAtSigning={savedFirstAtSigning}
+        onDistributionTypeChange={onDistributionTypeChange}
+        onFirstPaymentAmountChange={onFirstPaymentAmountChange}
+        onFirstPaymentTypeChange={onFirstPaymentTypeChange}
+        onIntervalChange={onIntervalChange}
+        onCountChange={onCountChange}
+        onHasDifferentFirstPaymentChange={onHasDifferentFirstPaymentChange}
+        onFirstAtSigningChange={onFirstAtSigningChange}
       />
 
       {/* Cost Calculator */}

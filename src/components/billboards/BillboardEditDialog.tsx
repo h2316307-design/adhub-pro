@@ -4,13 +4,21 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Upload, ClipboardPaste, Loader2, Image as ImageIcon, RefreshCw } from 'lucide-react';
+import { Upload, ClipboardPaste, Loader2, Image as ImageIcon, RefreshCw, Plus } from 'lucide-react';
 import { BillboardImage } from '@/components/BillboardImage';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { MultiSelect } from '@/components/ui/multi-select';
 import { uploadToImgbb } from '@/services/imgbbService';
 import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
+import { 
+  QuickAddSizeDialog, 
+  QuickAddMunicipalityDialog, 
+  QuickAddCityDialog, 
+  QuickAddTypeDialog, 
+  QuickAddLevelDialog, 
+  QuickAddFaceDialog 
+} from './QuickAddDialogs';
 
 interface BillboardEditDialogProps {
   editOpen: boolean;
@@ -39,6 +47,12 @@ interface BillboardEditDialogProps {
   loadBillboards: (options?: { silent?: boolean }) => Promise<void>;
   uploadImageToFolder: (file: File, fileName: string) => Promise<boolean>;
   addMunicipalityIfNew: (name: string, municipalities: any[], setMunicipalities: any, setDbMunicipalities: any) => Promise<void>;
+  loadCities?: () => Promise<void>;
+  loadMunicipalities?: () => Promise<void>;
+  loadSizes?: () => Promise<void>;
+  loadLevels?: () => Promise<void>;
+  loadFaces?: () => Promise<void>;
+  loadBillboardTypes?: () => Promise<void>;
 }
 
 export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
@@ -67,8 +81,22 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
   setDbMunicipalities,
   loadBillboards,
   uploadImageToFolder,
-  addMunicipalityIfNew
+  addMunicipalityIfNew,
+  loadCities,
+  loadMunicipalities,
+  loadSizes,
+  loadLevels,
+  loadFaces,
+  loadBillboardTypes
 }) => {
+  // Sub-dialog states for quick add
+  const [sizeQuickAddOpen, setSizeQuickAddOpen] = useState(false);
+  const [munQuickAddOpen, setMunQuickAddOpen] = useState(false);
+  const [cityQuickAddOpen, setCityQuickAddOpen] = useState(false);
+  const [typeQuickAddOpen, setTypeQuickAddOpen] = useState(false);
+  const [levelQuickAddOpen, setLevelQuickAddOpen] = useState(false);
+  const [faceQuickAddOpen, setFaceQuickAddOpen] = useState(false);
+
   // ✅ NEW: State for district input and suggestions
   const [districtInput, setDistrictInput] = useState('');
   const [showDistrictSuggestions, setShowDistrictSuggestions] = useState(false);
@@ -501,43 +529,67 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">المدينة</Label>
-                <Select value={editForm.City || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, City: v }))}>
-                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                    <SelectValue placeholder="اختر المدينة" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    {citiesList.filter(c => c && String(c).trim()).map((c) => (
-                      <SelectItem key={c} value={c as string} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={editForm.City || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, City: v }))}>
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9 flex-1">
+                      <SelectValue placeholder="اختر المدينة" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      {citiesList.filter(c => c && String(c).trim()).map((c) => (
+                        <SelectItem key={c} value={c as string} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setCityQuickAddOpen(true)}
+                    title="إضافة مدينة جديدة"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">البلدية</Label>
-                <Select value={editForm.Municipality || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Municipality: v }))}>
-                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                    <SelectValue placeholder="اختر البلدية">
-                      {editForm.Municipality || 'اختر البلدية'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border max-h-60">
-                    {Array.isArray(municipalities) && municipalities.length > 0 ? (
-                      municipalities.map((m) => (
-                        <SelectItem 
-                          key={m.id || m.name} 
-                          value={m.name} 
-                          className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-                        >
-                          {m.name}
+                <div className="flex gap-1 items-center">
+                  <Select value={editForm.Municipality || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Municipality: v }))}>
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9 flex-1">
+                      <SelectValue placeholder="اختر البلدية">
+                        {editForm.Municipality || 'اختر البلدية'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border max-h-60">
+                      {Array.isArray(municipalities) && municipalities.length > 0 ? (
+                        municipalities.map((m) => (
+                          <SelectItem 
+                            key={m.id || m.name} 
+                            value={m.name} 
+                            className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                          >
+                            {m.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-data" disabled className="text-muted-foreground">
+                          لا توجد بلديات متاحة
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-data" disabled className="text-muted-foreground">
-                        لا توجد بلديات متاحة
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setMunQuickAddOpen(true)}
+                    title="إضافة بلدية جديدة"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="relative">
                 <Label className="text-xs text-muted-foreground mb-1.5 block">المنطقة</Label>
@@ -604,102 +656,150 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 rounded-lg bg-muted/30 border border-border">
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">المقاس</Label>
-                <Select value={editForm.Size || ''} onValueChange={(v) => {
-                  const selectedSize = sizes.find(s => s.name === v);
-                  setEditForm((p: any) => ({ 
-                    ...p, 
-                    Size: v,
-                    size_id: selectedSize?.id || null
-                  }));
-                }}>
-                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                    <SelectValue placeholder="اختر المقاس">
-                      {editForm.Size || 'اختر المقاس'}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border max-h-60">
-                    {sizes && sizes.length > 0 ? (
-                      sizes.map((s) => (
-                        <SelectItem 
-                          key={s.id} 
-                          value={s.name} 
-                          className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
-                        >
-                          {s.name}
+                <div className="flex gap-1 items-center">
+                  <Select value={editForm.Size || ''} onValueChange={(v) => {
+                    const selectedSize = sizes.find(s => s.name === v);
+                    setEditForm((p: any) => ({ 
+                      ...p, 
+                      Size: v,
+                      size_id: selectedSize?.id || null
+                    }));
+                  }}>
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9 flex-1">
+                      <SelectValue placeholder="اختر المقاس">
+                        {editForm.Size || 'اختر المقاس'}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border max-h-60">
+                      {sizes && sizes.length > 0 ? (
+                        sizes.map((s) => (
+                          <SelectItem 
+                            key={s.id} 
+                            value={s.name} 
+                            className="text-popover-foreground hover:bg-accent hover:text-accent-foreground"
+                          >
+                            {s.name}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="no-sizes" disabled className="text-muted-foreground">
+                          لا توجد مقاسات متاحة
                         </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="no-sizes" disabled className="text-muted-foreground">
-                        لا توجد مقاسات متاحة
-                      </SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setSizeQuickAddOpen(true)}
+                    title="إضافة مقاس جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">عدد الأوجه</Label>
-                <Select value={String(editForm.Faces_Count || '')} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Faces_Count: v }))}>
-                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                    <SelectValue placeholder="اختر">
-                      {editForm.Faces_Count ? 
-                        faces.find(f => String(f.count) === String(editForm.Faces_Count) || String(f.face_count) === String(editForm.Faces_Count))?.name || editForm.Faces_Count
-                        : "اختر"
-                      }
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    {faces.filter(face => face && face.id && (face.count != null || face.face_count != null)).map((face) => {
-                      const faceCount = face.count || face.face_count;
-                      return (
-                        <SelectItem key={face.id} value={String(faceCount)} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
-                          {face.name} ({faceCount})
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={String(editForm.Faces_Count || '')} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Faces_Count: v }))}>
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9 flex-1">
+                      <SelectValue placeholder="اختر">
+                        {editForm.Faces_Count ? 
+                          faces.find(f => String(f.count) === String(editForm.Faces_Count) || String(f.face_count) === String(editForm.Faces_Count))?.name || editForm.Faces_Count
+                          : "اختر"
+                        }
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      {faces.filter(face => face && face.id && (face.count != null || face.face_count != null)).map((face) => {
+                        const faceCount = face.count || face.face_count;
+                        return (
+                          <SelectItem key={face.id} value={String(faceCount)} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+                            {face.name} ({faceCount})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setFaceQuickAddOpen(true)}
+                    title="إضافة خيار أوجه جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">المستوى</Label>
-                <Select value={editForm.Level || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Level: v }))}>
-                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                    <SelectValue placeholder="اختر المستوى">
-                      {editForm.Level || "اختر المستوى"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    {levels && levels.filter(lv => lv && String(lv).trim()).length > 0 ? (
-                      levels.filter(lv => lv && String(lv).trim()).map((lv) => (
-                        <SelectItem key={lv} value={lv} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
-                          {lv}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد مستويات</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={editForm.Level || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, Level: v }))}>
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9 flex-1">
+                      <SelectValue placeholder="اختر المستوى">
+                        {editForm.Level || "اختر المستوى"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      {levels && levels.filter(lv => lv && String(lv).trim()).length > 0 ? (
+                        levels.filter(lv => lv && String(lv).trim()).map((lv) => (
+                          <SelectItem key={lv} value={lv} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+                            {lv}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد مستويات</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setLevelQuickAddOpen(true)}
+                    title="إضافة مستوى جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground mb-1.5 block">نوع اللوحة</Label>
-                <Select value={editForm.billboard_type || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, billboard_type: v }))}>
-                  <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                    <SelectValue placeholder="اختر النوع">
-                      {editForm.billboard_type || "اختر النوع"}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="bg-popover border-border">
-                    {billboardTypes && billboardTypes.filter(type => type && String(type).trim()).length > 0 ? (
-                      billboardTypes.filter(type => type && String(type).trim()).map((type) => (
-                        <SelectItem key={type} value={type} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
-                          {type}
-                        </SelectItem>
-                      ))
-                    ) : (
-                      <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد أنواع</SelectItem>
-                    )}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={editForm.billboard_type || ''} onValueChange={(v) => setEditForm((p: any) => ({ ...p, billboard_type: v }))}>
+                    <SelectTrigger className="text-sm bg-background border-border text-foreground h-9 flex-1">
+                      <SelectValue placeholder="اختر النوع">
+                        {editForm.billboard_type || "اختر النوع"}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="bg-popover border-border">
+                      {billboardTypes && billboardTypes.filter(type => type && String(type).trim()).length > 0 ? (
+                        billboardTypes.filter(type => type && String(type).trim()).map((type) => (
+                          <SelectItem key={type} value={type} className="text-popover-foreground hover:bg-accent hover:text-accent-foreground">
+                            {type}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        <SelectItem value="placeholder" disabled className="text-muted-foreground">لا توجد أنواع</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setTypeQuickAddOpen(true)}
+                    title="إضافة نوع جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -984,6 +1084,46 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
             {saving ? 'جارٍ الحفظ...' : uploadingImage ? 'جاري رفع الصورة...' : 'حفظ التعديلات'}
           </Button>
         </div>
+        {/* Quick Add Dialogs */}
+        <QuickAddSizeDialog
+          open={sizeQuickAddOpen}
+          onOpenChange={setSizeQuickAddOpen}
+          onSuccess={(val) => {
+            const selectedSize = sizes.find(s => s.name === val);
+            setEditForm((prev: any) => ({ ...prev, Size: val, size_id: selectedSize?.id || null }));
+          }}
+          onRefresh={loadSizes || (() => Promise.resolve())}
+        />
+        <QuickAddMunicipalityDialog
+          open={munQuickAddOpen}
+          onOpenChange={setMunQuickAddOpen}
+          onSuccess={(val) => setEditForm((prev: any) => ({ ...prev, Municipality: val }))}
+          onRefresh={loadMunicipalities || (() => Promise.resolve())}
+        />
+        <QuickAddCityDialog
+          open={cityQuickAddOpen}
+          onOpenChange={setCityQuickAddOpen}
+          onSuccess={(val) => setEditForm((prev: any) => ({ ...prev, City: val }))}
+          onRefresh={loadCities || (() => Promise.resolve())}
+        />
+        <QuickAddTypeDialog
+          open={typeQuickAddOpen}
+          onOpenChange={setTypeQuickAddOpen}
+          onSuccess={(val) => setEditForm((prev: any) => ({ ...prev, billboard_type: val }))}
+          onRefresh={loadBillboardTypes || (() => Promise.resolve())}
+        />
+        <QuickAddLevelDialog
+          open={levelQuickAddOpen}
+          onOpenChange={setLevelQuickAddOpen}
+          onSuccess={(val) => setEditForm((prev: any) => ({ ...prev, Level: val }))}
+          onRefresh={loadLevels || (() => Promise.resolve())}
+        />
+        <QuickAddFaceDialog
+          open={faceQuickAddOpen}
+          onOpenChange={setFaceQuickAddOpen}
+          onSuccess={(val) => setEditForm((prev: any) => ({ ...prev, Faces_Count: val }))}
+          onRefresh={loadFaces || (() => Promise.resolve())}
+        />
       </DialogContent>
     </Dialog>
   );

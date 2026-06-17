@@ -10,20 +10,7 @@ interface GoogleBillboardsMapProps {
   onToggleSelection?: (id: string) => void;
 }
 
-function parseCoords(b: Billboard): { lat: number; lng: number } | null {
-  const coords = (b as any).GPS_Coordinates || (b as any).coordinates;
-  if (!coords || coords === '0') return null;
-  
-  if (typeof coords === 'string') {
-    const parts = coords.split(',').map((c: string) => parseFloat(c.trim()));
-    if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-      return { lat: parts[0], lng: parts[1] };
-    }
-  } else if (typeof coords === 'object' && typeof (coords as any).lat === 'number' && typeof (coords as any).lng === 'number') {
-    return { lat: (coords as any).lat, lng: (coords as any).lng };
-  }
-  return null;
-}
+import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
 
 // Custom premium popup content for client home map
 function createClientPopupContent(b: Billboard, isSelected: boolean) {
@@ -220,14 +207,16 @@ export default function GoogleBillboardsMap({
       let hasMarkers = false;
 
       billboards.forEach((b) => {
-        const coords = parseCoords(b);
+        const coords = getJitteredCoords(b, billboards);
         if (!coords) return;
 
         const billboardId = String(b.id || b.ID);
         const isSelected = selectedBillboards.includes(billboardId);
         
         const status = getBillboardStatus(b);
-        const pinData = createPinSvgUrl(b.size || b.Size || '', status.label, isSelected, b.adType || b.Ad_Type || '', b.clientName || b.Customer_Name || '');
+        const adTypeVal = b.adType || b.Ad_Type || (b as any).ad_type || (b as any).AdType || (b as any).contracts?.[0]?.['Ad Type'] || '';
+        const clientNameVal = b.clientName || b.Customer_Name || (b as any).customer_name || (b as any).contracts?.[0]?.['Customer Name'] || '';
+        const pinData = createPinSvgUrl(b.size || b.Size || '', status.label, isSelected, adTypeVal, clientNameVal);
 
         const marker = new google.maps.Marker({
           position: coords,

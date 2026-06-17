@@ -36,6 +36,7 @@ interface ContractData {
   duration_months?: number | null;
   duration_days?: number | null;
   use_30_day_month?: boolean | null;
+  previous_contract_number?: number | null;
 }
 
 interface ContractCreate {
@@ -67,6 +68,7 @@ interface ContractCreate {
   ['Payment 3']?: number | string | null;
   ['Remaining']?: number | string;
   billboard_prices?: any; // To support current usage, consider typing properly later
+  previous_contract_number?: number | null;
 }
 
 // إنشاء عقد جديد مع معالجة محسنة للأخطاء وحفظ بيانات اللوحات والتركيب
@@ -74,7 +76,7 @@ export async function createContract(contractData: ContractData) {
   console.log('Creating contract with data:', contractData);
 
   // فصل معرفات اللوحات عن بيانات العقد
-  const { billboard_ids, installments, installments_data, print_cost_enabled, print_price_per_meter, operating_fee_rate, ...contractPayload } = contractData;
+  const { billboard_ids, installments, installments_data, print_cost_enabled, print_price_per_meter, operating_fee_rate, previous_contract_number, ...contractPayload } = contractData;
 
   // Determine customer_id: prefer explicit, else find by name, else create new customer
   let customer_id: string | null = contractData.customer_id || null;
@@ -268,7 +270,8 @@ export async function createContract(contractData: ContractData) {
     pricing_mode: contractData.pricing_mode || null,
     duration_months: contractData.duration_months !== undefined ? contractData.duration_months : null,
     duration_days: contractData.duration_days !== undefined ? contractData.duration_days : null,
-    use_30_day_month: contractData.use_30_day_month !== undefined ? contractData.use_30_day_month : null
+    use_30_day_month: contractData.use_30_day_month !== undefined ? contractData.use_30_day_month : null,
+    previous_contract_number: previous_contract_number || null
   };
 
   console.log('Insert payload with all cost settings:', {
@@ -1252,6 +1255,7 @@ export async function renewContract(originalContractId: string, options?: { star
     print_price_per_meter: original.print_price_per_meter || 0,
     // ✅ NEW: Copy operating fee rate from original contract
     operating_fee_rate: original.operating_fee_rate || 3,
+    previous_contract_number: Number(originalContractId),
   };
 
   // حافظ على فئة التسعير إن وجدت

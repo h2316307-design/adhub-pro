@@ -41,6 +41,7 @@ const STATUS_OPTIONS = [
   { value: 'available', label: 'متاح', color: 'bg-emerald-500', ring: 'ring-emerald-500/30' },
   { value: 'nearExpiry', label: 'قريب الانتهاء', color: 'bg-amber-500', ring: 'ring-amber-500/30' },
   { value: 'rented', label: 'مؤجر', color: 'bg-red-500', ring: 'ring-red-500/30' },
+  { value: 'maintenance', label: 'صيانة', color: 'bg-orange-500', ring: 'ring-orange-500/30' },
   { value: 'hidden', label: 'مخفية', color: 'bg-purple-500', ring: 'ring-purple-500/30' },
   { value: 'all', label: 'الكل', color: 'bg-muted-foreground', ring: 'ring-muted-foreground/30' },
 ];
@@ -119,28 +120,28 @@ export function BillboardFilters({
   }
 
   return (
-    <div className="rounded-xl border border-border/60 bg-card shadow-sm overflow-hidden" dir="rtl">
+    <div className="rounded-2xl border border-amber-500/25 bg-slate-950/40 backdrop-blur-xl shadow-lg overflow-hidden" dir="rtl">
       {/* Top bar: search + stats */}
       <div className="p-2.5 pb-2 space-y-2">
         {/* Header row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="p-1 rounded-md bg-primary/15">
-              <Filter className="h-3.5 w-3.5 text-primary" />
+            <div className="p-1 rounded-md bg-amber-500/10 border border-amber-500/20">
+              <Filter className="h-3.5 w-3.5 text-amber-500" />
             </div>
             <span className="text-xs font-bold text-foreground">فلترة اللوحات</span>
             {totalCount > 0 && (
-              <span className="text-[10px] text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-md">
+              <span className="text-[10px] text-muted-foreground bg-muted/30 px-1.5 py-0.5 rounded-md">
                 {totalCount}
               </span>
             )}
             {selectedCount > 0 && (
-              <Badge className="text-[10px] h-4 px-1.5 bg-primary/15 text-primary border-0">
+              <Badge className="text-[10px] h-4 px-1.5 bg-amber-500/15 text-amber-500 border border-amber-500/20">
                 {selectedCount} محددة
               </Badge>
             )}
             {activeFilterCount > 0 && (
-              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-accent/50 text-accent-foreground">
+              <Badge variant="outline" className="text-[10px] h-4 px-1.5 border-amber-500/40 text-amber-500">
                 {activeFilterCount} فلتر نشط
               </Badge>
             )}
@@ -148,12 +149,12 @@ export function BillboardFilters({
 
           <div className="flex items-center gap-1">
             {onSelectAll && (
-              <Button variant="ghost" size="sm" onClick={onSelectAll} className="h-6 text-[10px] px-2 text-primary hover:bg-primary/10">
+              <Button variant="ghost" size="sm" onClick={onSelectAll} className="h-6 text-[10px] px-2 text-amber-500 hover:bg-amber-500/10 cursor-pointer">
                 تحديد الكل
               </Button>
             )}
             {onClearSelection && selectedCount > 0 && (
-              <Button variant="ghost" size="sm" onClick={onClearSelection} className="h-6 text-[10px] px-2 text-destructive hover:bg-destructive/10">
+              <Button variant="ghost" size="sm" onClick={onClearSelection} className="h-6 text-[10px] px-2 text-destructive hover:bg-destructive/10 cursor-pointer">
                 <X className="h-2.5 w-2.5 ml-0.5" />
                 إلغاء التحديد
               </Button>
@@ -168,13 +169,13 @@ export function BillboardFilters({
             placeholder="بحث بالاسم، الموقع، البلدية، رقم اللوحة..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pr-8 pl-8 h-8 text-xs bg-muted/30 border-border/40 focus:border-primary/50 focus:bg-background rounded-lg transition-colors"
+            className="pr-8 pl-8 h-8 text-xs bg-muted/10 border-border/50 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:bg-background rounded-xl transition-all duration-200"
             dir="rtl"
           />
           {searchQuery && (
             <button
               onClick={() => setSearchQuery('')}
-              className="absolute left-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors cursor-pointer"
             >
               <X className="h-3 w-3" />
             </button>
@@ -192,10 +193,10 @@ export function BillboardFilters({
                 key={s.value}
                 onClick={() => setStatusFilter(s.value)}
                 className={cn(
-                  "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-medium transition-all duration-150",
+                  "flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all duration-200 cursor-pointer hover:scale-[1.03] active:scale-[0.97]",
                   isActive
-                    ? `bg-primary text-primary-foreground shadow-sm ring-2 ${s.ring}`
-                    : "bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                    ? `bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-md shadow-amber-500/20 ring-1 ring-amber-500/30`
+                    : "bg-muted/30 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                 )}
               >
                 <span className={cn("h-1.5 w-1.5 rounded-full", s.color)} />

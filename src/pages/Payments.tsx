@@ -141,8 +141,6 @@ export default function Customers() {
 
   useEffect(() => {
     loadData();
-    // load billboards for invoice builder
-    fetchAllBillboards().then((b)=> setAllBillboards(b as any)).catch(()=> setAllBillboards([] as any));
   }, []);
 
   // auto-derive size counts from selected contracts
@@ -339,7 +337,7 @@ export default function Customers() {
         const pByName = await supabase
           .from('customer_payments')
           .select('*')
-          .ilike('customer_name', `%${name}%`)
+          .eq('customer_name', name)
           .order('paid_at', { ascending: false });
         
         console.log('Payments by name result:', pByName);
@@ -371,7 +369,7 @@ export default function Customers() {
         const byName = await supabase
           .from('Contract')
           .select('*')
-          .ilike('Customer Name', `%${name}%`);
+          .eq('Customer Name', name);
         
         console.log('Contracts by name result:', byName);
         contractsData = byName.data || [];
@@ -402,6 +400,53 @@ export default function Customers() {
 
       console.log('Final contracts data:', deduped);
       setDetailsContracts(deduped);
+
+      // Collect all billboard IDs from this customer's contracts to load only their billboards dynamically
+      const billboardIdsSet = new Set<number>();
+      const billboardToContractMap = new Map<number, { contractNumber: string; customerName: string }>();
+      
+      deduped.forEach((contract: any) => {
+        const idsStr = contract.billboard_ids;
+        const contractNum = String(contract.Contract_Number || '');
+        const custName = String(contract['Customer Name'] || contract.Customer_Name || '');
+        if (idsStr) {
+          String(idsStr)
+            .split(',')
+            .map((s: string) => parseInt(s.trim(), 10))
+            .filter((n: number) => !isNaN(n))
+            .forEach(id => {
+              billboardIdsSet.add(id);
+              billboardToContractMap.set(id, { contractNumber: contractNum, customerName: custName });
+            });
+        }
+      });
+      const billboardIds = Array.from(billboardIdsSet);
+
+      let customerBillboards: any[] = [];
+      if (billboardIds.length > 0) {
+        try {
+          const { data, error } = await supabase
+            .from('billboards')
+            .select('ID, Billboard_Name, Size, City, Level, Nearest_Landmark, Faces_Count, Price')
+            .in('ID', billboardIds);
+          
+          if (!error && data) {
+            customerBillboards = data.map((b: any) => {
+              const mapping = billboardToContractMap.get(Number(b.ID));
+              return {
+                ...b,
+                Contract_Number: mapping?.contractNumber || b.Contract_Number || '',
+                Customer_Name: mapping?.customerName || b.Customer_Name || '',
+                size: b.Size || '',
+                faces: b.Faces_Count || 1
+              };
+            });
+          }
+        } catch (err) {
+          console.warn('Error loading billboards for customer:', err);
+        }
+      }
+      setAllBillboards(customerBillboards);
     } catch (e) {
       console.error('openCustomer error', e);
       setDetailsContracts([]);

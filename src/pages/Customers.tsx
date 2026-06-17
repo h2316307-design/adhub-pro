@@ -19,7 +19,7 @@ import { Billboard } from '@/types';
 import { fetchAllBillboards } from '@/services/supabaseService';
 import { CustomerFilters } from '@/components/customers/CustomerFilters';
 import { OverduePaymentsAlert } from '@/components/billing/OverduePaymentsAlert';
-import { useOverduePayments } from '@/hooks/useOverduePayments';
+import { computeOverdueData } from '@/utils/overdueCalculations';
 import { TopOverduePayments } from '@/components/customers/TopOverduePayments';
 import { SendAccountStatementDialog } from '@/components/customers/SendAccountStatementDialog';
 import { SendOverdueRemindersDialog } from '@/components/billing/SendOverdueRemindersDialog';
@@ -68,6 +68,13 @@ interface CustomerSummary {
   isSupplier?: boolean;
   isCustomer?: boolean;
   supplierType?: string | null;
+  overdueInfo?: {
+    hasOverdue: boolean;
+    oldestDueDate: string | null;
+    oldestDaysOverdue: number;
+    totalOverdueAmount: number;
+    overdueCount: number;
+  };
 }
 
 // Component for each customer row with overdue check
@@ -86,10 +93,13 @@ function CustomerRow({
   onEdit: () => void;
   onDelete: () => void;
 }) {
-  const { overdueInfo } = useOverduePayments(
-    customer.id.startsWith('name:') ? null : customer.id,
-    customer.name
-  );
+  const overdueInfo = customer.overdueInfo || {
+    hasOverdue: false,
+    oldestDueDate: null,
+    oldestDaysOverdue: 0,
+    totalOverdueAmount: 0,
+    overdueCount: 0
+  };
 
   const isOverdue = overdueInfo.hasOverdue;
   const hasUnpaidDebt = remaining > 0;
@@ -408,16 +418,16 @@ export default function Customers() {
         fbrRes,
         fcRes
       ] = await Promise.all([
-        supabase.from('customer_payments').select('*').order('paid_at', { ascending: false }).range(0, 10000),
-        supabase.from('Contract').select('*').range(0, 10000),
-        supabase.from('customers').select('*').order('name', { ascending: true }).range(0, 10000),
-        supabase.from('sales_invoices').select('*').range(0, 10000),
-        supabase.from('printed_invoices').select('*').range(0, 10000),
-        supabase.from('purchase_invoices').select('*').range(0, 10000),
-        supabase.from('customer_general_discounts').select('*').eq('status', 'active'),
-        supabase.from('composite_tasks').select('*').range(0, 10000),
+        supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes, method, reference').order('paid_at', { ascending: false }).range(0, 10000),
+        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 10000),
+        supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id').order('name', { ascending: true }).range(0, 10000),
+        supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 10000),
+        supabase.from('printed_invoices').select('id, customer_id, total_amount, print_cost, invoice_type, included_in_contract').range(0, 10000),
+        supabase.from('purchase_invoices').select('id, customer_id, total_amount').range(0, 10000),
+        supabase.from('customer_general_discounts').select('id, customer_id, discount_value').eq('status', 'active'),
+        supabase.from('composite_tasks').select('id, customer_id, combined_invoice_id, print_task_id, customer_total').range(0, 10000),
         supabase.from('print_tasks').select('id, invoice_id').range(0, 10000),
-        supabase.from('friend_billboard_rentals').select('*').range(0, 10000),
+        supabase.from('friend_billboard_rentals').select('id, friend_company_id, friend_rental_cost, customer_rental_price, used_as_payment, contract_number, start_date, billboard_id').range(0, 10000),
         supabase.from('friend_companies').select('id, name'),
       ]);
 
@@ -457,8 +467,6 @@ export default function Customers() {
 
   useEffect(() => {
     loadData();
-    // load billboards for invoice builder
-    fetchAllBillboards().then((b)=> setAllBillboards(b as any)).catch(()=> setAllBillboards([] as any));
     // load printers list
     loadPrinters();
   }, []);
@@ -516,6 +524,108 @@ export default function Customers() {
 
   // ✅ Build summary per customer using the CORRECT calculation logic (same as debt summary card)
   const customersSummary = useMemo((): CustomerSummary[] => {
+    // Pre-calculate overdue info for all customers in memory (0 database queries!)
+    const overdueMap = new Map<string, any>();
+    try {
+      const acctPaymentsForOverdue = payments.filter((p: any) => 
+        !p.contract_number && 
+        ['payment', 'receipt', 'account_payment'].includes(p.entry_type) &&
+        p.sales_invoice_id === null && 
+        p.printed_invoice_id === null && 
+        p.composite_task_id === null
+      );
+      const contractPaymentsForOverdue = payments.filter((p: any) => 
+        p.contract_number && 
+        ['payment', 'receipt', 'account_payment'].includes(p.entry_type)
+      );
+      const { customerOverdues } = computeOverdueData(contracts || [], contractPaymentsForOverdue || [], acctPaymentsForOverdue || []);
+      (customerOverdues || []).forEach((c) => {
+        const key = c.customerId ? String(c.customerId) : String(c.customerName).toLowerCase();
+        overdueMap.set(key, {
+          hasOverdue: true,
+          oldestDueDate: c.oldestDueDate,
+          oldestDaysOverdue: c.oldestDaysOverdue,
+          totalOverdueAmount: c.totalOverdue,
+          overdueCount: c.overdueCount
+        });
+      });
+    } catch (e) {
+      console.error('Failed to compute overdue data in memory:', e);
+    }
+
+    // Index arrays by customer_id to avoid O(N * M) filtering inside the loop
+    const contractsByCustomerId = new Map<string, any[]>();
+    for (const c of contracts) {
+      const cid = c.customer_id;
+      if (cid) {
+        if (!contractsByCustomerId.has(cid)) contractsByCustomerId.set(cid, []);
+        contractsByCustomerId.get(cid)!.push(c);
+      }
+    }
+
+    const paymentsByCustomerId = new Map<string, any[]>();
+    for (const p of payments) {
+      const cid = p.customer_id;
+      if (cid) {
+        if (!paymentsByCustomerId.has(cid)) paymentsByCustomerId.set(cid, []);
+        paymentsByCustomerId.get(cid)!.push(p);
+      }
+    }
+
+    const salesInvoicesByCustomerId = new Map<string, any[]>();
+    for (const inv of salesInvoices) {
+      const cid = inv.customer_id;
+      if (cid) {
+        if (!salesInvoicesByCustomerId.has(cid)) salesInvoicesByCustomerId.set(cid, []);
+        salesInvoicesByCustomerId.get(cid)!.push(inv);
+      }
+    }
+
+    const printedInvoicesByCustomerId = new Map<string, any[]>();
+    for (const inv of printedInvoices) {
+      const cid = inv.customer_id;
+      if (cid) {
+        if (!printedInvoicesByCustomerId.has(cid)) printedInvoicesByCustomerId.set(cid, []);
+        printedInvoicesByCustomerId.get(cid)!.push(inv);
+      }
+    }
+
+    const purchaseInvoicesByCustomerId = new Map<string, any[]>();
+    for (const inv of purchaseInvoices) {
+      const cid = inv.customer_id;
+      if (cid) {
+        if (!purchaseInvoicesByCustomerId.has(cid)) purchaseInvoicesByCustomerId.set(cid, []);
+        purchaseInvoicesByCustomerId.get(cid)!.push(inv);
+      }
+    }
+
+    const discountsByCustomerId = new Map<string, any[]>();
+    for (const d of discounts) {
+      const cid = d.customer_id;
+      if (cid) {
+        if (!discountsByCustomerId.has(cid)) discountsByCustomerId.set(cid, []);
+        discountsByCustomerId.get(cid)!.push(d);
+      }
+    }
+
+    const compositeTasksByCustomerId = new Map<string, any[]>();
+    for (const t of compositeTasks) {
+      const cid = t.customer_id;
+      if (cid) {
+        if (!compositeTasksByCustomerId.has(cid)) compositeTasksByCustomerId.set(cid, []);
+        compositeTasksByCustomerId.get(cid)!.push(t);
+      }
+    }
+
+    const friendBillboardRentalsByCompanyId = new Map<string, any[]>();
+    for (const r of friendBillboardRentals) {
+      const fid = r.friend_company_id;
+      if (fid) {
+        if (!friendBillboardRentalsByCompanyId.has(fid)) friendBillboardRentalsByCompanyId.set(fid, []);
+        friendBillboardRentalsByCompanyId.get(fid)!.push(r);
+      }
+    }
+
     // initialize map from customers list with all customer data
     const map = new Map<string, CustomerSummary>();
     for (const c of (customers || [])) {
@@ -536,7 +646,14 @@ export default function Customers() {
         repaymentPercentage: 0,
         isSupplier: (c as any).is_supplier ?? false,
         isCustomer: (c as any).is_customer ?? true,
-        supplierType: (c as any).supplier_type ?? null
+        supplierType: (c as any).supplier_type ?? null,
+        overdueInfo: {
+          hasOverdue: false,
+          oldestDueDate: null,
+          oldestDaysOverdue: 0,
+          totalOverdueAmount: 0,
+          overdueCount: 0
+        }
       });
     }
 
@@ -563,7 +680,14 @@ export default function Customers() {
             repaymentPercentage: 0,
             isSupplier: false,
             isCustomer: true,
-            supplierType: null
+            supplierType: null,
+            overdueInfo: {
+              hasOverdue: false,
+              oldestDueDate: null,
+              oldestDaysOverdue: 0,
+              totalOverdueAmount: 0,
+              overdueCount: 0
+            }
           });
         }
         map.get(key)!.contractsCount += 1;
@@ -575,13 +699,13 @@ export default function Customers() {
       // تجاهل العملاء الذين ليس لديهم id حقيقي
       if (customerId.startsWith('name:')) continue;
       
-      // تصفية البيانات الخاصة بهذا العميل
-      const customerContracts = contracts.filter(c => c.customer_id === customerId);
-      const customerPayments = payments.filter(p => p.customer_id === customerId);
-      const customerSalesInvoices = salesInvoices.filter(inv => inv.customer_id === customerId);
-      const customerPurchaseInvoices = purchaseInvoices.filter(inv => inv.customer_id === customerId);
-      const customerDiscounts = discounts.filter(d => d.customer_id === customerId);
-      const customerCompositeTasks = compositeTasks.filter(t => t.customer_id === customerId);
+      // تصفية البيانات الخاصة بهذا العميل باستخدام الفهارس المحسوبة مسبقاً
+      const customerContracts = contractsByCustomerId.get(customerId) || [];
+      const customerPayments = paymentsByCustomerId.get(customerId) || [];
+      const customerSalesInvoices = salesInvoicesByCustomerId.get(customerId) || [];
+      const customerPurchaseInvoices = purchaseInvoicesByCustomerId.get(customerId) || [];
+      const customerDiscounts = discountsByCustomerId.get(customerId) || [];
+      const customerCompositeTasks = compositeTasksByCustomerId.get(customerId) || [];
 
       // ✅ توحيد منطق فواتير الطباعة مع صفحة CustomerBilling
       // استبعاد فواتير composite_task وأي فاتورة مرتبطة بمهام مجمعة
@@ -604,8 +728,7 @@ export default function Customers() {
           .filter(Boolean)
       );
 
-      const customerPrintedInvoices = printedInvoices.filter((inv: any) => {
-        if (inv.customer_id !== customerId) return false;
+      const customerPrintedInvoices = (printedInvoicesByCustomerId.get(customerId) || []).filter((inv: any) => {
         if (inv.invoice_type === 'composite_task') return false;
         if (compositeTaskInvoiceIds.has(String(inv.id || ''))) return false;
         if (compositePrintInvoiceIds.has(String(inv.id || ''))) return false;
@@ -623,7 +746,7 @@ export default function Customers() {
 
       if (linkedFriendCompanyId) {
         // 1. إضافة من جدول friend_billboard_rentals
-        const dbFriendRentals = friendBillboardRentals.filter(r => r.friend_company_id === linkedFriendCompanyId);
+        const dbFriendRentals = friendBillboardRentalsByCompanyId.get(linkedFriendCompanyId) || [];
         dbFriendRentals.forEach(rental => {
           const rentalCost = Number(rental.friend_rental_cost) || Number(rental.customer_rental_price) || 0;
           const usedAsPayment = Number(rental.used_as_payment) || 0;
@@ -713,6 +836,13 @@ export default function Customers() {
       customerData.totalPaid = financials.totalPaid;
       customerData.remainingDebt = financials.remainingDebt;
       customerData.repaymentPercentage = financials.repaymentPercentage;
+      customerData.overdueInfo = overdueMap.get(customerId) || {
+        hasOverdue: false,
+        oldestDueDate: null,
+        oldestDaysOverdue: 0,
+        totalOverdueAmount: 0,
+        overdueCount: 0
+      };
       
       // تحديد الموردين
       for (const p of customerPayments) {
@@ -759,7 +889,14 @@ export default function Customers() {
             repaymentPercentage: 0,
             isSupplier: false,
             isCustomer: true,
-            supplierType: null
+            supplierType: null,
+            overdueInfo: {
+              hasOverdue: false,
+              oldestDueDate: null,
+              oldestDaysOverdue: 0,
+              totalOverdueAmount: 0,
+              overdueCount: 0
+            }
           });
         }
         const cur = map.get(key)!;
@@ -789,12 +926,19 @@ export default function Customers() {
         customerData.repaymentPercentage = customerData.totalRent > 0 
           ? Math.round((customerData.totalPaid / customerData.totalRent) * 100) 
           : 100;
+        customerData.overdueInfo = overdueMap.get(customerData.name.toLowerCase()) || {
+          hasOverdue: false,
+          oldestDueDate: null,
+          oldestDaysOverdue: 0,
+          totalOverdueAmount: 0,
+          overdueCount: 0
+        };
       }
     }
 
     const result = Array.from(map.values()).sort((a, b) => b.totalRent - a.totalRent);
     return result;
-  }, [payments, contracts, customers, salesInvoices, printedInvoices, purchaseInvoices, discounts, compositeTasks, printTasks]);
+  }, [payments, contracts, customers, salesInvoices, printedInvoices, purchaseInvoices, discounts, compositeTasks, printTasks, friendBillboardRentals, friendCompanies]);
 
   const totalAllPaid = payments.reduce((s, p) => s + (Number(p.amount) || 0), 0);
 
@@ -913,7 +1057,7 @@ export default function Customers() {
         const pByName = await supabase
           .from('customer_payments')
           .select('*')
-          .ilike('customer_name', `%${name}%`)
+          .eq('customer_name', name)
           .order('paid_at', { ascending: false });
         
         console.log('Payments by name result:', pByName);
@@ -945,7 +1089,7 @@ export default function Customers() {
         const byName = await supabase
           .from('Contract')
           .select('*')
-          .ilike('Customer Name', `%${name}%`);
+          .eq('Customer Name', name);
         
         console.log('Contracts by name result:', byName);
         contractsData = byName.data || [];
@@ -976,6 +1120,53 @@ export default function Customers() {
 
       console.log('Final contracts data:', deduped);
       setDetailsContracts(deduped);
+
+      // Collect all billboard IDs from this customer's contracts to load only their billboards dynamically
+      const billboardIdsSet = new Set<number>();
+      const billboardToContractMap = new Map<number, { contractNumber: string; customerName: string }>();
+      
+      deduped.forEach((contract: any) => {
+        const idsStr = contract.billboard_ids;
+        const contractNum = String(contract.Contract_Number || '');
+        const custName = String(contract['Customer Name'] || contract.Customer_Name || '');
+        if (idsStr) {
+          String(idsStr)
+            .split(',')
+            .map((s: string) => parseInt(s.trim(), 10))
+            .filter((n: number) => !isNaN(n))
+            .forEach(id => {
+              billboardIdsSet.add(id);
+              billboardToContractMap.set(id, { contractNumber: contractNum, customerName: custName });
+            });
+        }
+      });
+      const billboardIds = Array.from(billboardIdsSet);
+
+      let customerBillboards: any[] = [];
+      if (billboardIds.length > 0) {
+        try {
+          const { data, error } = await supabase
+            .from('billboards')
+            .select('ID, Billboard_Name, Size, City, Level, Nearest_Landmark, Faces_Count, Price')
+            .in('ID', billboardIds);
+          
+          if (!error && data) {
+            customerBillboards = data.map((b: any) => {
+              const mapping = billboardToContractMap.get(Number(b.ID));
+              return {
+                ...b,
+                Contract_Number: mapping?.contractNumber || b.Contract_Number || '',
+                Customer_Name: mapping?.customerName || b.Customer_Name || '',
+                size: b.Size || '',
+                faces: b.Faces_Count || 1
+              };
+            });
+          }
+        } catch (err) {
+          console.warn('Error loading billboards for customer:', err);
+        }
+      }
+      setAllBillboards(customerBillboards);
     } catch (e) {
       console.error('openCustomer error', e);
       setDetailsContracts([]);

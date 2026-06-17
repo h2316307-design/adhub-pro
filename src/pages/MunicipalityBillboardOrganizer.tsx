@@ -1108,6 +1108,24 @@ export default function MunicipalityBillboardOrganizer() {
         }
       }
 
+      // Pre-generate QR codes (Google Maps links) for all print items
+      const qrCodes = new Map<number, { content: string; dataUrl: string }>();
+      await Promise.all(
+        printItems.map(async (item) => {
+          const coords = item.latitude && item.longitude ? `${item.latitude},${item.longitude}` : '';
+          const qrContent = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : '';
+          let qrDataUrl = '';
+          if (qrContent) {
+            try {
+              qrDataUrl = await QRCode.toDataURL(qrContent, { width: 100, margin: 1 });
+            } catch (e) {
+              console.error('Error generating QR code:', e);
+            }
+          }
+          qrCodes.set(item.sequence_number, { content: qrContent, dataUrl: qrDataUrl });
+        })
+      );
+
       // 🆕 صفحة جدول ملخّص اللوحات
       {
         const compactSummary = printItems.length > 18;
@@ -1117,17 +1135,29 @@ export default function MunicipalityBillboardOrganizer() {
         const totalSummaryPages = Math.max(1, Math.ceil(printItems.length / rowsPerPage));
         for (let pIdx = 0; pIdx < totalSummaryPages; pIdx++) {
           const chunk = printItems.slice(pIdx * rowsPerPage, (pIdx + 1) * rowsPerPage);
-          const tableRowsHtml = chunk.map(it => `
-            <tr>
-              <td class="num">${it.sequence_number}</td>
-              <td class="loc">${it.location_text || '-'}</td>
-              <td class="loc">${it.nearest_landmark || '-'}</td>
-              <td class="num">${formatSizeForPrint(it.size, showHeightInPrint) || '-'}</td>
-              <td class="num">${it.faces_count || '-'}</td>
-              <td class="coords">${it.latitude && it.longitude ? `${it.latitude}, ${it.longitude}` : '-'}</td>
-              ${showStatusInPrint ? `<td class="num">${it.status || '-'}</td>` : ''}
-            </tr>
-          `).join('');
+          const tableRowsHtml = chunk.map(it => {
+            const qrInfo = qrCodes.get(it.sequence_number);
+            const qrContent = qrInfo?.content || '';
+            const qrDataUrl = qrInfo?.dataUrl || '';
+            return `
+              <tr>
+                <td class="num">${it.sequence_number}</td>
+                <td class="loc">${it.location_text || '-'}</td>
+                <td class="loc">${it.nearest_landmark || '-'}</td>
+                <td class="num">${formatSizeForPrint(it.size, showHeightInPrint) || '-'}</td>
+                <td class="num">${it.faces_count || '-'}</td>
+                <td class="coords">${it.latitude && it.longitude ? `${it.latitude}, ${it.longitude}` : '-'}</td>
+                ${showStatusInPrint ? `<td class="num">${it.status || '-'}</td>` : ''}
+                <td class="qr-col" style="padding: 2px !important;">
+                  ${qrDataUrl ? `
+                    <a href="${qrContent}" target="_blank" style="display: block; cursor: pointer;">
+                      <img src="${qrDataUrl}" alt="QR" style="width: 30px; height: 30px; display: block; margin: 0 auto; object-fit: contain;" />
+                    </a>
+                  ` : '-'}
+                </td>
+              </tr>
+            `;
+          }).join('');
           pages.push(`
           <div class="page summary-page">
             <div class="summary-inner">
@@ -1140,11 +1170,12 @@ export default function MunicipalityBillboardOrganizer() {
                   <tr>
                     <th style="width:5%;">#</th>
                     <th style="width:15%;">الموقع</th>
-                    <th style="width:${showStatusInPrint ? '38%' : '44%'};">أقرب نقطة</th>
+                    <th style="width:${showStatusInPrint ? '30%' : '36%'};">أقرب نقطة</th>
                     <th style="width:9%;">المقاس</th>
                     <th style="width:7%;">الأوجه</th>
-                    <th style="width:${showStatusInPrint ? '16%' : '18%'};">الإحداثيات</th>
+                    <th style="width:${showStatusInPrint ? '14%' : '18%'};">الإحداثيات</th>
                     ${showStatusInPrint ? `<th style="width:10%;">الحالة</th>` : ''}
+                    <th style="width:10%;">QR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1182,15 +1213,10 @@ export default function MunicipalityBillboardOrganizer() {
       }
 
       for (const item of printItems) {
+        const qrInfo = qrCodes.get(item.sequence_number);
+        const qrContent = qrInfo?.content || '';
+        const qrDataUrl = qrInfo?.dataUrl || '';
         const coords = item.latitude && item.longitude ? `${item.latitude},${item.longitude}` : '';
-        const qrContent = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : '';
-
-        let qrDataUrl = '';
-        if (qrContent) {
-          try {
-            qrDataUrl = await QRCode.toDataURL(qrContent, { width: 100 });
-          } catch (e) {}
-        }
 
         const hasDesign = item.design_face_a || item.design_face_b;
         const mainImage = item.image_url || '';
@@ -1198,7 +1224,7 @@ export default function MunicipalityBillboardOrganizer() {
         const pinColor = (s as any).pin_color?.trim() || undefined;
         const pinTextColor = (s as any).pin_text_color?.trim() || undefined;
         const printedSize = formatSizeForPrint(item.size, showHeightInPrint);
-        const pinData = createPinSvgUrl(printedSize || 'متاحة', 'متاحة', false, undefined, undefined, pinColor, pinTextColor);
+        const pinData = createPinSvgUrl(printedSize || 'متاحة', item.status || 'متاحة', false, undefined, undefined, pinColor, pinTextColor);
         const customPinUrl = (s as any).custom_pin_url?.trim();
         const pinSvgDataUrl = customPinUrl || pinData.url;
 

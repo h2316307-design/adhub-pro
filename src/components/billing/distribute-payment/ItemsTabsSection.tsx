@@ -20,7 +20,7 @@ interface ItemsTabsSectionProps {
 const normalizeDigits = (str: string) => str.replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d)));
 
 export function ItemsTabsSection({ items, setItems, onSelect, onAmountChange, remainingToAllocate }: ItemsTabsSectionProps) {
-  const [contractSearch, setContractSearch] = useState('');
+  const [globalSearch, setGlobalSearch] = useState('');
   const [contractAdTypeFilter, setContractAdTypeFilter] = useState('all');
 
   const contracts = items.filter(i => i.type === 'contract');
@@ -36,14 +36,42 @@ export function ItemsTabsSection({ items, setItems, onSelect, onAmountChange, re
   const filteredContracts = useMemo(() => {
     return contracts.filter((c) => {
       if (contractAdTypeFilter !== 'all' && c.adType !== contractAdTypeFilter) return false;
-      if (!contractSearch.trim()) return true;
-      const term = normalizeDigits(contractSearch.trim().toLowerCase());
+      if (!globalSearch.trim()) return true;
+      const term = normalizeDigits(globalSearch.trim().toLowerCase());
       const contractId = normalizeDigits(String(c.id));
       const adType = normalizeDigits((c.adType || '').toLowerCase());
       const displayName = normalizeDigits(c.displayName || '');
       return contractId.includes(term) || adType.includes(term) || displayName.includes(term);
     });
-  }, [contracts, contractSearch, contractAdTypeFilter]);
+  }, [contracts, globalSearch, contractAdTypeFilter]);
+
+  const filteredPrintedInvoices = useMemo(() => {
+    return printedInvoices.filter((inv) => {
+      if (!globalSearch.trim()) return true;
+      const term = normalizeDigits(globalSearch.trim().toLowerCase());
+      const displayName = normalizeDigits(inv.displayName || '');
+      return displayName.includes(term);
+    });
+  }, [printedInvoices, globalSearch]);
+
+  const filteredSalesInvoices = useMemo(() => {
+    return salesInvoices.filter((inv) => {
+      if (!globalSearch.trim()) return true;
+      const term = normalizeDigits(globalSearch.trim().toLowerCase());
+      const displayName = normalizeDigits(inv.displayName || '');
+      return displayName.includes(term);
+    });
+  }, [salesInvoices, globalSearch]);
+
+  const filteredCompositeTasks = useMemo(() => {
+    return compositeTasks.filter((task) => {
+      if (!globalSearch.trim()) return true;
+      const term = normalizeDigits(globalSearch.trim().toLowerCase());
+      const displayName = normalizeDigits(task.displayName || '');
+      const adType = normalizeDigits((task.adType || '').toLowerCase());
+      return displayName.includes(term) || adType.includes(term);
+    });
+  }, [compositeTasks, globalSearch]);
 
   const selectAll = () => setItems(items.map(item => ({ ...item, selected: true })));
   const deselectAll = () => setItems(items.map(item => ({ ...item, selected: false, allocatedAmount: 0 })));
@@ -64,35 +92,60 @@ export function ItemsTabsSection({ items, setItems, onSelect, onAmountChange, re
   );
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Quick actions bar */}
-      <div className="flex gap-1.5 mb-2 shrink-0">
-        <Button onClick={selectAll} variant="outline" size="sm" className="gap-1 text-xs h-7 flex-1">
-          <CheckCircle className="h-3 w-3" /> تحديد الكل
-        </Button>
-        <Button onClick={deselectAll} variant="outline" size="sm" className="gap-1 text-xs h-7 flex-1">
-          <X className="h-3 w-3" /> إلغاء التحديد
-        </Button>
+    <div className="flex flex-col h-full space-y-3">
+      {/* Quick actions & Global Search */}
+      <div className="flex flex-col gap-2 shrink-0 bg-muted/30 p-2.5 rounded-xl border border-border/20">
+        <div className="flex gap-1.5">
+          <Button onClick={selectAll} variant="outline" size="sm" className="gap-1 text-xs h-7 flex-1">
+            <CheckCircle className="h-3 w-3" /> تحديد الكل
+          </Button>
+          <Button onClick={deselectAll} variant="outline" size="sm" className="gap-1 text-xs h-7 flex-1">
+            <X className="h-3 w-3" /> إلغاء التحديد
+          </Button>
+        </div>
+        
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input 
+              placeholder="البحث بالرقم، البيان، أو التفاصيل..." 
+              value={globalSearch} 
+              onChange={(e) => setGlobalSearch(e.target.value)} 
+              className="pr-8 h-8 text-xs bg-background" 
+            />
+          </div>
+          {uniqueContractAdTypes.length > 1 && (
+            <Select value={contractAdTypeFilter} onValueChange={setContractAdTypeFilter}>
+              <SelectTrigger className="h-8 text-xs w-[120px] bg-background">
+                <SelectValue placeholder="نوع الإعلان" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">كل الإعلانات</SelectItem>
+                {uniqueContractAdTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
       </div>
 
       <Tabs defaultValue="contracts" className="flex flex-col flex-1 min-h-0">
         <TabsList className="grid w-full grid-cols-4 bg-muted h-8 shrink-0">
-          <TabsTrigger value="contracts" className="gap-1 text-[10px] px-1">
+          <TabsTrigger value="contracts" className="gap-1 text-[10px] px-1 cursor-pointer">
             <FileText className="h-3 w-3" />
             <span className="hidden sm:inline">العقود</span>
             <Badge variant="secondary" className="text-[10px] h-4 px-1">{contracts.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="printed" className="gap-1 text-[10px] px-1">
+          <TabsTrigger value="printed" className="gap-1 text-[10px] px-1 cursor-pointer">
             <PrinterIcon className="h-3 w-3" />
             <span className="hidden sm:inline">الطباعة</span>
             <Badge variant="secondary" className="text-[10px] h-4 px-1">{printedInvoices.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="sales" className="gap-1 text-[10px] px-1">
+          <TabsTrigger value="sales" className="gap-1 text-[10px] px-1 cursor-pointer">
             <ShoppingCart className="h-3 w-3" />
             <span className="hidden sm:inline">المبيعات</span>
             <Badge variant="secondary" className="text-[10px] h-4 px-1">{salesInvoices.length}</Badge>
           </TabsTrigger>
-          <TabsTrigger value="composite" className="gap-1 text-[10px] px-1">
+          <TabsTrigger value="composite" className="gap-1 text-[10px] px-1 cursor-pointer">
             <Wrench className="h-3 w-3" />
             <span className="hidden sm:inline">المجمعة</span>
             <Badge variant="secondary" className="text-[10px] h-4 px-1">{compositeTasks.length}</Badge>
@@ -100,46 +153,30 @@ export function ItemsTabsSection({ items, setItems, onSelect, onAmountChange, re
         </TabsList>
 
         <TabsContent value="contracts" className="flex-1 overflow-y-auto mt-2 space-y-1.5">
-          {/* Search */}
-          <div className="sticky top-0 z-10 bg-card/95 backdrop-blur-sm pb-1.5 space-y-1.5">
-            <div className="relative">
-              <Search className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-              <Input placeholder="ابحث برقم العقد..." value={contractSearch} onChange={(e) => setContractSearch(e.target.value)} className="pr-8 h-8 text-xs" />
-            </div>
-            {uniqueContractAdTypes.length > 1 && (
-              <Select value={contractAdTypeFilter} onValueChange={setContractAdTypeFilter}>
-                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="نوع الإعلان" /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">الكل</SelectItem>
-                  {uniqueContractAdTypes.map((t) => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
           {filteredContracts.length === 0 
-            ? renderEmptyState(<FileText className="h-10 w-10 mx-auto" />, contractSearch ? 'لا توجد نتائج' : 'لا توجد عقود مستحقة')
+            ? renderEmptyState(<FileText className="h-10 w-10 mx-auto" />, globalSearch ? 'لا توجد نتائج' : 'لا توجد عقود مستحقة')
             : renderItems(filteredContracts)
           }
         </TabsContent>
 
         <TabsContent value="printed" className="flex-1 overflow-y-auto mt-2">
-          {printedInvoices.length === 0 
+          {filteredPrintedInvoices.length === 0 
             ? renderEmptyState(<PrinterIcon className="h-10 w-10 mx-auto" />, 'لا توجد فواتير طباعة مستحقة')
-            : renderItems(printedInvoices)
+            : renderItems(filteredPrintedInvoices)
           }
         </TabsContent>
 
         <TabsContent value="sales" className="flex-1 overflow-y-auto mt-2">
-          {salesInvoices.length === 0
+          {filteredSalesInvoices.length === 0
             ? renderEmptyState(<ShoppingCart className="h-10 w-10 mx-auto" />, 'لا توجد فواتير مبيعات مستحقة')
-            : renderItems(salesInvoices)
+            : renderItems(filteredSalesInvoices)
           }
         </TabsContent>
 
         <TabsContent value="composite" className="flex-1 overflow-y-auto mt-2">
-          {compositeTasks.length === 0
+          {filteredCompositeTasks.length === 0
             ? renderEmptyState(<Wrench className="h-10 w-10 mx-auto" />, 'لا توجد مهام مجمعة مستحقة')
-            : renderItems(compositeTasks)
+            : renderItems(filteredCompositeTasks)
           }
         </TabsContent>
       </Tabs>

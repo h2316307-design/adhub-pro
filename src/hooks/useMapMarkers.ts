@@ -11,25 +11,39 @@ const escapeHtml = (text: string | null | undefined): string => {
   return div.innerHTML;
 }
 
-// Highly distinct colors for each size category - ordered for maximum contrast
+// Highly distinct colors for each size category - alternating dark/light for maximum contrast
 const colorPalette = [
-  { bg: "#dc2626", border: "#fca5a5", text: "#fff" },  // Bright Red
-  { bg: "#2563eb", border: "#93c5fd", text: "#fff" },  // Royal Blue
-  { bg: "#16a34a", border: "#86efac", text: "#fff" },  // Forest Green
-  { bg: "#9333ea", border: "#d8b4fe", text: "#fff" },  // Vivid Purple
-  { bg: "#ea580c", border: "#fdba74", text: "#fff" },  // Deep Orange
-  { bg: "#0891b2", border: "#67e8f9", text: "#fff" },  // Ocean Cyan
-  { bg: "#db2777", border: "#f9a8d4", text: "#fff" },  // Hot Pink
-  { bg: "#ca8a04", border: "#fde047", text: "#fff" },  // Gold Yellow
-  { bg: "#4f46e5", border: "#a5b4fc", text: "#fff" },  // Indigo
-  { bg: "#059669", border: "#6ee7b7", text: "#fff" },  // Emerald
-  { bg: "#7c3aed", border: "#c4b5fd", text: "#fff" },  // Violet
-  { bg: "#0284c7", border: "#7dd3fc", text: "#fff" },  // Sky Blue
+  { bg: "#e11d48", border: "#fecdd3", text: "#fff" },       // Crimson Red (Dark)
+  { bg: "#fef08a", border: "#eab308", text: "#1e293b" },    // Lemon Yellow (Light)
+  { bg: "#1d4ed8", border: "#dbeafe", text: "#fff" },       // Royal Blue (Dark)
+  { bg: "#bef264", border: "#65a30d", text: "#365314" },    // Lime Green (Light)
+  { bg: "#7c3aed", border: "#ede9fe", text: "#fff" },       // Purple (Dark)
+  { bg: "#ffffff", border: "#94a3b8", text: "#0f172a" },    // White (Light)
+  { bg: "#ea580c", border: "#ffedd5", text: "#fff" },       // Orange (Dark)
+  { bg: "#a5f3fc", border: "#0891b2", text: "#0e7490" },    // Cyan (Light)
+  { bg: "#1e293b", border: "#cbd5e1", text: "#f8fafc" },    // Charcoal Black (Dark)
+  { bg: "#ffd6e8", border: "#db2777", text: "#9d174d" },    // Pastel Pink (Light)
+  { bg: "#047857", border: "#d1fae5", text: "#fff" },       // Emerald Green (Dark)
+  { bg: "#ffedd5", border: "#f97316", text: "#9a3412" },    // Apricot/Peach (Light)
+  { bg: "#0369a1", border: "#e0f2fe", text: "#fff" },       // Sky Blue (Dark)
+  { bg: "#fbcfe8", border: "#ec4899", text: "#86198f" },    // Pink/Magenta (Light)
+  { bg: "#78350f", border: "#fef08a", text: "#fff" },       // Brown (Dark)
+  { bg: "#e9d5ff", border: "#9333ea", text: "#581c87" },    // Lavender (Light)
 ]
 
 const sizeColorMap: Record<string, { bg: string, border: string, text: string }> = {}
 let sizeOrderLoaded = false
 let initPromise: Promise<void> | null = null
+
+// Normalize size strings to avoid color mismatches between variations (e.g. 3x8 vs 3×8)
+const normalizeSizeString = (size: string): string => {
+  return String(size || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace('×', 'x')
+    .replace('*', 'x');
+}
 
 // Initialize size colors from database sort_order
 export const initSizeColorsFromDB = async () => {
@@ -48,9 +62,13 @@ export const initSizeColorsFromDB = async () => {
       if (!error && data) {
         // Clear existing maps and caches
         Object.keys(sizeColorMap).forEach(k => delete sizeColorMap[k])
-        // Assign colors in order of sort_order
+        // Assign colors in order of sort_order dynamically
         data.forEach((size: any, index: number) => {
-          sizeColorMap[size.name] = colorPalette[index % colorPalette.length]
+          const norm = normalizeSizeString(size.name)
+          const color = colorPalette[index % colorPalette.length]
+          sizeColorMap[norm] = color
+          // Also keep original name key for compatibility
+          sizeColorMap[size.name] = color
         })
         sizeOrderLoaded = true
         console.log('✅ Size colors initialized from DB order:', Object.keys(sizeColorMap))
@@ -68,7 +86,10 @@ export const setSizeColorsFromData = (sizes: { name: string; sort_order: number 
   Object.keys(sizeColorMap).forEach(k => delete sizeColorMap[k])
   const sorted = [...sizes].sort((a, b) => (a.sort_order || 999) - (b.sort_order || 999))
   sorted.forEach((size, index) => {
-    sizeColorMap[size.name] = colorPalette[index % colorPalette.length]
+    const norm = normalizeSizeString(size.name)
+    const color = colorPalette[index % colorPalette.length]
+    sizeColorMap[norm] = color
+    sizeColorMap[size.name] = color
   })
   sizeOrderLoaded = true
 }
@@ -77,18 +98,22 @@ export const setSizeColorsFromData = (sizes: { name: string; sort_order: number 
 initSizeColorsFromDB()
 
 export const getSizeColor = (size: string): { bg: string, border: string, text: string } => {
+  const norm = normalizeSizeString(size)
+  if (sizeColorMap[norm]) return sizeColorMap[norm]
   if (sizeColorMap[size]) return sizeColorMap[size]
+
   // Fallback: hash-based for sizes not in DB
   let hash = 0
-  for (let i = 0; i < size.length; i++) {
-    hash = size.charCodeAt(i) + ((hash << 5) - hash)
+  for (let i = 0; i < norm.length; i++) {
+    hash = norm.charCodeAt(i) + ((hash << 5) - hash)
   }
   const index = Math.abs(hash) % colorPalette.length
-  sizeColorMap[size] = colorPalette[index]
-  return sizeColorMap[size]
+  sizeColorMap[norm] = colorPalette[index]
+  return sizeColorMap[norm]
 }
 
-// Get billboard status info with all status types
+// Get billboard status info with all status types aligned with the design system
+// Get billboard status info with all status types aligned with the design system
 export function getBillboardStatus(billboard: any): { color: string; label: string } {
   const status = String(billboard.Status || billboard.status || '').trim().toLowerCase()
   const maintenanceStatus = String(billboard.maintenance_status || '').trim()
@@ -106,15 +131,11 @@ export function getBillboardStatus(billboard: any): { color: string; label: stri
     return { color: '#808080', label: 'إزالة' }
   }
   
-  // صيانة
-  if (status === 'صيانة' || maintenanceStatus === 'maintenance' || maintenanceStatus === 'قيد الصيانة') {
-    return { color: '#f97316', label: 'صيانة' }
-  }
-  
-  // تحتاج صيانة
-  if (maintenanceStatus === 'repair_needed' || maintenanceStatus === 'تحتاج إصلاح' || 
-      maintenanceStatus === 'متضررة اللوحة') {
-    return { color: '#eab308', label: 'تحتاج صيانة' }
+  // صيانة (برتقالي #f59e0b)
+  if (status === 'صيانة' || maintenanceStatus === 'maintenance' || maintenanceStatus === 'قيد الصيانة' ||
+      maintenanceStatus === 'repair_needed' || maintenanceStatus === 'تحتاج إصلاح' || 
+      maintenanceStatus === 'متضررة اللوحة' || status === 'تحتاج صيانة' || status === 'قيد الصيانة') {
+    return { color: '#f59e0b', label: 'صيانة' }
   }
   
   // خارج الخدمة
@@ -148,9 +169,9 @@ export function getBillboardStatus(billboard: any): { color: string; label: stri
     return { color: '#22c55e', label: 'متاحة' }
   }
 
-  // Explicit reserved status - RESERVED (orange)
+  // Explicit reserved status - RESERVED (red)
   if (status === 'محجوز' || status === 'محجوزة' || status === 'reserved') {
-    return { color: '#f59e0b', label: 'محجوزة' }
+    return { color: '#ef4444', label: 'مؤجرة' }
   }
 
   // Explicit rented status - RENTED (red)
@@ -162,12 +183,12 @@ export function getBillboardStatus(billboard: any): { color: string; label: stri
   if (hasRentalData) {
     // Contract exists but hasn't started yet
     if (isFutureStart) {
-      return { color: '#f59e0b', label: 'محجوزة' }
+      return { color: '#ef4444', label: 'مؤجرة' }
     }
 
     // If we only have a contract number with no customer name, treat as reserved
     if (hasContract && !hasCustomer) {
-      return { color: '#f59e0b', label: 'محجوزة' }
+      return { color: '#ef4444', label: 'مؤجرة' }
     }
 
     // Otherwise treat as rented (active or unknown dates)
@@ -299,7 +320,7 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } {
   return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 }
 }
 
-// Create 3D teardrop pin SVG
+// Create 3D teardrop pin SVG - Body is dynamically size colored, center ring represents status
 export const createPinSvgUrl = (
   size: string,
   status: string,
@@ -313,192 +334,162 @@ export const createPinSvgUrl = (
   zoomLevel: number = 10,
   imageUrl?: string
 ) => {
-  const cacheKey = `${size}-${status}-${isSelected}-${adType || ''}-${customerName || ''}-${overrideColor || ''}-${overrideTextColor || ''}-${billboardType || ''}-${billboardCode || ''}-${zoomLevel}-${imageUrl || ''}-v28-teardrop`
+  const cacheKey = `${size}-${status}-${isSelected}-${adType || ''}-${customerName || ''}-${overrideColor || ''}-${overrideTextColor || ''}-${billboardType || ''}-${billboardCode || ''}-${zoomLevel}-${imageUrl || ''}-v32-dynamic-statusring`
   if (pinIconCache[cacheKey]) return pinIconCache[cacheKey]
-  
+
   const isHidden = status === "مخفية" || status === "مخفية من المتاح" || status === "مخفية من متاح"
   const isAvailable = status === "متاحة" || status === "متاح"
   const isSoon = status === "قريباً" || status === "محجوزة" || status === "محجوز"
   const isMaintenance = status === "صيانة" || status === "تحتاج صيانة" || status === "قيد الصيانة" || status === "متضررة اللوحة"
   
-  let gradientStart = '#22C55E'
-  let gradientEnd = '#15803D'
-  let glowColor = '#22C55E'
-  let isClock = false
-  let isWrench = false
+  // Status colors matching standard conventions (for the central ring stroke)
+  let statusColor = '#ef4444' // Default: Red (Rented/Reserved)
+  let glow = '239,68,68'
   
   if (isHidden) {
-    gradientStart = '#94A3B8'
-    gradientEnd = '#475569'
-    glowColor = '#94A3B8'
-  } else if (isMaintenance) {
-    gradientStart = '#EF4444'
-    gradientEnd = '#B91C1C'
-    glowColor = '#EF4444'
-    isWrench = true
+    statusColor = '#94a3b8'
+    glow = '148,163,184'
+  } else if (isAvailable) {
+    statusColor = '#22c55e'
+    glow = '34,197,94'
   } else if (isSoon) {
-    gradientStart = '#F59E0B'
-    gradientEnd = '#B45309'
-    glowColor = '#F59E0B'
-    isClock = true
-  } else if (!isAvailable) { // Rented
-    gradientStart = '#2D6BFF'
-    gradientEnd = '#1D4ED8'
-    glowColor = '#2D6BFF'
+    statusColor = '#ef4444' // Red (Reserved is same as rented)
+    glow = '239,68,68'
+  } else if (isMaintenance) {
+    statusColor = '#f59e0b' // Orange for maintenance
+    glow = '245,158,11'
+  } else if (status === 'إزالة') {
+    statusColor = '#808080'
+    glow = '128,128,128'
   }
 
+  // Size color resolving - body of the pin represents size color (dynamic)
+  const sizeColor = getSizeColor(size)
+  let start = sizeColor.bg
+  let end = adjustColor(sizeColor.bg, -35)
+  
   if (overrideColor) {
-    gradientStart = overrideColor
-    gradientEnd = adjustColor(overrideColor, -40)
-    glowColor = overrideColor
+    start = overrideColor
+    end = adjustColor(overrideColor, -40)
   }
 
-  const finalCode = billboardCode || 'TR-0000'
+  // Label resolving
+  const getShortLabel = () => {
+    const cleanSize = String(size || '')
+      .trim()
+      .replace(/\s+/g, '')
+      .replace('×', 'x')
+      .replace('*', 'x');
+    if (cleanSize) return cleanSize.slice(0, 5);
+    return '·';
+  }
+  const label = getShortLabel()
+
+  const adTypeStr = String(adType || '').trim()
+  const showAd = !!adTypeStr
+  const displayAd = adTypeStr.length > 14 ? adTypeStr.slice(0, 12) + '..' : adTypeStr
 
   let svg = ''
-  let scaleW = 40
-  let scaleH = 38
+  let W = isSelected ? 60 : 52
+  let H = isSelected ? 76 : 66
+  let tipY = H - 2
 
-  // Reusable status badge (clock / wrench) painted at (cx, cy) with radius r
-  const badgeSvg = (cx: number, cy: number, r: number) => {
-    if (!isClock && !isWrench) return ''
-    if (isClock) {
-      return `
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="#F59E0B" stroke="white" stroke-width="1" />
-        <circle cx="${cx}" cy="${cy}" r="${r - 1}" fill="none" stroke="white" stroke-width="0.8" />
-        <line x1="${cx}" y1="${cy}" x2="${cx}" y2="${cy - (r - 1.5)}" stroke="white" stroke-width="0.8" stroke-linecap="round" />
-        <line x1="${cx}" y1="${cy}" x2="${cx + (r - 1.5)}" y2="${cy}" stroke="white" stroke-width="0.8" stroke-linecap="round" />
-      `
-    }
-    return `
-        <circle cx="${cx}" cy="${cy}" r="${r}" fill="#EF4444" stroke="white" stroke-width="1" />
-        <line x1="${cx - 2}" y1="${cy + 2}" x2="${cx + 2}" y2="${cy - 2}" stroke="white" stroke-width="1" stroke-linecap="round" />
-        <circle cx="${cx + 2}" cy="${cy - 2.2}" r="1" fill="none" stroke="white" stroke-width="0.8" />
-      `
-  }
-
-  if (isSelected) {
-    // ─── SELECTED: large teardrop with billboard photo inside head + pulsing gold ring ───
-    scaleW = 72
-    scaleH = 96
-    const R = 32
-    const cx = 36
-    const cy = R + 4   // head center y
-    // teardrop path: round head + sharp pointer at bottom
-    const tear = `M ${cx} ${cy + R}
-      C ${cx - R * 0.55} ${cy + R}, ${cx - R} ${cy + R * 0.55}, ${cx - R} ${cy}
-      A ${R} ${R} 0 1 1 ${cx + R} ${cy}
-      C ${cx + R} ${cy + R * 0.55}, ${cx + R * 0.55} ${cy + R}, ${cx} ${cy + R}
-      L ${cx} ${scaleH - 2} Z`
-    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${scaleW}" height="${scaleH}" viewBox="0 0 ${scaleW} ${scaleH}">
-      <defs>
-        <linearGradient id="selGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${gradientStart}" />
-          <stop offset="100%" stop-color="${gradientEnd}" />
-        </linearGradient>
-        <filter id="selShadow" x="-30%" y="-10%" width="160%" height="130%">
-          <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="black" flood-opacity="0.45" />
-        </filter>
-        <clipPath id="clipHead"><circle cx="${cx}" cy="${cy}" r="${R - 5}" /></clipPath>
-      </defs>
-      <g filter="url(#selShadow)" opacity="${isHidden ? '0.55' : '1'}">
-        <path d="${tear}" fill="url(#selGrad)" stroke="white" stroke-width="2" />
-        ${imageUrl
-          ? `<image href="${imageUrl}" x="${cx - (R - 5)}" y="${cy - (R - 5)}" width="${(R - 5) * 2}" height="${(R - 5) * 2}" clip-path="url(#clipHead)" preserveAspectRatio="xMidYMid slice" />
-             <circle cx="${cx}" cy="${cy}" r="${R - 5}" fill="none" stroke="white" stroke-width="1.5" opacity="0.6" />`
-          : `<text x="${cx}" y="${cy + 4}" text-anchor="middle" font-family="'Manrope', 'Tajawal', sans-serif" font-size="11" font-weight="900" fill="white">${finalCode}</text>`}
-        <!-- pulsing gold selection ring -->
-        <path d="${tear}" fill="none" stroke="#d6ac40" stroke-width="3">
-          <animate attributeName="stroke-width" values="2.5;5;2.5" dur="1.8s" repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.7;1;0.7" dur="1.8s" repeatCount="indefinite" />
-        </path>
-        ${badgeSvg(cx + R - 4, cy - R + 6, 6)}
-      </g>
-    </svg>`
-  } else if (zoomLevel >= 15) {
-    // ─── WIDE: pill with downward pointer (code visible) ───
-    scaleW = 88
-    scaleH = 46
+  if (zoomLevel >= 15 && !isSelected) {
+    // Pill shape (matches unified pill zoom level >= 15)
+    W = 88
+    H = 46
     const pillH = 30
-    const tip = scaleW / 2
-    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${scaleW}" height="${scaleH}" viewBox="0 0 ${scaleW} ${scaleH}">
+    const tip = W / 2
+    const uid = `p${Math.abs((status.length * 31 + label.charCodeAt(0)) | 0)}`
+    
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
       <defs>
-        <linearGradient id="gradWide" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${gradientStart}" />
-          <stop offset="100%" stop-color="${gradientEnd}" />
+        <linearGradient id="b${uid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${start}" />
+          <stop offset="100%" stop-color="${end}" />
         </linearGradient>
-        <filter id="shadowWide" x="-10%" y="-10%" width="120%" height="140%">
-          <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="black" flood-opacity="0.4" />
+        <filter id="s${uid}" x="-10%" y="-10%" width="120%" height="140%">
+          <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="rgba(0,0,0,0.55)" />
         </filter>
       </defs>
-      <g filter="url(#shadowWide)" opacity="${isHidden ? '0.55' : '1'}">
+      <g filter="url(#s${uid})" opacity="${isHidden ? '0.7' : '1'}">
         <path d="M 15 2
-                 H ${scaleW - 15}
-                 A ${pillH / 2} ${pillH / 2} 0 0 1 ${scaleW - 15} ${pillH + 2}
+                 H ${W - 15}
+                 A ${pillH / 2} ${pillH / 2} 0 0 1 ${W - 15} ${pillH + 2}
                  H ${tip + 5}
-                 L ${tip} ${scaleH - 2}
+                 L ${tip} ${H - 2}
                  L ${tip - 5} ${pillH + 2}
                  H 15
                  A ${pillH / 2} ${pillH / 2} 0 0 1 15 2 Z"
-              fill="url(#gradWide)" stroke="white" stroke-width="1.8" />
-        <text x="${scaleW / 2}" y="20" text-anchor="middle" dominant-baseline="middle" font-family="'Manrope', 'Tajawal', sans-serif" font-size="12" font-weight="900" fill="white" letter-spacing="0.3">${finalCode}</text>
-        ${badgeSvg(scaleW - 12, 10, 5.5)}
+              fill="url(#b${uid})" stroke="${statusColor}" stroke-width="2.5" />
+        <text x="${W / 2}" y="18" text-anchor="middle" dominant-baseline="middle" font-family="'Manrope', 'Tajawal', sans-serif" font-size="12" font-weight="900" fill="white" letter-spacing="0.3">${label}</text>
       </g>
     </svg>`
   } else {
-    // ─── COMPACT: classic teardrop with billboard icon inside ───
-    scaleW = 36
-    scaleH = 48
-    const R = 16
-    const cx = scaleW / 2
-    const cy = R + 2
-    const tear = `M ${cx} ${cy + R}
-      C ${cx - R * 0.55} ${cy + R}, ${cx - R} ${cy + R * 0.55}, ${cx - R} ${cy}
-      A ${R} ${R} 0 1 1 ${cx + R} ${cy}
-      C ${cx + R} ${cy + R * 0.55}, ${cx + R * 0.55} ${cy + R}, ${cx} ${cy + R}
-      L ${cx} ${scaleH - 1} Z`
-    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${scaleW}" height="${scaleH}" viewBox="0 0 ${scaleW} ${scaleH}">
+    // Teardrop shape (matches unified teardrop pin)
+    const cx = W / 2
+    const topPad = showAd ? 16 : 4
+    const r = isSelected ? 22 : 19 // outer head radius
+    const innerR = r - 4.5
+    const headCy = topPad + r
+    
+    // teardrop path: circle blended into pointer
+    const tailControl = r * 0.55
+    const path = `M ${cx - r} ${headCy}
+      A ${r} ${r} 0 1 1 ${cx + r} ${headCy}
+      C ${cx + r} ${headCy + tailControl}, ${cx + 4} ${tipY - 6}, ${cx} ${tipY}
+      C ${cx - 4} ${tipY - 6}, ${cx - r} ${headCy + tailControl}, ${cx - r} ${headCy} Z`
+
+    const uid = `u${Math.abs((status.length * 31 + label.charCodeAt(0)) | 0)}`
+    
+    svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
       <defs>
-        <linearGradient id="gradCompact" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="${gradientStart}" />
-          <stop offset="100%" stop-color="${gradientEnd}" />
+        <linearGradient id="b${uid}" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="${start}"/>
+          <stop offset="100%" stop-color="${end}"/>
         </linearGradient>
-        <radialGradient id="gradHighlight" cx="35%" cy="30%" r="60%">
-          <stop offset="0%" stop-color="white" stop-opacity="0.35" />
-          <stop offset="100%" stop-color="white" stop-opacity="0" />
+        <radialGradient id="g${uid}" cx="35%" cy="30%" r="60%">
+          <stop offset="0%" stop-color="white" stop-opacity="0.45"/>
+          <stop offset="100%" stop-color="white" stop-opacity="0"/>
         </radialGradient>
-        <filter id="shadowCompact" x="-30%" y="-10%" width="160%" height="130%">
-          <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="black" flood-opacity="0.45" />
+        <filter id="s${uid}" x="-40%" y="-20%" width="180%" height="160%">
+          <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="rgba(0,0,0,0.55)"/>
         </filter>
       </defs>
-      <g filter="url(#shadowCompact)" opacity="${isHidden ? '0.55' : '1'}">
-        <path d="${tear}" fill="url(#gradCompact)" stroke="white" stroke-width="1.8" />
-        <path d="${tear}" fill="url(#gradHighlight)" />
-        <!-- Billboard icon centered in the head circle -->
-        <g stroke="white" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="translate(${cx - 8}, ${cy - 6})">
-          <rect x="0" y="0" width="16" height="9" rx="1.5" />
-          <line x1="4" y1="9" x2="4" y2="13" />
-          <line x1="12" y1="9" x2="12" y2="13" />
-          <line x1="2" y1="13" x2="14" y2="13" />
-        </g>
-        ${badgeSvg(cx + R - 3, cy - R + 5, 5)}
+      <ellipse cx="${cx}" cy="${tipY + 0.5}" rx="${r * 0.55}" ry="2.2" fill="rgba(0,0,0,0.3)"/>
+      ${showAd ? `
+        <g>
+          <rect x="${cx - 32}" y="0" width="64" height="14" rx="7" fill="#0a0a14" stroke="#d6ac40" stroke-width="1"/>
+          <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="9" font-weight="800" fill="#f4c25a">${displayAd}</text>
+        </g>` : ''}
+      <g filter="url(#s${uid})" opacity="${isHidden ? '0.7' : '1'}">
+        <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#f4c25a' : 'white'}" stroke-width="${isSelected ? 2.2 : 1.6}"/>
+        <path d="${path}" fill="url(#g${uid})"/>
+        <!-- Inner core (white fill with thick status-colored stroke border ring) -->
+        <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${statusColor}" stroke-width="2.8"/>
+        <text x="${cx}" y="${headCy + 3.4}" text-anchor="middle" font-family="'Manrope','Tajawal',sans-serif" font-size="${innerR > 11 ? 9.5 : 8.5}" font-weight="900" fill="${overrideTextColor || '#0f172a'}" letter-spacing="0.1">${label}</text>
       </g>
+      ${isAvailable ? `
+        <circle cx="${cx}" cy="${headCy}" r="${r}" fill="none" stroke="rgba(${glow},0.5)" stroke-width="1.5">
+          <animate attributeName="r" values="${r};${r + 6};${r}" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+        </circle>` : ''}
     </svg>`
   }
 
   const result = {
     url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`,
-    width: scaleW,
-    height: scaleH,
-    anchorX: scaleW / 2,
-    anchorY: scaleH,
-    pinSize: scaleH,
+    width: W,
+    height: H,
+    anchorX: W / 2,
+    anchorY: tipY,
+    pinSize: H,
     labelOffset: 0
   }
   
   pinIconCache[cacheKey] = result
   return result
-}
+};
 
 
 export const createMarkerIcon = (

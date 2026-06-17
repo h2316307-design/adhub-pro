@@ -17,7 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import type { Billboard } from '@/types';
-import { ArrowLeft, Save, Map as MapIcon, Wrench, FileText, List, DollarSign, Printer, Trash2, RefreshCw, Calculator } from 'lucide-react';
+import { ArrowLeft, Save, Map as MapIcon, Wrench, FileText, List, DollarSign, Printer, Trash2, RefreshCw, Calculator, AlertTriangle } from 'lucide-react';
 
 // Import modular components (shared with contract edit)
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
@@ -82,6 +82,7 @@ export default function OfferEdit() {
   const [sizeFilter, setSizeFilter] = useState<string>('all');
   const [sizeFilters, setSizeFilters] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   // Dates & pricing
   const [startDate, setStartDate] = useState('');
@@ -98,6 +99,8 @@ export default function OfferEdit() {
   const [pricingAlertOpen, setPricingAlertOpen] = useState(false);
   const [pricingAlertPendingAction, setPricingAlertPendingAction] = useState<(() => void) | null>(null);
   const [refreshingPrices, setRefreshingPrices] = useState(false);
+  const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false);
+  const [pendingMaintenanceBillboard, setPendingMaintenanceBillboard] = useState<Billboard | null>(null);
   const [discountType, setDiscountType] = useState<'percent' | 'amount'>('percent');
   const [discountValue, setDiscountValue] = useState<number>(0);
 
@@ -591,6 +594,46 @@ export default function OfferEdit() {
     });
   }, [billboards, selected, printCostEnabled, printPricePerMeter, customPrintCosts]);
 
+  // ✅ NEW: Calculate unified billboard prices (same as ContractEdit)
+  const unifiedPricingByBillboard = useMemo(() => {
+    const selectedInputs = selected
+      .map((id) => {
+        const bb = billboards.find((b) => String((b as any).ID) === id);
+        if (!bb) return null;
+        const installRaw = installationDetails.find((d) => d.billboardId === id)?.installationPrice || 0;
+        const printRaw = perBillboardPrintCosts.find((d) => d.billboardId === id)?.printCost || 0;
+        return {
+          billboardId: id,
+          baseRentalPrice: calculateBillboardPrice(bb),
+          installationPrice: installRaw,
+          printCost: printRaw,
+          isSingleFace: singleFaceBillboards.has(id),
+        };
+      })
+      .filter(Boolean) as any[];
+
+    const results = calculateAllBillboardPrices(selectedInputs, {
+      totalDiscount: discountAmount,
+      printCostEnabled,
+      includePrintInPrice,
+      installationEnabled,
+      includeInstallationInPrice,
+    });
+    return new Map(results.map((r) => [r.billboardId, r]));
+  }, [
+    selected,
+    billboards,
+    installationDetails,
+    perBillboardPrintCosts,
+    calculateBillboardPrice,
+    singleFaceBillboards,
+    discountAmount,
+    printCostEnabled,
+    includePrintInPrice,
+    installationEnabled,
+    includeInstallationInPrice,
+  ]);
+
   const handleUpdatePrintUnitCost = (size: string, newCost: number) => {
     setCustomPrintCosts(prev => { const m = new Map(prev); m.set(size, newCost); return m; });
   };
@@ -705,6 +748,7 @@ export default function OfferEdit() {
     const effectiveStatusEn = isBillboardRented(b) ? 'rented' : 'available';
 
     return {
+      ...b,
       ID: (b as any).ID || 0,
       Billboard_Name: (b as any).Billboard_Name || '',
       City: (b as any).City || '',
@@ -772,17 +816,31 @@ export default function OfferEdit() {
       const isNear = isNearExpiring(b);
       const isInSelection = selected.includes(String(b.ID));
 
+      const statusValue = String((b.Status ?? b.status ?? '')).trim();
+      const statusLower = statusValue.toLowerCase();
+      const maintenanceStatus = String(b.maintenance_status ?? '').trim().toLowerCase();
+      const isUnderMaintenance = 
+        statusValue === 'صيانة' || 
+        statusLower === 'maintenance' || 
+        maintenanceStatus === 'maintenance' || 
+        maintenanceStatus === 'repair_needed' || 
+        maintenanceStatus === 'out_of_service' || 
+        maintenanceStatus === 'قيد الصيانة' || 
+        maintenanceStatus === 'متضررة اللوحة';
+
       let shouldShow = false;
       if (statusFilter === 'all') {
-        shouldShow = !isHidden;
+        shouldShow = !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'available') {
-        shouldShow = (isAvail || isNear) && !isHidden;
+        shouldShow = (isAvail || isNear) && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'nearExpiry') {
-        shouldShow = isNear && !isHidden;
+        shouldShow = isNear && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'rented') {
-        shouldShow = !isAvail && !isNear && !isHidden;
+        shouldShow = !isAvail && !isNear && !isHidden && !isUnderMaintenance;
+      } else if (statusFilter === 'maintenance') {
+        shouldShow = isUnderMaintenance;
       } else if (statusFilter === 'hidden') {
-        shouldShow = isHidden;
+        shouldShow = isHidden && !isUnderMaintenance;
       }
 
       if (isInSelection) shouldShow = true;
@@ -809,7 +867,37 @@ export default function OfferEdit() {
 
   const toggleSelect = (b: Billboard) => {
     const id = String((b as any).ID);
+    const isSelected = selected.includes(id);
+
+    if (!isSelected) {
+      const statusValue = String((b as any).Status || '').trim().toLowerCase();
+      const maintStatus = String((b as any).maintenance_status || '').trim().toLowerCase();
+      const isUnderMaint = 
+        statusValue === 'صيانة' || 
+        statusValue === 'maintenance' || 
+        maintStatus === 'maintenance' || 
+        maintStatus === 'repair_needed' || 
+        maintStatus === 'out_of_service' || 
+        maintStatus === 'قيد الصيانة' || 
+        maintStatus === 'متضررة اللوحة';
+
+      if (isUnderMaint) {
+        setPendingMaintenanceBillboard(b);
+        setMaintenanceConfirmOpen(true);
+        return;
+      }
+    }
+
     setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const handleConfirmMaintenanceSelect = () => {
+    if (pendingMaintenanceBillboard) {
+      const id = String((pendingMaintenanceBillboard as any).ID);
+      setSelected(prev => [...prev, id]);
+      setPendingMaintenanceBillboard(null);
+    }
+    setMaintenanceConfirmOpen(false);
   };
 
   const removeSelected = (id: string) => {
@@ -1307,6 +1395,7 @@ export default function OfferEdit() {
                   <CollapsibleContent>
                     <div className="border-t border-border">
                       <SelectableGoogleHomeMap
+                        className="w-full h-[550px] lg:h-[650px]"
                         billboards={billboards
                           .filter((b) => selected.includes(String((b as any).ID)))
                           .map(b => ({
@@ -1316,6 +1405,7 @@ export default function OfferEdit() {
                           })) as Billboard[]}
                         selectedBillboards={selectedBillboardsSet}
                         hideInternalFilters
+                        billboardPricingResults={unifiedPricingByBillboard}
                       />
                     </div>
                   </CollapsibleContent>
@@ -1324,8 +1414,8 @@ export default function OfferEdit() {
             )}
 
             {/* ✅ اختيار اللوحات مع الخريطة - Tabs مثل صفحة العقود */}
-            <Card className="border-border shadow-lg overflow-hidden h-[calc(100vh-160px)] min-h-[800px] flex flex-col">
-              <div className="p-3 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-border shrink-0">
+            <Card className="border-amber-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-3xl overflow-hidden h-[calc(100vh-160px)] min-h-[950px] flex flex-col border bg-card/60 backdrop-blur-md">
+              <div className="p-3 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-border/60 shrink-0">
                 <BillboardFilters
                   searchQuery={searchQuery}
                   setSearchQuery={setSearchQuery}
@@ -1350,14 +1440,14 @@ export default function OfferEdit() {
                 />
               </div>
 
-              <Tabs defaultValue="list" className="w-full flex-1 flex flex-col min-h-0">
-                <div className="p-3 border-b border-border shrink-0">
-                  <TabsList className="grid w-[240px] grid-cols-2 bg-background/50 h-10">
-                    <TabsTrigger value="list" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              <Tabs value={viewMode} onValueChange={(val) => setViewMode(val as 'list' | 'map')} className="w-full flex-1 flex flex-col min-h-0">
+                <div className="p-3 border-b border-border/60 shrink-0">
+                  <TabsList className="grid w-[240px] grid-cols-2 bg-muted/40 h-10 p-1 rounded-xl">
+                    <TabsTrigger value="list" className="flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md cursor-pointer">
                       <List className="h-4 w-4" />
                       القائمة
                     </TabsTrigger>
-                    <TabsTrigger value="map" className="flex items-center gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                    <TabsTrigger value="map" className="flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md cursor-pointer">
                       <MapIcon className="h-4 w-4" />
                       الخريطة
                     </TabsTrigger>
@@ -1383,7 +1473,7 @@ export default function OfferEdit() {
                 
                 <TabsContent value="map" className="m-0 p-3 flex-1 min-h-0">
                   <SelectableGoogleHomeMap
-                    className="w-full h-full"
+                    className="w-full h-[700px] lg:h-[800px]"
                     billboards={filtered.map((b) => mapBillboardWithEffectiveStatus(b)) as Billboard[]}
                     selectedBillboards={selectedBillboardsSet}
                     onToggleSelection={(billboardId) => {
@@ -1406,6 +1496,7 @@ export default function OfferEdit() {
                     pricingCategory={pricingCategory}
                     calculateBillboardPrice={calculateBillboardPrice}
                     hideInternalFilters
+                    billboardPricingResults={unifiedPricingByBillboard}
                   />
                 </TabsContent>
               </Tabs>
@@ -1785,6 +1876,42 @@ export default function OfferEdit() {
               }}
             >
               إلغاء التغيير
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation dialog for billboards under maintenance */}
+      <Dialog open={maintenanceConfirmOpen} onOpenChange={setMaintenanceConfirmOpen}>
+        <DialogContent dir="rtl" className="max-w-md bg-card border border-border shadow-2xl rounded-xl">
+          <DialogHeader className="space-y-3 text-right">
+            <DialogTitle className="text-xl font-bold flex items-center gap-2 text-amber-500">
+              <AlertTriangle className="h-6 w-6 text-amber-500" />
+              تأكيد اختيار لوحة تحت الصيانة
+            </DialogTitle>
+            <div className="text-sm text-muted-foreground leading-relaxed mt-2">
+              هذه اللوحة قيد الصيانة حالياً:
+              <br /><br />
+              - نوع الصيانة: <strong className="text-foreground">{(pendingMaintenanceBillboard as any)?.maintenance_type || 'غير محدد'}</strong>
+              <br />
+              - السبب: <strong className="text-foreground">{(pendingMaintenanceBillboard as any)?.maintenance_notes || 'غير محدد'}</strong>
+              <br /><br />
+              هل أنت متأكد من رغبتك في اختيار هذه اللوحة وإضافتها للعرض؟
+            </div>
+          </DialogHeader>
+          <DialogFooter className="flex flex-row-reverse justify-end gap-2 mt-6">
+            <Button 
+              variant="default" 
+              className="bg-amber-600 hover:bg-amber-700 text-white font-bold"
+              onClick={handleConfirmMaintenanceSelect}
+            >
+              تأكيد الاختيار
+            </Button>
+            <Button variant="outline" className="border-border hover:bg-muted" onClick={() => {
+              setMaintenanceConfirmOpen(false);
+              setPendingMaintenanceBillboard(null);
+            }}>
+              إلغاء
             </Button>
           </DialogFooter>
         </DialogContent>

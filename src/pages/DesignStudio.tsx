@@ -264,6 +264,35 @@ const renderLucideIcon = (name: string, color: string, size: number) => {
   return <IconComponent color={color} size={size} />;
 };
 
+// ====================== LIGHT LEAK OVERLAY IMAGES ======================
+// Professional light leak / prism overlay images for cover templates.
+// Stored in /public/light-leaks/. Used with mixBlendMode: 'screen' on dark backgrounds.
+const LIGHT_LEAK_OVERLAYS = [
+  '/light-leaks/cd13d52a7d7454fcad5b6a3d6a5fff33.jpg', // 0  — warm red/cyan gradient fill
+  '/light-leaks/ec96abeabadc5505aab5271b4e96f6e8.jpg', // 1  — diagonal amber/blue streak
+  '/light-leaks/c4cd1b9e9411cfabd9fdc4bfba201b34.jpg', // 2  — chrome liquid glass
+  '/light-leaks/02562c86483e0ae3b82b04e52befe53e.jpg', // 3  — subtle diagonal rainbow lines
+  '/light-leaks/99269a605df1298ea51bee9312d7e96d.jpg', // 4  — scattered rainbow prisms on black
+  '/light-leaks/8a54f9dfc01162f53d9fb8a6523912a0.jpg', // 5  — scattered rainbow prisms similar
+  '/light-leaks/eae47f0b7f639cb66febd7f1fdba6cc6.jpg', // 6  — bold diagonal rainbow streaks
+  '/light-leaks/5044f3a2de00815de44f7ccf9daed3ec.jpg', // 7  — subtle teal glow spots
+  '/light-leaks/0e214f17fd1a30a1b41380ab15621693.jpg', // 8  — soft light leak
+  '/light-leaks/3e0328f4500cf0eed282c1d56fb43154.jpg', // 9  — light leak variant
+  '/light-leaks/3ea3e8dc4e428915cf6d2b56bd6f4f98.jpg', // 10 — light leak variant
+  '/light-leaks/447cbd35ab35f43c076030b979d50466.jpg', // 11 — light leak variant
+  '/light-leaks/45913395ca2fb343f931960aa35f3729.jpg', // 12 — light leak variant
+  '/light-leaks/5d47b66704914926bb37502761bc5231.jpg', // 13 — light leak variant
+  '/light-leaks/ed738e6861f1d6136a71f57215d4026e.jpg', // 14 — light leak variant
+  '/light-leaks/e6012ef48dda989ebf3a69e93ceb704e.jpg', // 15 — light leak variant
+  '/light-leaks/c1714d1c99e828ee3c87d5cdffadd4d0.jpg', // 16 — light leak variant
+  '/light-leaks/29a80e174ed66071d541fade00010f3e.jpg', // 17 — light leak variant
+  '/light-leaks/0f71b038f3f3133eaf7b03aaf6d91a38.jpg', // 18 — light leak variant
+  '/light-leaks/215619fdf905128a44dc7a3d937c063c.jpg', // 19 — light leak variant
+  '/light-leaks/a7c6c7133f69177b10f0d3d08e1f6f4c.jpg', // 20 — light leak variant
+  '/light-leaks/f942835f8caa9c20cdf94ffb9575f897.jpg', // 21 — light leak variant
+  '/light-leaks/fe0d8bd554a949ad70cc7b557b459953.jpg', // 22 — light leak variant
+];
+
 // ====================== DEFAULT TEMPLATE CONFIG ======================
 
 const DEFAULT_CANVAS_WIDTH = 1500;
@@ -379,10 +408,10 @@ export default function DesignStudio() {
   const [coverAccentColor, setCoverAccentColor] = useState('#d6ac40');
   const [coverSecondaryColor, setCoverSecondaryColor] = useState('#ffffff');
   const [coverGlowColor, setCoverGlowColor] = useState('#000000');
-  const [coverTemplate, setCoverTemplate] = useState<'template1' | 'template2' | 'template3' | 'template4' | 'template5'>('template3');
+  const [coverTemplate, setCoverTemplate] = useState<'template1' | 'template2' | 'template3' | 'template4' | 'template5' | 'template6' | 'template7'>('template3');
   // Helper to change templates and load sensible defaults for sliders to avoid clashes
   // Helper to change templates and load sensible defaults for sliders to avoid clashes
-  const handleSelectTemplate = (id: 'template1' | 'template2' | 'template3' | 'template4' | 'template5') => {
+  const handleSelectTemplate = (id: 'template1' | 'template2' | 'template3' | 'template4' | 'template5' | 'template6' | 'template7') => {
     setCoverTemplate(id);
     
     // Check if there are user saved default settings in localStorage
@@ -429,6 +458,10 @@ export default function DesignStudio() {
       setCoverT4({ cardHeight: 1.0, fgBlur: 1.4, bgBlur: 10, zoom: 1.3 });
     } else if (id === 'template5') {
       setCoverT4({ cardHeight: 1.0, fgBlur: 0, bgBlur: 10, zoom: 1.3 });
+    } else if (id === 'template6') {
+      setCoverT4({ cardHeight: 1.0, fgBlur: 0.5, bgBlur: 15, zoom: 1.1 });
+    } else if (id === 'template7') {
+      setCoverT4({ cardHeight: 0.6, fgBlur: 0.6, bgBlur: 20, zoom: 1.3 });
     }
   };
 
@@ -460,7 +493,7 @@ export default function DesignStudio() {
     };
     try {
       localStorage.setItem(`design_studio:default_settings:${coverTemplate}`, JSON.stringify(defaultSettings));
-      const templateNum = coverTemplate === 'template1' ? '1' : coverTemplate === 'template2' ? '2' : coverTemplate === 'template3' ? '3' : coverTemplate === 'template4' ? '4' : '5';
+      const templateNum = coverTemplate === 'template1' ? '1' : coverTemplate === 'template2' ? '2' : coverTemplate === 'template3' ? '3' : coverTemplate === 'template4' ? '4' : coverTemplate === 'template5' ? '5' : coverTemplate === 'template6' ? '6' : '7';
       toast.success(`تم حفظ الإعدادات الحالية كافتراضية لقالب ${templateNum} بنجاح!`);
     } catch (e) {
       toast.error('فشل حفظ الإعدادات الافتراضية');
@@ -484,6 +517,10 @@ export default function DesignStudio() {
         setCoverT4({ cardHeight: 1.0, fgBlur: 1.4, bgBlur: 10, zoom: 1.3 });
       } else if (id === 'template5') {
         setCoverT4({ cardHeight: 1.0, fgBlur: 0, bgBlur: 10, zoom: 1.3 });
+      } else if (id === 'template6') {
+        setCoverT4({ cardHeight: 1.0, fgBlur: 0.5, bgBlur: 15, zoom: 1.1 });
+      } else if (id === 'template7') {
+        setCoverT4({ cardHeight: 0.6, fgBlur: 0.6, bgBlur: 20, zoom: 1.3 });
       }
     } catch (e) {
       toast.error('فشل إعادة تعيين الإعدادات الافتراضية');
@@ -3222,37 +3259,12 @@ export default function DesignStudio() {
 
   const getTemplateCrops = (photosList: { id: string; url: string }[], colCount: number) => {
     const crops = [];
-    const uniqueUrls = Array.from(new Set(photosList.map(p => p.url)));
-    const isSingleDesign = uniqueUrls.length <= 1;
-
-    // Fresh seeded generator specifically for crops to ensure identical
-    // outputs for a given coverShuffleSeed.
     const cropRng = mulberry32(coverShuffleSeed + 999);
-
     for (let i = 0; i < colCount; i++) {
-      if (isSingleDesign) {
-        // Distribute the center sector of the crops from left to right,
-        // and add some random jitter so that shuffling changes the crop.
-        const sectorWidth = 90 / colCount;
-        const minX = 5 + i * sectorWidth;
-        const rX = cropRng();
-        const rY = cropRng();
-        const x = Math.min(95, Math.max(5, minX + rX * sectorWidth));
-        const y = Math.min(95, Math.max(5, 15 + rY * 70));
-        crops.push({ x, y });
-      } else {
-        // For multiple designs, stagger them and add small seeded jitters
-        const x = colCount > 1 ? 5 + (i * 90) / (colCount - 1) : 50;
-        const patternY = [15, 80, 48, 25, 70, 50];
-        const y = colCount > 1 ? patternY[i % patternY.length] : 50;
-        
-        const jitterX = (cropRng() - 0.5) * 10; // +/- 5%
-        const jitterY = (cropRng() - 0.5) * 10;
-        crops.push({ 
-          x: Math.min(95, Math.max(5, x + jitterX)), 
-          y: Math.min(95, Math.max(5, y + jitterY)) 
-        });
-      }
+      // Fully randomize crop coordinates (5-95%) across the entire image so shuffling rearranges design elements!
+      const x = Math.round(5 + cropRng() * 90);
+      const y = Math.round(5 + cropRng() * 90);
+      crops.push({ x, y });
     }
     return crops;
   };
@@ -3407,11 +3419,12 @@ export default function DesignStudio() {
     );
   };
 
-  const Header = ({ accent, brandRight = true, align = 'center', imagesSide }: { accent: string; brandRight?: boolean; align?: 'right' | 'center' | 'left'; imagesSide?: 'left' | 'right' }) => {
+  const Header = ({ accent, brandRight = true, align = 'center', imagesSide, showBlurCard = false }: { accent: string; brandRight?: boolean; align?: 'right' | 'center' | 'left'; imagesSide?: 'left' | 'right'; showBlurCard?: boolean }) => {
     const panelLogoEl = textElements.find(el => el.id === 'company_logo');
     const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
-    const showLogo = coverShow.companyLogo && !!logoSrc;
-    const showName = coverShow.companyName;
+    const isT7 = coverTemplate === 'template7';
+    const showLogo = coverShow.companyLogo && !!logoSrc && !isT7;
+    const showName = coverShow.companyName && !isT7;
     const isT5 = coverTemplate === 'template5';
     const brandWidth = align === 'center' ? (imagesSide ? (isT5 ? '33%' : '50%') : '80%') : '60%';
     const brandMarginLeft = align === 'center'
@@ -3443,12 +3456,21 @@ export default function DesignStudio() {
         {(showLogo || showName) && (
           <div
             style={{
-              width: brandWidth,
+              width: showBlurCard ? 'fit-content' : brandWidth,
               marginLeft: brandMarginLeft,
               marginRight: brandMarginRight,
               display: 'grid',
               placeItems: 'center',
               minHeight: `${isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo}px`,
+              ...(showBlurCard ? {
+                backgroundColor: 'rgba(8, 12, 24, 0.48)',
+                backdropFilter: 'blur(20px)',
+                WebkitBackdropFilter: 'blur(20px)',
+                border: `1.5px solid ${getRGBAColor(accent, 0.28)}`,
+                borderRadius: '16px',
+                padding: '12px 32px',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
+              } : {})
             }}
           >
             {showLogo && (
@@ -3504,7 +3526,7 @@ export default function DesignStudio() {
         )}
         <h1 dir="rtl" className="font-black" style={{ color: elColors.campaignName || '#ffffff', fontFamily: "'Tajawal', 'Cairo', sans-serif", fontSize: `${isT5 ? Math.round(coverFontSizes.campaignName * 0.68) : coverFontSizes.campaignName}px`, lineHeight: 1.18, paddingBottom: '0.05em', letterSpacing: 0, textShadow: `0 14px 32px rgba(0,0,0,0.7), 0 0 80px ${accent}33`, overflow: 'visible', textAlign: align === 'center' ? 'center' : align === 'left' ? 'left' : 'right', width: '100%' }}>{(adTypeOverride && adTypeOverride.trim()) || ((groupedContracts.find((x:any) => String(x.contract_id) === selectedContractId) as any)?.adType) || coverCampaignName || coverTitle2}</h1>
         {coverShow.tagline && coverTagline && (
-          <div className="inline-flex items-center justify-center font-bold" style={{ color: '#1a1408', background: `linear-gradient(180deg, ${(elColors.tagline || accent)} 0%, ${(elColors.tagline || accent)}cc 100%)`, borderRadius: '9999px', padding: '14px 36px', fontSize: `${isT5 ? Math.round(coverFontSizes.tagline * 0.78) : coverFontSizes.tagline}px`, marginTop: `${(isT5 ? Math.round(coverFontSizes.campaignName * 0.68 * 0.50) : Math.max(65, Math.round(coverFontSizes.campaignName * 0.52)))}px`, boxShadow: `0 12px 30px ${(elColors.tagline || accent)}73, inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.25)` }}>{coverTagline}</div>
+          <div className="inline-flex items-center justify-center font-bold" style={{ color: '#1a1408', background: `linear-gradient(180deg, ${(elColors.tagline || accent)} 0%, ${(elColors.tagline || accent)}cc 100%)`, borderRadius: '9999px', padding: '14px 36px', fontSize: `${isT5 ? Math.round(coverFontSizes.tagline * 0.78) : coverFontSizes.tagline}px`, marginTop: `${(isT5 ? Math.round(coverFontSizes.campaignName * 0.68 * 0.70) : Math.max(90, Math.round(coverFontSizes.campaignName * 0.75)))}px`, boxShadow: `0 12px 30px ${(elColors.tagline || accent)}73, inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -2px 0 rgba(0,0,0,0.25)` }}>{coverTagline}</div>
         )}
         {coverShow.badge && coverBadge && (
           <div className="inline-flex items-center justify-center font-semibold tracking-wide" style={{ color: elColors.badge || accent, background: `${(elColors.badge || accent)}1f`, border: `1px solid ${(elColors.badge || accent)}99`, borderRadius: '9999px', padding: '10px 26px', fontSize: `${isT5 ? Math.round(coverFontSizes.badge * 0.78) : coverFontSizes.badge}px`, marginTop: `${(coverShow.tagline && coverTagline) ? (isT5 ? Math.round(coverFontSizes.badge * 0.78 * 1.3) : Math.max(30, Math.round(coverFontSizes.badge * 1.5))) : (isT5 ? Math.round(coverFontSizes.campaignName * 0.68 * 0.58) : Math.max(75, Math.round(coverFontSizes.campaignName * 0.60)))}px`, backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>{coverBadge}</div>
@@ -3739,10 +3761,10 @@ export default function DesignStudio() {
         </div>
       )}
 
-      <div className="flex flex-col xl:flex-row gap-5">
+      <div className="flex flex-col lg:flex-row gap-5">
 
       {/* ═══════════════ LEFT PANEL (RESTYLED WITH TABS) ═══════════════ */}
-      <div className="w-full xl:w-[370px] shrink-0 flex flex-col gap-3 max-h-[calc(100vh-160px)] overflow-y-auto custom-scrollbar">
+      <div className="w-full lg:w-[370px] shrink-0 flex flex-col gap-3 max-h-[calc(100vh-160px)] overflow-y-auto custom-scrollbar">
         {/* ── Sticky template save toolbar (always visible) ── */}
         <div className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border border-border/40 rounded-2xl p-2 shadow-md flex items-center gap-2">
           <Button
@@ -4274,6 +4296,8 @@ export default function DesignStudio() {
                           { id: 'template3', label: '3 — زجاج مموّج' },
                           { id: 'template4', label: '4 — بطاقات' },
                           { id: 'template5', label: '5 — البوابة الذهبية' },
+                          { id: 'template6', label: '6 — أسطوانات ثلاثية الأبعاد' },
+                          { id: 'template7', label: '7 — موزاييك سينمائي' },
                         ] as const).map((t) => (
                           <Button
                             key={t.id}
@@ -4345,7 +4369,7 @@ export default function DesignStudio() {
                           }}
                         />
                       </div>
-                      {(coverTemplate === 'template4' || coverTemplate === 'template5' || coverTemplate === 'template1') && (
+                      {(coverTemplate === 'template4' || coverTemplate === 'template5' || coverTemplate === 'template1' || coverTemplate === 'template6' || coverTemplate === 'template3' || coverTemplate === 'template7') && (
                         <div className="space-y-2 pt-2">
                           {coverTemplate === 'template1' ? (
                             <>
@@ -4367,11 +4391,15 @@ export default function DesignStudio() {
                             </>
                           ) : (
                             <>
-                              <div className="flex items-center justify-between">
-                                <Label className="text-[11px]">ارتفاع بطاقة الكريستال</Label>
-                                <span className="text-[10px] text-muted-foreground font-mono">{coverT4.cardHeight.toFixed(2)}x</span>
-                              </div>
-                              <Slider min={0.7} max={2} step={0.05} value={[coverT4.cardHeight]} onValueChange={([v]) => setCoverT4(p => ({ ...p, cardHeight: v }))} />
+                              {((coverTemplate as string) === 'template4' || (coverTemplate as string) === 'template5' || (coverTemplate as string) === 'template2') && (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-[11px]">ارتفاع بطاقة الكريستال</Label>
+                                    <span className="text-[10px] text-muted-foreground font-mono">{coverT4.cardHeight.toFixed(2)}x</span>
+                                  </div>
+                                  <Slider min={0.7} max={2} step={0.05} value={[coverT4.cardHeight]} onValueChange={([v]) => setCoverT4(p => ({ ...p, cardHeight: v }))} />
+                                </>
+                              )}
                               
                               {coverTemplate === 'template4' && (
                                 <>
@@ -4389,11 +4417,88 @@ export default function DesignStudio() {
                                 </>
                               )}
                               
-                              <div className="flex items-center justify-between">
-                                <Label className="text-[11px]">{coverTemplate === 'template5' ? 'ضبابية خلفية النافذة البوابة' : 'ضبابية خلفية البطاقة'}</Label>
-                                <span className="text-[10px] text-muted-foreground font-mono">{coverT4.bgBlur}px</span>
-                              </div>
-                              <Slider min={0} max={60} step={1} value={[coverT4.bgBlur]} onValueChange={([v]) => setCoverT4(p => ({ ...p, bgBlur: v }))} />
+                              {(coverTemplate === 'template4' || coverTemplate === 'template5') && (
+                                <>
+                                  <div className="flex items-center justify-between">
+                                    <Label className="text-[11px]">{coverTemplate === 'template5' ? 'ضبابية خلفية النافذة البوابة' : 'ضبابية خلفية البطاقة'}</Label>
+                                    <span className="text-[10px] text-muted-foreground font-mono">{coverT4.bgBlur}px</span>
+                                  </div>
+                                  <Slider min={0} max={60} step={1} value={[coverT4.bgBlur]} onValueChange={([v]) => setCoverT4(p => ({ ...p, bgBlur: v }))} />
+                                </>
+                              )}
+
+                              {(coverTemplate === 'template3' || coverTemplate === 'template6' || coverTemplate === 'template7') && (
+                                <div className="space-y-3 pt-2 border-t border-border/20 mt-1">
+                                  <div className="text-[11px] font-bold text-primary">خيارات وتأثيرات القالب</div>
+                                  
+                                  <div className="flex items-center justify-between pt-1">
+                                    <Label className="text-[11px] font-medium text-foreground">تطبيق مود الألوان (لون الإبراز)</Label>
+                                    <Switch checked={coverT5ColorMode} onCheckedChange={setCoverT5ColorMode} />
+                                  </div>
+
+                                  {coverT5ColorMode && (
+                                    <div className="space-y-1 pt-1">
+                                      <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                        <span>قوة تطبيق اللون</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.fgBlur ?? 0.6) * 100)}%</span>
+                                      </div>
+                                      <Slider 
+                                        min={0} 
+                                        max={1} 
+                                        step={0.05} 
+                                        value={[coverT4.fgBlur ?? 0.6]} 
+                                        onValueChange={([v]) => setCoverT4(p => ({ ...p, fgBlur: v }))} 
+                                      />
+                                    </div>
+                                  )}
+
+                                  <div className="space-y-1 pt-1">
+                                    <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                      <span>{coverTemplate === 'template7' ? 'شدة العمق ثلاثي الأبعاد للموزاييك' : 'مقياس حجم الكرة ثلاثية الأبعاد'}</span>
+                                      <span className="text-[10px] text-muted-foreground font-mono">{(coverT4.zoom ?? 1.55).toFixed(2)}x</span>
+                                    </div>
+                                    <Slider 
+                                      min={1.0} 
+                                      max={2.5} 
+                                      step={0.05} 
+                                      value={[coverT4.zoom ?? 1.55]} 
+                                      onValueChange={([v]) => setCoverT4(p => ({ ...p, zoom: v }))} 
+                                    />
+                                  </div>
+
+                                  {coverTemplate === 'template6' && (
+                                    <div className="space-y-1 pt-2 border-t border-border/10">
+                                      <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                        <span>ارتفاع الألواح الزجاجية</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.cardHeight ?? 1.0) * 100)}%</span>
+                                      </div>
+                                      <Slider 
+                                        min={0.4} 
+                                        max={1.15} 
+                                        step={0.05} 
+                                        value={[coverT4.cardHeight ?? 1.0]} 
+                                        onValueChange={([v]) => setCoverT4(p => ({ ...p, cardHeight: v }))} 
+                                      />
+                                    </div>
+                                  )}
+
+                                  {coverTemplate === 'template7' && (
+                                    <div className="space-y-1 pt-2 border-t border-border/10">
+                                      <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                        <span>تباعد قطع الموزاييك (الفجوات)</span>
+                                        <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.cardHeight ?? 0.6) * 20)}px</span>
+                                      </div>
+                                      <Slider 
+                                        min={0} 
+                                        max={1.5} 
+                                        step={0.05} 
+                                        value={[coverT4.cardHeight ?? 0.6]} 
+                                        onValueChange={([v]) => setCoverT4(p => ({ ...p, cardHeight: v }))} 
+                                      />
+                                    </div>
+                                  )}
+                                </div>
+                              )}
 
                               {coverTemplate === 'template5' && (
                                 <div className="space-y-3 pt-2 border-t border-border/20">
@@ -5523,7 +5628,7 @@ export default function DesignStudio() {
       </div>
 
         {/* ═══════════════ RIGHT: CANVAS (Sticky so it follows scrolling down the side panel) ═══════════════ */}
-        <div className="flex-1 flex flex-col gap-3 xl:sticky xl:top-4 self-start">
+        <div className="flex-1 flex flex-col gap-3 lg:sticky lg:top-4 self-start">
 
           {/* ── Toolbar ── */}
           <Card className="border-border/40 shadow-lg bg-card/90 backdrop-blur-sm">
@@ -5559,6 +5664,8 @@ export default function DesignStudio() {
                     { id: 'template3', label: '3' },
                     { id: 'template4', label: '4' },
                     { id: 'template5', label: '5' },
+                    { id: 'template6', label: '6' },
+                    { id: 'template7', label: '7' },
                   ] as const).map((t) => (
                     <Button
                       key={t.id}
@@ -5681,6 +5788,117 @@ export default function DesignStudio() {
             </CardContent>
           </Card>
 
+          {/* ── Central Quick Dashboard Controls ── */}
+          {showQuickControls ? (
+            <div className="w-full mx-auto">
+              <Card className="border-border/40 shadow-xl bg-card/90 backdrop-blur-md px-4 py-2.5 flex flex-wrap items-center justify-between gap-3 rounded-2xl relative">
+                {/* Collapse button */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setShowQuickControls(false)}
+                  className="absolute -top-3 -left-3 h-6 w-6 rounded-full bg-destructive text-destructive-foreground hover:bg-destructive/95 shadow-md flex items-center justify-center border border-border/20"
+                  title="إخفاء اللوحة"
+                >
+                  <X className="h-3 w-3" />
+                </Button>
+                {/* Group 1: Zoom In / Out */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground font-bold">الزووم:</span>
+                  <div className="flex items-center border rounded-xl p-0.5 bg-muted/40 border-border/50">
+                    <Button variant="ghost" size="icon" onClick={() => setZoom(z => Math.max(0.1, z - 0.05))} className="h-7 w-7 rounded-lg" title="تصغير">
+                      <ZoomOut className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="text-xs font-bold font-mono px-2 min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
+                    <Button variant="ghost" size="icon" onClick={() => setZoom(z => Math.min(2, z + 0.05))} className="h-7 w-7 rounded-lg" title="تكبير">
+                      <ZoomIn className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setZoom(0.38)} className="h-7 px-1.5 text-[10px] rounded-lg font-bold" title="إعادة تعيين الزوم">
+                      38%
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="h-5 w-px bg-border/60" />
+
+                {/* Group 2: Photo / Item Navigation */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground font-bold">اللوحة:</span>
+                  <div className="flex items-center gap-1 bg-muted/40 border border-border/50 rounded-xl p-0.5">
+                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" disabled={!canGoPrev} onClick={goToPrevItem} title="السابق">
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </Button>
+                    <span className="text-xs font-bold px-2 select-none text-foreground">
+                      {currentItemIndex + 1} / {taskItems.length || 1}
+                    </span>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg" disabled={!canGoNext} onClick={goToNextItem} title="التالي">
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="h-5 w-px bg-border/60" />
+
+                {/* Group 3: Face Switcher */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-muted-foreground font-bold">الوجه:</span>
+                  <div className="flex bg-muted/40 border border-border/50 rounded-xl p-0.5 gap-0.5">
+                    <Button
+                      variant={imageSource === 'face_a' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 text-[10px] px-2.5 font-bold rounded-lg"
+                      onClick={() => setImageSource('face_a')}
+                      disabled={selectedItemDetails ? !selectedItemDetails.installed_face_a : false}
+                    >
+                      الأمامي
+                    </Button>
+                    <Button
+                      variant={imageSource === 'face_b' ? 'default' : 'ghost'}
+                      size="sm"
+                      className="h-7 text-[10px] px-2.5 font-bold rounded-lg"
+                      onClick={() => setImageSource('face_b')}
+                      disabled={selectedItemDetails ? !selectedItemDetails.installed_face_b : false}
+                    >
+                      الخلفي
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="h-5 w-px bg-border/60" />
+
+                {/* Group 4: Download & Upload */}
+                <div className="flex items-center gap-1.5">
+                  <Label
+                    className="flex items-center justify-center gap-1 h-8 px-2.5 border border-border/60 hover:bg-accent/40 rounded-xl cursor-pointer text-[10px] font-bold transition-all"
+                  >
+                    <Upload className="h-3 w-3" />
+                    <span>رفع صورة</span>
+                    <input type="file" accept="image/*" onChange={handleImageUpload} className="hidden" />
+                  </Label>
+
+                  <Button
+                    onClick={handleExportCard}
+                    size="sm"
+                    className="h-8 gap-1 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg text-[10px]"
+                  >
+                    <Download className="h-3 w-3" />
+                    تحميل الصورة
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          ) : (
+            <div className="flex justify-center w-full py-1">
+              <Button
+                onClick={() => setShowQuickControls(true)}
+                className="shadow-xl bg-card/95 hover:bg-accent border border-border/50 text-foreground gap-1.5 px-4 py-2.5 rounded-full font-bold text-[11px] backdrop-blur-md transition-all hover:scale-105"
+              >
+                <Sliders className="h-3.5 w-3.5 text-primary" />
+                <span>إظهار لوحة التحكم السريعة</span>
+              </Button>
+            </div>
+          )}
+
           {/* ── Canvas Viewport ── */}
           <div className="flex-1 overflow-auto bg-muted/20 border border-border/40 rounded-2xl flex items-center justify-center p-6 min-h-[500px] relative">
             <div
@@ -5766,56 +5984,34 @@ export default function DesignStudio() {
                             padding: '64px' 
                           }}
                         >
-                          {/* Background Glow Wave SVG - Layered soft blurs */}
+                          {/* Background Glow Pillars - Vertical light columns for Template 1 */}
                           <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]">
                             <defs>
-                              <linearGradient id="wave-gradient-t1" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor={accent} stopOpacity="0.1" />
-                                <stop offset="25%" stopColor={accent} stopOpacity="0.8" />
-                                <stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
-                                <stop offset="75%" stopColor={waveGlowColor} stopOpacity="0.8" />
-                                <stop offset="100%" stopColor={waveGlowColor} stopOpacity="0.1" />
+                              <linearGradient id="pillar-gradient-t1" x1="0%" y1="0%" x2="0%" y2="100%">
+                                <stop offset="0%" stopColor={accent} stopOpacity="0.05" />
+                                <stop offset="50%" stopColor={accent} stopOpacity="0.75" />
+                                <stop offset="100%" stopColor={accent} stopOpacity="0.05" />
                               </linearGradient>
-                              <filter id="blur-heavy-t1" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation={coverT4.bgBlur} />
-                              </filter>
-                              <filter id="blur-medium-t1" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation={coverT4.bgBlur * 0.5} />
-                              </filter>
-                              <filter id="blur-light-t1" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation={coverT4.bgBlur * 0.15} />
+                              <filter id="blur-pillar" x="-30%" y="-30%" width="160%" height="160%">
+                                <feGaussianBlur stdDeviation={60} />
                               </filter>
                             </defs>
-                            {/* Layer 1: Wide ambient glow */}
-                            <path
-                              d={pathD}
-                              fill="none"
-                              stroke="url(#wave-gradient-t1)"
-                              strokeWidth={h * 0.28}
-                              strokeLinecap="round"
-                              filter="url(#blur-heavy-t1)"
-                              opacity="0.35"
-                            />
-                            {/* Layer 2: Core glow */}
-                            <path
-                              d={pathD}
-                              fill="none"
-                              stroke="url(#wave-gradient-t1)"
-                              strokeWidth={h * 0.14}
-                              strokeLinecap="round"
-                              filter="url(#blur-medium-t1)"
-                              opacity="0.65"
-                            />
-                            {/* Layer 3: Intense white center reflection */}
-                            <path
-                              d={pathD}
-                              fill="none"
-                              stroke="#ffffff"
-                              strokeWidth={h * 0.03}
-                              strokeLinecap="round"
-                              filter="url(#blur-light-t1)"
-                              opacity="0.85"
-                            />
+                            {/* Render vertical glowing pillars */}
+                            {[0, 1, 2].map((i) => {
+                              const xPos = swap ? (w * 0.12 + i * w * 0.12) : (w * 0.52 + i * w * 0.12);
+                              return (
+                                <rect
+                                  key={`pillar-${i}`}
+                                  x={xPos}
+                                  y={0}
+                                  width={w * 0.06}
+                                  height={h}
+                                  fill="url(#pillar-gradient-t1)"
+                                  filter="url(#blur-pillar)"
+                                  opacity="0.35"
+                                />
+                              );
+                            })}
                           </svg>
 
                           {/* Extra ambient glow behind text block */}
@@ -5851,16 +6047,10 @@ export default function DesignStudio() {
                                   const imgUrl = photo.url;
                                   const crop = crops[i];
 
-                                const scaleFactor = (coverT4.cardHeight ?? 45) / 50;
-
-                                // Seeded random parameters calculated dynamically per seed
-                                const randomYOffset = rand(-40, 40) * scaleFactor;
-                                const randomImgY = rand(-15, 15);
-                                const randomImgScale = rand(1.0, 1.45); // Random Zoom-In / Zoom-Out!
-
-                                // Add shuffle randomness to the crop focus point
-                                const randomCropX = Math.min(95, Math.max(5, crop.x + rand(-12, 12)));
-                                const randomCropY = Math.min(95, Math.max(5, crop.y + rand(-15, 15)));
+                                const colLayout = sliceCols[i] || { height: 100, top: 0, rotY: 0 };
+                                const randomImgScale = rand(1.0, 1.15); // Gentle zoom so product is fully visible
+                                const randomCropX = Math.min(95, Math.max(5, crop.x + rand(-4, 4)));
+                                const randomCropY = Math.min(95, Math.max(5, crop.y + rand(-4, 4)));
 
                                 return (
                                   <div
@@ -5868,16 +6058,15 @@ export default function DesignStudio() {
                                     className="relative transition-all duration-300"
                                     style={{
                                       width: '18.8%',
-                                      height: '100%',
-                                      top: '0%',
-                                      transform: 'none',
+                                      height: `${colLayout.height}%`,
+                                      top: `${colLayout.top}%`,
+                                      transform: `rotateY(${colLayout.rotY}deg) translateZ(${10 + i * 5}px)`,
                                       transformOrigin: 'center center',
-                                      borderRadius: 0,
+                                      borderRadius: '12px',
                                       overflow: 'hidden',
                                       background: 'rgba(255, 255, 255, 0.03)',
-                                      borderLeft: '1px solid rgba(255, 255, 255, 0.25)',
-                                      borderRight: '1px solid rgba(255, 255, 255, 0.08)',
-                                      boxShadow: 'inset 0 0 15px rgba(255, 255, 255, 0.05), 0 0 45px rgba(0, 0, 0, 0.55)',
+                                      border: '1.5px solid rgba(255, 255, 255, 0.22)',
+                                      boxShadow: 'inset 0 0 15px rgba(255, 255, 255, 0.05), 0 25px 45px rgba(0, 0, 0, 0.45)',
                                     }}
                                   >
                                     <img 
@@ -5890,7 +6079,7 @@ export default function DesignStudio() {
                                         left: 0,
                                         objectFit: 'cover',
                                         objectPosition: `${randomCropX}% ${randomCropY}%`,
-                                        transform: `translateY(${randomImgY}%) scale(${randomImgScale})`,
+                                        transform: `scale(${randomImgScale})`,
                                         filter: 'saturate(1.08) contrast(1.04) brightness(1.02)',
                                       }}
                                     />
@@ -5931,6 +6120,17 @@ export default function DesignStudio() {
                               />
                             ))}
                           </div>
+
+                          {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[3]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.32,
+                            }}
+                          />
 
                           <Footer accent={accent} reverse={!swap} />
                         </div>
@@ -5981,11 +6181,13 @@ export default function DesignStudio() {
                       const imgFx2 = photos.map((_, i) => {
                         const crop = crops[i];
                         return {
-                          scale: rand(1.0, 1.35),
-                          ox: Math.min(95, Math.max(5, crop.x + rand(-10, 10))),
-                          oy: Math.min(95, Math.max(5, crop.y + rand(-12, 12))),
+                          scale: rand(1.0, 1.1),
+                          ox: Math.min(95, Math.max(5, crop.x + rand(-5, 5))),
+                          oy: Math.min(95, Math.max(5, crop.y + rand(-5, 5))),
                         };
                       });
+                      // Pick a light leak overlay for this template (fixed at index 1 for Amber/Blue streak to contrast with Template 1)
+                      const lightLeakSrc = LIGHT_LEAK_OVERLAYS[1];
                       return (
                         <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
                           style={{ 
@@ -6095,9 +6297,19 @@ export default function DesignStudio() {
                                   );
                                 })}
                               </div>
-                              <WavyGlass accent={accent} opacity={0.5} />
+                              <WavyGlass accent={accent} opacity={0.35} />
                             </div>
                           )}
+                          {/* Light Leak Effect Overlay — professional cinematic glow */}
+                          <img
+                            src={lightLeakSrc}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.35,
+                            }}
+                          />
                           <Footer accent={accent} reverse={!swap} />
                         </div>
                       );
@@ -6333,6 +6545,17 @@ export default function DesignStudio() {
                           <div className="absolute pointer-events-none z-[7]" style={{ left: '4%', right: '4%', top: '14%', height: '72%', background: `radial-gradient(ellipse ${gI.spread * 1.04}% ${gI.spread * 0.9}% at 50% 50%, ${glow}${alphaToHex(0.33 * gI.opacity)} 0%, ${glow}${alphaToHex(0.13 * gI.opacity)} 55%, transparent 88%)`, filter: `blur(${gI.blur * 1.22}px)` }} />
                           <Header accent={accent} align="center" />
                           <TextBlock accent={accent} align="center" />
+                          {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[10]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.35,
+                            }}
+                          />
+
                           <Footer accent={accent} />
                         </div>
                       );
@@ -7169,7 +7392,7 @@ export default function DesignStudio() {
                                         radial-gradient(1.2px 1.2px at 60px 650px, #fff, transparent),
                                         radial-gradient(2.5px 2.5px at 200px 790px, #fff, transparent),
                                         radial-gradient(1.2px 1.2px at 350px 880px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 520px 1050px, #fff, transparent),
+                                        radial-gradient(1.8px 1.8px at 520px 1050px, ${accent}, transparent),
                                         radial-gradient(1.2px 1.2px at 650px 1200px, #fff, transparent),
                                         radial-gradient(2.5px 2.5px at 240px 1350px, ${accent}, transparent),
                                         radial-gradient(1.8px 1.8px at 450px 1450px, #fff, transparent),
@@ -7226,242 +7449,1513 @@ export default function DesignStudio() {
                             }}
                           />
 
+                          {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[2]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[27]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.35,
+                            }}
+                          />
+
                           <Footer accent={accent} reverse={!swap} />
                         </div>
                       );
                     }
 
-                    // ============= TEMPLATE 3 — LIQUID GLASS ACCORDION =============
-                    {
+                    // ============= TEMPLATE 3 — PREMIUM 3D FLOATING MOSAIC =============
+                    if (coverTemplate === 'template3') {
                       const accent = coverAccentColor;
                       const glow = coverGlowColor;
                       const gI = coverGlowIntensity;
                       const swap = coverSwapSides;
-                      const imagesSide: 'left' | 'right' = swap ? 'right' : 'left';
-                      const textAlign: 'left' | 'right' | 'center' = coverTextCentered ? 'center' : (swap ? 'left' : 'right');
-                      
-                      const photos = pickPhotos(5); // 5 vertical glass rod columns
-                      const colCount = 5;
-                      const crops = getTemplateCrops(photos, colCount);
+                      const textAlign: 'left' | 'right' | 'center' = 'center';
 
-                      // Generate randomized offsets and crop parameters per column
-                      const imgFx3 = Array.from({ length: colCount }).map((_, i) => {
-                        const waveOffset = rand(-40, 40); // strong vertical stagger stagger
-                        const crop = crops[i];
-                        const randomCropX = Math.min(95, Math.max(5, crop.x + rand(-15, 15)));
-                        const randomCropY = Math.min(95, Math.max(5, crop.y + rand(-20, 20)));
-                        const scale = rand(1.18, 1.55); // random zoom/scale per column
-                        return { waveOffset, randomCropX, randomCropY, scale };
-                      });
+                      const photos = pickPhotos(8); // 8 shards
+                      const crops = getTemplateCrops(photos, 8);
 
                       const w = canvasWidth;
                       const h = canvasHeight;
-                      const pathWave = swap
-                        ? `M ${w * 1.15} ${h * 0.25} C ${w * 0.7} ${h * 0.85} ${w * 0.3} ${h * 0.15} ${-w * 0.15} ${h * 0.75}`
-                        : `M ${-w * 0.15} ${h * 0.25} C ${w * 0.3} ${h * 0.85} ${w * 0.7} ${h * 0.15} ${w * 1.15} ${h * 0.75}`;
 
-                      const waveGlowColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
+                      const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
+                      const activeIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 0;
+                      const effectIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 1.0;
+
+                      // Define the 3D cards metadata with dynamic positions and polygon points for glass shards
+                      // Adjusted to leave the top center completely empty for the brand logo header
+                      const cards = [
+                        // 1. Top-Left Shard
+                        { 
+                          x: 0.03, y: 0.02, width: 0.36, height: 0.40, 
+                          rotX: -12, rotY: -15, rotZ: -8, tz: -20,
+                          p1: { x: 0, y: 0 }, p2: { x: 100, y: 15 }, p3: { x: 75, y: 100 }, p4: { x: 0, y: 100 },
+                          sparkleIndex: 2,
+                          drawEdges: [false, true, true, false] // pt2->pt3 and pt3->pt4
+                        },
+                        // 2. Top-Right Shard
+                        { 
+                          x: 0.62, y: 0.02, width: 0.36, height: 0.40, 
+                          rotX: -10, rotY: 15, rotZ: 8, tz: -15,
+                          p1: { x: 0, y: 15 }, p2: { x: 100, y: 0 }, p3: { x: 100, y: 100 }, p4: { x: 25, y: 100 },
+                          sparkleIndex: 3,
+                          drawEdges: [false, false, true, true] // pt3->pt4 and pt4->pt1
+                        },
+                        // 3. Right Shard (center right)
+                        { 
+                          x: 0.68, y: 0.32, width: 0.30, height: 0.36, 
+                          rotX: 5, rotY: 18, rotZ: 4, tz: 60,
+                          p1: { x: 25, y: 0 }, p2: { x: 100, y: 10 }, p3: { x: 100, y: 90 }, p4: { x: 0, y: 100 },
+                          sparkleIndex: 3,
+                          drawEdges: [true, false, false, true] // pt1->pt2 and pt4->pt1
+                        },
+                        // 4. Bottom-Right Shard
+                        { 
+                          x: 0.62, y: 0.58, width: 0.36, height: 0.40, 
+                          rotX: 12, rotY: 15, rotZ: -6, tz: -50,
+                          p1: { x: 0, y: 0 }, p2: { x: 100, y: 0 }, p3: { x: 100, y: 100 }, p4: { x: 25, y: 75 },
+                          sparkleIndex: 0,
+                          drawEdges: [true, false, false, false] // pt1->pt2
+                        },
+                        // 5. Bottom-Center-Right Shard
+                        { 
+                          x: 0.46, y: 0.66, width: 0.28, height: 0.32, 
+                          rotX: 15, rotY: 8, rotZ: -2, tz: -40,
+                          p1: { x: 30, y: 0 }, p2: { x: 100, y: 15 }, p3: { x: 90, y: 100 }, p4: { x: 0, y: 100 },
+                          sparkleIndex: 0,
+                          drawEdges: [false, false, false, true] // pt4->pt1
+                        },
+                        // 6. Bottom-Center-Left Shard
+                        { 
+                          x: 0.26, y: 0.66, width: 0.28, height: 0.32, 
+                          rotX: 15, rotY: -8, rotZ: 2, tz: -30,
+                          p1: { x: 0, y: 15 }, p2: { x: 70, y: 0 }, p3: { x: 100, y: 100 }, p4: { x: 10, y: 100 },
+                          sparkleIndex: 1,
+                          drawEdges: [false, true, false, false] // pt2->pt3
+                        },
+                        // 7. Bottom-Left Shard
+                        { 
+                          x: 0.02, y: 0.58, width: 0.36, height: 0.40, 
+                          rotX: 10, rotY: -18, rotZ: 6, tz: 80,
+                          p1: { x: 0, y: 0 }, p2: { x: 100, y: 0 }, p3: { x: 75, y: 75 }, p4: { x: 0, y: 100 },
+                          sparkleIndex: 1,
+                          drawEdges: [true, true, false, false] // pt1->pt2 and pt2->pt3
+                        },
+                        // 8. Left Shard (center left)
+                        { 
+                          x: 0.02, y: 0.32, width: 0.30, height: 0.36, 
+                          rotX: -5, rotY: -15, rotZ: -4, tz: 40,
+                          p1: { x: 0, y: 10 }, p2: { x: 75, y: 0 }, p3: { x: 100, y: 100 }, p4: { x: 0, y: 90 },
+                          sparkleIndex: 1,
+                          drawEdges: [false, true, true, false] // pt2->pt3 and pt3->pt4
+                        }
+                      ];
+
+                      // Seeded random wobbly offsets for the shards to make the shattering look irregular and organic
+                      const wobblyCards = cards.map((c, idx) => {
+                        const seed = (coverShuffleSeed || 1) + idx * 79;
+                        const cardRng = mulberry32(seed);
+                        const cardRand = (min: number, max: number) => min + cardRng() * (max - min);
+
+                        // Randomized rotation, positions, sizes, and depth translation based on shuffle seed!
+                        const rotXMod = cardRand(-12, 12) * effectIntensity;
+                        const rotYMod = cardRand(-12, 12) * effectIntensity;
+                        const rotZMod = cardRand(-6, 6) * effectIntensity;
+                        const tzMod = (c.tz + cardRand(-25, 25)) * effectIntensity;
+
+                        const widthMod = c.width * cardRand(0.9, 1.1);
+                        const heightMod = c.height * cardRand(0.9, 1.1);
+                        const xMod = c.x + cardRand(-0.02, 0.02);
+                        const yMod = c.y + cardRand(-0.02, 0.02);
+                        
+                        const wp1 = c.p1;
+                        const wp2 = c.p2;
+                        const wp3 = c.p3;
+                        const wp4 = c.p4;
+
+                        const flipX = false;
+                        const flipY = false;
+
+                        const brightnessOffset = cardRand(-0.04, 0.04);
+                        const contrastOffset = cardRand(-0.02, 0.05);
+
+                        return {
+                          ...c,
+                          x: xMod,
+                          y: yMod,
+                          width: widthMod,
+                          height: heightMod,
+                          rotX: rotXMod,
+                          rotY: rotYMod,
+                          rotZ: rotZMod,
+                          tz: tzMod,
+                          p1: wp1,
+                          p2: wp2,
+                          p3: wp3,
+                          p4: wp4,
+                          flipX,
+                          flipY,
+                          brightness: 0.98 + brightnessOffset,
+                          contrast: 1.02 + contrastOffset,
+                          seed
+                        };
+                      });
+
+                      // Circle size (increased to 48% for a larger sphere presence)
+                      const circleSize = Math.round(Math.min(w, h) * 0.48);
+
+                      const campaignTitle = (adTypeOverride && adTypeOverride.trim()) || ((groupedContracts.find((x:any) => String(x.contract_id) === selectedContractId) as any)?.adType) || coverCampaignName || coverTitle2;
+                      const kickerText = coverKicker;
+                      const taglineText = coverTagline;
+
+                      const panelLogoEl = textElements.find(el => el.id === 'company_logo');
+                      const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
+
+                      // Dynamic background source from main design image
+                      const bgPhoto = photos[0]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+
+                      const crackColor = coverT5ColorMode ? accent : '#f4c25a';
+                      const bgBrightness = 0.25 - activeIntensity * 0.03;
+                      const bgSaturate = 1.0 - activeIntensity * 0.9;
+                      const bgGrayscale = activeIntensity * 0.9;
 
                       return (
                         <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
                           style={{ 
                             ['--cover-accent' as any]: accent, 
-                            background: `radial-gradient(ellipse 95% 85% at ${swap ? '20%' : '80%'} 50%, ${accent}26 0%, transparent 60%), 
-                                         radial-gradient(ellipse 75% 65% at ${swap ? '80%' : '20%'} 50%, ${waveGlowColor}1f 0%, transparent 70%), 
-                                         linear-gradient(180deg, #030305 0%, #0c0d12 50%, #020203 100%)`, 
+                            background: '#030305',
                             padding: '64px' 
                           }}
                         >
-                          {/* Background Glow Wave SVG - Layered soft blurs matching theme colors (no hardcoded purple/blue) */}
-                          <svg className="absolute inset-0 w-full h-full pointer-events-none z-[1]">
-                            <defs>
-                              <linearGradient id="wave-gradient-t3" x1="0%" y1="0%" x2="100%" y2="0%">
-                                <stop offset="0%" stopColor={accent} stopOpacity="0.1" />
-                                <stop offset="25%" stopColor={accent} stopOpacity="0.8" />
-                                <stop offset="50%" stopColor="#ffffff" stopOpacity="1" />
-                                <stop offset="75%" stopColor={waveGlowColor} stopOpacity="0.8" />
-                                <stop offset="100%" stopColor={waveGlowColor} stopOpacity="0.1" />
-                              </linearGradient>
-                              <filter id="neon-blur-t3-heavy" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation={coverT4.bgBlur} />
-                              </filter>
-                              <filter id="neon-blur-t3-medium" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation={coverT4.bgBlur * 0.5} />
-                              </filter>
-                              <filter id="neon-blur-t3-light" x="-20%" y="-20%" width="140%" height="140%">
-                                <feGaussianBlur stdDeviation={coverT4.bgBlur * 0.15} />
-                              </filter>
-                            </defs>
-                            {/* Layer 1: Wide ambient glow */}
-                            <path
-                              d={pathWave}
-                              fill="none"
-                              stroke="url(#wave-gradient-t3)"
-                              strokeWidth={h * 0.28}
-                              strokeLinecap="round"
-                              filter="url(#neon-blur-t3-heavy)"
-                              opacity="0.35"
-                            />
-                            {/* Layer 2: Core glow */}
-                            <path
-                              d={pathWave}
-                              fill="none"
-                              stroke="url(#wave-gradient-t3)"
-                              strokeWidth={h * 0.14}
-                              strokeLinecap="round"
-                              filter="url(#neon-blur-t3-medium)"
-                              opacity="0.65"
-                            />
-                            {/* Layer 3: Intense white center reflection */}
-                            <path
-                              d={pathWave}
-                              fill="none"
-                              stroke="#ffffff"
-                              strokeWidth={h * 0.03}
-                              strokeLinecap="round"
-                              filter="url(#neon-blur-t3-light)"
-                              opacity="0.85"
-                            />
-                          </svg>
-
-                          {/* Dark Liquid Metal Gloss Reflective Ridges (Reference Image 4) */}
-                          <div className="absolute inset-0 pointer-events-none z-[2] opacity-20 mix-blend-color-dodge" 
-                            style={{ 
-                              background: `
-                                linear-gradient(135deg, 
-                                  transparent 0%, 
-                                  rgba(255,255,255,0.01) 30%, 
-                                  rgba(255,255,255,0.15) 32%, 
-                                  rgba(255,255,255,0.02) 34%, 
-                                  transparent 36%, 
-                                  transparent 60%, 
-                                  rgba(255,255,255,0.12) 62%, 
-                                  rgba(255,255,255,0.01) 64%, 
-                                  transparent 100%)
-                              `
-                            }} 
-                          />
-                          <div className="absolute inset-0 pointer-events-none z-[3] opacity-30 mix-blend-overlay"
+                          {/* 0. Blurred design image background replica (independently blurred at Z-0) */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none scale-105"
                             style={{
-                              backgroundImage: `linear-gradient(220deg, rgba(0,0,0,0.8) 0%, rgba(255,255,255,0.1) 35%, rgba(0,0,0,0.85) 65%, rgba(255,255,255,0.05) 100%)`
+                              backgroundImage: `url('${bgPhoto}')`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              filter: `blur(16px) brightness(${bgBrightness}) saturate(${bgSaturate}) grayscale(${bgGrayscale})`,
+                              opacity: 0.98
+                            }}
+                          />
+                          {/* Dynamic accent color overlay on background */}
+                          {coverT5ColorMode && (
+                            <div 
+                              className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: getRGBAColor(accent, activeIntensity * 0.35),
+                                mixBlendMode: 'color',
+                              }}
+                            />
+                          )}
+                          {/* Floating accent-colored background lights */}
+                          <div className="absolute inset-0 z-0 pointer-events-none" style={{ mixBlendMode: 'screen', opacity: 0.5 }}>
+                            <div className="absolute rounded-full" style={{ left: '10%', top: '15%', width: '400px', height: '400px', background: `radial-gradient(circle, ${getRGBAColor(accent, 0.22)} 0%, transparent 70%)`, filter: 'blur(50px)' }} />
+                            <div className="absolute rounded-full" style={{ right: '10%', bottom: '15%', width: '500px', height: '500px', background: `radial-gradient(circle, ${getRGBAColor(accent, 0.22)} 0%, transparent 70%)`, filter: 'blur(60px)' }} />
+                          </div>
+                          {/* Dark vignette overlay for contrast and depth */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none"
+                            style={{
+                              background: 'radial-gradient(circle, transparent 35%, rgba(3, 3, 5, 0.8) 100%), linear-gradient(180deg, rgba(3, 3, 5, 0.3) 0%, rgba(12, 13, 18, 0.6) 100%)'
                             }}
                           />
 
-                          {/* Background shadow overlay to smoothly transition to the text block */}
-                          <div className="absolute top-0 bottom-0 pointer-events-none z-[4]" 
+                          {/* 1. Brand Logo Header Section (Unified with other templates) */}
+                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} />
+
+                          {/* 2. Spotlight background behind text/glass (Z-index: 15) */}
+                          <div className="absolute pointer-events-none z-[15]" 
                             style={{ 
-                              [swap ? 'right' : 'left']: '38%', 
-                              width: '15%', 
-                              background: `linear-gradient(to ${swap ? 'right' : 'left'}, transparent 0%, rgba(3,3,5,0.95) 75%, rgba(3,3,5,1) 100%)` 
-                            } as React.CSSProperties} 
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 1.5}px`,
+                              height: `${circleSize * 1.5}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: `radial-gradient(circle, ${spotlightColor}${alphaToHex(0.35 * gI.opacity)} 0%, ${spotlightColor}${alphaToHex(0.10 * gI.opacity)} 50%, transparent 80%)`, 
+                              filter: `blur(${gI.blur * 1.5}px)`,
+                              opacity: 0.95
+                            }} 
                           />
 
-                          {/* Main Title Glow Intensity Overlay */}
-                          <div className="absolute pointer-events-none z-[7]" 
-                            style={{ 
-                              [swap ? 'right' : 'left']: '40%', 
-                              [swap ? 'left' : 'right']: '6%', 
-                              top: '18%', 
-                              height: '64%', 
-                              background: `radial-gradient(ellipse ${gI.spread}% ${gI.spread * 0.93}% at 50% 50%, ${glow}${alphaToHex(0.4 * gI.opacity)} 0%, ${glow}${alphaToHex(0.2 * gI.opacity)} 50%, transparent 85%)`, 
-                              filter: `blur(${gI.blur}px)` 
-                            } as React.CSSProperties} 
-                          />
-                          <div className="absolute pointer-events-none z-[8]" 
-                            style={{ 
-                              [swap ? 'right' : 'left']: '40%', 
-                              [swap ? 'left' : 'right']: '6%', 
-                              top: '22%', 
-                              height: '56%', 
-                              background: `radial-gradient(ellipse ${gI.spread * 0.93}% ${gI.spread * 0.86}% at 50% 50%, ${glow}${alphaToHex(1 * gI.opacity)} 0%, ${glow}${alphaToHex(0.9 * gI.opacity)} 30%, ${glow}${alphaToHex(0.6 * gI.opacity)} 55%, ${glow}${alphaToHex(0.25 * gI.opacity)} 75%, transparent 92%)`, 
-                              filter: `blur(${Math.max(8, gI.blur * 0.67)}px)` 
-                            } as React.CSSProperties} 
-                          />
-
-                          {/* Collage Slices - 3D Glass Cylindrical Rod Accordion Wall */}
+                          {/* 3. 3D Floating Glass Shards (Z-index: 10) */}
                           {coverShow.collage && (
-                            <div className="absolute top-0 bottom-0 z-10 pointer-events-none overflow-hidden" 
-                              style={{ 
-                                [imagesSide]: 0, 
-                                width: '42%',
-                                boxShadow: `0 0 80px rgba(0,0,0,0.85), ${imagesSide === 'left' ? '20px' : '-20px'} 0 40px rgba(0,0,0,0.6)`
-                              } as React.CSSProperties}
-                            >
-                              <div className="absolute inset-x-0 h-full flex">
-                                {imgFx3.map((fx, idx) => {
-                                  // Pick different design image per slice to avoid "single body" look
-                                  const photo = photos[idx % photos.length] || photos[0];
-                                  if (!photo) return null;
+                            <div className="absolute inset-0 z-10 pointer-events-none" style={{ perspective: '1200px', transformStyle: 'preserve-3d' }}>
+                              {wobblyCards.map((c, idx) => {
+                                const photo = photos[idx % photos.length] || photos[0];
+                                if (!photo) return null;
+                                const crop = crops[idx % crops.length] || { x: 50, y: 50 };
 
-                                  return (
-                                    <div 
-                                      key={`t3-col-${idx}`} 
-                                      className="relative h-[112%] overflow-hidden transition-all duration-300" 
-                                      style={{ 
-                                        width: `${100 / colCount}%`,
-                                        top: '-6%',
-                                        transform: `translateY(${fx.waveOffset}px)`,
-                                        borderLeft: idx > 0 ? '1.5px solid rgba(255, 255, 255, 0.45)' : 'none',
-                                        borderRight: idx < colCount - 1 ? '1.2px solid rgba(0, 0, 0, 0.35)' : 'none',
-                                        boxShadow: '0 25px 45px rgba(0, 0, 0, 0.55), inset 0 0 15px rgba(0, 0, 0, 0.25)'
+                                const cardWidth = Math.round(w * c.width);
+                                const cardHeight = Math.round(h * c.height);
+                                
+                                // Mirror horizontal coordinates if swap is active
+                                const left = swap ? Math.round(w * (1 - c.x - c.width)) : Math.round(w * c.x);
+                                const p1x = swap ? 100 - c.p1.x : c.p1.x;
+                                const p2x = swap ? 100 - c.p2.x : c.p2.x;
+                                const p3x = swap ? 100 - c.p3.x : c.p3.x;
+                                const p4x = swap ? 100 - c.p4.x : c.p4.x;
+                                
+                                const p1y = c.p1.y;
+                                const p2y = c.p2.y;
+                                const p3y = c.p3.y;
+                                const p4y = c.p4.y;
+
+                                // Maintain clockwise drawing order for polygon
+                                const pt1 = swap ? { x: p2x, y: p2y } : { x: p1x, y: p1y };
+                                const pt2 = swap ? { x: p1x, y: p1y } : { x: p2x, y: p2y };
+                                const pt3 = swap ? { x: p4x, y: p4y } : { x: p3x, y: p3y };
+                                const pt4 = swap ? { x: p3x, y: p3y } : { x: p4x, y: p4y };
+
+                                const clipPathVal = `polygon(${pt1.x}% ${pt1.y}%, ${pt2.x}% ${pt2.y}%, ${pt3.x}% ${pt3.y}%, ${pt4.x}% ${pt4.y}%)`;
+                                const pointsStr = `${pt1.x * cardWidth / 100},${pt1.y * cardHeight / 100} ${pt2.x * cardWidth / 100},${pt2.y * cardHeight / 100} ${pt3.x * cardWidth / 100},${pt3.y * cardHeight / 100} ${pt4.x * cardWidth / 100},${pt4.y * cardHeight / 100}`;
+                                const top = Math.round(h * c.y);
+
+                                // Sparkle coordinates on the inner corner
+                                const sparklePt = [pt1, pt2, pt3, pt4][c.sparkleIndex ?? 0];
+                                const sparkleX = Math.round(sparklePt.x * cardWidth / 100);
+                                const sparkleY = Math.round(sparklePt.y * cardHeight / 100);
+
+                                // Card-specific random shift for refraction effect
+                                const cardRng = mulberry32(c.seed);
+                                const cardRand = (min: number, max: number) => min + cardRng() * (max - min);
+                                const refractX = Math.round(cardRand(-180, 180)); // Much larger visible shift
+                                const refractY = Math.round(cardRand(-180, 180)); // Much larger visible shift
+                                const refractScale = cardRand(1.18, 1.48); // Much larger visible scale
+
+                                // Dynamic 3D transformations scaling with effectIntensity
+                                const rotXVal = (swap ? -c.rotX : c.rotX) * effectIntensity;
+                                const rotYVal = (swap ? -c.rotY : c.rotY) * effectIntensity;
+                                const rotZVal = (swap ? -c.rotZ : c.rotZ) * effectIntensity;
+                                const tzVal = c.tz * effectIntensity;
+
+                                const refractScaleVal = refractScale;
+                                const refractXVal = refractX;
+                                const refractYVal = refractY;
+
+                                return (
+                                  <div
+                                    key={`t3-card-${idx}`}
+                                    className="absolute transition-all duration-300 pointer-events-none"
+                                    style={{
+                                      left: `${left}px`,
+                                      top: `${top}px`,
+                                      width: `${cardWidth}px`,
+                                      height: `${cardHeight}px`,
+                                      transform: `perspective(1200px) rotateX(${rotXVal}deg) rotateY(${rotYVal}deg) rotateZ(${rotZVal}deg) translateZ(${tzVal}px)`,
+                                      transformStyle: 'preserve-3d',
+                                      filter: `drop-shadow(0 ${10 * effectIntensity}px ${20 * effectIntensity}px rgba(0, 0, 0, ${0.55 * effectIntensity}))`,
+                                    }}
+                                  >
+                                    {/* 2D Glass Extrusion Layers (Stacking layers with 2D offsets to simulate thick glass edges) */}
+                                    {/* 2D Glass Extrusion Layers (Stacking 10 layers with 2D offsets to simulate realistic thick glass edges) */}
+                                    {Array.from({ length: 10 }).map((_, lIdx) => {
+                                      const step = lIdx + 1;
+                                      const offset = step * 1.5 * effectIntensity;
+                                      const scale = 1.0 - step * 0.0015;
+                                      const bgOpacity = (0.04 - step * 0.003) * effectIntensity;
+                                      const borderOpacity = (0.28 - step * 0.02) * effectIntensity;
+                                      
+                                      return (
+                                        <div
+                                          key={`t3-glass-layer-${idx}-${lIdx}`}
+                                          className="absolute inset-0 pointer-events-none"
+                                          style={{
+                                            clipPath: clipPathVal,
+                                            transform: `translate(${-offset}px, ${offset}px) scale(${scale})`,
+                                            background: `linear-gradient(135deg, rgba(255, 255, 255, ${Math.max(0.08, bgOpacity * 2.0)}) 0%, rgba(255, 255, 255, 0.01) 50%, rgba(0, 0, 0, 0.2) 100%)`,
+                                            border: `1.2px solid rgba(255, 255, 255, ${Math.max(0.08, borderOpacity * 1.2)})`,
+                                          }}
+                                        />
+                                      );
+                                    })}
+
+                                    {/* The clipped card image wrapper */}
+                                    <div
+                                      className="w-full h-full absolute inset-0 overflow-hidden"
+                                      style={{
+                                        clipPath: clipPathVal,
+                                        background: '#0e1017',
+                                        boxShadow: `0 ${20 * effectIntensity}px ${45 * effectIntensity}px rgba(0,0,0,${0.55 * effectIntensity})`,
                                       }}
                                     >
-                                      {/* Crisp Design Image with random crops and offsets */}
-                                      <img 
-                                        src={photo.url} 
-                                        crossOrigin="anonymous" 
-                                        alt="Design" 
-                                        className="absolute inset-0 w-full h-full" 
-                                        style={{ 
+                                      <img
+                                        src={coverMixImages ? photo.url : bgPhoto}
+                                        crossOrigin="anonymous"
+                                        alt="Design"
+                                        className="absolute object-cover"
+                                        style={coverMixImages ? {
+                                          left: 0,
+                                          top: 0,
+                                          width: '100%',
+                                          height: '100%',
                                           objectFit: 'cover',
-                                          objectPosition: `${fx.randomCropX}% ${fx.randomCropY}%`,
-                                          transform: `scale(${fx.scale})`,
-                                          filter: 'saturate(1.08) contrast(1.04) brightness(1.02)'
-                                        }} 
+                                          objectPosition: `${crop.x}% ${crop.y}%`,
+                                          filter: `contrast(${c.contrast * (1 + activeIntensity * 0.08)}) brightness(${c.brightness * (1 - activeIntensity * 0.03)}) saturate(${1.0 - activeIntensity * 0.5}) grayscale(${activeIntensity * 0.5})`,
+                                          transform: `scale(${refractScaleVal * 1.15}) translate(${refractXVal / 2}px, ${refractYVal / 2}px)`,
+                                        } : {
+                                          left: `${-left}px`,
+                                          top: `${-top}px`,
+                                          width: `${w}px`,
+                                          height: `${h}px`,
+                                          maxWidth: 'none',
+                                          filter: `contrast(${c.contrast * (1 + activeIntensity * 0.08)}) brightness(${c.brightness * (1 - activeIntensity * 0.03)}) saturate(${1.0 - activeIntensity * 0.5}) grayscale(${activeIntensity * 0.5})`,
+                                          transform: `scale(${refractScaleVal}) translate(${refractXVal}px, ${refractYVal}px)`,
+                                          transformOrigin: `${left + cardWidth / 2}px ${top + cardHeight / 2}px`,
+                                        }}
                                       />
-                                      {/* 3D Cylindrical Glass Rod Highlight/Shadow Overlay */}
-                                      <div className="absolute inset-0 pointer-events-none" 
-                                        style={{ 
-                                          background: `linear-gradient(90deg, 
-                                            rgba(255, 255, 255, 0.28) 0%, 
-                                            rgba(255, 255, 255, 0.48) 8%, 
-                                            rgba(255, 255, 255, 0.12) 22%, 
-                                            transparent 50%, 
-                                            rgba(0, 0, 0, 0.15) 80%, 
-                                            rgba(0, 0, 0, 0.45) 100%)`
-                                        }} 
+                                      {/* Dynamic accent color overlay */}
+                                      {coverT5ColorMode && (
+                                        <div className="absolute inset-0 pointer-events-none z-[4]"
+                                          style={{
+                                            background: getRGBAColor(accent, activeIntensity * 0.6),
+                                            mixBlendMode: 'color',
+                                          }}
+                                        />
+                                      )}
+                                      {/* Accent color grading multiply overlay */}
+                                      <div className="absolute inset-0 pointer-events-none"
+                                        style={{
+                                          background: `linear-gradient(135deg, ${getRGBAColor(accent, activeIntensity * 0.15)} 0%, rgba(0,0,0,0.4) 100%)`,
+                                          mixBlendMode: 'multiply',
+                                          opacity: activeIntensity * 0.8
+                                        }}
                                       />
-                                      {/* Vertical glossy sheen line */}
-                                      <div className="absolute inset-y-0 left-[8%] w-[1.5px] pointer-events-none" 
-                                        style={{ 
-                                          background: 'rgba(255, 255, 255, 0.65)',
-                                          boxShadow: '0 0 4px rgba(255, 255, 255, 0.8)'
-                                        }} 
+                                      {/* Glass sheen overlay (1. Diagonal general gloss) */}
+                                      <div className="absolute inset-0 pointer-events-none"
+                                        style={{
+                                          background: 'linear-gradient(135deg, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0.03) 40%, rgba(0,0,0,0.45) 100%)',
+                                          mixBlendMode: 'overlay',
+                                        }}
                                       />
+                                      {/* Glass sheen overlay (2. Diagonal sharp specular glare streak floating slightly above) */}
+                                      <div className="absolute inset-0 pointer-events-none z-[8]"
+                                        style={{
+                                          background: 'linear-gradient(105deg, transparent 30%, rgba(255,255,255,0.12) 35%, rgba(255,255,255,0.4) 37%, rgba(255,255,255,0.12) 39%, transparent 45%)',
+                                          mixBlendMode: 'screen', // Changed from color-dodge to prevent burning
+                                          opacity: 0.18, // Reduced to prevent distortion
+                                          transform: 'translateZ(2px)',
+                                        }}
+                                      />
+                                      {/* Photorealistic glass reflection texture overlay */}
+                                      <img
+                                        src="/glass-reflection-texture.png"
+                                        alt=""
+                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[8]"
+                                        style={{
+                                          mixBlendMode: 'screen',
+                                          opacity: 0.35,
+                                        }}
+                                      />
+                                      {/* Glass Bevel 3D edge highlight (Dark bevel shadow + white glint line) */}
+                                      <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-[9]">
+                                        {/* Outer dark bevel shadow */}
+                                        <polygon 
+                                          points={pointsStr} 
+                                          fill="none" 
+                                          stroke="#000000" 
+                                          strokeWidth="3.8" 
+                                          strokeLinejoin="round"
+                                          opacity="0.45"
+                                        />
+                                        {/* Inner white bevel glint line */}
+                                        <polygon 
+                                          points={pointsStr} 
+                                          fill="none" 
+                                          stroke="#ffffff" 
+                                          strokeWidth="1.6" 
+                                          strokeLinejoin="round"
+                                          opacity="0.65"
+                                        />
+                                      </svg>
                                     </div>
-                                  );
-                                })}
-                              </div>
 
-                              {/* Glowing Cyber Grid Halftone Pattern overlay on Slices (Reference Image 2) */}
-                              <div className="absolute inset-0 pointer-events-none z-[12] mix-blend-overlay opacity-35" 
-                                style={{ 
-                                  backgroundImage: 'radial-gradient(rgba(255,255,255,0.3) 1.5px, transparent 1.5px)', 
-                                  backgroundSize: '16px 16px' 
-                                }} 
+                                    {/* Glowing gold glass shard borders — Toned down to act as base structural glow underneath the overlay */}
+                                    <svg 
+                                      className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" 
+                                      style={{ 
+                                        zIndex: 10,
+                                        filter: 'drop-shadow(0 0 2px rgba(244,194,90,0.4))'
+                                      }}
+                                    >
+                                      {[
+                                        { from: pt1, to: pt2, draw: c.drawEdges?.[0] },
+                                        { from: pt2, to: pt3, draw: c.drawEdges?.[1] },
+                                        { from: pt3, to: pt4, draw: c.drawEdges?.[2] },
+                                        { from: pt4, to: pt1, draw: c.drawEdges?.[3] }
+                                      ].map((edge, eIdx) => {
+                                        if (!edge.draw) return null;
+                                        
+                                        const x1 = edge.from.x * cardWidth / 100;
+                                        const y1 = edge.from.y * cardHeight / 100;
+                                        const x2 = edge.to.x * cardWidth / 100;
+                                        const y2 = edge.to.y * cardHeight / 100;
+
+                                        return (
+                                          <g key={`edge-${idx}-${eIdx}`}>
+                                            {/* Level 3: Soft outer glow */}
+                                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={crackColor} strokeWidth="8" strokeLinecap="round" opacity={effectIntensity * 0.05} />
+                                            {/* Level 2: Medium glow */}
+                                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={crackColor} strokeWidth="4" strokeLinecap="round" opacity={effectIntensity * 0.12} />
+                                            {/* Level 1: Core gold line */}
+                                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={crackColor} strokeWidth="1.8" strokeLinecap="round" opacity={effectIntensity * 0.25} />
+                                            {/* Highlight: White-gold inner specular reflection line */}
+                                            <line x1={x1} y1={y1} x2={x2} y2={y2} stroke="#ffffff" strokeWidth="0.8" strokeLinecap="round" opacity={effectIntensity * 0.3} />
+                                          </g>
+                                        );
+                                      })}
+                                    </svg>
+                                  </div>
+                                );
+                              })}
+
+                              {/* 3D Gold Shatter Cracks Texture Overlay */}
+                              <img
+                                src="/cover-template3-gold-cracks.png"
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                                style={{
+                                  mixBlendMode: 'screen',
+                                  opacity: effectIntensity * 0.42,
+                                  zIndex: 15,
+                                }}
                               />
 
-                              {/* Glass Sheen overlay */}
-                              <WavyGlass accent={accent} opacity={0.55} density="normal" />
+                              {/* Light Leak Layer 2: Scattered rainbow prisms for realistic glass sheen */}
+                              <img
+                                src={LIGHT_LEAK_OVERLAYS[4]}
+                                alt=""
+                                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[16]"
+                                style={{
+                                  mixBlendMode: 'screen',
+                                  opacity: 0.4,
+                                }}
+                              />
                             </div>
                           )}
 
-                          <Header accent={accent} brandRight={true} align={textAlign} imagesSide={imagesSide} />
-                          <TextBlock accent={accent} align={textAlign} imagesSide={imagesSide} />
+                          {/* Light Leak Layer 1: Warm amber/blue diagonal streak */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[1]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.35,
+                            }}
+                          />
+
+                          {/* Glowing radial halo behind the center badge */}
+                          <div 
+                            className="absolute pointer-events-none rounded-full"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 1.55}px`,
+                              height: `${circleSize * 1.55}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: `radial-gradient(circle, ${getRGBAColor(accent, 0.35)} 0%, ${getRGBAColor(accent, 0.08)} 50%, transparent 75%)`,
+                              filter: 'blur(16px)',
+                              zIndex: 15
+                            }}
+                          />
+
+                          {/* Soft 3D Sphere shadow backing */}
+                          <div 
+                            className="absolute pointer-events-none rounded-full"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 0.95}px`,
+                              height: `${circleSize * 0.95}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: 'rgba(0, 0, 0, 0.45)',
+                              filter: 'blur(20px)',
+                              zIndex: 16
+                            }}
+                          />
+
+                          {/* 3D Glass Sphere Texture Overlay (Rendered as sibling for perfect mixBlendMode blending, unclipped) */}
+                          <img
+                            src="/cover-template3-glass-sphere.png"
+                            alt=""
+                            className="absolute pointer-events-none"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize}px`,
+                              height: `${circleSize}px`,
+                              transform: `translate(-50%, -50%) scale(${coverT4.zoom ?? 1.55})`,
+                              transformOrigin: 'center center',
+                              mixBlendMode: 'screen',
+                              opacity: 0.98,
+                              zIndex: 18
+                            }}
+                          />
+
+                          {/* 4. Centered Glassmorphism Focus Circle (Z-index: 20) */}
+                          <div 
+                            className="absolute pointer-events-none z-20 flex flex-col justify-center items-center p-6"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize}px`,
+                              height: `${circleSize}px`,
+                              transform: 'translate(-50%, -50%)',
+                              borderRadius: '50%',
+                              background: 'radial-gradient(135deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.01) 100%)',
+                              border: `1.2px solid ${getRGBAColor(accent, 0.35)}`,
+                              backdropFilter: 'blur(3px)',
+                              WebkitBackdropFilter: 'blur(3px)',
+                              boxShadow: `inset 0 0 15px rgba(255,255,255,0.1), 0 8px 25px rgba(0,0,0,0.4)`,
+                            }}
+                          >
+                            {/* Inner spotlight behind text */}
+                            <div className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: `radial-gradient(circle at 50% 50%, ${getRGBAColor(accent, 0.15)} 0%, transparent 70%)`,
+                              }}
+                            />
+
+                            {/* Centered Campaign Content */}
+                            {coverShow.kicker && kickerText && (
+                              <div 
+                                dir="rtl" 
+                                className="font-bold text-center tracking-wide mb-1 select-none z-10" 
+                                style={{ 
+                                  color: accent,
+                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9)}px`, 
+                                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                }}
+                              >
+                                {kickerText}
+                              </div>
+                            )}
+                            
+                            <div 
+                              dir="rtl" 
+                              className="font-black text-center text-white select-none max-w-[90%] break-words z-10" 
+                              style={{ 
+                                fontFamily: "'Tajawal', sans-serif", 
+                                fontSize: `${coverFontSizes.campaignName}px`, 
+                                lineHeight: 1.15,
+                                textShadow: '0 0 20px rgba(255,255,255,0.45), 0 4px 12px rgba(0,0,0,0.9)'
+                              }}
+                            >
+                              {campaignTitle}
+                            </div>
+
+                            {/* Small horizontal gold line divider */}
+                            <div className="w-14 h-[2px] mx-auto my-3.5 rounded-full z-10"
+                              style={{
+                                background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+                                boxShadow: `0 0 8px ${getRGBAColor(accent, 0.8)}`
+                              }}
+                            />
+
+                            {coverShow.tagline && taglineText && (
+                              <div 
+                                dir="rtl"
+                                className="inline-flex items-center justify-center font-extrabold text-center select-none z-10" 
+                                style={{ 
+                                  color: '#030305', 
+                                  background: 'linear-gradient(180deg, #ffd700 0%, #d4af37 50%, #aa7c11 100%)', 
+                                  borderRadius: '9999px', 
+                                  padding: '10px 30px', 
+                                  fontSize: `${coverFontSizes.tagline}px`,
+                                  boxShadow: '0 8px 20px rgba(212, 175, 55, 0.35), inset 0 1px 0 rgba(255,255,255,0.5)',
+                                  textShadow: '0 1px 0 rgba(255,255,255,0.2)'
+                                }}
+                              >
+                                {taglineText}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Footer information displayed conditionally */}
                           <Footer accent={accent} />
                         </div>
                       );
                     }
+
+                    // ============= TEMPLATE 6 — LUXURY 3D GLASS PRISM COLUMNS =============
+                    if (coverTemplate === 'template6') {
+                      const accent = coverAccentColor;
+                      const glow = coverGlowColor;
+                      const gI = coverGlowIntensity;
+                      const swap = coverSwapSides;
+                      const textAlign: 'left' | 'right' | 'center' = 'center';
+                      const activeIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 0;
+
+                      const photos = pickPhotos(5); // 5 columns
+                      const crops = getTemplateCrops(photos, 5);
+
+                      const w = canvasWidth;
+                      const h = canvasHeight;
+
+                      const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
+
+                      // Define 5 columns layout in 2D perspective (with custom points for bevels)
+                      const columns = [
+                        {
+                          id: 'col1',
+                          x: swap ? 0.81 : 0.03,
+                          y: 0.16,
+                          width: 0.16,
+                          height: 0.72,
+                          p1: { x: 0, y: 8 }, p2: { x: 100, y: 4 }, p3: { x: 100, y: 92 }, p4: { x: 0, y: 88 },
+                          photoIdx: swap ? 4 : 0,
+                        },
+                        {
+                          id: 'col2',
+                          x: swap ? 0.62 : 0.22,
+                          y: 0.09,
+                          width: 0.16,
+                          height: 0.78,
+                          p1: { x: 0, y: 4 }, p2: { x: 100, y: 12 }, p3: { x: 100, y: 88 }, p4: { x: 0, y: 96 },
+                          photoIdx: swap ? 3 : 1,
+                        },
+                        {
+                          id: 'col3',
+                          x: 0.41,
+                          y: 0.07,
+                          width: 0.18,
+                          height: 0.86,
+                          p1: { x: 0, y: 12 }, p2: { x: 100, y: 6 }, p3: { x: 100, y: 94 }, p4: { x: 0, y: 88 },
+                          photoIdx: 2,
+                        },
+                        {
+                          id: 'col4',
+                          x: swap ? 0.22 : 0.62,
+                          y: 0.11,
+                          width: 0.16,
+                          height: 0.80,
+                          p1: { x: 0, y: 6 }, p2: { x: 100, y: 14 }, p3: { x: 100, y: 90 }, p4: { x: 0, y: 82 },
+                          photoIdx: swap ? 1 : 3,
+                        },
+                        {
+                          id: 'col5',
+                          x: swap ? 0.03 : 0.81,
+                          y: 0.18,
+                          width: 0.16,
+                          height: 0.70,
+                          p1: { x: 0, y: 14 }, p2: { x: 100, y: 8 }, p3: { x: 100, y: 84 }, p4: { x: 0, y: 90 },
+                          photoIdx: swap ? 0 : 4,
+                        }
+                      ];
+
+                      // Circle size (increased to 48% for a larger sphere presence)
+                      const circleSize = Math.round(Math.min(w, h) * 0.48);
+
+                      const campaignTitle = (adTypeOverride && adTypeOverride.trim()) || ((groupedContracts.find((x:any) => String(x.contract_id) === selectedContractId) as any)?.adType) || coverCampaignName || coverTitle2;
+                      const kickerText = coverKicker;
+                      const taglineText = coverTagline;
+
+                      const bgPhoto = photos[0]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+
+                      return (
+                        <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
+                          style={{ 
+                            ['--cover-accent' as any]: accent, 
+                            background: '#040407',
+                            padding: '64px' 
+                          }}
+                        >
+                          {/* 0. Blurred design image background replica (independently blurred at Z-0) */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none scale-105"
+                            style={{
+                              backgroundImage: `url('${bgPhoto}')`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              filter: coverT5ColorMode
+                                ? `blur(16px) brightness(0.22) saturate(0.1) grayscale(0.9)`
+                                : 'blur(16px) brightness(0.25) saturate(1.0)',
+                              opacity: 0.95
+                            }}
+                          />
+                          {/* Dynamic accent color overlay on background */}
+                          {coverT5ColorMode && (
+                            <div 
+                              className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: getRGBAColor(accent, (coverT4.fgBlur ?? 0.6) * 0.35),
+                                mixBlendMode: 'color',
+                              }}
+                            />
+                          )}
+                          {/* Floating accent-colored background lights */}
+                          <div className="absolute inset-0 z-0 pointer-events-none" style={{ mixBlendMode: 'screen', opacity: 0.5 }}>
+                            <div className="absolute rounded-full" style={{ left: '15%', top: '20%', width: '450px', height: '450px', background: `radial-gradient(circle, ${getRGBAColor(accent, 0.2)} 0%, transparent 70%)`, filter: 'blur(60px)' }} />
+                            <div className="absolute rounded-full" style={{ right: '15%', bottom: '20%', width: '450px', height: '450px', background: `radial-gradient(circle, ${getRGBAColor(accent, 0.2)} 0%, transparent 70%)`, filter: 'blur(60px)' }} />
+                          </div>
+                          {/* Dark vignette overlay for contrast and depth */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none"
+                            style={{
+                              background: 'radial-gradient(circle, transparent 40%, rgba(3, 3, 5, 0.85) 100%), linear-gradient(180deg, rgba(3, 3, 5, 0.4) 0%, rgba(12, 13, 18, 0.7) 100%)'
+                            }}
+                          />
+
+                          {/* 1. Brand Logo Header Section (Unified with other templates) */}
+                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} />
+
+                          {/* 2. Spotlight background behind text/glass (Z-index: 15) */}
+                          <div className="absolute pointer-events-none z-[15]" 
+                            style={{ 
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 1.6}px`,
+                              height: `${circleSize * 1.6}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: `radial-gradient(circle, ${spotlightColor}${alphaToHex(0.35 * gI.opacity)} 0%, ${spotlightColor}${alphaToHex(0.10 * gI.opacity)} 50%, transparent 80%)`, 
+                              filter: `blur(${gI.blur * 1.5}px)`,
+                              opacity: 0.95
+                            }} 
+                          />
+
+                          {/* 3. 2D Offset Glass Column Prisms (Z-index: 10) */}
+                          {coverShow.collage && (
+                            <div className="absolute inset-0 z-10 pointer-events-none" style={{ perspective: '1200px', transformStyle: 'preserve-3d' }}>
+                              {columns.map((c, idx) => {
+                                const photo = photos[c.photoIdx % photos.length] || photos[0];
+                                if (!photo) return null;
+                                const crop = crops[c.photoIdx % crops.length] || { x: 50, y: 50 };
+
+                                const heightScale = coverT4.cardHeight ?? 1.0;
+
+                                // Seeded random factors per column depending on shuffle seed
+                                const colRng = mulberry32(idx * 777 + (swap ? 99 : 123) + (coverShuffleSeed || 1));
+                                const colZoomVal = 1.15 + colRng() * 0.35; // Prism zoom shift (highly visible)
+                                const colShiftX = (colRng() * 120 - 60) * activeIntensity; // Highly visible shift
+                                const colShiftY = (colRng() * 120 - 60) * activeIntensity; // Highly visible shift
+
+                                // Randomize size and offset slightly based on shuffle seed!
+                                const wScale = 0.9 + colRng() * 0.2; // 0.9 to 1.1 width scale
+                                const hScale = 0.9 + colRng() * 0.2; // 0.9 to 1.1 height scale
+                                const colWidth = Math.round(w * c.width * wScale);
+                                const colHeight = Math.round(h * c.height * heightScale * hScale);
+                                const left = Math.round(w * c.x + (colRng() * 16 - 8));
+                                const colY = (1 - (c.height * heightScale * hScale)) / 2;
+                                const top = Math.round(h * colY + (colRng() * 16 - 8));
+
+                                // 3D Rotations and Translations based on shuffle seed!
+                                const rotXVal = (colRng() * 14 - 7) * activeIntensity;
+                                const rotYVal = (colRng() * 16 - 8) * activeIntensity;
+                                const rotZVal = (colRng() * 6 - 3) * activeIntensity;
+                                const tzVal = (colRng() * 60 - 30) * activeIntensity;
+
+                                const clipPathVal = `polygon(${c.p1.x}% ${c.p1.y}%, ${c.p2.x}% ${c.p2.y}%, ${c.p3.x}% ${c.p3.y}%, ${c.p4.x}% ${c.p4.y}%)`;
+                                const pointsStr = `${c.p1.x * colWidth / 100},${c.p1.y * colHeight / 100} ${c.p2.x * colWidth / 100},${c.p2.y * colHeight / 100} ${c.p3.x * colWidth / 100},${c.p3.y * colHeight / 100} ${c.p4.x * colWidth / 100},${c.p4.y * colHeight / 100}`;
+
+                                const effectIntensity = 1.0;
+
+                                return (
+                                  <div
+                                    key={`t6-col-${c.id}`}
+                                    className="absolute transition-all duration-300 pointer-events-none"
+                                    style={{
+                                      left: `${left}px`,
+                                      top: `${top}px`,
+                                      width: `${colWidth}px`,
+                                      height: `${colHeight}px`,
+                                      transform: `perspective(1200px) rotateX(${rotXVal}deg) rotateY(${rotYVal}deg) rotateZ(${rotZVal}deg) translateZ(${tzVal}px)`,
+                                      transformStyle: 'preserve-3d',
+                                      filter: `drop-shadow(0 ${10 * effectIntensity}px ${20 * effectIntensity}px rgba(0, 0, 0, ${0.55 * effectIntensity}))`,
+                                    }}
+                                  >
+                                    {/* 2D Glass Extrusion Layers (Stacking 10 layers with 2D offsets to simulate realistic thick glass edges) */}
+                                    {Array.from({ length: 10 }).map((_, lIdx) => {
+                                      const step = lIdx + 1;
+                                      const offset = step * 1.5 * effectIntensity;
+                                      const scale = 1.0 - step * 0.0015;
+                                      const bgOpacity = (0.04 - step * 0.003) * effectIntensity;
+                                      const borderOpacity = (0.28 - step * 0.02) * effectIntensity;
+                                      
+                                      return (
+                                        <div
+                                          key={`t6-glass-layer-${c.id}-${lIdx}`}
+                                          className="absolute inset-0 pointer-events-none"
+                                          style={{
+                                            clipPath: clipPathVal,
+                                            transform: `translate(${-offset}px, ${offset}px) scale(${scale})`,
+                                            background: `linear-gradient(135deg, rgba(255, 255, 255, ${Math.max(0.08, bgOpacity * 2.0)}) 0%, rgba(255, 255, 255, 0.01) 50%, rgba(0, 0, 0, 0.2) 100%)`,
+                                            border: `1.2px solid rgba(255, 255, 255, ${Math.max(0.08, borderOpacity * 1.2)})`,
+                                          }}
+                                        />
+                                      );
+                                    })}
+
+                                    {/* The clipped card image wrapper */}
+                                    <div
+                                      className="w-full h-full absolute inset-0 overflow-hidden"
+                                      style={{
+                                        clipPath: clipPathVal,
+                                        background: '#0b0c10',
+                                        boxShadow: 'inset 0 0 20px rgba(0,0,0,0.8)',
+                                      }}
+                                    >
+                                      <img
+                                        src={coverMixImages ? photo.url : bgPhoto}
+                                        crossOrigin="anonymous"
+                                        alt="Design column"
+                                        className="absolute object-cover"
+                                        style={coverMixImages ? {
+                                          left: 0,
+                                          top: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          objectPosition: `${crop.x}% ${crop.y}%`,
+                                          filter: `contrast(${1.0 + activeIntensity * 0.06}) brightness(${0.98 - activeIntensity * 0.04}) saturate(${1.0 - activeIntensity * 0.5}) grayscale(${activeIntensity * 0.5})`,
+                                          transform: `scale(${colZoomVal * 1.1}) translate(${colShiftX / 2}px, ${colShiftY / 2}px)`,
+                                        } : {
+                                          left: `${-left}px`,
+                                          top: `${-top}px`,
+                                          width: `${w}px`,
+                                          height: `${h}px`,
+                                          maxWidth: 'none',
+                                          filter: `contrast(${1.0 + activeIntensity * 0.06}) brightness(${0.98 - activeIntensity * 0.04}) saturate(${1.0 - activeIntensity * 0.5}) grayscale(${activeIntensity * 0.5})`,
+                                          transform: `scale(${colZoomVal}) translate(${colShiftX}px, ${colShiftY}px)`,
+                                          transformOrigin: `${left + colWidth / 2}px ${top + colHeight / 2}px`,
+                                        }}
+                                      />
+                                      {/* Dynamic accent color grading overlay */}
+                                      <div className="absolute inset-0 pointer-events-none z-[4]"
+                                        style={{
+                                          background: coverT5ColorMode
+                                            ? getRGBAColor(accent, activeIntensity * 0.5)
+                                            : `linear-gradient(135deg, ${getRGBAColor(accent, 0.08)} 0%, rgba(0,0,0,0.3) 100%)`,
+                                          mixBlendMode: coverT5ColorMode ? 'color' : 'multiply',
+                                          opacity: coverT5ColorMode ? 1 : 0.65
+                                        }}
+                                      />
+                                      {/* Diagonal general gloss */}
+                                      <div className="absolute inset-0 pointer-events-none z-[7]"
+                                        style={{
+                                          background: 'linear-gradient(135deg, rgba(255,255,255,0.15) 0%, rgba(255,255,255,0.01) 50%, rgba(0,0,0,0.25) 100%)',
+                                          mixBlendMode: 'overlay',
+                                        }}
+                                      />
+                                      {/* Specular light streak floating slightly above */}
+                                      <div className="absolute inset-0 pointer-events-none z-[8]"
+                                        style={{
+                                          background: 'linear-gradient(100deg, transparent 30%, rgba(255,255,255,0.08) 36%, rgba(255,255,255,0.25) 38%, rgba(255,255,255,0.08) 40%, transparent 48%)',
+                                          mixBlendMode: 'screen', // Changed from color-dodge to prevent burning
+                                          opacity: 0.18, // Reduced to prevent distortion
+                                          transform: 'translateZ(2px)',
+                                        }}
+                                      />
+                                      {/* Photorealistic glass reflection texture overlay */}
+                                      <img
+                                        src="/glass-reflection-texture.png"
+                                        alt=""
+                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[8]"
+                                        style={{
+                                          mixBlendMode: 'screen',
+                                          opacity: 0.35,
+                                        }}
+                                      />
+                                      {/* Glass Bevel 3D edge highlight (Dark bevel shadow + white glint line) */}
+                                      <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-[9]">
+                                        {/* Outer dark bevel shadow */}
+                                        <polygon 
+                                          points={pointsStr} 
+                                          fill="none" 
+                                          stroke="#000000" 
+                                          strokeWidth="3.8" 
+                                          strokeLinejoin="round"
+                                          opacity="0.45"
+                                        />
+                                        {/* Inner white bevel glint line */}
+                                        <polygon 
+                                          points={pointsStr} 
+                                          fill="none" 
+                                          stroke="#ffffff" 
+                                          strokeWidth="1.6" 
+                                          strokeLinejoin="round"
+                                          opacity="0.65"
+                                        />
+                                      </svg>
+                                    </div>
+
+                                    {/* Ultra fine glowing gold outlines for 3D presence */}
+                                    <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-[10]" style={{ filter: 'drop-shadow(0 0 4px rgba(244,194,90,0.35))' }}>
+                                      <polygon 
+                                        points={pointsStr} 
+                                        fill="none" 
+                                        stroke="#f4c25a" 
+                                        strokeWidth="1.2" 
+                                        strokeLinejoin="round"
+                                        opacity="0.5"
+                                      />
+                                    </svg>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* Soft 3D Sphere shadow backing */}
+                          <div 
+                            className="absolute pointer-events-none rounded-full"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize * 0.95}px`,
+                              height: `${circleSize * 0.95}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: 'rgba(0, 0, 0, 0.45)',
+                              filter: 'blur(20px)',
+                              zIndex: 16
+                            }}
+                          />
+
+                          {/* 3D Glass Sphere Texture Overlay (Rendered as sibling for perfect mixBlendMode blending, unclipped) */}
+                          <img
+                            src="/cover-template3-glass-sphere.png"
+                            alt=""
+                            className="absolute pointer-events-none"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize}px`,
+                              height: `${circleSize}px`,
+                              transform: `translate(-50%, -50%) scale(${coverT4.zoom ?? 1.55})`,
+                              transformOrigin: 'center center',
+                              mixBlendMode: 'screen',
+                              opacity: 0.98,
+                              zIndex: 18
+                            }}
+                          />
+
+                          {/* 4. Centered Glassmorphism Focus Circle (Z-index: 20) */}
+                          <div 
+                            className="absolute pointer-events-none z-20 flex flex-col justify-center items-center p-6"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${circleSize}px`,
+                              height: `${circleSize}px`,
+                              transform: 'translate(-50%, -50%)',
+                              borderRadius: '50%',
+                              background: 'transparent',
+                              border: 'none',
+                            }}
+                          >
+                            {/* Inner spotlight behind text */}
+                            <div className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: `radial-gradient(circle at 50% 50%, ${getRGBAColor(accent, 0.15)} 0%, transparent 70%)`,
+                              }}
+                            />
+
+                            {/* Centered Campaign Content */}
+                            {coverShow.kicker && kickerText && (
+                              <div 
+                                dir="rtl" 
+                                className="font-bold text-center tracking-wide mb-1 select-none z-10" 
+                                style={{ 
+                                  color: accent,
+                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9)}px`, 
+                                  textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                }}
+                              >
+                                {kickerText}
+                              </div>
+                            )}
+                            
+                            <div 
+                              dir="rtl" 
+                              className="font-black text-center text-white select-none max-w-[90%] break-words z-10" 
+                              style={{ 
+                                fontFamily: "'Tajawal', sans-serif", 
+                                fontSize: `${coverFontSizes.campaignName}px`, 
+                                lineHeight: 1.15,
+                                textShadow: '0 0 20px rgba(255,255,255,0.45), 0 4px 12px rgba(0,0,0,0.9)'
+                              }}
+                            >
+                              {campaignTitle}
+                            </div>
+
+                            {/* Small horizontal gold line divider */}
+                            <div className="w-14 h-[2px] mx-auto my-3.5 rounded-full z-10"
+                              style={{
+                                background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+                                boxShadow: `0 0 8px ${getRGBAColor(accent, 0.8)}`
+                              }}
+                            />
+
+                            {coverShow.tagline && taglineText && (
+                              <div 
+                                dir="rtl"
+                                className="inline-flex items-center justify-center font-extrabold text-center select-none z-10" 
+                                style={{ 
+                                  color: '#030305', 
+                                  background: 'linear-gradient(180deg, #ffd700 0%, #d4af37 50%, #aa7c11 100%)', 
+                                  borderRadius: '9999px', 
+                                  padding: '10px 30px', 
+                                  fontSize: `${coverFontSizes.tagline}px`,
+                                  boxShadow: '0 8px 20px rgba(212, 175, 55, 0.35), inset 0 1px 0 rgba(255,255,255,0.5)',
+                                  textShadow: '0 1px 0 rgba(255,255,255,0.2)'
+                                }}
+                              >
+                                {taglineText}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Light Leak Layer 1: Warm amber/blue diagonal streak */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[1]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.35,
+                            }}
+                          />
+
+                          {/* Light Leak Layer 2: Scattered rainbow prisms for realistic glass sheen */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[4]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[22]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.4,
+                            }}
+                          />
+
+                          {/* Footer information displayed conditionally */}
+                          <Footer accent={accent} />
+                        </div>
+                      );
+                    }
+
+                    // ============= TEMPLATE 7 — CINEMATIC 3D MOSAIC PUZZLE =============
+                    if (coverTemplate === 'template7') {
+                      const accent = coverAccentColor;
+                      const glow = coverGlowColor;
+                      const gI = coverGlowIntensity;
+                      const swap = coverSwapSides;
+                      const textAlign: 'left' | 'right' | 'center' = 'center';
+                      const activeIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 0;
+                      
+                      // Depth intensity derived from coverT4.zoom (default to 1.3)
+                      const depthIntensity = coverT4.zoom ?? 1.3;
+                      // Gap size ratio derived from coverT4.cardHeight (default to 0.6)
+                      const gapRatio = coverT4.cardHeight ?? 0.6;
+                      
+                      const photos = pickPhotos(8); // 8 collage photos
+                      const crops = getTemplateCrops(photos, 8);
+
+                      const w = canvasWidth;
+                      const h = canvasHeight;
+
+                      const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
+
+                      // Generate mosaic layout dynamically using seeded recursive partition
+                      const generateMosaic = () => {
+                        const list = [{ x: 0, y: 0, w: 1, h: 1 }];
+                        const rng = mulberry32(coverShuffleSeed + 777);
+                        const blockCount = 8;
+                        
+                        for (let i = 0; i < blockCount - 1; i++) {
+                          let maxAreaIdx = 0;
+                          let maxArea = 0;
+                          for (let j = 0; j < list.length; j++) {
+                            const area = list[j].w * list[j].h;
+                            if (area > maxArea) {
+                              maxArea = area;
+                              maxAreaIdx = j;
+                            }
+                          }
+                          const target = list[maxAreaIdx];
+                          
+                          // Determine split direction: horizontal or vertical
+                          const splitVertical = target.w / target.h > 1.3 
+                            ? true 
+                            : (target.h / target.w > 1.3 ? false : rng() > 0.5);
+                            
+                          const splitRatio = 0.35 + rng() * 0.3; // split between 35% and 65%
+                          
+                          if (splitVertical) {
+                            const w1 = target.w * splitRatio;
+                            const w2 = target.w * (1 - splitRatio);
+                            list.splice(maxAreaIdx, 1, 
+                              { x: target.x, y: target.y, w: w1, h: target.h },
+                              { x: target.x + w1, y: target.y, w: w2, h: target.h }
+                            );
+                          } else {
+                            const h1 = target.h * splitRatio;
+                            const h2 = target.h * (1 - splitRatio);
+                            list.splice(maxAreaIdx, 1, 
+                              { x: target.x, y: target.y, w: target.w, h: h1 },
+                              { x: target.x, y: target.y + h1, w: target.w, h: h2 }
+                            );
+                          }
+                        }
+                        
+                        return list.map((b, idx) => ({
+                          ...b,
+                          seed: coverShuffleSeed + idx * 100,
+                        }));
+                      };
+
+                      const mosaicBlocks = generateMosaic();
+                      const campaignTitle = (adTypeOverride && adTypeOverride.trim()) || ((groupedContracts.find((x:any) => String(x.contract_id) === selectedContractId) as any)?.adType) || coverCampaignName || coverTitle2;
+                      const kickerText = coverKicker;
+                      const taglineText = coverTagline;
+                      const panelLogoEl = textElements.find(el => el.id === 'company_logo');
+                      const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
+
+                      const bgPhoto = photos[0]?.url || canvasImageUrl || 'https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1600&auto=format&fit=crop';
+
+                      // Frosted glass card dimensions
+                      const cardW = Math.round(w * 0.68);
+                      const cardH = Math.round(h * 0.38);
+
+                      return (
+                        <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
+                          style={{ 
+                            ['--cover-accent' as any]: accent, 
+                            background: '#020204',
+                            padding: '64px' 
+                          }}
+                        >
+                          {/* 0. Blurred design background image replica */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none scale-105"
+                            style={{
+                              backgroundImage: `url('${bgPhoto}')`,
+                              backgroundSize: 'cover',
+                              backgroundPosition: 'center',
+                              filter: coverT5ColorMode
+                                ? `blur(24px) brightness(0.12) saturate(0.1) grayscale(0.95)`
+                                : 'blur(24px) brightness(0.15) saturate(0.9)',
+                              opacity: 0.95
+                            }}
+                          />
+
+                          {/* Dynamic accent color overlay on background */}
+                          {coverT5ColorMode && (
+                            <div 
+                              className="absolute inset-0 z-0 pointer-events-none"
+                              style={{
+                                background: getRGBAColor(accent, (coverT4.fgBlur ?? 0.6) * 0.3),
+                                mixBlendMode: 'color',
+                              }}
+                            />
+                          )}
+
+                          {/* Cinematic dual light leaks (Cyan and Accent/Amber) */}
+                          <div className="absolute inset-0 z-0 pointer-events-none" style={{ mixBlendMode: 'screen', opacity: 0.65 }}>
+                            {/* Cyan light leak left side */}
+                            <div className="absolute rounded-full" 
+                              style={{ 
+                                left: '-10%', 
+                                top: '15%', 
+                                width: '600px', 
+                                height: '600px', 
+                                background: 'radial-gradient(circle, rgba(6, 182, 212, 0.16) 0%, transparent 70%)', 
+                                filter: 'blur(70px)' 
+                              }} 
+                            />
+                            {/* Amber / Accent light leak right side */}
+                            <div className="absolute rounded-full" 
+                              style={{ 
+                                right: '-10%', 
+                                bottom: '15%', 
+                                width: '600px', 
+                                height: '600px', 
+                                background: `radial-gradient(circle, ${getRGBAColor(spotlightColor, 0.18)} 0%, transparent 70%)`, 
+                                filter: 'blur(70px)' 
+                              }} 
+                            />
+                          </div>
+
+                          {/* Vignette */}
+                          <div 
+                            className="absolute inset-0 z-0 pointer-events-none"
+                            style={{
+                              background: 'radial-gradient(circle, transparent 30%, rgba(1, 1, 3, 0.92) 100%), linear-gradient(180deg, rgba(1, 1, 3, 0.3) 0%, rgba(2, 3, 6, 0.7) 100%)'
+                            }}
+                          />
+
+                          {/* 1. Header (Logo & Brand Info) */}
+                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} showBlurCard={true} />
+
+                          {/* 2. 3D Floating Mosaic Puzzle Blocks (Z-index: 10) */}
+                          {coverShow.collage && (
+                            <div className="absolute inset-0 z-10 pointer-events-none" style={{ perspective: '1200px', transformStyle: 'preserve-3d' }}>
+                              {mosaicBlocks.map((b, idx) => {
+                                const photo = photos[idx % photos.length] || photos[0];
+                                if (!photo) return null;
+                                const crop = crops[idx % crops.length] || { x: 50, y: 50 };
+
+                                // Seeding randoms for 3D rotation and depth displacements
+                                // Seeding randoms for 3D rotation and depth displacements
+                                const blockRng = mulberry32(b.seed);
+                                // Transformations scale down to 0 as activeIntensity goes to 0 (clean flat design)
+                                const rotX = (blockRng() * 14 - 7) * activeIntensity * depthIntensity;
+                                const rotY = (blockRng() * 14 - 7) * activeIntensity * depthIntensity;
+                                const rotZ = (blockRng() * 6 - 3) * activeIntensity * depthIntensity;
+                                const tz = (blockRng() * 60 - 30) * activeIntensity * depthIntensity;
+
+                                // Seeded random zoom and translate per block to focus on different details
+                                const blockZoomVal = 1.15 + blockRng() * 0.35; // Prism zoom shift (highly visible)
+                                const blockShiftX = (blockRng() * 100 - 50) * activeIntensity; // Highly visible shift
+                                const blockShiftY = (blockRng() * 100 - 50) * activeIntensity; // Highly visible shift
+
+                                // Pixel dimensions with customizable gap size
+                                const gapSize = gapRatio * 18;
+                                const colWidth = Math.max(30, Math.round(w * b.w - gapSize));
+                                const colHeight = Math.max(30, Math.round(h * b.h - gapSize));
+                                const left = Math.round(w * b.x + gapSize / 2);
+                                const top = Math.round(h * b.y + gapSize / 2);
+
+                                return (
+                                  <div
+                                    key={`t7-block-${idx}`}
+                                    className="absolute transition-all duration-300 pointer-events-none"
+                                    style={{
+                                      left: `${left}px`,
+                                      top: `${top}px`,
+                                      width: `${colWidth}px`,
+                                      height: `${colHeight}px`,
+                                      transform: `perspective(1200px) rotateX(${rotX}deg) rotateY(${rotY}deg) rotateZ(${rotZ}deg) translateZ(${tz}px)`,
+                                      transformStyle: 'preserve-3d',
+                                      filter: `drop-shadow(0 ${Math.max(2, 8 * activeIntensity)}px ${Math.max(3, 12 * activeIntensity)}px rgba(0, 0, 0, ${0.45 * activeIntensity}))`,
+                                    }}
+                                  >
+                                    <div
+                                      className="w-full h-full absolute inset-0 overflow-hidden rounded-xl border"
+                                      style={{
+                                        borderColor: getRGBAColor(accent, 0.15),
+                                        background: '#040507',
+                                        boxShadow: 'inset 0 0 15px rgba(0,0,0,0.7)',
+                                      }}
+                                    >
+                                      <img
+                                        src={coverMixImages ? photo.url : bgPhoto}
+                                        crossOrigin="anonymous"
+                                        alt="Design block"
+                                        className="absolute object-cover"
+                                        style={coverMixImages ? {
+                                          left: 0,
+                                          top: 0,
+                                          width: '100%',
+                                          height: '100%',
+                                          objectFit: 'cover',
+                                          objectPosition: `${crop.x}% ${crop.y}%`,
+                                          filter: `contrast(${1.0 + activeIntensity * 0.1}) brightness(${0.96 - activeIntensity * 0.05}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                          transform: `scale(${blockZoomVal * 1.1}) translate(${blockShiftX / 2}px, ${blockShiftY / 2}px)`,
+                                        } : {
+                                          left: `${-left}px`,
+                                          top: `${-top}px`,
+                                          width: `${w}px`,
+                                          height: `${h}px`,
+                                          maxWidth: 'none',
+                                          filter: `contrast(${1.0 + activeIntensity * 0.1}) brightness(${0.96 - activeIntensity * 0.05}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                          transform: `scale(${blockZoomVal}) translate(${blockShiftX}px, ${blockShiftY}px)`,
+                                          transformOrigin: `${left + colWidth / 2}px ${top + colHeight / 2}px`,
+                                        }}
+                                      />
+                                      {/* Color grading overlay */}
+                                      <div className="absolute inset-0 pointer-events-none z-[4]"
+                                        style={{
+                                          background: coverT5ColorMode
+                                            ? getRGBAColor(accent, activeIntensity)
+                                            : `linear-gradient(135deg, ${getRGBAColor(accent, 0.1)} 0%, rgba(0,0,0,0.4) 100%)`,
+                                          mixBlendMode: coverT5ColorMode ? 'color' : 'multiply',
+                                          opacity: coverT5ColorMode ? activeIntensity : 0
+                                        }}
+                                      />
+                                      {/* Gloss linear streak */}
+                                      <div className="absolute inset-0 pointer-events-none z-[7]"
+                                        style={{
+                                          background: 'linear-gradient(135deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.01) 50%, rgba(0,0,0,0.4) 100%)',
+                                          mixBlendMode: 'overlay',
+                                        }}
+                                      />
+                                    </div>
+
+                                    {/* Subtle gold framing border inside */}
+                                    <div className="absolute inset-[3px] rounded-lg border pointer-events-none" 
+                                      style={{ 
+                                        borderColor: getRGBAColor(accent, 0.25),
+                                        opacity: 0.6
+                                      }} 
+                                    />
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+
+                          {/* 3. Text Backdrop Spotlight (glowing backdrop for centered info panel) */}
+                          <div className="absolute pointer-events-none z-[15]" 
+                            style={{ 
+                              left: '50%',
+                              top: '50%',
+                              width: `${cardW * 1.3}px`,
+                              height: `${cardH * 1.5}px`,
+                              transform: 'translate(-50%, -50%)',
+                              background: `radial-gradient(circle, ${spotlightColor}${alphaToHex(0.28 * gI.opacity)} 0%, ${spotlightColor}${alphaToHex(0.06 * gI.opacity)} 60%, transparent 80%)`, 
+                              filter: `blur(${gI.blur * 1.3}px)`,
+                              opacity: 0.95
+                            }} 
+                          />
+
+                          {/* 4. Centered Floating Frosted Glass Panel (Z-index: 20) */}
+                          <div 
+                            className="absolute pointer-events-none z-20 flex flex-col justify-center items-center p-8 transition-all duration-300"
+                            style={{
+                              left: '50%',
+                              top: '50%',
+                              width: `${cardW}px`,
+                              height: `${cardH}px`,
+                              transform: `translate(-50%, -50%) perspective(1200px) rotateX(${2 * activeIntensity}deg) rotateY(${-2 * activeIntensity}deg) translateZ(${80 * activeIntensity}px)`,
+                              borderRadius: '24px',
+                              backgroundColor: 'rgba(8, 12, 24, 0.52)',
+                              backdropFilter: 'blur(24px)',
+                              WebkitBackdropFilter: 'blur(24px)',
+                              border: `1.5px solid ${getRGBAColor(accent, 0.3)}`,
+                              boxShadow: `0 30px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.12), 0 0 35px ${getRGBAColor(accent, 0.15 * activeIntensity)}`,
+                            }}
+                          >
+                            {/* Inner ambient shine */}
+                            <div className="absolute inset-0 z-0 pointer-events-none rounded-[22px] overflow-hidden">
+                              <div className="absolute inset-0" 
+                                style={{
+                                  background: 'linear-gradient(135deg, rgba(255,255,255,0.06) 0%, transparent 40%, rgba(0,0,0,0.3) 100%)'
+                                }}
+                              />
+                              <div className="absolute inset-0"
+                                style={{
+                                  background: `radial-gradient(circle at 50% 15%, ${getRGBAColor(accent, 0.18)} 0%, transparent 60%)`
+                                }}
+                              />
+                            </div>
+
+                            {/* Decorative framing corner brackets */}
+                            {(() => {
+                              const bracketStyle = {
+                                position: 'absolute' as const,
+                                width: '22px',
+                                height: '22px',
+                                borderColor: accent,
+                                opacity: 0.8,
+                              };
+                              return (
+                                <>
+                                  <div style={{ ...bracketStyle, left: '14px', top: '14px', borderLeft: '2px solid', borderTop: '2px solid', borderTopLeftRadius: '6px' }} />
+                                  <div style={{ ...bracketStyle, right: '14px', top: '14px', borderRight: '2px solid', borderTop: '2px solid', borderTopRightRadius: '6px' }} />
+                                  <div style={{ ...bracketStyle, left: '14px', bottom: '14px', borderLeft: '2px solid', borderBottom: '2px solid', borderBottomLeftRadius: '6px' }} />
+                                  <div style={{ ...bracketStyle, right: '14px', bottom: '14px', borderRight: '2px solid', borderBottom: '2px solid', borderBottomRightRadius: '6px' }} />
+                                </>
+                              );
+                            })()}
+
+                            {/* Brand Logo or Company Name inside the Frosted Panel at the Top */}
+                            {coverShow.companyLogo && logoSrc ? (
+                              <div className="mb-14 z-10 flex justify-center items-center">
+                                <img
+                                  src={logoSrc}
+                                  className="object-contain"
+                                  style={{
+                                    height: `${coverFontSizes.companyBrandLogo * 0.85}px`,
+                                    maxWidth: `${coverFontSizes.companyBrandLogo * 3.2}px`
+                                  }}
+                                />
+                              </div>
+                            ) : (
+                              coverShow.companyName && (
+                                <div className="mb-14 text-center z-10">
+                                  <div className="font-black font-sans leading-none" style={{ color: elColors.brandName || accent, fontSize: `${coverFontSizes.companyBrandName * 0.85}px` }}>{companyInfo.name}</div>
+                                  {companyInfo.subtitle && (
+                                    <div className="text-white/60 font-semibold tracking-wider uppercase" style={{ fontSize: `${Math.max(9, Math.round(coverFontSizes.companyBrandName * 0.32))}px`, marginTop: '3px' }}>{companyInfo.subtitle}</div>
+                                  )}
+                                </div>
+                              )
+                            )}
+
+                            {/* Campaign Text Content */}
+                            {coverShow.kicker && kickerText && (
+                              <div 
+                                dir="rtl" 
+                                className="font-bold text-center tracking-widest mb-3 select-none z-10 uppercase" 
+                                style={{ 
+                                  color: accent,
+                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9)}px`, 
+                                  textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                                }}
+                              >
+                                {kickerText}
+                              </div>
+                            )}
+                            
+                            <div 
+                              dir="rtl" 
+                              className="font-black text-center text-white select-none max-w-[85%] break-words z-10" 
+                              style={{ 
+                                fontFamily: "'Tajawal', sans-serif", 
+                                fontSize: `${coverFontSizes.campaignName * 0.95}px`, 
+                                lineHeight: 1.2,
+                                textShadow: '0 0 15px rgba(255,255,255,0.4), 0 4px 10px rgba(0,0,0,0.8)'
+                              }}
+                            >
+                              {campaignTitle}
+                            </div>
+
+                            {/* Horizontal Gold Line Divider */}
+                            <div className="w-20 h-[2px] mx-auto my-5 rounded-full z-10"
+                              style={{
+                                background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
+                                boxShadow: `0 0 8px ${getRGBAColor(accent, 0.7)}`
+                              }}
+                            />
+
+                            {coverShow.tagline && taglineText && (
+                              <div 
+                                dir="rtl"
+                                className="inline-flex items-center justify-center font-black text-center select-none z-10" 
+                                style={{ 
+                                  color: '#0a0a14', 
+                                  background: `linear-gradient(135deg, #ffd700 0%, ${accent} 50%, #b8860b 100%)`, 
+                                  borderRadius: '9999px', 
+                                  padding: '10px 36px', 
+                                  fontSize: `${coverFontSizes.tagline * 0.9}px`,
+                                  boxShadow: `0 10px 24px ${getRGBAColor(accent, 0.32)}, inset 0 1px 0 rgba(255, 255, 255, 0.4)`,
+                                  fontFamily: "'Tajawal', sans-serif"
+                                }}
+                              >
+                                {taglineText}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                          <img
+                            src={LIGHT_LEAK_OVERLAYS[0]}
+                            alt=""
+                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[22]"
+                            style={{
+                              mixBlendMode: 'screen',
+                              opacity: 0.38,
+                            }}
+                          />
+
+                          {/* Footer information displayed conditionally */}
+                          <Footer accent={accent} />
+                        </div>
+                      );
+                    }
+
+                    // Final fallback return to ensure the IIFE has a path
+                    return null;
                   })()
                 ) : (
                   <>

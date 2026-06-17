@@ -30,6 +30,7 @@ const DEFAULT_PAYMENT_TYPES = [
   '', // خيار فارغ افتراضي
   'عند التوقيع',
   'عند التركيب',
+  'بعد 20% من العقد',
   'شهري',
   'مقدم',
   'ربع سنوي',
@@ -77,26 +78,29 @@ interface InstallmentsManagerProps {
   onUpdateInstallment: (index: number, field: string, value: any) => void;
   onClearAll: () => void;
   installmentSummary?: string | null;
-  savedDistributionType?: 'single' | 'multiple';
+  endDate?: string;
+  savedDistributionType?: 'single' | 'multiple' | 'periods';
   savedFirstPaymentAmount?: number;
   savedFirstPaymentType?: 'amount' | 'percent';
   savedInterval?: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months';
   savedCount?: number;
   savedHasDifferentFirstPayment?: boolean;
   savedFirstAtSigning?: boolean;
-  onDistributionTypeChange?: (type: 'single' | 'multiple') => void;
+  onDistributionTypeChange?: (type: 'single' | 'multiple' | 'periods') => void;
   onFirstPaymentAmountChange?: (amount: number) => void;
   onFirstPaymentTypeChange?: (type: 'amount' | 'percent') => void;
   onIntervalChange?: (interval: 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months') => void;
   onCountChange?: (count: number) => void;
   onHasDifferentFirstPaymentChange?: (has: boolean) => void;
   onFirstAtSigningChange?: (value: boolean) => void;
+  onDistributeByDurationPeriods?: (count: number) => void;
 }
 
 export function InstallmentsManager({
   installments,
   finalTotal,
   startDate,
+  endDate,
   disableAutoRedistribute,
   onDistributeEvenly,
   onDistributeWithInterval,
@@ -120,7 +124,8 @@ export function InstallmentsManager({
   onIntervalChange,
   onCountChange,
   onHasDifferentFirstPaymentChange,
-  onFirstAtSigningChange
+  onFirstAtSigningChange,
+  onDistributeByDurationPeriods
 }: InstallmentsManagerProps) {
   const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = React.useState<boolean>(savedHasDifferentFirstPayment ?? false);
   const [firstPayment, setFirstPayment] = React.useState<number>(savedFirstPaymentAmount ?? 0);
@@ -128,7 +133,8 @@ export function InstallmentsManager({
   const [firstPaymentDate, setFirstPaymentDate] = React.useState<string>('');
   const [useCustomFirstDate, setUseCustomFirstDate] = React.useState(false);
 
-  const [paymentMode, setPaymentMode] = React.useState<'single' | 'multiple'>(savedDistributionType ?? 'multiple');
+  const [paymentMode, setPaymentMode] = React.useState<'single' | 'multiple' | 'periods'>(savedDistributionType ?? 'multiple');
+  const [periodsCount, setPeriodsCount] = React.useState<number>(3);
   const [interval, setInterval] = React.useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>(savedInterval ?? 'month');
   const [numPayments, setNumPayments] = React.useState<number>(savedCount ?? 2);
   const [useCustomLastDate, setUseCustomLastDate] = React.useState(false);
@@ -383,196 +389,298 @@ export function InstallmentsManager({
         
         {/* التوزيع الذكي */}
         {onDistributeWithInterval && (
-          <div className="space-y-4">
+          <div className="space-y-4 animate-in fade-in duration-300">
             
-            {/* الدفعة الأولى */}
-            <div className="rounded-xl border-2 border-dashed border-primary/30 bg-gradient-to-br from-primary/5 to-transparent p-4 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  <Label className="text-sm font-bold">دفعة أولى مختلفة</Label>
-                </div>
-                <Switch
-                  checked={hasDifferentFirstPayment}
-                  onCheckedChange={handleHasDifferentFirstPaymentChange}
-                />
-              </div>
-
-              {hasDifferentFirstPayment && (
-                <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">القيمة</Label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={firstPaymentType === 'percent' ? 100 : finalTotal}
-                        value={firstPayment}
-                        onChange={(e) => handleFirstPaymentChange(Number(e.target.value) || 0)}
-                        placeholder={firstPaymentType === 'percent' ? '%' : 'د.ل'}
-                        className="h-10 font-bold text-base"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs text-muted-foreground">النوع</Label>
-                      <Select value={firstPaymentType} onValueChange={(v: any) => handleFirstPaymentTypeChange(v)}>
-                        <SelectTrigger className="h-10">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="amount">مبلغ ثابت</SelectItem>
-                          <SelectItem value="percent">نسبة %</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  {/* عرض القيمة المحسوبة */}
-                  {actualFirstPayment > 0 && actualFirstPayment <= finalTotal && (
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
-                      <div className="space-y-0.5">
-                        <p className="text-xs text-muted-foreground">الدفعة الأولى</p>
-                        <p className="text-lg font-bold text-primary font-manrope">{actualFirstPayment.toLocaleString('ar-LY')} د.ل</p>
-                      </div>
-                      <div className="text-left space-y-0.5">
-                        <p className="text-xs text-muted-foreground">المتبقي</p>
-                        <p className="text-lg font-bold text-foreground font-manrope">{remainingAfterFirst.toLocaleString('ar-LY')} د.ل</p>
-                      </div>
-                    </div>
+            {/* نوع التوزيع */}
+            <div className="space-y-3">
+              <Label className="text-sm font-bold">طريقة السداد</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handlePaymentModeChange('single')}
+                  className={cn(
+                    "p-2.5 rounded-xl border-2 text-center transition-all duration-200 cursor-pointer flex flex-col items-center justify-center min-h-[90px]",
+                    paymentMode === 'single' 
+                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/20" 
+                      : "border-border hover:border-primary/50"
                   )}
+                >
+                  <DollarSign className="h-5 w-5 mb-1 text-primary" />
+                  <div className="text-[11px] font-bold">دفعة واحدة</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePaymentModeChange('multiple')}
+                  className={cn(
+                    "p-2.5 rounded-xl border-2 text-center transition-all duration-200 cursor-pointer flex flex-col items-center justify-center min-h-[90px]",
+                    paymentMode === 'multiple' 
+                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/20" 
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <Calculator className="h-5 w-5 mb-1 text-primary" />
+                  <div className="text-[11px] font-bold">تقسيط شهري</div>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handlePaymentModeChange('periods')}
+                  className={cn(
+                    "p-2.5 rounded-xl border-2 text-center transition-all duration-200 cursor-pointer flex flex-col items-center justify-center min-h-[90px]",
+                    paymentMode === 'periods' 
+                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/20" 
+                      : "border-border hover:border-primary/50"
+                  )}
+                >
+                  <Sparkles className="h-5 w-5 mb-1 text-primary" />
+                  <div className="text-[11px] font-bold">تقسيم مدة العقد</div>
+                </button>
+              </div>
+            </div>
 
-                  {/* تاريخ الدفعة الأولى */}
-                  <div className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                    <Label className="text-xs">تاريخ مخصص للدفعة الأولى</Label>
-                    <Switch checked={useCustomFirstDate} onCheckedChange={setUseCustomFirstDate} />
-                  </div>
+            {/* إعدادات وطرق السداد بناءً على الاختيار */}
+            {paymentMode === 'single' && (
+              <div className="p-4 rounded-xl border border-border bg-muted/10 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                  <Info className="h-4 w-4 shrink-0" />
+                  <span>سيتم سداد كامل قيمة العقد دفعة واحدة.</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  سيتم إنشاء دفعة واحدة بكامل قيمة العقد بقيمة <span className="font-bold text-foreground font-manrope">{(finalTotal || 0).toLocaleString('ar-LY')} د.ل</span> تستحق افتراضياً عند بداية العقد.
+                </p>
 
-                  {useCustomFirstDate && (
+                <div className="flex items-center justify-between p-2 rounded-lg bg-background border border-border/40">
+                  <Label className="text-xs font-semibold cursor-pointer">تاريخ استحقاق مخصص</Label>
+                  <Switch checked={useCustomFirstDate} onCheckedChange={setUseCustomFirstDate} />
+                </div>
+
+                {useCustomFirstDate && (
+                  <div className="space-y-1.5 animate-in slide-in-from-top-1 duration-200">
+                    <Label className="text-xs text-muted-foreground">تاريخ الاستحقاق</Label>
                     <Input
                       type="date"
                       value={firstPaymentDate}
                       onChange={(e) => setFirstPaymentDate(e.target.value)}
                       className="h-10"
                     />
-                  )}
-                  
-                  {/* زر سريع: دفعتان فقط */}
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleTwoPaymentMode}
-                    className="w-full border-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10 font-bold"
-                    disabled={actualFirstPayment <= 0 || !startDate}
-                  >
-                    <CheckCircle2 className="h-4 w-4 mr-2" />
-                    دفعتان فقط (الأولى + الباقي)
-                  </Button>
-                </div>
-              )}
-            </div>
+                  </div>
+                )}
 
-            {/* نوع التوزيع */}
-            <div className="space-y-3">
-              <Label className="text-sm font-bold">توزيع الدفعات</Label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
+                <Button
                   type="button"
-                  onClick={() => handlePaymentModeChange('single')}
-                  className={cn(
-                    "p-3 rounded-xl border-2 text-center transition-all duration-200",
-                    paymentMode === 'single' 
-                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/20" 
-                      : "border-border hover:border-primary/50"
-                  )}
+                  onClick={handleDistribute}
+                  className="w-full h-11 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-[1.01]"
+                  disabled={!startDate}
                 >
-                  <DollarSign className="h-6 w-6 mb-1 text-primary" />
-                  <div className="text-sm font-bold">دفعة واحدة</div>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePaymentModeChange('multiple')}
-                  className={cn(
-                    "p-3 rounded-xl border-2 text-center transition-all duration-200",
-                    paymentMode === 'multiple' 
-                      ? "border-primary bg-primary/10 shadow-lg shadow-primary/20" 
-                      : "border-border hover:border-primary/50"
-                  )}
-                >
-                  <Calculator className="h-6 w-6 mb-1 text-primary" />
-                  <div className="text-sm font-bold">عدة دفعات</div>
-                </button>
-              </div>
-            </div>
-
-            {/* إعدادات الدفعات المتعددة */}
-            {paymentMode === 'multiple' && (
-              <div className="space-y-3 p-4 rounded-xl bg-muted/30 border border-border">
-                {/* دفعة عند التوقيع */}
-                <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-primary" />
-                    <Label className="text-sm font-medium">دفعة عند التوقيع</Label>
-                  </div>
-                  <Switch
-                    checked={firstAtSigning}
-                    onCheckedChange={handleFirstAtSigningChange}
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">الفترة بين الدفعات</Label>
-                    <Select value={interval} onValueChange={(v: any) => handleIntervalChange(v)}>
-                      <SelectTrigger className="h-10">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="z-[10000]">
-                        <SelectItem value="month">كل شهر</SelectItem>
-                        <SelectItem value="2months">كل شهرين</SelectItem>
-                        <SelectItem value="3months">كل 3 أشهر</SelectItem>
-                        <SelectItem value="4months">كل 4 أشهر</SelectItem>
-                        <SelectItem value="5months">كل 5 أشهر</SelectItem>
-                        <SelectItem value="6months">كل 6 أشهر</SelectItem>
-                        <SelectItem value="7months">كل 7 أشهر</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">{hasDifferentFirstPayment ? 'عدد الدفعات المتبقية' : 'عدد الدفعات'}</Label>
-                    <Input
-                      type="number"
-                      min={1}
-                      max={24}
-                      value={numPayments}
-                      onChange={(e) => {
-                        const val = parseInt(e.target.value, 10);
-                        if (!isNaN(val) && val >= 1 && val <= 24) {
-                          handleNumPaymentsChange(val);
-                        }
-                      }}
-                      className="h-10 font-bold text-center"
-                      placeholder="2"
-                    />
-                  </div>
-                </div>
+                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                  تطبيق دفعة واحدة
+                </Button>
               </div>
             )}
 
-            {/* زر التطبيق الرئيسي */}
-            <Button
-              type="button"
-              onClick={handleDistribute}
-              className="w-full h-12 text-base font-bold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70 shadow-lg shadow-primary/25"
-              disabled={!startDate}
-            >
-              <Calculator className="h-5 w-5 mr-2" />
-              تطبيق التوزيع
-            </Button>
+            {paymentMode === 'multiple' && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                {/* الدفعة الأولى الاختيارية */}
+                <div className="rounded-xl border border-border bg-muted/10 p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-primary" />
+                      <Label className="text-sm font-bold">دفعة أولى مختلفة</Label>
+                    </div>
+                    <Switch
+                      checked={hasDifferentFirstPayment}
+                      onCheckedChange={handleHasDifferentFirstPaymentChange}
+                    />
+                  </div>
+
+                  {hasDifferentFirstPayment && (
+                    <div className="space-y-3 animate-in slide-in-from-top-2 duration-200">
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">القيمة</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            max={firstPaymentType === 'percent' ? 100 : finalTotal}
+                            value={firstPayment}
+                            onChange={(e) => handleFirstPaymentChange(Number(e.target.value) || 0)}
+                            placeholder={firstPaymentType === 'percent' ? '%' : 'د.ل'}
+                            className="h-10 font-bold text-base"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">النوع</Label>
+                          <Select value={firstPaymentType} onValueChange={(v: any) => handleFirstPaymentTypeChange(v)}>
+                            <SelectTrigger className="h-10">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="z-[10000]">
+                              <SelectItem value="amount">مبلغ ثابت</SelectItem>
+                              <SelectItem value="percent">نسبة %</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* عرض القيمة المحسوبة */}
+                      {actualFirstPayment > 0 && actualFirstPayment <= finalTotal && (
+                        <div className="flex items-center justify-between p-3 rounded-lg bg-primary/10 border border-primary/20">
+                          <div className="space-y-0.5 text-right">
+                            <p className="text-xs text-muted-foreground">الدفعة الأولى</p>
+                            <p className="text-lg font-bold text-primary font-manrope">{actualFirstPayment.toLocaleString('ar-LY')} د.ل</p>
+                          </div>
+                          <div className="text-left space-y-0.5">
+                            <p className="text-xs text-muted-foreground">المتبقي للأقساط</p>
+                            <p className="text-lg font-bold text-foreground font-manrope">{remainingAfterFirst.toLocaleString('ar-LY')} د.ل</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* تاريخ الدفعة الأولى */}
+                      <div className="flex items-center justify-between p-2 rounded-lg bg-background border border-border/40">
+                        <Label className="text-xs font-semibold cursor-pointer">تاريخ مخصص للدفعة الأولى</Label>
+                        <Switch checked={useCustomFirstDate} onCheckedChange={setUseCustomFirstDate} />
+                      </div>
+
+                      {useCustomFirstDate && (
+                        <Input
+                          type="date"
+                          value={firstPaymentDate}
+                          onChange={(e) => setFirstPaymentDate(e.target.value)}
+                          className="h-10"
+                        />
+                      )}
+                      
+                      {/* زر سريع: دفعتان فقط */}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleTwoPaymentMode}
+                        className="w-full border-2 border-amber-500/50 text-amber-600 hover:bg-amber-500/10 font-bold"
+                        disabled={actualFirstPayment <= 0 || !startDate}
+                      >
+                        <CheckCircle2 className="h-4 w-4 mr-2" />
+                        دفعتان فقط (الأولى + الباقي)
+                      </Button>
+                    </div>
+                  )}
+                </div>
+
+                {/* إعدادات الأقساط */}
+                <div className="space-y-3 p-4 rounded-xl bg-card border border-border shadow-sm">
+                  {/* دفعة عند التوقيع */}
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-primary/5 border border-primary/20">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                      <Label className="text-sm font-medium">دفعة عند التوقيع</Label>
+                    </div>
+                    <Switch
+                      checked={firstAtSigning}
+                      onCheckedChange={handleFirstAtSigningChange}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">الفترة بين الدفعات</Label>
+                      <Select value={interval} onValueChange={(v: any) => handleIntervalChange(v)}>
+                        <SelectTrigger className="h-10">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="z-[10000]">
+                          <SelectItem value="month">كل شهر</SelectItem>
+                          <SelectItem value="2months">كل شهرين</SelectItem>
+                          <SelectItem value="3months">كل 3 أشهر</SelectItem>
+                          <SelectItem value="4months">كل 4 أشهر</SelectItem>
+                          <SelectItem value="5months">كل 5 أشهر</SelectItem>
+                          <SelectItem value="6months">كل 6 أشهر</SelectItem>
+                          <SelectItem value="7months">كل 7 أشهر</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs text-muted-foreground">{hasDifferentFirstPayment ? 'عدد الدفعات المتبقية' : 'عدد الدفعات'}</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={24}
+                        value={numPayments}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          if (!isNaN(val) && val >= 1 && val <= 24) {
+                            handleNumPaymentsChange(val);
+                          }
+                        }}
+                        className="h-10 font-bold text-center"
+                        placeholder="2"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* زر التطبيق الرئيسي للأقساط */}
+                <Button
+                  type="button"
+                  onClick={handleDistribute}
+                  className="w-full h-11 text-sm font-bold bg-primary hover:bg-primary/95 text-primary-foreground shadow-md transition-transform hover:scale-[1.01]"
+                  disabled={!startDate}
+                >
+                  <Calculator className="h-4 w-4 mr-2" />
+                  توزيع الأقساط تلقائياً
+                </Button>
+              </div>
+            )}
+
+            {paymentMode === 'periods' && (
+              <div className="p-4 rounded-xl border border-border bg-muted/10 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-2 text-xs font-semibold text-primary">
+                  <Sparkles className="h-4 w-4 shrink-0" />
+                  <span>تقسيم مدة العقد الإجمالية إلى فترات متساوية.</span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  تستحق الدفعات عند بداية كل فترة (آخر دفعة تكون قبل نهاية العقد بفترة كاملة، وليس في نهاية العقد). يعتمد على نسبة مئوية دقيقة من مدة العقد.
+                </p>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">عدد فترات التقسيم</Label>
+                  <Select 
+                    value={String(periodsCount)} 
+                    onValueChange={(v) => setPeriodsCount(Number(v) || 3)}
+                  >
+                    <SelectTrigger className="h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="z-[10000]">
+                      <SelectItem value="2">فترتين (50% عند التوقيع و 50% بمنتصف العقد)</SelectItem>
+                      <SelectItem value="3">3 فترات (33% عند التوقيع، 33% بثلث العقد، 33% بثلثي العقد)</SelectItem>
+                      <SelectItem value="4">4 فترات (كل ربع من مدة العقد)</SelectItem>
+                      <SelectItem value="5">5 فترات من مدة العقد</SelectItem>
+                      <SelectItem value="6">6 فترات من مدة العقد</SelectItem>
+                      <SelectItem value="7">7 فترات من مدة العقد</SelectItem>
+                      <SelectItem value="8">8 فترات من مدة العقد</SelectItem>
+                      <SelectItem value="9">9 فترات من مدة العقد</SelectItem>
+                      <SelectItem value="10">10 فترات من مدة العقد</SelectItem>
+                      <SelectItem value="11">11 فترة من مدة العقد</SelectItem>
+                      <SelectItem value="12">12 فترة من مدة العقد</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <Button
+                  type="button"
+                  onClick={() => onDistributeByDurationPeriods?.(periodsCount)}
+                  className="w-full h-11 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-[1.01]"
+                  disabled={!startDate || !endDate}
+                >
+                  <Calculator className="h-4 w-4 mr-2" />
+                  تطبيق تقسيم المدة
+                </Button>
+              </div>
+            )}
             
             {!startDate && (
-              <p className="text-xs text-destructive text-center flex items-center justify-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                حدد تاريخ بداية العقد أولاً
+              <p className="text-xs text-destructive text-center flex items-center justify-center gap-1 bg-destructive/10 p-2 rounded-lg border border-destructive/20 animate-pulse">
+                <AlertCircle className="h-4 w-4" />
+                يرجى تحديد تاريخ بداية العقد أولاً لتفعيل التوزيع
               </p>
             )}
           </div>

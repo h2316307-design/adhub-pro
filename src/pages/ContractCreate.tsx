@@ -73,6 +73,7 @@ export default function ContractCreate() {
   const [sizeFilters, setSizeFilters] = useState<string[]>([]);
   const [cityFilters, setCityFilters] = useState<string[]>([]);
   const [municipalityFilters, setMunicipalityFilters] = useState<string[]>([]);
+  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
 
   const cities = useMemo(
     () => Array.from(new Set(billboards.map((b) => b.City || b.city))).filter(Boolean) as string[],
@@ -246,8 +247,79 @@ export default function ContractCreate() {
     installments,
     setInstallments,
     finalTotal: calculations.finalTotal,
-    calculateDueDate
+    calculateDueDate,
+    startDate: formData.startDate,
+    endDate: formData.endDate
   });
+
+  // ✅ Installment distribution settings
+  const [installmentDistributionType, setInstallmentDistributionType] = useState<'single' | 'multiple' | 'periods'>('multiple');
+  const [installmentFirstPaymentAmount, setInstallmentFirstPaymentAmount] = useState<number>(0);
+  const [installmentFirstPaymentType, setInstallmentFirstPaymentType] = useState<'amount' | 'percent'>('amount');
+  const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>('month');
+  const [installmentCount, setInstallmentCount] = useState<number>(2);
+  const [installmentFirstAtSigning, setInstallmentFirstAtSigning] = useState<boolean>(true);
+  const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = useState<boolean>(false);
+
+  // Helper to round installment values down to clean/closed numbers (nearest 500 for >=10k, nearest 100 for >=1k, etc.) to ensure the first payment is always the largest.
+  const roundToCleanValue = (value: number): number => {
+    if (value <= 0) return 0;
+    if (value < 100) {
+      return Math.floor(value);
+    }
+    if (value < 1000) {
+      return Math.floor(value / 10) * 10;
+    }
+    if (value < 10000) {
+      return Math.floor(value / 100) * 100;
+    }
+    return Math.floor(value / 500) * 500;
+  };
+
+  // ✅ Default installments initialization for creation (signature + 20% contract duration)
+  useEffect(() => {
+    if (calculations.finalTotal <= 0) return;
+    
+    if (installments.length === 0) {
+      const cleanAmount = roundToCleanValue(calculations.finalTotal / 2);
+      const firstAmount = Math.round((calculations.finalTotal - cleanAmount) * 100) / 100;
+      
+      let finalFirst = firstAmount;
+      let finalSecond = cleanAmount;
+      
+      if (roundToCleanValue(firstAmount) !== firstAmount) {
+        let cleanFirst = roundToCleanValue(firstAmount);
+        const payment2 = Math.round((calculations.finalTotal - cleanFirst) * 100) / 100;
+        
+        if (cleanFirst < payment2) {
+          let step = 500;
+          if (cleanFirst < 100) step = 1;
+          else if (cleanFirst < 1000) step = 10;
+          else if (cleanFirst < 10000) step = 100;
+          
+          cleanFirst += step;
+        }
+        finalFirst = cleanFirst;
+        finalSecond = Math.round((calculations.finalTotal - cleanFirst) * 100) / 100;
+      }
+      
+      setInstallments([
+        { 
+          amount: finalFirst, 
+          paymentType: 'عند التوقيع', 
+          description: 'الدفعة الأولى',
+          dueDate: calculateDueDate('عند التوقيع', 0)
+        },
+        { 
+          amount: finalSecond, 
+          paymentType: 'بعد 20% من العقد', 
+          description: 'الدفعة الثانية',
+          dueDate: calculateDueDate('بعد 20% من العقد', 1)
+        },
+      ]);
+      console.log('✅ Created default installments for new contract:', finalFirst, finalSecond);
+    }
+  }, [calculations.finalTotal, installments.length]);
 
   // Get next contract number
   useEffect(() => {
@@ -484,6 +556,12 @@ export default function ContractCreate() {
         duration_months: formData.pricingMode === 'months' ? formData.durationMonths : null,
         duration_days: formData.pricingMode === 'days' ? formData.durationDays : null,
         use_30_day_month: use30DayMonth,
+        installment_distribution_type: installmentDistributionType,
+        installment_first_payment_amount: installmentFirstPaymentAmount,
+        installment_first_payment_type: installmentFirstPaymentType,
+        installment_interval: installmentInterval,
+        installment_count: installmentCount,
+        installment_first_at_signing: installmentFirstAtSigning,
       };
       
       if (formData.customerId) payload.customer_id = formData.customerId;
@@ -539,8 +617,8 @@ export default function ContractCreate() {
         {/* Main Content */}
         <div className="flex-1 space-y-6">
           {/* Billboard Selection - Tabs for List and Map View */}
-          <div className="expenses-preview-item flex flex-col h-[calc(100vh-160px)] min-h-[800px]">
-            <h3 className="expenses-preview-label mb-2 shrink-0">اختيار اللوحات</h3>
+          <div className="expenses-preview-item flex flex-col h-[calc(100vh-160px)] min-h-[950px] border border-amber-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-slate-950/40 backdrop-blur-xl rounded-3xl p-4">
+            <h3 className="expenses-preview-label mb-2 shrink-0 text-amber-500 font-extrabold">اختيار اللوحات</h3>
             
             <div className="shrink-0 mb-2">
               <BillboardFilters
@@ -571,13 +649,13 @@ export default function ContractCreate() {
               />
             </div>
 
-            <Tabs defaultValue="list" className="w-full flex-1 flex flex-col min-h-0">
-              <TabsList className="grid w-full grid-cols-2 mb-4 shrink-0">
-                <TabsTrigger value="list" className="flex items-center gap-2">
+            <Tabs value={viewMode} onValueChange={(val) => setViewMode(val as 'list' | 'map')} className="w-full flex-1 flex flex-col min-h-0">
+              <TabsList className="grid w-full grid-cols-2 mb-4 bg-muted/40 h-10 p-1 rounded-xl shrink-0">
+                <TabsTrigger value="list" className="flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md cursor-pointer">
                   <List className="h-4 w-4" />
                   عرض القائمة
                 </TabsTrigger>
-                <TabsTrigger value="map" className="flex items-center gap-2">
+                <TabsTrigger value="map" className="flex items-center justify-center gap-2 rounded-lg text-xs font-bold transition-all data-[state=active]:bg-gradient-to-r data-[state=active]:from-amber-500 data-[state=active]:to-amber-600 data-[state=active]:text-white data-[state=active]:shadow-md cursor-pointer">
                   <MapIcon className="h-4 w-4" />
                   عرض الخريطة
                 </TabsTrigger>
@@ -612,7 +690,7 @@ export default function ContractCreate() {
               </TabsContent>
               
               <TabsContent value="map" className="flex-1 min-h-0 mt-0">
-                <div className="relative w-full h-full">
+                <div className="relative w-full h-[700px] lg:h-[800px]">
                   <SelectableGoogleHomeMap
                     className="w-full h-full"
                     hideInternalFilters
@@ -969,10 +1047,28 @@ export default function ContractCreate() {
           saving={saving}
           submitLabel="إنشاء العقد"
           distributeEvenly={installmentManager.distributeEvenly}
+          onDistributeWithInterval={installmentManager.distributeWithInterval}
+          onDistributeByDurationPeriods={installmentManager.distributeByDurationPeriods}
+          onCreateManualInstallments={installmentManager.createManualInstallments}
           addInstallment={installmentManager.addInstallment}
           removeInstallment={installmentManager.removeInstallment}
           clearAllInstallments={installmentManager.clearAllInstallments}
           calculateDueDate={calculateDueDate}
+          installmentSummary={installmentManager.getInstallmentSummary()}
+          savedDistributionType={installmentDistributionType}
+          savedFirstPaymentAmount={installmentFirstPaymentAmount}
+          savedFirstPaymentType={installmentFirstPaymentType}
+          savedInterval={installmentInterval}
+          savedCount={installmentCount}
+          savedHasDifferentFirstPayment={hasDifferentFirstPayment}
+          savedFirstAtSigning={installmentFirstAtSigning}
+          onDistributionTypeChange={setInstallmentDistributionType}
+          onFirstPaymentAmountChange={setInstallmentFirstPaymentAmount}
+          onFirstPaymentTypeChange={setInstallmentFirstPaymentType}
+          onIntervalChange={setInstallmentInterval}
+          onCountChange={setInstallmentCount}
+          onHasDifferentFirstPaymentChange={setHasDifferentFirstPayment}
+          onFirstAtSigningChange={setInstallmentFirstAtSigning}
           use30DayMonth={use30DayMonth}
           setUse30DayMonth={setUse30DayMonth}
           currencySymbol={currentCurrency.symbol}

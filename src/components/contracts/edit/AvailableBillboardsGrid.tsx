@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar, Camera, ChevronLeft, ChevronRight, CheckCircle2, Clock, XCircle, Layers, Pencil, MapPin, Tag, Check, Square, CheckSquare } from 'lucide-react';
+import { Calendar, Camera, ChevronLeft, ChevronRight, CheckCircle2, Clock, XCircle, Layers, Pencil, MapPin, Tag, Check, Square, CheckSquare, Wrench } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
@@ -245,7 +245,25 @@ export function AvailableBillboardsGrid({
               const daysUntilExpiry = getDaysUntilExpiry(endDate);
               const isNearExpiring = !isAvailable && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30;
               const canSelect = allowAllSelection || isAvailable || isNearExpiring || isSelected;
-              const statusStyle = getStatusStyle(isAvailable, isNearExpiring, daysUntilExpiry);
+
+              const maintStatus = String((b as any).maintenance_status || '').trim().toLowerCase();
+              const isUnderMaint = 
+                String((b as any).Status || '').trim().toLowerCase() === 'صيانة' || 
+                maintStatus === 'maintenance' || 
+                maintStatus === 'repair_needed' || 
+                maintStatus === 'out_of_service' || 
+                maintStatus === 'قيد الصيانة' || 
+                maintStatus === 'متضررة اللوحة';
+
+              const statusStyle = isUnderMaint 
+                ? {
+                    bg: 'bg-orange-500',
+                    text: 'text-white',
+                    border: 'border-orange-500/30',
+                    glow: 'shadow-orange-500/20',
+                    label: 'صيانة'
+                  }
+                : getStatusStyle(isAvailable, isNearExpiring, daysUntilExpiry);
               
               return (
                 <Card 
@@ -279,7 +297,9 @@ export function AvailableBillboardsGrid({
                       )}
                     >
                       <span className="flex items-center gap-1.5">
-                        {isAvailable ? (
+                        {isUnderMaint ? (
+                          <Wrench className="h-3.5 w-3.5" />
+                        ) : isAvailable ? (
                           <CheckCircle2 className="h-3.5 w-3.5" />
                         ) : isNearExpiring ? (
                           <Clock className="h-3.5 w-3.5" />
@@ -338,6 +358,19 @@ export function AvailableBillboardsGrid({
 
                   {/* Content Section */}
                   <CardContent className="p-4 space-y-3">
+                    {/* Maintenance info if under maintenance */}
+                    {isUnderMaint && (
+                      <div className="bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/30 rounded-xl p-2.5 space-y-1 text-xs mb-2">
+                        <p className="font-bold text-orange-600 dark:text-orange-400">
+                          تحت الصيانة: <span className="font-extrabold text-foreground">{(b as any).maintenance_type || 'صيانة عامة'}</span>
+                        </p>
+                        {String((b as any).maintenance_notes || '').trim() && (
+                          <p className="text-muted-foreground font-semibold">
+                            السبب: <span className="text-foreground font-medium">{(b as any).maintenance_notes}</span>
+                          </p>
+                        )}
+                      </div>
+                    )}
                     {/* Billboard name */}
                     <div className="flex items-start justify-between gap-2">
                       <h4 className="font-bold text-foreground line-clamp-1 flex-1">

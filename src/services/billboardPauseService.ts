@@ -316,3 +316,100 @@ export const pauseBillboardFromContract = async (
   return true;
 };
 
+export const autoPauseBillboardFromActiveContract = async (
+  billboardId: number,
+  oldContractNumber: number,
+  pauseDateStr: string
+) => {
+  // 1. Get the old contract info
+  const { data: contractData, error: contractError } = await supabase
+    .from('Contract')
+    .select('*')
+    .eq('Contract_Number', oldContractNumber)
+    .single();
+
+  if (contractError) throw contractError;
+  const contract = contractData as any;
+
+  // 2. Determine billboard prices and dates
+  let priceBeforeDiscount = 0;
+  let discountPerBillboard = 0;
+  let printCost = 0;
+  let installationCost = 0;
+  
+  if (contract.billboard_prices) {
+    try {
+      const prices = typeof contract.billboard_prices === 'string'
+        ? JSON.parse(contract.billboard_prices)
+        : contract.billboard_prices;
+      if (Array.isArray(prices)) {
+        const pObj = prices.find((p: any) => String(p.billboardId ?? p.id) === String(billboardId));
+        if (pObj) {
+          priceBeforeDiscount = Number(pObj.priceBeforeDiscount ?? pObj.baseRental ?? pObj.contractPrice ?? 0);
+          discountPerBillboard = Number(pObj.discountPerBillboard ?? 0);
+          printCost = Number(pObj.printCost ?? 0);
+          installationCost = Number(pObj.installationCost ?? pObj.installationPrice ?? 0);
+        }
+      }
+    } catch (e) {
+      console.warn('Error parsing contract.billboard_prices', e);
+    }
+  }
+  
+  if (priceBeforeDiscount === 0) {
+    const count = contract.billboard_ids ? contract.billboard_ids.split(',').length : 1;
+    priceBeforeDiscount = Number(contract['Total Rent'] || 0) / count;
+    discountPerBillboard = Number(contract['Discount'] || 0) / count;
+    installationCost = Number(contract.installation_cost || 0) / count;
+    printCost = Number(contract.print_cost || 0) / count;
+  }
+
+  const includeInstall = contract.include_installation_in_price || false;
+  const includePrint = contract.include_print_in_billboard_price || false;
+  
+  const billboardPrice = priceBeforeDiscount - discountPerBillboard + (includeInstall ? 0 : installationCost) + (includePrint ? 0 : printCost);
+
+  // We need the rent start date of this billboard in the old contract.
+  const rentStartDate = contract['Contract Date'] || contract['Start Date'] || new Date().toISOString().split('T')[0];
+  const contractEndDate = contract['End Date'] || new Date().toISOString().split('T')[0];
+
+  // Calculate the refund amount using the same formula
+  const result = calculateBillboardPauseValue(
+    pauseDateStr,
+    rentStartDate,
+    contractEndDate,
+    billboardPrice,
+    printCost,
+    installationCost,
+    includePrint,
+    includeInstall
+  );
+
+  // Deduct refundAmount from the old contract's total
+  const oldContractTotal = Number(contract.Total || 0);
+  const newContractTotal = Math.max(0, oldContractTotal - result.unusedRefund);
+  
+  // Update old contract's total in DB
+  const { error: updateOldContractError } = await supabase
+    .from('Contract')
+    .update({ 
+      Total: newContractTotal,
+      notes: contract.notes ? `${contract.notes} | تم إيقاف لوحة ${billboardId} ونقلها لعقد آخر` : `إيقاف لوحة ${billboardId} ونقلها لعقد آخر`
+    } as any)
+    .eq('Contract_Number', oldContractNumber);
+
+  if (updateOldContractError) {
+    console.error('Failed to update old contract total:', updateOldContractError);
+  }
+
+  await pauseBillboardFromContract(
+    billboardId,
+    oldContractNumber,
+    pauseDateStr,
+    `تم نقل اللوحة تلقائياً إلى عقد آخر`,
+    result.unusedRefund,
+    true
+  );
+};
+
+

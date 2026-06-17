@@ -75,6 +75,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   const [delayRefreshKey, setDelayRefreshKey] = useState(0);
   
   const [totalExpenses, setTotalExpenses] = useState<number>(0);
+  const [suspensionDiscount, setSuspensionDiscount] = useState<number>(0);
   const [customerData, setCustomerData] = useState<{ phone: string | null; company: string | null } | null>(null);
   const [approachingDeadlineCount, setApproachingDeadlineCount] = useState(0);
   const [detectedPreviousContract, setDetectedPreviousContract] = useState<number | null>(null);
@@ -124,6 +125,19 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     // المدفوعات من الـ view
     if (c.actual_paid !== undefined && c.actual_paid !== null) {
       setActualPaid(Number(c.actual_paid));
+    }
+    // جلب خصم الإيقاف من جدول paused_billboards
+    if (isVisible) {
+      const contractNum = Number(contract.Contract_Number ?? contract.id);
+      if (contractNum && !isNaN(contractNum)) {
+        supabase.from('paused_billboards' as any).select('refund_amount').eq('contract_number', contractNum)
+          .then(({ data, error }) => {
+            if (!error && data) {
+              const sum = data.reduce((acc, pb: any) => acc + (Number(pb.refund_amount) || 0), 0);
+              setSuspensionDiscount(sum);
+            }
+          });
+      }
     }
   }, [contract, isVisible]);
 
@@ -1535,10 +1549,31 @@ export const ContractCard: React.FC<ContractCardProps> = ({
             </div>
           )}
           
-          <div className={cn("flex justify-between items-center pt-1.5 border-t text-xs font-bold", borderClass)}>
-            <span className={textClass}>المجموع المستحق:</span>
-            <span className={cn("font-bold font-manrope text-sm", textPrimaryClass)}>{finalTotalCost.toLocaleString('ar-LY')} د.ل</span>
-          </div>
+          {suspensionDiscount > 0 ? (
+            <>
+              <div className="flex justify-between items-center text-xs font-semibold">
+                <span className={textMutedClass}>الإجمالي قبل الإيقاف:</span>
+                <span className={cn("font-bold font-manrope text-sm", textClass)}>
+                  {(finalTotalCost + suspensionDiscount).toLocaleString('ar-LY')} د.ل
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs font-semibold text-rose-500">
+                <span className={dominantHsl ? "text-rose-300" : "text-rose-500"}>خصم الإيقاف:</span>
+                <span className={cn("font-bold font-manrope text-sm", dominantHsl ? "text-rose-300" : "text-rose-600")}>
+                  -{suspensionDiscount.toLocaleString('ar-LY')} د.ل
+                </span>
+              </div>
+              <div className={cn("flex justify-between items-center pt-1.5 border-t text-xs font-bold", borderClass)}>
+                <span className={textClass}>المجموع المستحق (بعد الإيقاف):</span>
+                <span className={cn("font-bold font-manrope text-sm", textPrimaryClass)}>{finalTotalCost.toLocaleString('ar-LY')} د.ل</span>
+              </div>
+            </>
+          ) : (
+            <div className={cn("flex justify-between items-center pt-1.5 border-t text-xs font-bold", borderClass)}>
+              <span className={textClass}>المجموع المستحق:</span>
+              <span className={cn("font-bold font-manrope text-sm", textPrimaryClass)}>{finalTotalCost.toLocaleString('ar-LY')} د.ل</span>
+            </div>
+          )}
 
           {totalExpenses > 0 && (
             <div className={cn("flex justify-between items-center text-[10px] font-semibold pt-1 border-t", borderClass, dominantHsl ? "text-emerald-300" : "text-emerald-600 dark:text-emerald-400")}>

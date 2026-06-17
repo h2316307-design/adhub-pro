@@ -173,6 +173,23 @@ export const useBillboardData = () => {
     }
   }, []);
 
+  // Load cities from cities table
+  const loadCities = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('cities')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      const names = data?.map(city => city.name).filter(Boolean) || [];
+      setCitiesList(names);
+      console.log('✅ Loaded cities from cities table:', names);
+    } catch (error: any) {
+      console.error('Error loading cities:', error);
+    }
+  }, []);
+
   // ✅ ENHANCED: Load billboards with proper contract matching
   const loadBillboards = useCallback(async (options?: { silent?: boolean }) => {
     try {
@@ -455,7 +472,7 @@ export const useBillboardData = () => {
         .filter(Boolean)
       )].sort();
 
-      setCitiesList(cities);
+      loadCities();
       setDbMunicipalities(municipalities);
 
       // ✅ Sort sizes by database order AND sync pin colors
@@ -619,7 +636,6 @@ export const useBillboardData = () => {
     }
   }, []);
 
-  // ✅ FIXED: Initialize data on component mount with proper dependency array
   useEffect(() => {
     const initializeData = async () => {
       await Promise.all([
@@ -627,14 +643,15 @@ export const useBillboardData = () => {
         loadSizes(),
         loadLevels(),
         loadFaces(),
-        loadBillboardTypes()
+        loadBillboardTypes(),
+        loadCities()
       ]);
       // Load billboards last to ensure all form data is ready
       await loadBillboards();
     };
 
     initializeData();
-  }, []); // ✅ Empty dependency array to prevent infinite loop
+  }, [loadMunicipalities, loadSizes, loadLevels, loadFaces, loadBillboardTypes, loadCities, loadBillboards]); // Added dependencies
 
   return {
     billboards,
@@ -651,6 +668,12 @@ export const useBillboardData = () => {
     faces,
     billboardTypes,
     loadBillboards,
+    loadCities,
+    loadMunicipalities,
+    loadSizes,
+    loadLevels,
+    loadFaces,
+    loadBillboardTypes,
     updateBillboardVisibilityLocal,
     updateBillboardLocal,
     setMunicipalities,

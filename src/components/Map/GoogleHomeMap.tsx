@@ -46,7 +46,7 @@ interface GoogleHomeMapProps {
   onShowSocietChange?: (val: boolean) => void;
 }
 
-import { parseCoords } from '@/utils/parseCoords';
+import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
 import * as XLSX from 'xlsx';
 
 const LIBYA_CENTER = { lat: 32.8872, lng: 13.1913 };
@@ -103,10 +103,21 @@ export default function GoogleHomeMap({
   const leafletTrackingRouteGlowRef = useRef<L.Polyline | null>(null);
   const trackingPointsRef = useRef<{lat: number; lng: number}[]>([]);
   const osrmPendingRef = useRef(false);
+  const leafletMarkerMapRef = useRef<Map<string, L.Marker>>(new Map());
+
+  // Refs to avoid stale closures in Leaflet event listeners
+  const onBillboardClickRef = useRef(onBillboardClick);
+  const toggleBillboardSelectionRef = useRef<((billboardId: number) => void) | null>(null);
+
+  useEffect(() => {
+    onBillboardClickRef.current = onBillboardClick;
+  }, [onBillboardClick]);
   
   // Search pin refs
   const googleSearchPinRef = useRef<google.maps.Marker | null>(null);
   const leafletSearchPinRef = useRef<L.Marker | null>(null);
+  const googleSearchCircleRef = useRef<google.maps.Circle | null>(null);
+  const leafletSearchCircleRef = useRef<L.Circle | null>(null);
   
   // Container ref for fullscreen
   const containerRef = useRef<HTMLDivElement>(null);
@@ -149,6 +160,19 @@ export default function GoogleHomeMap({
   const [selectedBillboardForCard, setSelectedBillboardForCard] = useState<Billboard | null>(null);
   const [cardScreenPos, setCardScreenPos] = useState<{ x: number; y: number } | null>(null);
   const [localStatusFilter, setLocalStatusFilter] = useState<string[]>([]);
+
+  // Keep selectedBillboardForCard in sync with updated billboards data
+  useEffect(() => {
+    if (selectedBillboardForCard) {
+      const cardId = String((selectedBillboardForCard as any).ID || (selectedBillboardForCard as any).id || '');
+      const updatedBillboard = billboards.find(b => String((b as any).ID || (b as any).id || '') === cardId);
+      if (updatedBillboard) {
+        setSelectedBillboardForCard(updatedBillboard);
+      } else {
+        setSelectedBillboardForCard(null);
+      }
+    }
+  }, [billboards]);
   // Contract data fetched on demand for selected billboard
   const [contractData, setContractData] = useState<any | null>(null);
   const [contractLoading, setContractLoading] = useState(false);
@@ -653,20 +677,18 @@ export default function GoogleHomeMap({
     return set;
   }, [activeStatusesMap]);
 
-  // Filter billboards - combine internal search with external filters
+  // Filter billboards - only filter by external filters, local search is for navigation only
   const filteredBillboards = useMemo(() => {
-    const combinedSearchQuery = externalSearchQuery || searchQuery;
-    
-    return billboards.filter(b => {
+    const combinedSearchQuery = externalSearchQuery;
+    return billboards.filter((b) => {
       // Must have valid coordinates
       const parsedCoords = parseCoords(b);
       if (!parsedCoords) {
-        // Skip billboards without valid coordinates silently
         return false;
       }
+      
+      const sizeVal = (b as any).Size || '';
 
-      // سوسيت filter: إذا كان عرض السوسيت مفعّل → أظهر السوسيت فقط، وإلا أخفِ السوسيت
-      const sizeVal = String((b as any).Size || (b as any).size || '').trim();
       if (externalShowSociet) {
         if (sizeVal !== 'سوسيت') return false;
       } else {
@@ -757,6 +779,11 @@ export default function GoogleHomeMap({
     });
   }, []);
 
+  // Sync the ref after toggleBillboardSelection is defined
+  useEffect(() => {
+    toggleBillboardSelectionRef.current = toggleBillboardSelection;
+  }, [toggleBillboardSelection]);
+
   // Multi-select: export to Excel
   const exportSelectedToExcel = useCallback(() => {
     const selected = billboards.filter(b => selectedBillboardIds.has((b as any).ID || 0));
@@ -825,34 +852,115 @@ export default function GoogleHomeMap({
       document.removeEventListener('closeBillboardInfoWindow', handleClose);
     };
   }, []);
-
   const navigateToCoords = useCallback((lat: number, lng: number) => {
-    // Clear old search pin
-    if (googleSearchPinRef.current) { googleSearchPinRef.current.setMap(null); googleSearchPinRef.current = null; }
-    if (leafletSearchPinRef.current && leafletMapInstanceRef.current) { leafletMapInstanceRef.current.removeLayer(leafletSearchPinRef.current); leafletSearchPinRef.current = null; }
+    // 1. Clear old search pin and circle
+    if (googleSearchPinRef.current) {
+      googleSearchPinRef.current.setMap(null);
+      googleSearchPinRef.current = null;
+    }
+    if (googleSearchCircleRef.current) {
+      googleSearchCircleRef.current.setMap(null);
+      googleSearchCircleRef.current = null;
+    }
+    if (leafletSearchPinRef.current && leafletMapInstanceRef.current) {
+      leafletMapInstanceRef.current.removeLayer(leafletSearchPinRef.current);
+      leafletSearchPinRef.current = null;
+    }
+    if (leafletSearchCircleRef.current && leafletMapInstanceRef.current) {
+      leafletMapInstanceRef.current.removeLayer(leafletSearchCircleRef.current);
+      leafletSearchCircleRef.current = null;
+    }
 
     if (mapProvider === 'google' && googleMapInstanceRef.current && window.google?.maps) {
       const pin = new google.maps.Marker({
         position: { lat, lng },
         map: googleMapInstanceRef.current,
-        icon: { path: google.maps.SymbolPath.CIRCLE, scale: 12, fillColor: '#ef4444', fillOpacity: 0.9, strokeColor: '#fff', strokeWeight: 3 },
-        zIndex: 999,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          scale: 12,
+          fillColor: '#d6ac40',
+          fillOpacity: 1,
+          strokeColor: '#fff',
+          strokeWeight: 3
+        },
+        zIndex: 9999,
         title: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
       });
       googleSearchPinRef.current = pin;
+
+      const circle = new google.maps.Circle({
+        strokeColor: '#d6ac40',
+        strokeOpacity: 0.8,
+        strokeWeight: 1.5,
+        fillColor: '#d6ac40',
+        fillOpacity: 0.12,
+        map: googleMapInstanceRef.current,
+        center: { lat, lng },
+        radius: 200
+      });
+      googleSearchCircleRef.current = circle;
+
       googleMapInstanceRef.current.setCenter({ lat, lng });
       googleMapInstanceRef.current.setZoom(17);
-      // Auto-remove after 30s
-      setTimeout(() => { pin.setMap(null); if (googleSearchPinRef.current === pin) googleSearchPinRef.current = null; }, 30000);
+
+      // Auto-remove after 45s
+      setTimeout(() => {
+        if (pin && googleSearchPinRef.current === pin) {
+          pin.setMap(null);
+          googleSearchPinRef.current = null;
+        }
+        if (circle && googleSearchCircleRef.current === circle) {
+          circle.setMap(null);
+          googleSearchCircleRef.current = null;
+        }
+      }, 45000);
     } else if (mapProvider === 'openstreetmap' && leafletMapInstanceRef.current) {
+      const pulseHtml = `
+        <div style="position: relative; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px;">
+          <div style="position: absolute; width: 40px; height: 40px; border-radius: 50%; background: rgba(214, 172, 64, 0.2); border: 2px solid #d6ac40; animation: pulseRadar 2s infinite ease-out;"></div>
+          <div style="position: absolute; top: 10px; left: 10px; width: 20px; height: 20px; border-radius: 50%; background: #d6ac40; border: 3px solid #fff; box-shadow: 0 0 10px rgba(0,0,0,0.5);"></div>
+          <style>
+            @keyframes pulseRadar {
+              0% { transform: scale(0.5); opacity: 1; }
+              100% { transform: scale(1.8); opacity: 0; }
+            }
+          </style>
+        </div>
+      `;
       const pin = L.marker([lat, lng], {
-        icon: L.divIcon({ className: '', html: '<div style="width:24px;height:24px;background:#ef4444;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.3)"></div>', iconSize: [24, 24], iconAnchor: [12, 12] }),
+        icon: L.divIcon({
+          className: '',
+          html: pulseHtml,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        }),
       }).addTo(leafletMapInstanceRef.current);
       leafletSearchPinRef.current = pin;
+
+      const circle = L.circle([lat, lng], {
+        color: '#d6ac40',
+        fillColor: '#d6ac40',
+        fillOpacity: 0.12,
+        radius: 200,
+        weight: 1.5
+      }).addTo(leafletMapInstanceRef.current);
+      leafletSearchCircleRef.current = circle;
+
       leafletMapInstanceRef.current.setView([lat, lng], 17);
-      setTimeout(() => { pin.remove(); if (leafletSearchPinRef.current === pin) leafletSearchPinRef.current = null; }, 30000);
+
+      // Auto-remove after 45s
+      setTimeout(() => {
+        if (pin && leafletSearchPinRef.current === pin && leafletMapInstanceRef.current) {
+          leafletMapInstanceRef.current.removeLayer(pin);
+          leafletSearchPinRef.current = null;
+        }
+        if (circle && leafletSearchCircleRef.current === circle && leafletMapInstanceRef.current) {
+          leafletMapInstanceRef.current.removeLayer(circle);
+          leafletSearchCircleRef.current = null;
+        }
+      }, 45000);
     }
-    toast.success(`تم التوجه للإحداثي: ${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+    toast.success(`تم التوجيه وتحديد المنطقة الجغرافية بنجاح`);
   }, [mapProvider]);
 
   // Focus on a billboard from search
@@ -939,7 +1047,8 @@ export default function GoogleHomeMap({
       zoomControl: false,
       attributionControl: false,
       maxZoom: 21,
-      minZoom: 5
+      minZoom: 5,
+      preferCanvas: true
     });
 
     leafletMapInstanceRef.current = map;
@@ -1110,7 +1219,7 @@ export default function GoogleHomeMap({
     let hasMarkers = false;
 
     filteredBillboards.forEach((b) => {
-      const coords = parseCoords(b);
+      const coords = getJitteredCoords(b, billboards);
       if (!coords) return;
 
       const billboardId = (b as any).ID || 0;
@@ -1423,19 +1532,33 @@ export default function GoogleHomeMap({
           console.error('Failed to load Google Maps:', error);
         });
     }
+
+    return () => {
+      if (googleMapInstanceRef.current) {
+        googleMarkerMapRef.current.forEach(m => m.setMap(null));
+        googleMarkerMapRef.current.clear();
+        if (googleClustererRef.current) {
+          try {
+            googleClustererRef.current.clearMarkers();
+          } catch (e) {}
+          googleClustererRef.current = null;
+        }
+        googleMapInstanceRef.current = null;
+      }
+    };
   }, [mapProvider, mapType]);
 
-  // Update Google markers - diff-based for performance
+  // Update Google markers - diff-based with full marker and clusterer sync
   const updateGoogleMarkers = useCallback((skipFitBounds: boolean = false) => {
     if (!googleMapInstanceRef.current || !window.google?.maps) return;
 
     const map = googleMapInstanceRef.current;
 
-    // Build new billboard ID set
+    // Build new billboard ID set of active billboards
     const newBillboardMap = new Map<string, Billboard>();
     filteredBillboards.forEach(b => {
       const id = String((b as any).ID || (b as any).id || '');
-      if (id && parseCoords(b)) {
+      if (id && getJitteredCoords(b, billboards)) {
         newBillboardMap.set(id, b);
       }
     });
@@ -1463,23 +1586,49 @@ export default function GoogleHomeMap({
       }
     });
 
-    // Clear clusterer if there are changes
-    const hasChanges = toRemove.length > 0 || toAdd.length > 0;
-    if (hasChanges) {
-      try {
-        if (googleClustererRef.current) {
-          googleClustererRef.current.clearMarkers();
-          googleClustererRef.current = null;
-        }
-      } catch (e) {
-        console.warn('Error clearing clusterer:', e);
+    // Always clear clusterer before updates/rebuilds to prevent stale clusters or disappearing markers
+    try {
+      if (googleClustererRef.current) {
+        googleClustererRef.current.clearMarkers();
+        googleClustererRef.current = null;
       }
+    } catch (e) {
+      console.warn('Error clearing clusterer:', e);
     }
+
+    // Update existing markers (position, title, icon, and stored billboard data)
+    existingIds.forEach(id => {
+      if (newIds.has(id)) {
+        const marker = googleMarkerMapRef.current.get(id);
+        const b = newBillboardMap.get(id);
+        if (marker && b) {
+          const coords = getJitteredCoords(b, billboards);
+          if (coords) {
+            marker.setPosition(coords);
+            marker.setTitle((b as any).Billboard_Name || 'لوحة إعلانية');
+            
+            const billboardId = Number(id) || 0;
+            const isVisited = passedBillboardIds.has(billboardId);
+            const isSelected = (selectedBillboardForCard && (Number((selectedBillboardForCard as any).ID || (selectedBillboardForCard as any).id) === billboardId)) || selectedBillboardIdsRef.current.has(billboardId);
+            const pinData = createPinWithLabel(b, isSelected, isVisited);
+            
+            marker.setIcon({
+              url: pinData.url,
+              scaledSize: new google.maps.Size(pinData.width, pinData.height),
+              anchor: new google.maps.Point(pinData.anchorX, pinData.anchorY)
+            });
+            
+            // Store updated billboard data on the marker
+            marker.set('billboardData', b);
+          }
+        }
+      }
+    });
 
     // Add new markers
     toAdd.forEach(id => {
       const b = newBillboardMap.get(id)!;
-      const coords = parseCoords(b);
+      const coords = getJitteredCoords(b, billboards);
       if (!coords || typeof coords.lat !== 'number' || typeof coords.lng !== 'number' || isNaN(coords.lat) || isNaN(coords.lng)) return;
       const billboardId = Number(id) || 0;
       const isVisited = passedBillboardIds.has(billboardId);
@@ -1498,13 +1647,17 @@ export default function GoogleHomeMap({
         optimized: true
       });
 
+      // Store billboard data on the marker
+      marker.set('billboardData', b);
+
       marker.addListener('click', () => {
+        const currentB = marker.get('billboardData') || b;
         // Multi-select mode: toggle selection instead of opening info
         if (isMultiSelectModeRef.current) {
           toggleBillboardSelection(billboardId);
           // Update pin appearance
           const newSelected = !selectedBillboardIdsRef.current.has(billboardId);
-          const updatedPin = createPinWithLabel(b, newSelected, passedBillboardIds.has(billboardId));
+          const updatedPin = createPinWithLabel(currentB, newSelected, passedBillboardIds.has(billboardId));
           marker.setIcon({
             url: updatedPin.url,
             scaledSize: new google.maps.Size(updatedPin.width, updatedPin.height),
@@ -1515,8 +1668,8 @@ export default function GoogleHomeMap({
         
         if (googleInfoWindowRef.current) googleInfoWindowRef.current.close();
         
-        setSelectedBillboardForCard(b);
-        if (onBillboardClick) onBillboardClick(b);
+        setSelectedBillboardForCard(currentB);
+        if (onBillboardClick) onBillboardClick(currentB);
       });
 
       googleMarkerMapRef.current.set(id, marker);
@@ -1527,50 +1680,48 @@ export default function GoogleHomeMap({
 
     if (!googleMarkersRef.current.length) return;
 
-    // Rebuild clusterer
-    if (hasChanges && googleMarkersRef.current.length > 0) {
-      try {
-        googleClustererRef.current = new MarkerClusterer({
-          map,
-          markers: googleMarkersRef.current,
-          renderer: {
-            render: ({ count, position }) => {
-              const size = (() => {
-                const factor = isMobile ? 6 : 8;
-                const min = isMobile ? 24 : 30;
-                const max = isMobile ? 52 : 60;
-                return Math.min(Math.sqrt(count) * factor + min, max);
-              })();
-              
-              const clusterSvg = `
-                <svg width="${size}" height="${size}" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
-                  <defs>
-                    <linearGradient id="clusterGradG" x1="0%" y1="0%" x2="100%" y2="100%">
-                      <stop offset="0%" style="stop-color:#d4af37"/>
-                      <stop offset="100%" style="stop-color:#b8860b"/>
-                    </linearGradient>
-                  </defs>
-                  <circle cx="25" cy="25" r="23" fill="url(#clusterGradG)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
-                  <circle cx="25" cy="25" r="16" fill="#1a1a2e"/>
-                  <text x="25" y="30" text-anchor="middle" fill="#d4af37" font-size="14" font-weight="800" font-family="Tajawal, sans-serif">${count > 99 ? '99+' : count}</text>
-                </svg>
-              `;
-              
-              return new google.maps.Marker({
-                position,
-                icon: {
-                  url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(clusterSvg),
-                  scaledSize: new google.maps.Size(size, size),
-                  anchor: new google.maps.Point(size / 2, size / 2)
-                },
-                zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
-              });
-            },
+    // Always rebuild clusterer with the updated markers list
+    try {
+      googleClustererRef.current = new MarkerClusterer({
+        map,
+        markers: googleMarkersRef.current,
+        renderer: {
+          render: ({ count, position }) => {
+            const size = (() => {
+              const factor = isMobile ? 6 : 8;
+              const min = isMobile ? 24 : 30;
+              const max = isMobile ? 52 : 60;
+              return Math.min(Math.sqrt(count) * factor + min, max);
+            })();
+            
+            const clusterSvg = `
+              <svg width="${size}" height="${size}" viewBox="0 0 50 50" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                  <linearGradient id="clusterGradG" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" style="stop-color:#d4af37"/>
+                    <stop offset="100%" style="stop-color:#b8860b"/>
+                  </linearGradient>
+                </defs>
+                <circle cx="25" cy="25" r="23" fill="url(#clusterGradG)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+                <circle cx="25" cy="25" r="16" fill="#1a1a2e"/>
+                <text x="25" y="30" text-anchor="middle" fill="#d4af37" font-size="14" font-weight="800" font-family="Tajawal, sans-serif">${count > 99 ? '99+' : count}</text>
+              </svg>
+            `;
+            
+            return new google.maps.Marker({
+              position,
+              icon: {
+                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(clusterSvg),
+                scaledSize: new google.maps.Size(size, size),
+                anchor: new google.maps.Point(size / 2, size / 2)
+              },
+              zIndex: Number(google.maps.Marker.MAX_ZINDEX) + count,
+            });
           },
-        });
-      } catch (e) {
-        console.warn('Clusterer error:', e);
-      }
+        },
+      });
+    } catch (e) {
+      console.warn('Clusterer error:', e);
     }
 
     // Fit bounds logic
@@ -1606,7 +1757,7 @@ export default function GoogleHomeMap({
         console.warn('Error fitting bounds:', error);
       }
     }
-  }, [filteredBillboards, onBillboardClick, createPinWithLabel, isMobile, isTracking, passedBillboardIds]);
+  }, [filteredBillboards, onBillboardClick, createPinWithLabel, isMobile, isTracking, passedBillboardIds, selectedBillboardForCard]);
 
   // Update marker icons dynamically when zoom level or selection changes
   useEffect(() => {
@@ -2955,13 +3106,13 @@ export default function GoogleHomeMap({
             isMobile
               ? 'bottom-2 left-2 right-2 max-h-[60vh]'
               : !cardScreenPos
-                ? 'bottom-6 right-6 w-[360px]'
-                : 'w-[360px]'
+                ? 'bottom-6 right-6 w-[740px]'
+                : 'w-[740px]'
           }`}
           style={
             !isMobile && cardScreenPos
               ? {
-                  left: Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - 372, cardScreenPos.x - 180)),
+                  left: Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - 752, cardScreenPos.x - 370)),
                   top: Math.max(12, cardScreenPos.y - 20),
                   transform: 'translateY(-100%)',
                 }
@@ -2974,7 +3125,7 @@ export default function GoogleHomeMap({
               <div
                 className="absolute z-20"
                 style={{
-                  left: Math.max(18, Math.min(328, cardScreenPos.x - (Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - 372, cardScreenPos.x - 180))) )) - 7,
+                  left: Math.max(18, Math.min(722, cardScreenPos.x - (Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - 752, cardScreenPos.x - 370))) )) - 7,
                   bottom: -7,
                   width: 14,
                   height: 14,
@@ -2994,8 +3145,10 @@ export default function GoogleHomeMap({
               const statusTone =
                 isHidden ? { dot: 'bg-slate-400', text: 'text-slate-300', bg: 'bg-slate-500/15', bd: 'border-slate-400/30' } :
                 statusLabel === 'متاحة' || statusLabel === 'متاح' ? { dot: 'bg-emerald-400', text: 'text-emerald-300', bg: 'bg-emerald-500/15', bd: 'border-emerald-400/30' } :
-                statusLabel === 'محجوزة' || statusLabel === 'محجوز' ? { dot: 'bg-amber-400', text: 'text-amber-300', bg: 'bg-amber-500/15', bd: 'border-amber-400/30' } :
-                statusLabel === 'صيانة' || statusLabel === 'تحتاج صيانة' ? { dot: 'bg-red-400', text: 'text-red-300', bg: 'bg-red-500/15', bd: 'border-red-400/30' } :
+                statusLabel === 'مؤجرة' || statusLabel === 'مؤجر' || statusLabel === 'محجوزة' || statusLabel === 'محجوز' ? { dot: 'bg-rose-400', text: 'text-rose-300', bg: 'bg-rose-500/15', bd: 'border-rose-400/30' } :
+                statusLabel === 'صيانة' || statusLabel === 'تحتاج صيانة' || statusLabel === 'قيد الصيانة' || statusLabel === 'متضررة اللوحة' ? { dot: 'bg-amber-400', text: 'text-amber-300', bg: 'bg-amber-500/15', bd: 'border-amber-400/30' } :
+                statusLabel === 'إزالة' ? { dot: 'bg-gray-400', text: 'text-gray-300', bg: 'bg-gray-500/15', bd: 'border-gray-400/30' } :
+                statusLabel === 'خارج الخدمة' ? { dot: 'bg-neutral-400', text: 'text-neutral-300', bg: 'bg-neutral-500/15', bd: 'border-neutral-400/30' } :
                 { dot: 'bg-blue-400', text: 'text-blue-300', bg: 'bg-blue-500/15', bd: 'border-blue-400/30' };
 
               // Use only the billboard's real image — don't fall back to design image (caused "غير محملة" look)
@@ -3007,7 +3160,7 @@ export default function GoogleHomeMap({
               const endRaw = c['End Date'] || c.end_date || c.End_Date || bb.Rent_End_Date || bb.rent_end_date || bb.expiryDate;
               const customer = c['Customer Name'] || c.Customer_Name || c.customer_name || bb.Customer_Name || '';
               const adType = c['Ad Type'] || c.ad_type || bb.Ad_Type || bb.ad_type || '';
-              const totalRent = c['Total Rent'] || c.Total_Rent || c['Total'] || c.Total;
+              const contractTotal = c.Total || c['Total'] || c.total_cost || c['Total Rent'] || c.Total_Rent || c.rent_cost;
               const contractNum = bb.Contract_Number || bb.contract_number;
               const days = getDaysRemaining(endRaw);
               const fmt = (d: any) => {
@@ -3019,210 +3172,425 @@ export default function GoogleHomeMap({
               const showRental = !!startRaw || !!endRaw;
               const isAvailable = statusLabel === 'متاحة' || statusLabel === 'متاح';
 
-              return (
+              // Calculate billboard contract price
+              let billboardContractPrice: number | null = null;
+              if (c && Object.keys(c).length > 0) {
+                const rawPrices = c.billboard_prices;
+                if (rawPrices) {
+                  try {
+                    const prices = typeof rawPrices === 'string' ? JSON.parse(rawPrices) : rawPrices;
+                    if (Array.isArray(prices)) {
+                      const billboardIdStr = String(bb.ID || bb.id);
+                      const match = prices.find((p: any) => String(p.billboardId) === billboardIdStr);
+                      if (match) {
+                        billboardContractPrice = Number(match.finalPrice ?? match.priceAfterDiscount ?? match.totalBillboardPrice ?? 0);
+                      }
+                    }
+                  } catch (e) {
+                    console.error('Error parsing billboard_prices in map card:', e);
+                  }
+                }
+                if (!billboardContractPrice && c.rent_cost) {
+                  billboardContractPrice = Number(c.rent_cost);
+                }
+              }
+
+              const actionsSection = (
+                <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-white/5">
+                  <button
+                    onClick={() => {
+                      const action = () => {
+                        if (onBillboardClick) onBillboardClick(selectedBillboardForCard);
+                        window.dispatchEvent(new CustomEvent('edit-billboard', { detail: bb.ID || bb.id }));
+                      };
+                      if (document.fullscreenElement) {
+                        document.exitFullscreen().then(() => {
+                          setTimeout(action, 100);
+                        }).catch(() => {
+                          action();
+                        });
+                      } else {
+                        action();
+                      }
+                    }}
+                    className="py-2 rounded-lg text-[10px] font-extrabold border border-white/10 hover:bg-white/5 text-slate-200 hover:text-white transition-all cursor-pointer"
+                  >تعديل</button>
+                  <button
+                    onClick={() => {
+                      const action = () => {
+                        window.dispatchEvent(new CustomEvent('billboard-maintenance', { detail: bb.ID || bb.id }));
+                      };
+                      if (document.fullscreenElement) {
+                        document.exitFullscreen().then(() => {
+                          setTimeout(action, 100);
+                        }).catch(() => {
+                          action();
+                        });
+                      } else {
+                        action();
+                      }
+                    }}
+                    className="py-2 rounded-lg text-[10px] font-extrabold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 transition-all cursor-pointer"
+                  >صيانة</button>
+                  <button
+                    onClick={() => {
+                      const bid = bb.ID || bb.id;
+                      const isTorn = tornSet.has(Number(bid));
+                      if (confirm(isTorn ? 'إلغاء حالة الإعلان الممزق؟' : 'تسجيل اللوحة كإعلان ممزق؟')) {
+                        window.dispatchEvent(new CustomEvent('billboard-mark-torn', { detail: bid }));
+                      }
+                    }}
+                    className="py-2 rounded-lg text-[10px] font-extrabold bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 text-red-300 transition-all cursor-pointer"
+                  >{tornSet.has(Number(bb.ID || bb.id)) ? 'سليم' : 'تمزق'}</button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const newStatus = bb.is_visible_in_available === false;
+                        const { error } = await supabase
+                          .from('billboards')
+                          .update({ is_visible_in_available: newStatus })
+                          .eq('ID', bb.ID || bb.id);
+
+                        if (error) throw error;
+
+                        toast.success(newStatus ? 'ستظهر اللوحة في قائمة المتاح' : 'لن تظهر اللوحة في قائمة المتاح');
+                        setSelectedBillboardForCard(prev => prev ? { ...prev, is_visible_in_available: newStatus } : null);
+                        window.dispatchEvent(new CustomEvent('billboard-toggle-visibility', { detail: bb.ID || bb.id }));
+                      } catch (error) {
+                        console.error('Error updating visibility status:', error);
+                        toast.error('فشل في تحديث حالة الظهور');
+                      }
+                    }}
+                    className={`py-2 rounded-lg text-[10px] font-extrabold border transition-all cursor-pointer ${
+                      bb.is_visible_in_available !== false
+                        ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                        : 'border-red-500/40 bg-red-500/15 text-red-300'
+                    }`}
+                  >
+                    {bb.is_visible_in_available !== false ? 'إخفاء' : 'إظهار'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      const coords = parseCoords(selectedBillboardForCard);
+                      if (coords) {
+                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`, '_blank');
+                      } else {
+                        toast.error('إحداثيات اللوحة غير صالحة');
+                      }
+                    }}
+                    className="py-2 rounded-lg text-[10px] font-extrabold bg-[#d6ac40] hover:bg-[#f4c25a] text-[#0a0a14] shadow-lg shadow-[#d6ac40]/20 transition-all cursor-pointer"
+                  >توجيه</button>
+                </div>
+              );
+
+              const infoSection = (
                 <>
-                  {/* Header: hero image with overlays */}
-                  <div className={`relative ${isMobile ? 'h-28' : 'h-44'} bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden`}>
-                    {/* Loading skeleton */}
-                    {cardImageState === 'loading' && heroSrc && (
-                      <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
-                    )}
-                    {heroSrc ? (
-                      <img
-                        src={heroSrc}
-                        alt={code}
-                        loading="lazy"
-                        referrerPolicy="no-referrer"
-                        onLoad={() => setCardImageState('loaded')}
-                        onError={() => setCardImageState('error')}
-                        onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
-                        className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
-                      />
-                    ) : null}
-                    {(cardImageState === 'error' || !heroSrc) && (
-                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
-                        <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
-                        <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
-
-                    {/* Close */}
-                    <button
-                      onClick={() => setSelectedBillboardForCard(null)}
-                      className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
-                      aria-label="إغلاق"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-
-                    {/* Status pill */}
-                    <div className={`absolute top-3 right-3 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-lg`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
-                      {statusLabel}
+                  {/* Quick facts row */}
+                  <div className="grid grid-cols-3 gap-2 text-[11px]">
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
+                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">المقاس</div>
+                      <div className="text-white font-extrabold" style={{ fontFamily: 'Manrope, sans-serif' }}>{bb.Size || bb.size || '—'}</div>
                     </div>
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
+                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">نوع الإعلان</div>
+                      <div className="text-[#f4c25a] font-extrabold truncate">{adType || '—'}</div>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
+                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">المدينة</div>
+                      <div className="text-white font-extrabold truncate">{bb.City || '—'}</div>
+                    </div>
+                  </div>
 
-                    {/* Title at bottom of hero */}
-                    <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-6 z-10">
-                      <div className="flex items-end justify-between gap-2">
-                        <div className="min-w-0">
-                          <h3 className="text-base font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
-                          <p className="text-[10px] text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
-                        </div>
-                        <button
-                          onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
-                          className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
-                          title="نسخ الرمز"
-                        >
-                          <CheckSquare className="w-3.5 h-3.5" />
-                        </button>
+                  {/* Location */}
+                  <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 flex items-start gap-2.5">
+                    <MapPinned className="w-4 h-4 text-[#d6ac40] mt-0.5 flex-shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">الموقع / المعلم</div>
+                      <div className="text-white text-[12px] font-bold leading-tight">
+                        {bb.Municipality ? `${bb.Municipality} — ` : ''}{bb.District ? `${bb.District} — ` : ''}{bb.Nearest_Landmark || 'غير محدد'}
                       </div>
                     </div>
                   </div>
 
-                  {/* Body */}
-                  <div className={`${isMobile ? 'p-3 space-y-2' : 'p-4 space-y-3'}`}>
-                    {/* Quick facts row */}
-                    <div className="grid grid-cols-3 gap-2 text-[11px]">
-                      <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
-                        <div className="text-[9px] text-slate-400 font-bold mb-0.5">المقاس</div>
-                        <div className="text-white font-extrabold" style={{ fontFamily: 'Manrope, sans-serif' }}>{bb.Size || bb.size || '—'}</div>
-                      </div>
-                      <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
-                        <div className="text-[9px] text-slate-400 font-bold mb-0.5">نوع الإعلان</div>
-                        <div className="text-[#f4c25a] font-extrabold truncate">{adType || '—'}</div>
-                      </div>
-                      <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
-                        <div className="text-[9px] text-slate-400 font-bold mb-0.5">المدينة</div>
-                        <div className="text-white font-extrabold truncate">{bb.City || '—'}</div>
-                      </div>
-                    </div>
-
-                    {/* Location */}
-                    <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 flex items-start gap-2.5">
-                      <MapPinned className="w-4 h-4 text-[#d6ac40] mt-0.5 flex-shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[9px] text-slate-400 font-bold mb-0.5">الموقع / المعلم</div>
-                        <div className="text-white text-[12px] font-bold leading-tight">
-                          {bb.District ? `${bb.District} — ` : ''}{bb.Nearest_Landmark || 'غير محدد'}
+                  {/* Price Section */}
+                  {isAvailable ? (
+                    (bb.Price || bb.price) && Number(bb.Price || bb.price) > 0 ? (
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="w-4 h-4 text-[#d6ac40] flex-shrink-0" />
+                          <span className="text-[10px] text-slate-400 font-bold">سعر الإيجار شهرياً</span>
+                        </div>
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="font-extrabold text-[14px] text-[#f4c25a] font-manrope">
+                            {Number(bb.Price || bb.price).toLocaleString()}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-semibold">د.ل/شهرياً</span>
                         </div>
                       </div>
-                    </div>
-
-                    {/* Rental / Contract block */}
-                    {!isAvailable && (contractNum || customer || showRental) && (
-                      <div className="rounded-xl border border-[#d6ac40]/25 bg-gradient-to-br from-[#d6ac40]/8 to-[#d6ac40]/[0.02] p-3 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-[#f4c25a]">
-                            <FileText className="w-3.5 h-3.5" />
-                            بيانات العقد
-                          </div>
-                          {contractLoading && <Loader2 className="w-3 h-3 text-[#d6ac40] animate-spin" />}
-                          {contractNum && (
-                            <span className="text-[10px] font-mono font-bold text-[#d6ac40]">#{contractNum}</span>
-                          )}
+                    ) : null
+                  ) : (
+                    billboardContractPrice && billboardContractPrice > 0 ? (
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Wallet className="w-4 h-4 text-[#d6ac40] flex-shrink-0" />
+                          <span className="text-[10px] text-slate-400 font-bold">قيمة اللوحة في العقد (بعد الخصم)</span>
                         </div>
+                        <div className="flex items-baseline gap-0.5">
+                          <span className="font-extrabold text-[14px] text-emerald-400 font-manrope">
+                            {Number(billboardContractPrice).toLocaleString()}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-semibold">د.ل</span>
+                        </div>
+                      </div>
+                    ) : null
+                  )}
 
-                        {customer && (
-                          <div className="flex items-center gap-2 text-[12px]">
-                            <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
-                            <span className="text-slate-300 font-bold truncate">{customer}</span>
-                          </div>
+                  {/* Rental / Contract block */}
+                  {!isAvailable && (contractNum || customer || showRental) && (
+                    <div className="rounded-xl border border-[#d6ac40]/25 bg-gradient-to-br from-[#d6ac40]/8 to-[#d6ac40]/[0.02] p-3 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-[#f4c25a]">
+                          <FileText className="w-3.5 h-3.5" />
+                          بيانات العقد
+                        </div>
+                        {contractLoading && <Loader2 className="w-3 h-3 text-[#d6ac40] animate-spin" />}
+                        {contractNum && (
+                          <span className="text-[10px] font-mono font-bold text-[#d6ac40]">#{contractNum}</span>
                         )}
-
-                        {showRental && (
-                          <div className="grid grid-cols-3 gap-2 text-[11px]">
-                            <div className="bg-black/30 border border-white/5 rounded-lg p-2 text-center">
-                              <div className="text-[9px] text-slate-400 font-bold mb-0.5 flex items-center justify-center gap-1">
-                                <Calendar className="w-2.5 h-2.5" />البداية
-                              </div>
-                              <div className="text-white font-extrabold text-[10.5px] leading-tight">{fmt(startRaw)}</div>
-                            </div>
-                            <div className="bg-black/30 border border-white/5 rounded-lg p-2 text-center">
-                              <div className="text-[9px] text-slate-400 font-bold mb-0.5 flex items-center justify-center gap-1">
-                                <Calendar className="w-2.5 h-2.5" />النهاية
-                              </div>
-                              <div className="text-white font-extrabold text-[10.5px] leading-tight">{fmt(endRaw)}</div>
-                            </div>
-                            <div className="bg-black/30 border border-white/5 rounded-lg p-2 text-center">
-                              <div className="text-[9px] text-slate-400 font-bold mb-0.5">المتبقي</div>
-                              <div className={`font-extrabold text-[12px] leading-tight ${days !== null && days > 0 ? 'text-[#f4c25a]' : 'text-emerald-300'}`}>
-                                {days !== null && days > 0 ? `${days} يوم` : '—'}
-                              </div>
-                            </div>
-                          </div>
-                        )}
-
-                        {totalRent ? (
-                          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/5">
-                            <span className="text-slate-400 font-bold flex items-center gap-1"><Wallet className="w-3 h-3" /> إجمالي العقد</span>
-                            <span className="text-[#f4c25a] font-extrabold" style={{ fontFamily: 'Manrope, sans-serif' }}>
-                              {Number(totalRent).toLocaleString('en-US')} د.ل
-                            </span>
-                          </div>
-                        ) : null}
                       </div>
-                    )}
 
-                    {/* Front face design preview */}
-                    {bb.design_face_a && (
-                      <div className="pt-1">
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
-                          <Camera className="w-3 h-3 text-[#d6ac40]" />
+                      {customer && (
+                        <div className="flex items-center gap-2 text-[12px]">
+                          <User className="w-3.5 h-3.5 text-slate-400 flex-shrink-0" />
+                          <span className="text-slate-300 font-bold truncate">{customer}</span>
                         </div>
-                        <div
-                          className={`relative ${isMobile ? 'h-20' : 'h-24'} rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group`}
-                          onClick={() => setLightboxImage(bb.design_face_a)}
-                        >
-                          {/* Blurred background for natural framing */}
-                          <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
-                          <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
-                            <span className="text-[10px] text-white font-bold">اضغط للتكبير</span>
+                      )}
+
+                      {showRental && (
+                        <div className="grid grid-cols-3 gap-2 text-[11px]">
+                          <div className="bg-black/30 border border-white/5 rounded-lg p-2 text-center">
+                            <div className="text-[9px] text-slate-400 font-bold mb-0.5 flex items-center justify-center gap-1">
+                              <Calendar className="w-2.5 h-2.5" />البداية
+                            </div>
+                            <div className="text-white font-extrabold text-[10.5px] leading-tight">{fmt(startRaw)}</div>
+                          </div>
+                          <div className="bg-black/30 border border-white/5 rounded-lg p-2 text-center">
+                            <div className="text-[9px] text-slate-400 font-bold mb-0.5 flex items-center justify-center gap-1">
+                              <Calendar className="w-2.5 h-2.5" />النهاية
+                            </div>
+                            <div className="text-white font-extrabold text-[10.5px] leading-tight">{fmt(endRaw)}</div>
+                          </div>
+                          <div className="bg-black/30 border border-white/5 rounded-lg p-2 text-center">
+                            <div className="text-[9px] text-slate-400 font-bold mb-0.5">المتبقي</div>
+                            <div className={`font-extrabold text-[12px] leading-tight ${days !== null && days > 0 ? 'text-[#f4c25a]' : 'text-emerald-300'}`}>
+                              {days !== null && days > 0 ? `${days} يوم` : '—'}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Actions */}
-                    <div className="grid grid-cols-4 gap-1.5 pt-2 border-t border-white/5">
-                      <button
-                        onClick={() => {
-                          if (onBillboardClick) onBillboardClick(selectedBillboardForCard);
-                          window.dispatchEvent(new CustomEvent('edit-billboard', { detail: bb.ID || bb.id }));
-                        }}
-                        className="py-2 rounded-lg text-[10px] font-extrabold border border-white/10 hover:bg-white/5 text-slate-200 hover:text-white transition-all cursor-pointer"
-                      >تعديل</button>
-                      <button
-                        onClick={() => window.dispatchEvent(new CustomEvent('billboard-maintenance', { detail: bb.ID || bb.id }))}
-                        className="py-2 rounded-lg text-[10px] font-extrabold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 transition-all cursor-pointer"
-                      >صيانة</button>
-                      <button
-                        onClick={() => {
-                          const bid = bb.ID || bb.id;
-                          const isTorn = tornSet.has(Number(bid));
-                          if (confirm(isTorn ? 'إلغاء حالة الإعلان الممزق؟' : 'تسجيل اللوحة كإعلان ممزق؟')) {
-                            window.dispatchEvent(new CustomEvent('billboard-mark-torn', { detail: bid }));
-                          }
-                        }}
-                        className="py-2 rounded-lg text-[10px] font-extrabold bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 text-red-300 transition-all cursor-pointer"
-                      >{tornSet.has(Number(bb.ID || bb.id)) ? 'سليم' : 'تمزق'}</button>
-                      <button
-                        onClick={() => {
-                          const coords = parseCoords(selectedBillboardForCard);
-                          if (coords) {
-                            window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`, '_blank');
-                          } else {
-                            toast.error('إحداثيات اللوحة غير صالحة');
-                          }
-                        }}
-                        className="py-2 rounded-lg text-[10px] font-extrabold bg-[#d6ac40] hover:bg-[#f4c25a] text-[#0a0a14] shadow-lg shadow-[#d6ac40]/20 transition-all cursor-pointer"
-                      >توجيه</button>
+                      {contractTotal ? (
+                        <div className="flex items-center justify-between text-[11px] pt-1 border-t border-white/5">
+                          <span className="text-slate-400 font-bold flex items-center gap-1"><Wallet className="w-3 h-3" /> المجموع المستحق</span>
+                          <span className="text-[#f4c25a] font-extrabold" style={{ fontFamily: 'Manrope, sans-serif' }}>
+                            {Number(contractTotal).toLocaleString('en-US')} د.ل
+                          </span>
+                        </div>
+                      ) : null}
                     </div>
-                  </div>
+                  )}
                 </>
               );
+
+              if (isMobile) {
+                return (
+                  <>
+                    {/* Header: hero image with overlays */}
+                    <div className="relative h-28 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
+                      {/* Loading skeleton */}
+                      {cardImageState === 'loading' && heroSrc && (
+                        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
+                      )}
+                      {heroSrc ? (
+                        <img
+                          src={heroSrc}
+                          alt={code}
+                          loading="lazy"
+                          referrerPolicy="no-referrer"
+                          onLoad={() => setCardImageState('loaded')}
+                          onError={() => setCardImageState('error')}
+                          onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
+                          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
+                        />
+                      ) : null}
+                      {(cardImageState === 'error' || !heroSrc) && (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
+                          <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
+                          <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
+                        </div>
+                      )}
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
+
+                      {/* Close */}
+                      <button
+                        onClick={() => setSelectedBillboardForCard(null)}
+                        className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
+                        aria-label="إغلاق"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+
+                      {/* Status pill */}
+                      <div className={`absolute top-3 right-3 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-lg`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
+                        {statusLabel}
+                      </div>
+
+                      {/* Title at bottom of hero */}
+                      <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-6 z-10">
+                        <div className="flex items-end justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="text-base font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
+                            <p className="text-[10px] text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
+                          </div>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
+                            className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
+                            title="نسخ الرمز"
+                          >
+                            <CheckSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Body */}
+                    <div className="p-3 space-y-2">
+                      {infoSection}
+
+                      {/* Front face design preview */}
+                      {bb.design_face_a && (
+                        <div className="pt-1">
+                          <div className="flex items-center justify-between mb-1.5">
+                            <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
+                            <Camera className="w-3 h-3 text-[#d6ac40]" />
+                          </div>
+                          <div
+                            className="relative h-20 rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group"
+                            onClick={() => setLightboxImage(bb.design_face_a)}
+                          >
+                            <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
+                            <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
+                              <span className="text-[10px] text-white font-bold">اضغط للتكبير</span>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {actionsSection}
+                    </div>
+                  </>
+                );
+              } else {
+                return (
+                  <div className="flex flex-row items-stretch min-h-[380px] w-[740px]">
+                    {/* Right Column (Info / details) */}
+                    <div className="flex-1 p-4 space-y-3 flex flex-col justify-between order-2 md:order-1">
+                      <div className="space-y-3">
+                        {/* Title and Code */}
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <h3 className="text-base md:text-lg font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
+                            <p className="text-[10px] md:text-xs text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
+                          </div>
+                          <button
+                            onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
+                            className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
+                            title="نسخ الرمز"
+                          >
+                            <CheckSquare className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {infoSection}
+                      </div>
+                    </div>
+
+                    {/* Vertical divider */}
+                    <div className="w-px bg-white/10 self-stretch my-4 order-2" />
+
+                    {/* Left Column (Visuals & Actions) */}
+                    <div className="w-[340px] p-4 flex flex-col justify-between space-y-3 order-1 md:order-3">
+                      <div className="flex-1 flex flex-col space-y-3">
+                        {/* Hero Image Section */}
+                        <div className="relative flex-1 min-h-[200px] rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
+                          {/* Loading skeleton */}
+                          {cardImageState === 'loading' && heroSrc && (
+                            <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
+                          )}
+                          {heroSrc ? (
+                            <img
+                              src={heroSrc}
+                              alt={code}
+                              loading="lazy"
+                              referrerPolicy="no-referrer"
+                              onLoad={() => setCardImageState('loaded')}
+                              onError={() => setCardImageState('error')}
+                              onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
+                              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
+                            />
+                          ) : null}
+                          {(cardImageState === 'error' || !heroSrc) && (
+                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
+                              <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
+                              <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
+                            </div>
+                          )}
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
+
+                          {/* Close button */}
+                          <button
+                            onClick={() => setSelectedBillboardForCard(null)}
+                            className="absolute top-2 left-2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
+                            aria-label="إغلاق"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Status pill */}
+                          <div className={`absolute top-2 right-2 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 shadow-lg`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
+                            {statusLabel}
+                          </div>
+                        </div>
+
+                        {/* Front face design preview */}
+                        {bb.design_face_a && (
+                          <div className="pt-0.5">
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
+                              <Camera className="w-3 h-3 text-[#d6ac40]" />
+                            </div>
+                            <div
+                              className="relative h-36 rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group"
+                              onClick={() => setLightboxImage(bb.design_face_a)}
+                            >
+                              <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
+                              <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
+                                <span className="text-[9px] text-white font-bold">اضغط للتكبير</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {actionsSection}
+                    </div>
+                  </div>
+                );
+              }
             })()}
           </div>
         </div>

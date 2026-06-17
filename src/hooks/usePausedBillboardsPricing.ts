@@ -100,6 +100,7 @@ export interface PausedPricingOptions {
   singleFaceBillboards?: Set<string>;
   /** Per-billboard pricing (matches selected billboards' discount distribution). */
   pricingByBillboard?: Map<string, { discountPerBillboard?: number; netRentalAfterDiscount?: number; totalForBoard?: number }>;
+  useStoredPrices?: boolean;
 }
 
 export interface UsePausedBillboardsPricingResult {
@@ -234,11 +235,14 @@ export function usePausedBillboardsPricing(
       // هذا يضمن أن الإيجار الأساسي للوحة الموقوفة = الإيجار الأساسي للوحة المختارة لنفس اللوحة.
       // نسقط للقيمة المحفوظة في صف الإيقاف فقط إذا تعذّر الحساب اللحظي (لا يوجد بيانات لوحة).
       let baseRental = 0;
-      if (calcPrice && bb) {
+      if (options?.useStoredPrices) {
+        baseRental = Number((r as any).price_before_discount ?? r.net_rent ?? r.original_price ?? r.full_price ?? 0);
+      }
+      if (!baseRental && calcPrice && bb) {
         try { baseRental = Number(calcPrice(bb)) || 0; } catch { baseRental = 0; }
       }
       if (!baseRental) {
-        baseRental = Number((r as any).full_price ?? r.net_rent ?? r.original_price ?? 0);
+        baseRental = Number((r as any).price_before_discount ?? r.net_rent ?? r.original_price ?? r.full_price ?? 0);
       }
 
       const rawPrint = printMap.get(bbId) || 0;
@@ -303,9 +307,14 @@ export function usePausedBillboardsPricing(
 
       const manual = (r as any).manual_refund;
       const isManualRefund = manual !== null && manual !== undefined;
-      const refund = isManualRefund
-        ? Math.min(rentalBase, Math.max(0, Number(manual)))
-        : refundAuto;
+      
+      let refund = refundAuto;
+      if (options?.useStoredPrices && r.refund_amount !== undefined && r.refund_amount !== null) {
+        refund = Number(r.refund_amount) || 0;
+      } else if (isManualRefund) {
+        refund = Math.min(rentalBase, Math.max(0, Number(manual)));
+      }
+
       const consumedRental = Math.max(0, rentalBase - refund);
       const consumed = consumedRental + nonRefundable;
 

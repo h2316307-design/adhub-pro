@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { InlinePhoneEditor } from '@/components/shared/InlinePhoneEditor';
 import html2pdf from 'html2pdf.js';
+import { cleanStatementNote } from '@/lib/printUtils';
 import {
   Dialog,
   DialogContent,
@@ -654,18 +655,49 @@ export function SendAccountStatementDialog({
     const { data: paymentResult } = await paymentQuery.order('paid_at', { ascending: true });
     paymentsData = paymentResult || [];
 
+    // تحميل لوحات الإيقاف لحساب خصومات الإيقاف
+    let pausedBillboards: any[] = [];
+    if (contractsData.length > 0) {
+      const contractNums = contractsData.map(c => Number(c.Contract_Number)).filter(Boolean);
+      const { data: pausedData } = await supabase
+        .from('paused_billboards' as any)
+        .select('*')
+        .in('contract_number', contractNums);
+      if (pausedData) pausedBillboards = pausedData;
+    }
+
     // إنشاء قائمة الحركات
     const transactions: any[] = [];
 
     contractsData.forEach(contract => {
+      const contractPaused = pausedBillboards.filter(pb => Number(pb.contract_number) === Number(contract.Contract_Number));
+      const totalSuspensionDiscount = contractPaused.reduce((sum, pb) => sum + (Number(pb.refund_amount) || 0), 0);
+      const originalContractTotal = (Number(contract['Total']) || 0) + totalSuspensionDiscount;
+
       transactions.push({
         date: contract['Contract Date'],
         description: `عقد رقم ${contract.Contract_Number}`,
-        debit: Number(contract['Total']) || 0,
+        debit: originalContractTotal,
         credit: 0,
         reference: `عقد-${contract.Contract_Number}`,
-        notes: contract['Ad Type'] || '—',
+        notes: cleanStatementNote(contract['Ad Type'] || '—'),
       });
+
+      if (totalSuspensionDiscount > 0) {
+        const sortedPaused = [...contractPaused].sort((a, b) => new Date(b.pause_date).getTime() - new Date(a.pause_date).getTime());
+        const latestPaused = sortedPaused[0];
+        const latestPauseDate = latestPaused ? latestPaused.pause_date : contract['End Date'];
+        const latestBoardName = latestPaused ? (latestPaused.billboard_name || `لوحة #${latestPaused.billboard_id}`) : '';
+
+        transactions.push({
+          date: latestPauseDate,
+          description: `خصم إيقاف لوحات عقد رقم ${contract.Contract_Number}${latestBoardName ? ` - ${latestBoardName}` : ''}`,
+          debit: 0,
+          credit: totalSuspensionDiscount,
+          reference: `عقد-${contract.Contract_Number}`,
+          notes: cleanStatementNote(`خصم إيقاف اللوحات حسب آخر إيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
+        });
+      }
     });
 
     paymentsData.forEach(payment => {
@@ -676,7 +708,7 @@ export function SendAccountStatementDialog({
         debit: isDebit ? Number(payment.amount) || 0 : 0,
         credit: isDebit ? 0 : Number(payment.amount) || 0,
         reference: payment.reference || '—',
-        notes: payment.notes || '—',
+        notes: cleanStatementNote(payment.notes || '—'),
       });
     });
 

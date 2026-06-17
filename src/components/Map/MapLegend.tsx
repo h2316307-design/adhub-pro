@@ -9,13 +9,12 @@ interface MapLegendProps {
   collapsed?: boolean;
 }
 
-// الحالات الثابتة المحسنة مع تأثيرات التوهج
+// الحالات الثابتة المحسنة مع تأثيرات التوهج المتطابقة مع نظام التصميم
 const STATUS_ITEMS = [
-  { label: 'متاح', color: '#10b981', glow: 'rgba(16,185,129,0.4)' }, // Emerald
-  { label: 'قريباً', color: '#f59e0b', glow: 'rgba(245,158,11,0.4)' }, // Amber
-  { label: 'محجوز', color: '#ef4444', glow: 'rgba(239,68,68,0.4)' }, // Red
-  { label: 'صيانة', color: '#8b5cf6', glow: 'rgba(139,92,246,0.4)' }, // Violet
-  { label: 'مخفي', color: '#6b7280', glow: 'rgba(107,114,128,0.4)' }, // Gray
+  { label: 'متاح', color: '#22c55e', glow: 'rgba(34,197,94,0.4)' },
+  { label: 'مؤجر / محجوز', color: '#ef4444', glow: 'rgba(239,68,68,0.4)' },
+  { label: 'صيانة', color: '#f59e0b', glow: 'rgba(245,158,11,0.4)' },
+  { label: 'مخفي', color: '#94a3b8', glow: 'rgba(148,163,184,0.4)' },
 ];
 
 const MapLegend = memo(function MapLegend({ billboards, className = '', collapsed: initialCollapsed = false }: MapLegendProps) {
@@ -104,8 +103,8 @@ const MapLegend = memo(function MapLegend({ billboards, className = '', collapse
       {sizes.length > 0 && (
         <div className="border-t border-white/5 pt-2">
           <h4 className="text-amber-500/80 text-[9px] font-extrabold mb-1 text-right">ألوان المقاسات</h4>
-          <div className="space-y-1 max-h-[85px] overflow-y-auto custom-scrollbar pr-0.5">
-            {sizes.slice(0, 6).map((size) => {
+          <div className="space-y-1 max-h-[160px] overflow-y-auto custom-scrollbar pr-0.5">
+            {sizes.map((size) => {
               const colors = getSizeColor(size);
               return (
                 <div key={size} className="flex items-center justify-end gap-1.5 py-0.5">

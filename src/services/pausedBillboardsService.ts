@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { supabase } from '@/integrations/supabase/client';
+import { autoPauseBillboardFromActiveContract } from './billboardPauseService';
 
 /**
  * Paused billboards service.
@@ -294,8 +295,26 @@ export async function resumePausedBillboard(id: string): Promise<{ contractNumbe
     .single();
   if (bbErr || !bb) throw bbErr || new Error('اللوحة غير موجودة');
 
-  const status = String((bb as any).Status || '').trim();
-  const otherContract = (bb as any).Contract_Number;
+  let status = String((bb as any).Status || '').trim();
+  let otherContract = (bb as any).Contract_Number;
+  if (otherContract && Number(otherContract) !== contractNumber) {
+    const today = new Date().toISOString().split('T')[0];
+    await autoPauseBillboardFromActiveContract(
+      billboardId,
+      Number(otherContract),
+      today
+    );
+    // Refresh the billboard status to ensure it is updated
+    const { data: updatedBb } = await supabase
+      .from('billboards')
+      .select('*')
+      .eq('ID', billboardId)
+      .single();
+    if (updatedBb) {
+      status = String((updatedBb as any).Status || '').trim();
+      otherContract = (updatedBb as any).Contract_Number;
+    }
+  }
   if (otherContract && Number(otherContract) !== contractNumber) {
     throw new Error('اللوحة محجوزة حالياً في عقد آخر — لا يمكن استئنافها');
   }

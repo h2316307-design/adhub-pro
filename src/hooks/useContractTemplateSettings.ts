@@ -41,6 +41,7 @@ export interface TableSettings {
   cellPadding: number;
   qrForegroundColor: string;
   qrBackgroundColor: string;
+  cellTransparent?: boolean;
 }
 
 // إعدادات عرض التخفيض في الجدول
@@ -164,6 +165,7 @@ export const DEFAULT_TABLE_SETTINGS: TableSettings = {
   cellPadding: 2,
   qrForegroundColor: '#000000',
   qrBackgroundColor: '#ffffff',
+  cellTransparent: false,
 };
 
 export const DEFAULT_GOLD_LINE: GoldLineSettings = {

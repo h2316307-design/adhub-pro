@@ -5,10 +5,18 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MultiSelect } from '@/components/ui/multi-select';
-import { Upload, Loader2, ClipboardList, MapPin, Ruler, ImageIcon, Handshake, Sparkles, CheckCircle2, Building } from 'lucide-react';
+import { Upload, Loader2, ClipboardList, MapPin, Ruler, ImageIcon, Handshake, Sparkles, CheckCircle2, Building, Plus } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { uploadToImgbb } from '@/services/imgbbService';
+import { 
+  QuickAddSizeDialog, 
+  QuickAddMunicipalityDialog, 
+  QuickAddCityDialog, 
+  QuickAddTypeDialog, 
+  QuickAddLevelDialog, 
+  QuickAddFaceDialog 
+} from './QuickAddDialogs';
 
 interface BillboardAddDialogProps {
   addOpen: boolean;
@@ -42,6 +50,12 @@ interface BillboardAddDialogProps {
   addSizeIfNew: (sizeName: string, level: string, sizes: any[], setSizes: any, setDbSizes: any) => Promise<void>;
   addLevelIfNew: (level: string, levels: string[], setLevels: any) => Promise<void>;
   addBillboardTypeIfNew: (typeName: string, billboardTypes: string[], setBillboardTypes: any) => Promise<void>;
+  loadCities?: () => Promise<void>;
+  loadMunicipalities?: () => Promise<void>;
+  loadSizes?: () => Promise<void>;
+  loadLevels?: () => Promise<void>;
+  loadFaces?: () => Promise<void>;
+  loadBillboardTypes?: () => Promise<void>;
 }
 
 export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
@@ -75,8 +89,22 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
   addMunicipalityIfNew,
   addSizeIfNew,
   addLevelIfNew,
-  addBillboardTypeIfNew
+  addBillboardTypeIfNew,
+  loadCities,
+  loadMunicipalities,
+  loadSizes,
+  loadLevels,
+  loadFaces,
+  loadBillboardTypes
 }) => {
+  // Sub-dialog states for quick add
+  const [sizeQuickAddOpen, setSizeQuickAddOpen] = useState(false);
+  const [munQuickAddOpen, setMunQuickAddOpen] = useState(false);
+  const [cityQuickAddOpen, setCityQuickAddOpen] = useState(false);
+  const [typeQuickAddOpen, setTypeQuickAddOpen] = useState(false);
+  const [levelQuickAddOpen, setLevelQuickAddOpen] = useState(false);
+  const [faceQuickAddOpen, setFaceQuickAddOpen] = useState(false);
+
   // ✅ NEW: State for district input and suggestions
   const [districtInput, setDistrictInput] = useState('');
   const [showDistrictSuggestions, setShowDistrictSuggestions] = useState(false);
@@ -435,30 +463,31 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">نوع اللوحة</Label>
-                <Select 
-                  value={addForm.billboard_type || ''} 
-                  onValueChange={(v) => {
-                    if (v === '__add_new__') {
-                      const newType = prompt('أدخل نوع اللوحة الجديد:');
-                      if (newType && newType.trim()) {
-                        addBillboardTypeIfNew(newType.trim(), billboardTypes, setBillboardTypes);
-                        setAddForm((p: any) => ({ ...p, billboard_type: newType.trim() }));
-                      }
-                    } else {
-                      setAddForm((p: any) => ({ ...p, billboard_type: v }));
-                    }
-                  }}
-                >
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue placeholder="اختر النوع" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {billboardTypes.filter(type => type && String(type).trim()).map((type) => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                    <SelectItem value="__add_new__" className="text-primary font-medium">+ إضافة نوع جديد</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select 
+                    value={addForm.billboard_type || ''} 
+                    onValueChange={(v) => setAddForm((p: any) => ({ ...p, billboard_type: v }))}
+                  >
+                    <SelectTrigger className="text-sm h-9 flex-1">
+                      <SelectValue placeholder="اختر النوع" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {billboardTypes.filter(type => type && String(type).trim()).map((type) => (
+                        <SelectItem key={type} value={type}>{type}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setTypeQuickAddOpen(true)}
+                    title="إضافة نوع جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </fieldset>
@@ -469,29 +498,53 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs text-muted-foreground">المدينة</Label>
-                <Select value={addForm.City || ''} onValueChange={(v) => setAddForm((p: any) => ({ ...p, City: v }))}>
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue placeholder="اختر المدينة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {citiesList.filter(c => c && String(c).trim()).map((c) => (
-                      <SelectItem key={c} value={c as string}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={addForm.City || ''} onValueChange={(v) => setAddForm((p: any) => ({ ...p, City: v }))}>
+                    <SelectTrigger className="text-sm h-9 flex-1">
+                      <SelectValue placeholder="اختر المدينة" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {citiesList.filter(c => c && String(c).trim()).map((c) => (
+                        <SelectItem key={c} value={c as string}>{c}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setCityQuickAddOpen(true)}
+                    title="إضافة مدينة جديدة"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">البلدية *</Label>
-                <Select value={addForm.Municipality || ''} onValueChange={(v) => setAddForm((p: any) => ({ ...p, Municipality: v }))}>
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue placeholder="اختر البلدية" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {municipalities.filter(m => m && m.id && m.name && String(m.name).trim()).map((m) => (
-                      <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={addForm.Municipality || ''} onValueChange={(v) => setAddForm((p: any) => ({ ...p, Municipality: v }))}>
+                    <SelectTrigger className="text-sm h-9 flex-1">
+                      <SelectValue placeholder="اختر البلدية" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {municipalities.filter(m => m && m.id && m.name && String(m.name).trim()).map((m) => (
+                        <SelectItem key={m.id} value={m.name}>{m.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setMunQuickAddOpen(true)}
+                    title="إضافة بلدية جديدة"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="relative">
                 <Label className="text-xs text-muted-foreground">المنطقة</Label>
@@ -545,75 +598,89 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
             <div className="grid grid-cols-3 gap-3">
               <div>
                 <Label className="text-xs text-muted-foreground">المقاس *</Label>
-                <Select 
-                  value={addForm.Size || ''} 
-                  onValueChange={(v) => {
-                    if (v === '__add_new__') {
-                      const newSize = prompt('أدخل المقاس الجديد:');
-                      if (newSize && newSize.trim()) {
-                        addSizeIfNew(newSize.trim(), addForm.Level || 'A', sizes, setSizes, setDbSizes);
-                        setAddForm((p: any) => ({ ...p, Size: newSize.trim() }));
-                      }
-                    } else {
-                      setAddForm((p: any) => ({ ...p, Size: v }));
-                    }
-                  }}
-                >
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue placeholder="المقاس" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {sizes.filter(s => s && s.id && s.name && String(s.name).trim()).map((s) => (
-                      <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
-                    ))}
-                    <SelectItem value="__add_new__" className="text-primary font-medium">+ مقاس جديد</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select 
+                    value={addForm.Size || ''} 
+                    onValueChange={(v) => setAddForm((p: any) => ({ ...p, Size: v }))}
+                  >
+                    <SelectTrigger className="text-sm h-9 flex-1">
+                      <SelectValue placeholder="المقاس" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {sizes.filter(s => s && s.id && s.name && String(s.name).trim()).map((s) => (
+                        <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setSizeQuickAddOpen(true)}
+                    title="إضافة مقاس جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">المستوى *</Label>
-                <Select 
-                  value={addForm.Level || ''} 
-                  onValueChange={(v) => {
-                    if (v === '__add_new__') {
-                      const newLevel = prompt('أدخل المستوى الجديد:');
-                      if (newLevel && newLevel.trim()) {
-                        addLevelIfNew(newLevel.trim(), levels, setLevels);
-                        setAddForm((p: any) => ({ ...p, Level: newLevel.trim() }));
-                      }
-                    } else {
-                      setAddForm((p: any) => ({ ...p, Level: v }));
-                    }
-                  }}
-                >
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue placeholder="المستوى" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {levels.filter(lv => lv && String(lv).trim()).map((lv) => (
-                      <SelectItem key={lv} value={lv}>{lv}</SelectItem>
-                    ))}
-                    <SelectItem value="__add_new__" className="text-primary font-medium">+ مستوى جديد</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select 
+                    value={addForm.Level || ''} 
+                    onValueChange={(v) => setAddForm((p: any) => ({ ...p, Level: v }))}
+                  >
+                    <SelectTrigger className="text-sm h-9 flex-1">
+                      <SelectValue placeholder="المستوى" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {levels.filter(lv => lv && String(lv).trim()).map((lv) => (
+                        <SelectItem key={lv} value={lv}>{lv}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setLevelQuickAddOpen(true)}
+                    title="إضافة مستوى جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground">عدد الأوجه</Label>
-                <Select value={String(addForm.Faces_Count || '')} onValueChange={(v) => setAddForm((p: any) => ({ ...p, Faces_Count: v }))}>
-                  <SelectTrigger className="text-sm h-9">
-                    <SelectValue placeholder="الأوجه" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {faces.filter(face => face && face.id && (face.count != null || face.face_count != null)).map((face) => {
-                      const faceCount = face.count || face.face_count;
-                      return (
-                        <SelectItem key={face.id} value={String(faceCount)}>
-                          {face.name} ({faceCount})
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-1 items-center">
+                  <Select value={String(addForm.Faces_Count || '')} onValueChange={(v) => setAddForm((p: any) => ({ ...p, Faces_Count: v }))}>
+                    <SelectTrigger className="text-sm h-9 flex-1">
+                      <SelectValue placeholder="الأوجه" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {faces.filter(face => face && face.id && (face.count != null || face.face_count != null)).map((face) => {
+                        const faceCount = face.count || face.face_count;
+                        return (
+                          <SelectItem key={face.id} value={String(faceCount)}>
+                            {face.name} ({faceCount})
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-9 w-9 shrink-0 cursor-pointer hover:text-primary hover:border-primary transition-all duration-200"
+                    onClick={() => setFaceQuickAddOpen(true)}
+                    title="إضافة خيار أوجه جديد"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           </fieldset>
@@ -768,6 +835,43 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
             {adding ? 'جاري الإضافة...' : (uploadingImage || imgbbUploading) ? 'رفع الصورة...' : <><CheckCircle2 className="h-4 w-4 ml-1" /> إضافة اللوحة</>}
           </Button>
         </div>
+        {/* Quick Add Dialogs */}
+        <QuickAddSizeDialog
+          open={sizeQuickAddOpen}
+          onOpenChange={setSizeQuickAddOpen}
+          onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, Size: val }))}
+          onRefresh={loadSizes || (() => Promise.resolve())}
+        />
+        <QuickAddMunicipalityDialog
+          open={munQuickAddOpen}
+          onOpenChange={setMunQuickAddOpen}
+          onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, Municipality: val }))}
+          onRefresh={loadMunicipalities || (() => Promise.resolve())}
+        />
+        <QuickAddCityDialog
+          open={cityQuickAddOpen}
+          onOpenChange={setCityQuickAddOpen}
+          onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, City: val }))}
+          onRefresh={loadCities || (() => Promise.resolve())}
+        />
+        <QuickAddTypeDialog
+          open={typeQuickAddOpen}
+          onOpenChange={setTypeQuickAddOpen}
+          onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, billboard_type: val }))}
+          onRefresh={loadBillboardTypes || (() => Promise.resolve())}
+        />
+        <QuickAddLevelDialog
+          open={levelQuickAddOpen}
+          onOpenChange={setLevelQuickAddOpen}
+          onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, Level: val }))}
+          onRefresh={loadLevels || (() => Promise.resolve())}
+        />
+        <QuickAddFaceDialog
+          open={faceQuickAddOpen}
+          onOpenChange={setFaceQuickAddOpen}
+          onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, Faces_Count: val }))}
+          onRefresh={loadFaces || (() => Promise.resolve())}
+        />
       </DialogContent>
     </Dialog>
   );

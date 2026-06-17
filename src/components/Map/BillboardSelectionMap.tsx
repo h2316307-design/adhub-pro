@@ -162,7 +162,9 @@ export function BillboardSelectionMap({
         const billboardId = String(b.ID);
         const isSelected = selectedIds.includes(billboardId);
         const status = getBillboardStatus(b);
-        const pinData = createPinSvgUrl(b.Size || '', status.label, isSelected, b.Ad_Type || '', '');
+        const adTypeVal = b.Ad_Type || b.adType || (b as any).ad_type || (b as any).AdType || (b as any).contracts?.[0]?.['Ad Type'] || '';
+        const clientNameVal = b.Customer_Name || b.clientName || (b as any).customer_name || (b as any).contracts?.[0]?.['Customer Name'] || '';
+        const pinData = createPinSvgUrl(b.Size || '', status.label, isSelected, adTypeVal, clientNameVal);
 
         const marker = new google.maps.Marker({
           position: coords,

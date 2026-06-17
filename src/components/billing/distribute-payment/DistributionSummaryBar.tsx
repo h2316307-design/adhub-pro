@@ -86,11 +86,11 @@ export function DistributionSummaryBar({ inputAmountNum, totalAllocated, remaini
             </div>
             <div className="font-bold text-amber-700 dark:text-amber-300">{breakdown.custody.toFixed(0)}</div>
           </div>
-          <div className="p-1.5 rounded bg-orange-500/10 border border-orange-500/20 text-center">
-            <div className="flex items-center justify-center gap-0.5 text-orange-600 dark:text-orange-400">
+          <div className="p-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-center">
+            <div className="flex items-center justify-center gap-0.5 text-rose-600 dark:text-rose-400">
               <Users className="h-2.5 w-2.5" /><span>مصاريف</span>
             </div>
-            <div className="font-bold text-orange-700 dark:text-orange-300">{breakdown.expenses.toFixed(0)}</div>
+            <div className="font-bold text-rose-700 dark:text-rose-300">{breakdown.expenses.toFixed(0)}</div>
           </div>
         </div>
       )}

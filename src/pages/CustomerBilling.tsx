@@ -288,7 +288,7 @@ export default function CustomerBilling() {
         if (!p.error) paymentsData = (p.data || []) as PaymentRow[];
       }
       if ((!paymentsData || paymentsData.length === 0) && customerName) {
-        const p = await (supabase as any).from('customer_payments').select('*').ilike('customer_name', `%${customerName}%`).order('created_at', { ascending: true });
+        const p = await (supabase as any).from('customer_payments').select('*').eq('customer_name', customerName).order('created_at', { ascending: true });
         if (!p.error) paymentsData = (p.data || []) as PaymentRow[];
       }
 
@@ -298,7 +298,7 @@ export default function CustomerBilling() {
         if (!c.error) contractsData = (c.data || []) as ContractRow[];
       }
       if ((!contractsData || contractsData.length === 0) && customerName) {
-        const c = await (supabase as any).from('Contract').select('*').ilike('Customer Name', `%${customerName}%`).order('Contract_Number', { ascending: false });
+        const c = await (supabase as any).from('Contract').select('*').eq('Customer Name', customerName).order('Contract_Number', { ascending: false });
         if (!c.error) contractsData = (c.data || []) as ContractRow[];
       }
       setContracts(contractsData);
@@ -337,11 +337,11 @@ export default function CustomerBilling() {
             .order('created_at', { ascending: false });
           if (!error && data) printedInvoicesData = data;
         } else if (customerName) {
-          // Fallback: if no customerId, try to match by customer name (fuzzy)
+          // Fallback: if no customerId, try to match by customer name (exact)
           const { data, error } = await (supabase as any)
             .from('printed_invoices')
             .select('*')
-            .ilike('customer_name', `%${customerName}%`)
+            .eq('customer_name', customerName)
             .order('created_at', { ascending: false });
           if (!error && data) printedInvoicesData = data;
         }
@@ -467,7 +467,7 @@ export default function CustomerBilling() {
           const { data, error } = await supabase
             .from('purchase_invoices')
             .select('*')
-            .ilike('customer_name', `%${customerName}%`)
+            .eq('customer_name', customerName)
             .order('invoice_date', { ascending: false });
           if (!error && data) purchaseInvoicesData = data;
         }
@@ -491,7 +491,7 @@ export default function CustomerBilling() {
           const { data, error } = await supabase
             .from('sales_invoices')
             .select('*')
-            .ilike('customer_name', `%${customerName}%`)
+            .eq('customer_name', customerName)
             .order('invoice_date', { ascending: false });
           if (!error && data) salesInvoicesData = data;
         }
@@ -501,12 +501,52 @@ export default function CustomerBilling() {
       }
       setSalesInvoices(salesInvoicesData);
 
-      try {
-        const billboards = await fetchAllBillboards();
-        setAllBillboards(billboards as any);
-      } catch {
-        setAllBillboards([]);
+      // Collect all billboard IDs from this customer's contracts to load only their billboards
+      const billboardIdsSet = new Set<number>();
+      const billboardToContractMap = new Map<number, { contractNumber: string; customerName: string }>();
+      
+      contractsData.forEach((contract: any) => {
+        const idsStr = contract.billboard_ids;
+        const contractNum = String(contract.Contract_Number || '');
+        const custName = String(contract['Customer Name'] || '');
+        if (idsStr) {
+          String(idsStr)
+            .split(',')
+            .map((s: string) => parseInt(s.trim(), 10))
+            .filter((n: number) => !isNaN(n))
+            .forEach(id => {
+              billboardIdsSet.add(id);
+              billboardToContractMap.set(id, { contractNumber: contractNum, customerName: custName });
+            });
+        }
+      });
+      const billboardIds = Array.from(billboardIdsSet);
+
+      let customerBillboards: any[] = [];
+      if (billboardIds.length > 0) {
+        try {
+          const { data, error } = await supabase
+            .from('billboards')
+            .select('ID, Billboard_Name, Size, City, Level, Nearest_Landmark, Faces_Count, Price')
+            .in('ID', billboardIds);
+          
+          if (!error && data) {
+            customerBillboards = data.map((b: any) => {
+              const mapping = billboardToContractMap.get(Number(b.ID));
+              return {
+                ...b,
+                Contract_Number: mapping?.contractNumber || b.Contract_Number || '',
+                Customer_Name: mapping?.customerName || b.Customer_Name || '',
+                size: b.Size || '',
+                faces: b.Faces_Count || 1
+              };
+            });
+          }
+        } catch (err) {
+          console.warn('Error loading billboards for customer contracts:', err);
+        }
       }
+      setAllBillboards(customerBillboards);
     } catch (e) {
       console.error(e);
       toast.error('فشل تحميل البيانات');

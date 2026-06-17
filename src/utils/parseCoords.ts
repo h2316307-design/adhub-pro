@@ -71,3 +71,51 @@ export function parseCoords(b: any): { lat: number; lng: number } | null {
 
   return null;
 }
+
+/**
+ * Resolves overlapping/duplicate coordinates by adding a tiny spiral offset.
+ * This ensures markers that share identical coordinates don't hide each other on the map.
+ */
+export function getJitteredCoords(b: any, allBillboards: any[]): { lat: number; lng: number } | null {
+  const coords = parseCoords(b);
+  if (!coords) return null;
+
+  const id = String(b.ID || b.id || b.Id || '');
+  if (!id || !allBillboards || !Array.isArray(allBillboards)) return coords;
+
+  // Find all billboards in the list that resolve to the same coordinate (within 0.000001 deg)
+  const duplicates = allBillboards.filter(other => {
+    const otherId = String(other.ID || other.id || other.Id || '');
+    if (!otherId || otherId === id) return false;
+    const otherCoords = parseCoords(other);
+    return otherCoords && 
+           Math.abs(otherCoords.lat - coords.lat) < 0.000001 && 
+           Math.abs(otherCoords.lng - coords.lng) < 0.000001;
+  });
+
+  if (duplicates.length === 0) {
+    return coords;
+  }
+
+  // Sort by ID to ensure stable and consistent ordering
+  const sortedGroup = [b, ...duplicates].sort((x, y) => {
+    const idX = Number(x.ID || x.id || 0);
+    const idY = Number(y.ID || y.id || 0);
+    return idX - idY;
+  });
+
+  const index = sortedGroup.findIndex(x => String(x.ID || x.id || '') === id);
+  if (index <= 0) {
+    return coords; // Keep the first one exactly at the original position
+  }
+
+  // Calculate spiral offset (about 4-5 meters per step)
+  const angle = index * (2 * Math.PI / sortedGroup.length);
+  const radius = 0.000045 * Math.sqrt(index);
+
+  return {
+    lat: coords.lat + radius * Math.cos(angle),
+    lng: coords.lng + radius * Math.sin(angle)
+  };
+}
+

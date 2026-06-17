@@ -111,6 +111,12 @@ export function EnhancedDistributePaymentDialog({
   // ✅ موظف نشط مشترك بين الأقسام لربط الاختيار
   const [activeEmployeeId, setActiveEmployeeId] = useState<string>('');
 
+  // ✅ حفظ المبلغ المتبقي كرصيد عميل غير موزع
+  const [saveRemainderAsCredit, setSaveRemainderAsCredit] = useState(true);
+
+  // ✅ تفعيل التوزيعات الإضافية (سلف/عهد/مصاريف)
+  const [enableAdditionalDistributions, setEnableAdditionalDistributions] = useState(false);
+
   // ✅ Fix: useRef to avoid infinite loop from editingPayments reference changes
   const editingPaymentsRef = useRef(editingPayments);
   editingPaymentsRef.current = editingPayments;
@@ -226,6 +232,14 @@ export function EnhancedDistributePaymentDialog({
           }
         }
       }
+
+      if (
+        distributions.length > 0 ||
+        (custodies && custodies.length > 0) ||
+        (expPays && expPays.length > 0)
+      ) {
+        setEnableAdditionalDistributions(true);
+      }
     } catch (error) {
       console.error('Error loading edit mode employee data:', error);
     }
@@ -234,6 +248,7 @@ export function EnhancedDistributePaymentDialog({
   useEffect(() => {
     if (open) {
       setStep(1);
+      setSaveRemainderAsCredit(true);
       // ✅ Fix: read from ref to avoid stale closure without causing infinite loop
       const currentEditingPayments = editingPaymentsRef.current;
       
@@ -281,6 +296,7 @@ export function EnhancedDistributePaymentDialog({
         setExpensePayments([]);
         setEditingExpenseIds([]);
         setActiveEmployeeId('');
+        setEnableAdditionalDistributions(false);
       }
       setEmployeeBalances([]);
       
@@ -1088,8 +1104,10 @@ export function EnhancedDistributePaymentDialog({
         return;
       }
       if (inputAmountNum - customerAllocated > 0.01) {
-        toast.error(`متبقي ${(inputAmountNum - customerAllocated).toFixed(2)} د.ل غير موزّع على عناصر العميل`);
-        return;
+        if (!saveRemainderAsCredit) {
+          toast.error(`متبقي ${(inputAmountNum - customerAllocated).toFixed(2)} د.ل غير موزّع على عناصر العميل`);
+          return;
+        }
       }
     }
 
@@ -1321,6 +1339,55 @@ export function EnhancedDistributePaymentDialog({
         toast.error(`حدثت أخطاء:\n${errors.join('\n')}`);
         setDistributing(false);
         return;
+      }
+
+      // ✅ حفظ الرصيد المتبقي غير الموزع كدفعة حساب للزبون
+      if (saveRemainderAsCredit && remainingToAllocate > 0.01) {
+        const creditNotes = paymentNotes 
+          ? `${paymentNotes} - (رصيد متبقي غير موزع)` 
+          : `رصيد متبقي غير موزع من دفعة بمبلغ ${inputAmountNum.toFixed(2)} د.ل`;
+          
+        const creditPaymentData: any = {
+          customer_id: customerId,
+          customer_name: customerName,
+          amount: remainingToAllocate,
+          paid_at: currentDate,
+          method: paymentMethod || 'نقدي',
+          reference: paymentMethod === 'تحويل بنكي' ? transferReference : (paymentReference || null),
+          entry_type: 'payment',
+          distributed_payment_id: distributedPaymentId,
+          notes: creditNotes,
+          collected_via_intermediary: collectedViaIntermediary,
+          intermediary_commission: collectedViaIntermediary ? (parseFloat(intermediaryCommission) || 0) : 0,
+          transfer_fee: collectedViaIntermediary ? (parseFloat(transferFee) || 0) : 0,
+          net_amount: remainingToAllocate,
+          commission_notes: collectedViaIntermediary ? commissionNotes : null,
+          collector_name: collectedViaIntermediary ? collectorName : null,
+          receiver_name: collectedViaIntermediary ? receiverName : null,
+          delivery_location: collectedViaIntermediary ? deliveryLocation : null,
+          collection_date: collectedViaIntermediary ? collectionDate : null,
+          source_bank: paymentMethod === 'تحويل بنكي' ? sourceBank : null,
+          destination_bank: paymentMethod === 'تحويل بنكي' ? destinationBank : null,
+          transfer_reference: paymentMethod === 'تحويل بنكي' ? transferReference : null,
+          transfer_image_url: transferImageUrl || null
+        };
+        
+        if (purchaseInvoice) {
+          creditPaymentData.purchase_invoice_id = purchaseInvoice.id;
+        }
+
+        console.log('💳 إضافة رصيد متبقي غير موزع:', creditPaymentData);
+        
+        const { error: creditError } = await supabase
+          .from('customer_payments')
+          .insert(creditPaymentData);
+          
+        if (creditError) {
+          console.error('❌ خطأ في إضافة الرصيد المتبقي:', creditError);
+          errors.push(`فشل حفظ الرصيد المتبقي للعميل: ${creditError.message}`);
+        } else {
+          console.log('✅ تم إضافة الرصيد المتبقي بنجاح');
+        }
       }
 
       // تحديث المبالغ المدفوعة
@@ -1673,6 +1740,7 @@ export function EnhancedDistributePaymentDialog({
     }
   };
 
+  const maxStep = enableAdditionalDistributions ? 2 : 1;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1709,130 +1777,46 @@ export function EnhancedDistributePaymentDialog({
         ) : (
           <>
             {/* Step Indicator */}
-            <div className="flex items-center justify-center gap-2 py-3 border-b border-border/20 bg-muted/10 shrink-0">
-              <button 
-                type="button"
-                onClick={() => step > 1 && setStep(1)} 
-                className="flex items-center gap-2 focus:outline-none hover:opacity-85 transition-opacity"
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step === 1 
-                    ? 'bg-orange-600 text-white ring-4 ring-orange-500/10' 
-                    : step > 1 
-                      ? 'bg-orange-500/20 text-orange-600' 
+            {enableAdditionalDistributions && (
+              <div className="flex items-center justify-center gap-2 py-3 border-b border-border/20 bg-muted/10 shrink-0">
+                <button 
+                  type="button"
+                  onClick={() => step > 1 && setStep(1)} 
+                  className="flex items-center gap-2 focus:outline-none hover:opacity-85 transition-opacity"
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    step === 1 
+                      ? 'bg-primary text-primary-foreground ring-4 ring-primary/20' 
+                      : 'bg-primary/20 text-primary'
+                  }`}>
+                    {step > 1 ? <CheckCircle className="h-4 w-4 text-primary" /> : '1'}
+                  </div>
+                  <span className={`text-xs font-bold ${step === 1 ? 'text-primary' : 'text-muted-foreground'}`}>تفاصيل وتوزيع الدفعة</span>
+                </button>
+                
+                <div className="w-12 h-0.5 bg-muted"></div>
+                
+                <button 
+                  type="button"
+                  disabled={step < 2}
+                  className="flex items-center gap-2 focus:outline-none disabled:cursor-not-allowed"
+                >
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    step === 2 
+                      ? 'bg-primary text-primary-foreground ring-4 ring-primary/20' 
                       : 'bg-muted text-muted-foreground'
-                }`}>
-                  {step > 1 ? <CheckCircle className="h-4 w-4 text-orange-600" /> : '1'}
-                </div>
-                <span className={`text-xs font-bold ${step === 1 ? 'text-orange-600' : 'text-muted-foreground'}`}>تفاصيل الدفعة</span>
-              </button>
-              
-              <div className="w-12 h-0.5 bg-muted"></div>
-              
-              <button 
-                type="button"
-                onClick={() => step > 2 && setStep(2)} 
-                disabled={step < 2}
-                className="flex items-center gap-2 focus:outline-none disabled:cursor-not-allowed hover:opacity-85 transition-opacity"
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step === 2 
-                    ? 'bg-orange-600 text-white ring-4 ring-orange-500/10' 
-                    : step > 2 
-                      ? 'bg-orange-500/20 text-orange-600' 
-                      : 'bg-muted text-muted-foreground'
-                }`}>
-                  {step > 2 ? <CheckCircle className="h-4 w-4 text-orange-600" /> : '2'}
-                </div>
-                <span className={`text-xs font-bold ${step === 2 ? 'text-orange-600' : 'text-muted-foreground'}`}>توزيع العميل</span>
-              </button>
-              
-              <div className="w-12 h-0.5 bg-muted"></div>
-              
-              <button 
-                type="button"
-                disabled={step < 3}
-                className="flex items-center gap-2 focus:outline-none disabled:cursor-not-allowed"
-              >
-                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  step === 3 
-                    ? 'bg-orange-600 text-white ring-4 ring-orange-500/10' 
-                    : 'bg-muted text-muted-foreground'
-                }`}>3</div>
-                <span className={`text-xs font-bold ${step === 3 ? 'text-orange-600' : 'text-muted-foreground'}`}>التوزيعات الإضافية</span>
-              </button>
-            </div>
+                  }`}>2</div>
+                  <span className={`text-xs font-bold ${step === 2 ? 'text-primary' : 'text-muted-foreground'}`}>التوزيعات الإضافية (موظفين ومصروفات)</span>
+                </button>
+              </div>
+            )}
 
             <div className="flex-1 flex flex-col overflow-hidden min-h-0 bg-background/50">
-              {/* Step 1: Payment Details */}
+              {/* Step 1: Payment Details & Customer Allocation */}
               {step === 1 && (
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 overflow-y-auto p-5 gap-5 min-h-0">
-                  {/* Right Column: Payment Inputs */}
-                  <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm overflow-y-auto">
-                    <h3 className="text-sm font-bold text-orange-950 dark:text-orange-100 border-b pb-2 mb-3 flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-orange-600" />
-                      بيانات دفعة العميل الأساسية
-                    </h3>
-                    <PaymentInputSection
-                      totalAmount={totalAmount}
-                      setTotalAmount={setTotalAmount}
-                      paymentMethod={paymentMethod}
-                      setPaymentMethod={setPaymentMethod}
-                      paymentDate={paymentDate}
-                      setPaymentDate={setPaymentDate}
-                      paymentReference={paymentReference}
-                      setPaymentReference={setPaymentReference}
-                      paymentNotes={paymentNotes}
-                      setPaymentNotes={setPaymentNotes}
-                      sourceBank={sourceBank}
-                      setSourceBank={setSourceBank}
-                      destinationBank={destinationBank}
-                      setDestinationBank={setDestinationBank}
-                      transferReference={transferReference}
-                      setTransferReference={setTransferReference}
-                      transferImageUrl={transferImageUrl}
-                      setTransferImageUrl={setTransferImageUrl}
-                      customerName={customerName}
-                      contractIds={[...new Set(items.filter(i => i.selected && i.type === 'contract').map(i => i.id))]}
-                    />
-                  </div>
-
-                  {/* Left Column: Intermediary Details */}
-                  <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col overflow-y-auto">
-                    <h3 className="text-sm font-bold text-orange-950 dark:text-orange-100 border-b pb-2 mb-3 flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-orange-600" />
-                      تفاصيل الوسيط والعمولات (اختياري)
-                    </h3>
-                    <div className="flex-1 space-y-4">
-                      <IntermediarySection
-                        collectedViaIntermediary={collectedViaIntermediary}
-                        setCollectedViaIntermediary={setCollectedViaIntermediary}
-                        collectorName={collectorName}
-                        setCollectorName={setCollectorName}
-                        receiverName={receiverName}
-                        setReceiverName={setReceiverName}
-                        deliveryLocation={deliveryLocation}
-                        setDeliveryLocation={setDeliveryLocation}
-                        collectionDate={collectionDate}
-                        setCollectionDate={setCollectionDate}
-                        intermediaryCommission={intermediaryCommission}
-                        setIntermediaryCommission={setIntermediaryCommission}
-                        transferFee={transferFee}
-                        setTransferFee={setTransferFee}
-                        commissionNotes={commissionNotes}
-                        setCommissionNotes={setCommissionNotes}
-                        inputAmountNum={inputAmountNum}
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Step 2: Customer Allocation */}
-              {step === 2 && (
                 <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
                   {/* Left Side (wider): Items Tabs */}
-                  <div className="flex-1 overflow-y-auto p-5 min-h-0 order-2 lg:order-1 border-r border-border/10">
+                  <div className="flex-1 overflow-y-auto p-5 min-h-0 order-2 lg:order-1 border-r border-border/10 bg-background/30">
                     <ItemsTabsSection
                       items={items}
                       setItems={setItems}
@@ -1842,64 +1826,154 @@ export function EnhancedDistributePaymentDialog({
                     />
                   </div>
 
-                  {/* Right Side (narrower): Summary and Action */}
-                  <div className="lg:w-[350px] shrink-0 p-5 space-y-4 bg-card border-l border-border/50 overflow-y-auto order-1 lg:order-2 flex flex-col justify-between">
+                  {/* Right Side (narrower): Payment Inputs and Summary */}
+                  <div className="lg:w-[380px] shrink-0 p-5 space-y-4 bg-card border-l border-border/50 overflow-y-auto order-1 lg:order-2 flex flex-col justify-between">
                     <div className="space-y-4">
-                      <h3 className="text-sm font-bold text-orange-950 dark:text-orange-100 border-b pb-2 mb-2 flex items-center gap-2">
-                        <Sparkles className="h-4 w-4 text-orange-600" />
-                        حالة توزيع الدفعة
+                      <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-3 flex items-center gap-2">
+                        <Wallet className="h-4 w-4 text-primary" />
+                        بيانات وتوزيع دفعة العميل
                       </h3>
-                      
-                      <DistributionSummaryBar
-                        inputAmountNum={inputAmountNum}
-                        totalAllocated={customerAllocated}
-                        remainingToAllocate={remainingToAllocate}
-                        breakdown={{
-                          customer: customerAllocated,
-                          employees: employeesAllocated,
-                          custody: custodyAllocated,
-                          expenses: expensesAllocated,
-                        }}
+
+                      <PaymentInputSection
+                        totalAmount={totalAmount}
+                        setTotalAmount={setTotalAmount}
+                        paymentMethod={paymentMethod}
+                        setPaymentMethod={setPaymentMethod}
+                        paymentDate={paymentDate}
+                        setPaymentDate={setPaymentDate}
+                        paymentReference={paymentReference}
+                        setPaymentReference={setPaymentReference}
+                        paymentNotes={paymentNotes}
+                        setPaymentNotes={setPaymentNotes}
+                        sourceBank={sourceBank}
+                        setSourceBank={setSourceBank}
+                        destinationBank={destinationBank}
+                        setDestinationBank={setDestinationBank}
+                        transferReference={transferReference}
+                        setTransferReference={setTransferReference}
+                        transferImageUrl={transferImageUrl}
+                        setTransferImageUrl={setTransferImageUrl}
+                        customerName={customerName}
+                        contractIds={[...new Set(items.filter(i => i.selected && i.type === 'contract').map(i => i.id))]}
                       />
 
-                      <div className="space-y-3 pt-2">
-                        <Button
-                          type="button"
-                          onClick={handleAutoDistribute}
-                          className="w-full h-10 bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white font-bold text-xs shadow-lg shadow-orange-500/10 transition-transform hover:scale-[1.01]"
-                          disabled={!totalAmount || items.filter(i => i.selected).length === 0}
-                          size="sm"
-                        >
-                          <Sparkles className="h-4 w-4 ml-1.5 animate-pulse" />
-                          توزيع تلقائي ذكي (حسب الأقدمية)
-                        </Button>
+                      {/* Collapsible Intermediary Details */}
+                      <div className="border border-border/40 rounded-xl overflow-hidden bg-background/20">
+                        <div className="p-3">
+                          <IntermediarySection
+                            collectedViaIntermediary={collectedViaIntermediary}
+                            setCollectedViaIntermediary={setCollectedViaIntermediary}
+                            collectorName={collectorName}
+                            setCollectorName={setCollectorName}
+                            receiverName={receiverName}
+                            setReceiverName={setReceiverName}
+                            deliveryLocation={deliveryLocation}
+                            setDeliveryLocation={setDeliveryLocation}
+                            collectionDate={collectionDate}
+                            setCollectionDate={setCollectionDate}
+                            intermediaryCommission={intermediaryCommission}
+                            setIntermediaryCommission={setIntermediaryCommission}
+                            transferFee={transferFee}
+                            setTransferFee={setTransferFee}
+                            commissionNotes={commissionNotes}
+                            setCommissionNotes={setCommissionNotes}
+                            inputAmountNum={inputAmountNum}
+                          />
+                        </div>
+                      </div>
 
-                        {items.filter(i => i.selected).length === 0 && (
-                          <div className="flex items-center gap-2 text-xs text-amber-600 bg-amber-500/10 border border-amber-500/20 p-3 rounded-xl">
-                            <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
-                            <span>يرجى اختيار العقود أو الفواتير من التبويبات وتحديد قيم سدادها.</span>
-                          </div>
-                        )}
+                      <div className="border-t border-border/30 pt-3 space-y-4">
+                        <h4 className="text-xs font-bold text-muted-foreground">حالة توزيع الرصيد</h4>
+                        <DistributionSummaryBar
+                          inputAmountNum={inputAmountNum}
+                          totalAllocated={customerAllocated}
+                          remainingToAllocate={remainingToAllocate}
+                          breakdown={{
+                            customer: customerAllocated,
+                            employees: employeesAllocated,
+                            custody: custodyAllocated,
+                            expenses: expensesAllocated,
+                          }}
+                        />
 
-                        {inputAmountNum > 0 && remainingToAllocate > 0.01 && (
-                          <div className="flex items-center gap-2 text-xs text-orange-600 bg-orange-500/10 border border-orange-500/20 p-3 rounded-xl">
-                            <AlertCircle className="h-4 w-4 shrink-0 text-orange-500" />
-                            <span>يوجد متبقي غير موزع بقيمة {remainingToAllocate.toLocaleString('ar-LY')} د.ل. اضغط "توزيع تلقائي" لتسويته.</span>
+                        <div className="space-y-3 pt-2">
+                          {inputAmountNum > 0 && remainingToAllocate > 0.01 && (
+                            <div className="flex flex-col gap-2 p-3 bg-primary/10 border border-primary/20 rounded-xl">
+                              <div className="flex items-center gap-2">
+                                <Checkbox 
+                                  id="saveRemainderAsCredit" 
+                                  checked={saveRemainderAsCredit}
+                                  onCheckedChange={(checked) => setSaveRemainderAsCredit(!!checked)}
+                                />
+                                <Label htmlFor="saveRemainderAsCredit" className="text-xs font-semibold cursor-pointer text-foreground">
+                                  حفظ المتبقي كرصيد غير موزع للعميل
+                                </Label>
+                              </div>
+                              <p className="text-[10px] text-muted-foreground mr-6">
+                                قيمة الرصيد: {remainingToAllocate.toLocaleString('ar-LY')} د.ل
+                              </p>
+                            </div>
+                          )}
+
+                          <Button
+                            type="button"
+                            onClick={handleAutoDistribute}
+                            className="w-full h-10 bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary/90 text-primary-foreground font-bold text-xs shadow-lg shadow-primary/10 transition-transform hover:scale-[1.01]"
+                            disabled={!totalAmount || items.filter(i => i.selected).length === 0}
+                            size="sm"
+                          >
+                            <Sparkles className="h-4 w-4 ml-1.5 animate-pulse" />
+                            توزيع تلقائي ذكي (حسب الأقدمية)
+                          </Button>
+
+                          {items.filter(i => i.selected).length === 0 && (
+                            <div className="flex items-center gap-2 text-[11px] text-amber-600 bg-amber-500/10 border border-amber-500/20 p-2.5 rounded-xl">
+                              <AlertCircle className="h-4 w-4 shrink-0 text-amber-500" />
+                              <span>يرجى اختيار العقود أو الفواتير من التبويبات وتحديد قيم سدادها.</span>
+                            </div>
+                          )}
+
+                          {inputAmountNum > 0 && remainingToAllocate > 0.01 && !saveRemainderAsCredit && (
+                            <div className="flex items-center gap-2 text-[11px] text-red-600 bg-red-500/10 border border-red-500/20 p-2.5 rounded-xl">
+                              <AlertCircle className="h-4 w-4 shrink-0 text-red-500" />
+                              <span>يجب توزيع المبلغ بالكامل أو تفعيل خيار حفظ المتبقي كرصيد.</span>
+                            </div>
+                          )}
+
+                          {/* Toggle for additional distributions */}
+                          <div className="flex items-center gap-2 p-3 bg-muted/40 border border-border/30 rounded-xl mt-2">
+                            <Checkbox 
+                              id="enableAdditionalDistributions" 
+                              checked={enableAdditionalDistributions}
+                              onCheckedChange={(checked) => {
+                                const val = !!checked;
+                                setEnableAdditionalDistributions(val);
+                                if (!val) {
+                                  // Reset step 2 fields if toggled off
+                                  setEnableEmployee(false);
+                                  setEnableCustodyOption(false);
+                                  setEnableExpensePayment(false);
+                                }
+                              }}
+                            />
+                            <Label htmlFor="enableAdditionalDistributions" className="text-xs font-semibold cursor-pointer text-foreground">
+                              إضافة توزيعات إضافية (سلف/عهدة/مصاريف موظفين)
+                            </Label>
                           </div>
-                        )}
+                        </div>
                       </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Step 3: Disbursements & Custody */}
-              {step === 3 && (
+              {/* Step 2: Disbursements & Custody */}
+              {step === 2 && (
                 <div className="flex-1 grid grid-cols-1 md:grid-cols-3 overflow-y-auto p-5 gap-5 min-h-0 bg-background/20">
                   {/* 1. Employee Distributions */}
                   <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[300px] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-orange-950 dark:text-orange-100 border-b pb-2 mb-2 flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-orange-600" />
+                    <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-2 flex items-center gap-2">
+                      <UserCheck className="h-4 w-4 text-primary" />
                       دفعات وسلف الموظفين
                     </h3>
                     <div className="flex-1 pr-1">
@@ -1923,8 +1997,8 @@ export function EnhancedDistributePaymentDialog({
 
                   {/* 2. Custody Section */}
                   <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[300px] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-orange-950 dark:text-orange-100 border-b pb-2 mb-2 flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-orange-600" />
+                    <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-2 flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-primary" />
                       توزيع وإصدار العهد المالية
                     </h3>
                     <div className="flex-1 pr-1">
@@ -1949,8 +2023,8 @@ export function EnhancedDistributePaymentDialog({
 
                   {/* 3. Expense Payment Section */}
                   <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[300px] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-orange-950 dark:text-orange-100 border-b pb-2 mb-2 flex items-center gap-2">
-                      <Wrench className="h-4 w-4 text-orange-600" />
+                    <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-2 flex items-center gap-2">
+                      <Wrench className="h-4 w-4 text-primary" />
                       تسوية وسداد مصروفات تشغيلية
                     </h3>
                     <div className="flex-1 pr-1">
@@ -1998,7 +2072,7 @@ export function EnhancedDistributePaymentDialog({
               إلغاء
             </Button>
             
-            {step < 3 ? (
+            {step < maxStep ? (
               <Button
                 type="button"
                 onClick={() => {
@@ -2016,23 +2090,23 @@ export function EnhancedDistributePaymentDialog({
                   }
                   setStep(step + 1);
                 }}
-                className="mr-auto h-10 px-6 bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs"
+                className="mr-auto h-10 px-6 bg-primary hover:bg-primary/90 text-primary-foreground font-bold text-xs"
               >
                 التالي
               </Button>
             ) : null}
 
-            {/* Submit Button - visible in step 2 and step 3 */}
-            {(step === 2 || step === 3) && (
+            {/* Submit Button - visible in the final step (step 1 if additional distributions disabled, step 2 if enabled) */}
+            {step === maxStep && (
               <Button
                 type="button"
                 onClick={handleDistribute}
                 disabled={
                   distributing ||
                   (!hasCustomerItems && !hasExpensePayments && !hasAnyAllocation) ||
-                  (hasCustomerItems && inputAmountNum > 0 && Math.abs(remainingToAllocate) > 0.01)
+                  (hasCustomerItems && inputAmountNum > 0 && Math.abs(remainingToAllocate) > 0.01 && !saveRemainderAsCredit)
                 }
-                className="mr-auto h-10 px-6 font-bold text-xs bg-gradient-to-r from-orange-600 to-orange-500 hover:from-orange-700 hover:to-orange-600 text-white shadow-lg shadow-orange-500/20"
+                className="mr-auto h-10 px-6 font-bold text-xs bg-gradient-to-r from-primary to-primary/80 hover:from-primary hover:to-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
               >
                 {distributing ? (
                   <span className="flex items-center gap-2">

@@ -2352,8 +2352,9 @@ export default function OffersPage() {
 
                     {/* Billboard Grid or Map */}
                     {viewMode === 'map' ? (
-                      <div className="h-[500px] rounded-lg overflow-hidden border">
+                      <div className="h-[650px] lg:h-[750px] rounded-lg overflow-hidden border">
                         <SelectableGoogleHomeMap
+                          className="w-full h-full"
                           billboards={displayedBillboards}
                           selectedBillboards={selectedBillboardsSet}
                           onToggleSelection={handleToggleSelection}
