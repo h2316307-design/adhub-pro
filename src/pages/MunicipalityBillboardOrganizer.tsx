@@ -66,8 +66,8 @@ interface Collection {
 
 const parseDimensions = (sizeStr: string) => {
   if (!sizeStr) return { length: '', width: '', height: '' };
-  // Replace × or X with x to normalize
-  const normalized = sizeStr.replace(/×/g, 'x').replace(/X/g, 'x');
+  // Replace ×, X or * with x to normalize
+  const normalized = sizeStr.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
   const parts = normalized.split('x').map(p => p.trim());
   return {
     length: parts[0] || '',
@@ -203,6 +203,13 @@ export default function MunicipalityBillboardOrganizer() {
   const [municipalities, setMunicipalities] = useState<string[]>([]);
   const [cities, setCities] = useState<string[]>([]);
   const [dbSizes, setDbSizes] = useState<string[]>([]);
+  const [sizesList, setSizesList] = useState<{ name: string; sort_order: number }[]>([]);
+  const [selectedMunicipalityForImport, setSelectedMunicipalityForImport] = useState<string | null>(null);
+  const [showImportConfigDialog, setShowImportConfigDialog] = useState(false);
+  const [sizeMappings, setSizeMappings] = useState<Record<string, string>>({});
+  const [municipalitySizesWithCounts, setMunicipalitySizesWithCounts] = useState<{ size: string; count: number }[]>([]);
+  const [loadingBillboards, setLoadingBillboards] = useState(false);
+  const [loadedBillboardsCount, setLoadedBillboardsCount] = useState(0);
   const [restrictImportToMunicipality, setRestrictImportToMunicipality] = useState(true);
   const [searchMunicipality, setSearchMunicipality] = useState('');
   const [showExcelMunicipalityDialog, setShowExcelMunicipalityDialog] = useState(false);
@@ -246,6 +253,11 @@ export default function MunicipalityBillboardOrganizer() {
   const [showReplaceDialog, setShowReplaceDialog] = useState(false);
   const [replaceTarget, setReplaceTarget] = useState<number | null>(null);
   const [showStickerSettings, setShowStickerSettings] = useState(false);
+  // Reordering / Moving states
+  const [showMoveDialog, setShowMoveDialog] = useState(false);
+  const [moveSourceSeqs, setMoveSourceSeqs] = useState<number[]>([]);
+  const [moveTargetSeq, setMoveTargetSeq] = useState<number | ''>('');
+  const [movePosition, setMovePosition] = useState<'above' | 'below'>('above');
   const { settings: stickerSettings, reload: reloadStickerSettings } = useStickerSettings();
   const [showHeightInPrint, setShowHeightInPrint] = useState(() => {
     try {
@@ -298,10 +310,7 @@ export default function MunicipalityBillboardOrganizer() {
   useEffect(() => {
     loadCollections();
     loadAllBillboards();
-    loadMunicipalities();
-    loadCities();
     loadSizes();
-    // ✅ استرجاع آخر محفوظة كانت مفتوحة
     try {
       const savedId = localStorage.getItem('last_municipality_collection_id');
       if (savedId) {
@@ -310,34 +319,99 @@ export default function MunicipalityBillboardOrganizer() {
     } catch {}
   }, []);
 
+  const loadAllBillboards = async () => {
+    setLoadingBillboards(true);
+    setLoadedBillboardsCount(0);
+    let allData: any[] = [];
+    let page = 0;
+    const pageSize = 1000;
+    let hasMore = true;
+
+    try {
+      while (hasMore) {
+        const { data, error } = await supabase
+          .from('billboards')
+          .select('ID, Billboard_Name, Size, Faces_Count, City, District, Municipality, Nearest_Landmark, GPS_Coordinates, Image_URL, design_face_a, design_face_b, Status')
+          .order('ID', { ascending: true })
+          .range(page * pageSize, (page + 1) * pageSize - 1);
+
+        if (error) {
+          console.error('Error loading billboards page:', error);
+          hasMore = false;
+        } else if (data) {
+          const cleaned = data.map((b: any) => ({
+            ...b,
+            Municipality: b.Municipality ? b.Municipality.trim() : null,
+            City: b.City ? b.City.trim() : null,
+            Size: b.Size ? b.Size.trim() : null,
+          }));
+          allData = [...allData, ...cleaned];
+          setLoadedBillboardsCount(allData.length);
+          if (data.length < pageSize) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        } else {
+          hasMore = false;
+        }
+      }
+      
+      setAllBillboards(allData);
+      
+      // Derive municipalities and cities from the complete list of billboards
+      const uniqueMunicipalities = [...new Set(allData.map(b => b.Municipality).filter(Boolean))] as string[];
+      setMunicipalities(uniqueMunicipalities.sort());
+
+      const uniqueCities = [...new Set(allData.map(b => b.City).filter(Boolean))] as string[];
+      setCities(uniqueCities.sort());
+      
+    } catch (err) {
+      console.error('Failed to load billboards in chunked query:', err);
+    } finally {
+      setLoadingBillboards(false);
+    }
+  };
+
   const loadMunicipalities = async () => {
-    const { data } = await supabase
-      .from('billboards')
-      .select('Municipality')
-      .not('Municipality', 'is', null);
-    if (data) {
-      const unique = [...new Set(data.map(d => d.Municipality).filter(Boolean))] as string[];
+    if (allBillboards.length > 0) {
+      const unique = [...new Set(allBillboards.map(b => b.Municipality).filter(Boolean))] as string[];
       setMunicipalities(unique.sort());
+    } else {
+      const { data } = await supabase
+        .from('billboards')
+        .select('Municipality')
+        .not('Municipality', 'is', null);
+      if (data) {
+        const unique = [...new Set(data.map(d => d.Municipality).filter(Boolean))] as string[];
+        setMunicipalities(unique.sort());
+      }
     }
   };
 
   const loadCities = async () => {
-    const { data } = await supabase
-      .from('billboards')
-      .select('City')
-      .not('City', 'is', null);
-    if (data) {
-      const unique = [...new Set(data.map(d => d.City).filter(Boolean))] as string[];
+    if (allBillboards.length > 0) {
+      const unique = [...new Set(allBillboards.map(b => b.City).filter(Boolean))] as string[];
       setCities(unique.sort());
+    } else {
+      const { data } = await supabase
+        .from('billboards')
+        .select('City')
+        .not('City', 'is', null);
+      if (data) {
+        const unique = [...new Set(data.map(d => d.City).filter(Boolean))] as string[];
+        setCities(unique.sort());
+      }
     }
   };
 
   const loadSizes = async () => {
     const { data } = await supabase
       .from('sizes')
-      .select('name')
-      .order('name', { ascending: true });
+      .select('name, sort_order')
+      .order('sort_order', { ascending: true });
     if (data) {
+      setSizesList(data as { name: string; sort_order: number }[]);
       setDbSizes((data as any[]).map((d: any) => d.name).filter(Boolean));
     }
   };
@@ -348,14 +422,6 @@ export default function MunicipalityBillboardOrganizer() {
       .select('id, name, created_at')
       .order('created_at', { ascending: false });
     if (data) setCollections(data);
-  };
-
-  const loadAllBillboards = async () => {
-    const { data } = await supabase
-      .from('billboards')
-      .select('ID, Billboard_Name, Size, Faces_Count, City, District, Municipality, Nearest_Landmark, GPS_Coordinates, Image_URL, design_face_a, design_face_b, Status')
-      .order('ID', { ascending: true });
-    if (data) setAllBillboards(data);
   };
 
   const loadCollection = async (collectionId: string) => {
@@ -471,6 +537,18 @@ export default function MunicipalityBillboardOrganizer() {
     }
   };
 
+  const handleNewProject = () => {
+    setCurrentCollection({ items: [] });
+    setCollectionName('');
+    setMunicipalityName('');
+    setCityName('');
+    setDefaultSize('');
+    try {
+      localStorage.removeItem('last_municipality_collection_id');
+    } catch {}
+    toast.success('تم فتح مشروع جديد فارغ');
+  };
+
   // Add new manual billboard
   const openAddDialog = () => {
     setNewItem({
@@ -519,6 +597,8 @@ export default function MunicipalityBillboardOrganizer() {
     }
     const coords = b.GPS_Coordinates?.split(',').map((c: string) => parseFloat(c.trim()));
     const nextSeq = currentCollection.items.length + 1;
+    const dbStatus = (b.Status || '').trim();
+    const statusToUse = (dbStatus === 'إزالة' || dbStatus === 'ازالة') ? 'إزالة' : 'تم التركيب';
     const item: CollectionItem = {
       sequence_number: nextSeq,
       billboard_id: b.ID,
@@ -534,7 +614,7 @@ export default function MunicipalityBillboardOrganizer() {
       design_face_b: b.design_face_b,
       image_url: b.Image_URL,
       municipality: b.Municipality || '',
-      status: b.Status || 'متاحة',
+      status: statusToUse,
     };
     setCurrentCollection(prev => ({ ...prev, items: [...prev.items, item] }));
     toast.success(`تمت إضافة "${item.billboard_name}"`);
@@ -555,6 +635,8 @@ export default function MunicipalityBillboardOrganizer() {
       .filter(b => selectedBillboardIds.has(b.ID))
       .forEach(b => {
         const coords = b.GPS_Coordinates?.split(',').map((c: string) => parseFloat(c.trim()));
+        const dbStatus = (b.Status || '').trim();
+        const statusToUse = (dbStatus === 'إزالة' || dbStatus === 'ازالة') ? 'إزالة' : 'تم التركيب';
         newItems.push({
           sequence_number: seq++,
           billboard_id: b.ID,
@@ -570,7 +652,7 @@ export default function MunicipalityBillboardOrganizer() {
           design_face_b: b.design_face_b,
           image_url: b.Image_URL,
           municipality: b.Municipality || '',
-          status: b.Status || 'متاحة',
+          status: statusToUse,
         });
       });
 
@@ -601,6 +683,52 @@ export default function MunicipalityBillboardOrganizer() {
       const reSequenced = items.map((item, i) => ({ ...item, sequence_number: i + 1 }));
       return { ...prev, items: reSequenced };
     });
+  };
+
+  // Execute bulk or single move reordering
+  const executeMoveBillboards = () => {
+    const targetNum = Number(moveTargetSeq);
+    if (!moveTargetSeq || isNaN(targetNum) || targetNum < 1 || targetNum > currentCollection.items.length) {
+      toast.error('رقم اللوحة المستهدفة غير صحيح');
+      return;
+    }
+
+    if (moveSourceSeqs.includes(targetNum)) {
+      toast.error('لا يمكن نقل اللوحات إلى رقم إحداها');
+      return;
+    }
+
+    setCurrentCollection(prev => {
+      // Sort items by sequence number first
+      const sorted = [...prev.items].sort((a, b) => a.sequence_number - b.sequence_number);
+      
+      const movedItems = sorted.filter(item => moveSourceSeqs.includes(item.sequence_number));
+      const remainingItems = sorted.filter(item => !moveSourceSeqs.includes(item.sequence_number));
+      
+      const idxInRemaining = remainingItems.findIndex(item => item.sequence_number === targetNum);
+      if (idxInRemaining === -1) return prev;
+
+      const insertIndex = movePosition === 'above' ? idxInRemaining : idxInRemaining + 1;
+      
+      const newItems = [
+        ...remainingItems.slice(0, insertIndex),
+        ...movedItems,
+        ...remainingItems.slice(insertIndex)
+      ];
+
+      const reSequenced = newItems.map((item, index) => ({
+        ...item,
+        sequence_number: index + 1
+      }));
+
+      return { ...prev, items: reSequenced };
+    });
+
+    toast.success('تم إعادة ترتيب ونقل اللوحات بنجاح');
+    setSelectedItems(new Set());
+    setShowMoveDialog(false);
+    setMoveSourceSeqs([]);
+    setMoveTargetSeq('');
   };
 
   // Update item
@@ -890,6 +1018,15 @@ export default function MunicipalityBillboardOrganizer() {
     toast.success(`تم استيراد ${excelPendingItems.length} لوحة تحت "${excelMunicipalityName.trim()}"`);
   };
 
+  const getSizeSortOrder = (sizeStr: string) => {
+    if (!sizeStr) return 99999;
+    const normalize = (str: string) => str.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x').replace(/\s+/g, '').trim().toLowerCase();
+    const normalized = normalize(sizeStr);
+    const found = sizesList.find(s => normalize(s.name) === normalized);
+    if (found) return found.sort_order;
+    return 99999;
+  };
+
   // Import all billboards from a specific municipality
   const importByMunicipality = (municipality: string) => {
     const filtered = allBillboards.filter(b => b.Municipality === municipality);
@@ -897,9 +1034,58 @@ export default function MunicipalityBillboardOrganizer() {
       toast.error(`لا توجد لوحات في بلدية "${municipality}"`);
       return;
     }
+    
+    // Find unique sizes and counts in the chosen municipality
+    const sizeCounts: Record<string, number> = {};
+    filtered.forEach(b => {
+      const s = b.Size || 'بدون مقاس';
+      sizeCounts[s] = (sizeCounts[s] || 0) + 1;
+    });
+
+    const sizesList = Object.entries(sizeCounts).map(([size, count]) => ({ size, count }));
+    setMunicipalitySizesWithCounts(sizesList);
+
+    // Initialize mapping dictionary (default: each size maps to itself)
+    const initialMappings: Record<string, string> = {};
+    sizesList.forEach(({ size }) => {
+      initialMappings[size] = size;
+    });
+
+    setSelectedMunicipalityForImport(municipality);
+    setSizeMappings(initialMappings);
+    setShowImportConfigDialog(true);
+  };
+
+  const executeImportByMunicipality = (municipality: string) => {
+    let filtered = allBillboards.filter(b => b.Municipality === municipality);
+    if (filtered.length === 0) {
+      toast.error(`لا توجد لوحات في بلدية "${municipality}"`);
+      return;
+    }
+
+    // Apply size mappings using sizeMappings dictionary
+    filtered = filtered.map(b => {
+      const srcSize = b.Size || 'بدون مقاس';
+      const mappedSize = sizeMappings[srcSize] || srcSize;
+      return {
+        ...b,
+        Size: mappedSize === 'بدون مقاس' ? null : mappedSize
+      };
+    });
+
+    // Sort by sort_order of sizes, falling back to billboard ID
+    const sortedBillboards = [...filtered].sort((a, b) => {
+      const orderA = getSizeSortOrder(a.Size || '');
+      const orderB = getSizeSortOrder(b.Size || '');
+      if (orderA !== orderB) return orderA - orderB;
+      return (a.ID || 0) - (b.ID || 0);
+    });
+
     const startSeq = currentCollection.items.length + 1;
-    const newItems: CollectionItem[] = filtered.map((b, idx) => {
+    const newItems: CollectionItem[] = sortedBillboards.map((b, idx) => {
       const coords = b.GPS_Coordinates?.split(',').map((c: string) => parseFloat(c.trim()));
+      const dbStatus = (b.Status || '').trim();
+      const statusToUse = (dbStatus === 'إزالة' || dbStatus === 'ازالة') ? 'إزالة' : 'تم التركيب';
       return {
         sequence_number: startSeq + idx,
         billboard_id: b.ID,
@@ -915,8 +1101,10 @@ export default function MunicipalityBillboardOrganizer() {
         design_face_b: b.design_face_b,
         image_url: b.Image_URL,
         municipality: municipality,
+        status: statusToUse,
       };
     });
+
     setCurrentCollection(prev => ({ ...prev, items: [...prev.items, ...newItems] }));
     setMunicipalityName(municipality);
     // Auto-bind city from first billboard if empty
@@ -925,13 +1113,17 @@ export default function MunicipalityBillboardOrganizer() {
       if (firstCity) setCityName(firstCity);
     }
     if (!collectionName) setCollectionName(municipality);
+    setShowImportConfigDialog(false);
     setShowMunicipalityImportDialog(false);
-    toast.success(`تم جلب ${newItems.length} لوحة من بلدية "${municipality}"`);
+    setSelectedMunicipalityForImport(null);
+    setSizeMappings({});
+    setMunicipalitySizesWithCounts([]);
+    toast.success(`تم جلب ${newItems.length} لوحة مرتبة من بلدية "${municipality}"`);
   };
 
   // Convert items to Billboard format for map
   const mapBillboards: Billboard[] = useMemo(() => {
-    return currentCollection.items
+    const list = currentCollection.items
       .filter(item => item.latitude && item.longitude)
       .map(item => ({
         ID: item.sequence_number,
@@ -948,7 +1140,37 @@ export default function MunicipalityBillboardOrganizer() {
         design_face_a: item.design_face_a || '',
         design_face_b: item.design_face_b || '',
       } as any));
-  }, [currentCollection.items]);
+
+    if (showAddDialog && newItem.latitude && newItem.longitude) {
+      list.push({
+        ID: 999999,
+        Billboard_Name: 'لوحة جديدة (قيد الإضافة)',
+        Size: newItem.size || '',
+        Faces_Count: newItem.faces_count === 'وجه' ? 1 : 2,
+        GPS_Coordinates: `${newItem.latitude},${newItem.longitude}`,
+        Status: 'temp_adding',
+        City: newItem.location_text || '',
+        Municipality: '',
+        District: '',
+        Nearest_Landmark: newItem.nearest_landmark || '',
+        Image_URL: '',
+        design_face_a: '',
+        design_face_b: '',
+      } as any);
+    }
+
+    return list;
+  }, [currentCollection.items, showAddDialog, newItem]);
+
+  // إشعار توجيهي في حال كانت الخريطة فارغة
+  useEffect(() => {
+    if (mapBillboards.length === 0) {
+      toast.info('الخريطة فارغة. يمكنك الضغط بالزر الأيمن على الخريطة لإضافة لوحة جديدة مباشرة في أي مكان.', {
+        id: 'empty-map-info-toast',
+        duration: 5000
+      });
+    }
+  }, [mapBillboards.length]);
 
   // Filtered billboards for import dialog
   const filteredImportBillboards = useMemo(() => {
@@ -1129,8 +1351,33 @@ export default function MunicipalityBillboardOrganizer() {
       // 🆕 صفحة جدول ملخّص اللوحات
       {
         const compactSummary = printItems.length > 18;
+        const rowHeight = compactSummary ? '12.5mm' : '14.5mm';
+        const rowHeightVal = compactSummary ? 12.5 : 14.5;
+        
+        // Total table width is 190mm (210mm A4 width - 20mm margins). Allocating exact column widths in mm:
+        const indexWidth = 10;
+        const facesWidth = 14;
+        const sizeWidth = 20;
+        const qrWidth = rowHeightVal; // Perfectly square width
+        
+        const remainingWidth = 190 - (indexWidth + facesWidth + sizeWidth + qrWidth);
+        
+        let locWidth: number, coordsWidth: number, statusWidth: number, landmarkWidth: number;
+        if (showStatusInPrint) {
+          locWidth = 32;
+          coordsWidth = 28;
+          statusWidth = 18;
+          landmarkWidth = remainingWidth - (locWidth + coordsWidth + statusWidth);
+        } else {
+          locWidth = 36;
+          coordsWidth = 32;
+          landmarkWidth = remainingWidth - (locWidth + coordsWidth);
+          statusWidth = 0;
+        }
+
         const rowFontSize = compactSummary ? '11px' : '13px';
         const rowPadding = compactSummary ? '4px 6px' : '6px 8px';
+        const qrImgSize = compactSummary ? '11.5mm' : '13.5mm';
         const rowsPerPage = showStatusInPrint ? 18 : 20;
         const totalSummaryPages = Math.max(1, Math.ceil(printItems.length / rowsPerPage));
         for (let pIdx = 0; pIdx < totalSummaryPages; pIdx++) {
@@ -1148,10 +1395,10 @@ export default function MunicipalityBillboardOrganizer() {
                 <td class="num">${it.faces_count || '-'}</td>
                 <td class="coords">${it.latitude && it.longitude ? `${it.latitude}, ${it.longitude}` : '-'}</td>
                 ${showStatusInPrint ? `<td class="num">${it.status || '-'}</td>` : ''}
-                <td class="qr-col" style="padding: 2px !important;">
+                <td class="qr-col-cell">
                   ${qrDataUrl ? `
-                    <a href="${qrContent}" target="_blank" style="display: block; cursor: pointer;">
-                      <img src="${qrDataUrl}" alt="QR" style="width: 30px; height: 30px; display: block; margin: 0 auto; object-fit: contain;" />
+                    <a href="${qrContent}" target="_blank" style="display: flex; align-items: center; justify-content: center; width: 100%; height: 100%; cursor: pointer; text-decoration: none;">
+                      <img src="${qrDataUrl}" alt="QR" style="width: ${qrImgSize}; height: ${qrImgSize}; display: block; margin: 0 auto; object-fit: contain;" />
                     </a>
                   ` : '-'}
                 </td>
@@ -1168,14 +1415,14 @@ export default function MunicipalityBillboardOrganizer() {
               <table class="summary-table">
                 <thead>
                   <tr>
-                    <th style="width:5%;">#</th>
-                    <th style="width:15%;">الموقع</th>
-                    <th style="width:${showStatusInPrint ? '30%' : '36%'};">أقرب نقطة</th>
-                    <th style="width:9%;">المقاس</th>
-                    <th style="width:7%;">الأوجه</th>
-                    <th style="width:${showStatusInPrint ? '14%' : '18%'};">الإحداثيات</th>
-                    ${showStatusInPrint ? `<th style="width:10%;">الحالة</th>` : ''}
-                    <th style="width:10%;">QR</th>
+                    <th style="width:${indexWidth}mm;">#</th>
+                    <th style="width:${locWidth}mm;">الموقع</th>
+                    <th style="width:${landmarkWidth}mm;">أقرب نقطة</th>
+                    <th style="width:${sizeWidth}mm;">المقاس</th>
+                    <th style="width:${facesWidth}mm;">الأوجه</th>
+                    <th style="width:${coordsWidth}mm;">الإحداثيات</th>
+                    ${showStatusInPrint ? `<th style="width:${statusWidth}mm;">الحالة</th>` : ''}
+                    <th class="qr-col-cell" style="width:${qrWidth}mm !important;">QR</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1187,17 +1434,19 @@ export default function MunicipalityBillboardOrganizer() {
               .summary-page { padding: 0 !important; background: #fff !important; width: 210mm !important; height: 297mm !important; overflow: hidden !important; page-break-after: always !important; page-break-inside: avoid !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
               .summary-inner { padding: 15mm 10mm 15mm 10mm; box-sizing: border-box; width: 100%; height: 100%; overflow: hidden; display:flex; flex-direction:column; gap:8mm; }
               .summary-title { text-align:center; font-family:'Doran'; font-size:22px; margin:0; color:#000; letter-spacing:0.5px; font-weight:700; flex:0 0 auto; }
-              .summary-table { width:100%; border-collapse:separate; border-spacing:0; font-family:'Doran'; border:1px solid #000; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; table-layout:fixed; }
+              .summary-table { width:190mm !important; border-collapse:separate; border-spacing:0; font-family:'Doran'; border:1px solid #000; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; table-layout:fixed; }
               .summary-table thead tr { background:#000 !important; color:#fff !important; }
               .summary-table thead { display: table-header-group; }
               .summary-table thead th { background:#000 !important; color:#fff !important; font-size:14px; padding:9px 6px; border-bottom:1px solid #000; border-right:1px solid #333; font-weight:700; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
               .summary-table thead th:first-child { border-right:none; }
-              .summary-table tbody tr { height: ${compactSummary ? '12.5mm' : '14.5mm'}; background:#ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; page-break-inside: avoid; }
+              .summary-table thead th.qr-col-cell { width: ${rowHeight} !important; padding: 0 !important; text-align: center; }
+              .summary-table tbody tr { height: ${rowHeight}; background:#ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; page-break-inside: avoid; }
               .summary-table tbody td { padding:${rowPadding}; font-size:${rowFontSize}; border-bottom:1px solid #ccc; border-right:1px solid #ccc; text-align:center; color:#000; vertical-align:middle; line-height:1.25; }
               .summary-table tbody td:first-child { border-right:none; }
               .summary-table tbody td.loc { text-align:right; padding-right:10px; padding-left:10px; word-break:break-word; }
               .summary-table tbody td.num { font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-weight: 600; }
               .summary-table tbody td.coords { direction:ltr; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-size:${compactSummary ? '9.5px' : '11px'}; letter-spacing:0.2px; white-space:nowrap; font-weight: 600; }
+              .summary-table tbody td.qr-col-cell { width: ${rowHeight} !important; height: ${rowHeight} !important; padding: 0 !important; vertical-align: middle; text-align: center; }
               .summary-table tbody tr:nth-child(even) { background:#f0f0f0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
               .summary-table tbody tr:nth-child(even) td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
               .summary-table tbody tr:last-child td { border-bottom:none; }
@@ -1535,6 +1784,10 @@ export default function MunicipalityBillboardOrganizer() {
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                 <span>{currentCollection.items.length} لوحة</span>
               </div>
+              <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={handleNewProject}>
+                <Plus className="h-4 w-4" />
+                مشروع جديد
+              </Button>
               <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={() => setShowCollectionsDialog(true)}>
                 <FolderOpen className="h-4 w-4" />
                 المحفوظات
@@ -1824,6 +2077,11 @@ export default function MunicipalityBillboardOrganizer() {
                   تغيير حالة المحدد
                 </Button>
 
+                <Button size="sm" variant="outline" className="h-8 text-xs rounded-xl border-border/20 bg-card/45 gap-1.5" onClick={() => { setMoveSourceSeqs(Array.from(selectedItems).sort((a, b) => a - b)); setMoveTargetSeq(''); setMovePosition('above'); setShowMoveDialog(true); }}>
+                  <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
+                  نقل المحدد إلى رقم...
+                </Button>
+
                 <Button size="sm" variant="ghost" className="h-8 text-xs text-muted-foreground hover:text-foreground" onClick={() => setSelectedItems(new Set())}>
                   إلغاء التحديد
                 </Button>
@@ -1968,6 +2226,9 @@ export default function MunicipalityBillboardOrganizer() {
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => handleReplace(item.sequence_number)} title="استبدال">
                               <Replace className="h-3.5 w-3.5 text-indigo-500" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => { setMoveSourceSeqs([item.sequence_number]); setMoveTargetSeq(''); setMovePosition('above'); setShowMoveDialog(true); }} title="نقل اللوحة">
+                              <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => setEditingItem(item)} title="تعديل">
                               <Edit2 className="h-3.5 w-3.5 text-slate-500" />
@@ -2133,6 +2394,9 @@ export default function MunicipalityBillboardOrganizer() {
                           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-muted/80" onClick={() => handleReplace(item.sequence_number)} title="استبدال لوحة">
                             <Replace className="h-3.5 w-3.5 text-indigo-500" />
                           </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-muted/80" onClick={() => { setMoveSourceSeqs([item.sequence_number]); setMoveTargetSeq(''); setMovePosition('above'); setShowMoveDialog(true); }} title="نقل اللوحة">
+                            <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
+                          </Button>
                           <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-muted/80" onClick={() => setEditingItem(item)} title="تعديل البيانات">
                             <Edit2 className="h-3.5 w-3.5 text-slate-500" />
                           </Button>
@@ -2167,17 +2431,24 @@ export default function MunicipalityBillboardOrganizer() {
           </CardHeader>
           <CardContent className="p-0">
             <div style={{ height: '600px' }} className="rounded-b-[20px] overflow-hidden relative">
-              {mapBillboards.length > 0 ? (
-                <GoogleHomeMap billboards={mapBillboards} />
-              ) : (
-                <div className="flex items-center justify-center h-full bg-muted/10 text-muted-foreground p-8">
-                  <div className="text-center max-w-sm animate-in fade-in duration-300">
-                    <MapPin className="h-12 w-12 mx-auto mb-3.5 opacity-25 text-indigo-500 animate-bounce" />
-                    <h3 className="font-bold text-foreground/85 mb-1 text-sm">الخريطة فارغة</h3>
-                    <p className="text-xs text-muted-foreground">يرجى إضافة إحداثيات (خط العرض وخط الطول) للوحات حتى نتمكن من تمثيلها جغرافياً على الخريطة.</p>
-                  </div>
-                </div>
-              )}
+              <GoogleHomeMap
+                billboards={mapBillboards}
+                onMapRightClick={(lat, lng) => {
+                  setNewItem({
+                    size: defaultSize || '',
+                    faces_count: 'وجهين',
+                    location_text: '',
+                    nearest_landmark: '',
+                    latitude: Number(lat.toFixed(6)),
+                    longitude: Number(lng.toFixed(6)),
+                    item_type: 'new',
+                  });
+                  setShowAddDialog(true);
+                }}
+                onRemoveFromList={(b) => {
+                  removeItem(b.ID);
+                }}
+              />
             </div>
           </CardContent>
         </Card>
@@ -2715,7 +2986,13 @@ export default function MunicipalityBillboardOrganizer() {
             <div className="flex-1 overflow-hidden border border-border/15 rounded-2xl bg-background/30">
               <ScrollArea className="h-full">
                 <div className="space-y-2 p-3">
-                  {municipalities
+                  {loadingBillboards && (
+                    <div className="text-center py-10 text-xs text-muted-foreground flex flex-col items-center justify-center gap-3">
+                      <div className="w-6 h-6 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin" />
+                      <span>جاري تحميل كافة اللوحات من السيرفر ({loadedBillboardsCount} لوحة)...</span>
+                    </div>
+                  )}
+                  {!loadingBillboards && municipalities
                     .filter(m => !searchMunicipality || m.includes(searchMunicipality))
                     .map(m => {
                       const count = allBillboards.filter(b => b.Municipality === m).length;
@@ -2735,7 +3012,7 @@ export default function MunicipalityBillboardOrganizer() {
                         </div>
                       );
                     })}
-                  {municipalities.filter(m => !searchMunicipality || m.includes(searchMunicipality)).length === 0 && (
+                  {!loadingBillboards && municipalities.filter(m => !searchMunicipality || m.includes(searchMunicipality)).length === 0 && (
                     <p className="text-center text-muted-foreground py-10 text-xs">لا توجد بلديات مطابقة للبحث</p>
                   )}
                 </div>
@@ -2796,6 +3073,180 @@ export default function MunicipalityBillboardOrganizer() {
         onOpenChange={setShowStickerSettings}
         onSettingsChange={() => reloadStickerSettings()}
       />
+
+      {/* Municipality Import Configuration Dialog */}
+      <Dialog open={showImportConfigDialog} onOpenChange={setShowImportConfigDialog}>
+        <DialogContent className="max-w-xl border-border/15 rounded-3xl bg-background/98 backdrop-blur-md flex flex-col max-h-[85vh] p-6">
+          <DialogHeader className="shrink-0 pb-2 border-b border-border/10">
+            <DialogTitle className="font-bold flex items-center gap-2 text-foreground">
+              <Settings2 className="h-5 w-5 text-indigo-500" />
+              <span>إعدادات استيراد بلدية {selectedMunicipalityForImport}</span>
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-3 flex-1 overflow-hidden flex flex-col min-h-0">
+            <div className="text-xs text-muted-foreground leading-relaxed shrink-0">
+              يرجى مراجعة وتعديل مقاسات اللوحات التي سيتم استيرادها. يمكنك الإبقاء على المقاس كما هو، أو تغييره لمقاس آخر (من القائمة أو بالكتابة يدوياً):
+            </div>
+
+            <div className="flex-1 overflow-hidden border border-border/15 rounded-2xl bg-muted/10 p-1">
+              <ScrollArea className="h-full">
+                <div className="space-y-3 p-3">
+                  {municipalitySizesWithCounts.map(({ size, count }) => {
+                    const currentTarget = sizeMappings[size] || size;
+                    return (
+                      <div key={size} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 border border-border/10 rounded-2xl bg-background/50 hover:bg-background/80 transition-all">
+                        {/* Size and Count Info */}
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="rounded-xl px-2.5 py-1 text-xs border-indigo-500/20 bg-indigo-500/[0.02] text-indigo-600 dark:text-indigo-400 font-semibold font-mono">
+                            {size}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            ({count} لوحة)
+                          </span>
+                        </div>
+
+                        {/* Mapping inputs */}
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground font-semibold shrink-0">تغيير إلى:</span>
+                          
+                          {/* Target Select */}
+                          <Select
+                            value={currentTarget}
+                            onValueChange={(val) => {
+                              setSizeMappings(prev => ({ ...prev, [size]: val }));
+                            }}
+                          >
+                            <SelectTrigger className="h-9 w-32 rounded-xl bg-background/50 border-border/15 focus:ring-indigo-500 text-xs font-semibold">
+                              <SelectValue placeholder="اختر المقاس" />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md max-h-56">
+                              {[...new Set([
+                                currentTarget,
+                                ...municipalitySizesWithCounts.map(x => x.size),
+                                ...dbSizes
+                              ])].filter(Boolean).map(s => (
+                                <SelectItem key={s} value={s} className="text-xs">
+                                  {s}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+
+                          {/* Manual Input */}
+                          <Input
+                            value={currentTarget}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setSizeMappings(prev => ({ ...prev, [size]: val }));
+                            }}
+                            placeholder="كتابة يدوية..."
+                            className="h-9 w-28 rounded-xl bg-background/50 border-border/15 text-xs font-semibold"
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
+
+            <div className="text-[11px] text-muted-foreground bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-3 leading-relaxed shrink-0">
+              * سيتم استيراد كافة اللوحات وتطبيق ترتيبها تلقائياً تِبعاً لتسلسل المقاسات المعتمد في إعدادات النظام.
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 mt-2 shrink-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowImportConfigDialog(false);
+                setSelectedMunicipalityForImport(null);
+              }}
+              className="rounded-xl h-10 cursor-pointer"
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={() => {
+                if (selectedMunicipalityForImport) {
+                  executeImportByMunicipality(selectedMunicipalityForImport);
+                }
+              }}
+              className="rounded-xl h-10 bg-indigo-600 hover:bg-indigo-700 text-white cursor-pointer"
+            >
+              تأكيد الاستيراد والترتيب
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move Billboards Dialog */}
+      <Dialog open={showMoveDialog} onOpenChange={setShowMoveDialog}>
+        <DialogContent className="max-w-md border-border/15 rounded-3xl bg-background/98 backdrop-blur-md">
+          <DialogHeader>
+            <DialogTitle className="font-bold flex items-center gap-2">
+              <ArrowLeftRight className="h-5 w-5 text-indigo-500" />
+              <span>نقل اللوحات في القائمة</span>
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="text-xs text-muted-foreground leading-relaxed">
+              {moveSourceSeqs.length === 1 
+                ? `أنت تقوم بنقل اللوحة رقم (${moveSourceSeqs[0]}) إلى موضع جديد في القائمة بدون استبدال.`
+                : `أنت تقوم بنقل (${moveSourceSeqs.length}) لوحة محددة إلى موضع جديد في القائمة دفعة واحدة.`}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">رقم اللوحة المستهدفة (المنقول إليها):</Label>
+              <Input
+                type="number"
+                min={1}
+                max={currentCollection.items.length}
+                value={moveTargetSeq}
+                onChange={(e) => setMoveTargetSeq(e.target.value ? Number(e.target.value) : '')}
+                placeholder="أدخل رقم اللوحة..."
+                className="h-10 rounded-xl bg-background/50 border-border/15 focus-visible:ring-indigo-500"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">موضع اللوحات المنقولة بالنسبة للمستهدفة:</Label>
+              <RadioGroup
+                value={movePosition}
+                onValueChange={(val: 'above' | 'below') => setMovePosition(val)}
+                className="flex items-center gap-6"
+              >
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <RadioGroupItem value="above" id="pos_above" />
+                  <Label htmlFor="pos_above" className="text-xs font-medium cursor-pointer">فوق الرقم (قبل اللوحة)</Label>
+                </div>
+                <div className="flex items-center space-x-2 space-x-reverse">
+                  <RadioGroupItem value="below" id="pos_below" />
+                  <Label htmlFor="pos_below" className="text-xs font-medium cursor-pointer">تحت الرقم (بعد اللوحة)</Label>
+                </div>
+              </RadioGroup>
+            </div>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-9 rounded-xl border-border/20 bg-card/45"
+              onClick={() => setShowMoveDialog(false)}
+            >
+              إلغاء
+            </Button>
+            <Button
+              size="sm"
+              className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white"
+              onClick={executeMoveBillboards}
+            >
+              تأكيد النقل
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

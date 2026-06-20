@@ -2764,6 +2764,7 @@ export type Database = {
           linked_friend_company_id: string | null
           name: string
           phone: string | null
+          pricing_category: string | null
           printer_id: string | null
           supplier_type: string | null
           total_rent: number | null
@@ -2783,6 +2784,7 @@ export type Database = {
           linked_friend_company_id?: string | null
           name: string
           phone?: string | null
+          pricing_category?: string | null
           printer_id?: string | null
           supplier_type?: string | null
           total_rent?: number | null
@@ -2802,6 +2804,7 @@ export type Database = {
           linked_friend_company_id?: string | null
           name?: string
           phone?: string | null
+          pricing_category?: string | null
           printer_id?: string | null
           supplier_type?: string | null
           total_rent?: number | null

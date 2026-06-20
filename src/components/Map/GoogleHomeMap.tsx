@@ -1,7 +1,7 @@
 /// <reference types="google.maps" />
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Map as MapIcon, Globe, MapPin, Camera, X, ExternalLink, CheckSquare, Download, Route, ImageOff, Loader2, Calendar, User, Tag, MapPinned, FileText, Wallet } from 'lucide-react';
+import { Map as MapIcon, Globe, MapPin, Camera, X, ExternalLink, CheckSquare, Download, Route, ImageOff, Loader2, Calendar, User, Tag, MapPinned, FileText, Wallet, Trash2 } from 'lucide-react';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -44,6 +44,8 @@ interface GoogleHomeMapProps {
   externalMunicipalityFilter?: string[];
   externalShowSociet?: boolean;
   onShowSocietChange?: (val: boolean) => void;
+  onMapRightClick?: (lat: number, lng: number) => void;
+  onRemoveFromList?: (billboard: Billboard) => void;
 }
 
 import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
@@ -62,7 +64,9 @@ export default function GoogleHomeMap({
   externalSizeFilter,
   externalMunicipalityFilter,
   externalShowSociet,
-  onShowSocietChange
+  onShowSocietChange,
+  onMapRightClick,
+  onRemoveFromList
 }: GoogleHomeMapProps) {
 
 
@@ -122,8 +126,20 @@ export default function GoogleHomeMap({
   // Container ref for fullscreen
   const containerRef = useRef<HTMLDivElement>(null);
   
-  // State - OpenStreetMap is the default provider
   const [mapProvider, setMapProvider] = useState<MapProvider>('openstreetmap');
+  const [contextMenu, setContextMenu] = useState<{
+    x: number;
+    y: number;
+    lat: number;
+    lng: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const handleCloseMenu = () => setContextMenu(null);
+    window.addEventListener('click', handleCloseMenu);
+    return () => window.removeEventListener('click', handleCloseMenu);
+  }, []);
+
   const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'styled' | 'detailed'>('satellite');
   const [satelliteProvider, setSatelliteProvider] = useState<SatelliteProvider>(() => {
     return (localStorage.getItem("osm_satellite_provider") as SatelliteProvider) || "google";
@@ -681,6 +697,11 @@ export default function GoogleHomeMap({
   const filteredBillboards = useMemo(() => {
     const combinedSearchQuery = externalSearchQuery;
     return billboards.filter((b) => {
+      // Special temporary adding pin should always bypass filters and be shown!
+      if ((b as any).Status === 'temp_adding' || (b as any).status === 'temp_adding') {
+        return true;
+      }
+
       // Must have valid coordinates
       const parsedCoords = parseCoords(b);
       if (!parsedCoords) {
@@ -1099,7 +1120,18 @@ export default function GoogleHomeMap({
     };
     
     map.on('dblclick', leafletCopyCoords);
-    map.on('contextmenu', leafletCopyCoords);
+    map.on('contextmenu', (e: L.LeafletMouseEvent) => {
+      L.DomEvent.preventDefault(e);
+      const rect = leafletMapRef.current?.getBoundingClientRect();
+      if (rect) {
+        setContextMenu({
+          x: e.originalEvent.clientX - rect.left,
+          y: e.originalEvent.clientY - rect.top,
+          lat: e.latlng.lat,
+          lng: e.latlng.lng
+        });
+      }
+    });
 
     const satConfig = SATELLITE_TILE_URLS[satelliteProvider];
     const tileConfig = mapType === 'satellite' ? { url: satConfig.url, attribution: satConfig.attribution } : OSM_TILE_LAYERS.dark;
@@ -1504,8 +1536,21 @@ export default function GoogleHomeMap({
         // Double-click: copy coordinates
         map.addListener('dblclick', copyCoordinates);
         
-        // Right-click: copy coordinates
-        map.addListener('rightclick', copyCoordinates);
+        // Right-click: open custom context menu
+        map.addListener('rightclick', (e: google.maps.MapMouseEvent) => {
+          if (e.latLng) {
+            const domEvent = e.domEvent as MouseEvent | undefined;
+            const rect = googleMapRef.current?.getBoundingClientRect();
+            if (rect && domEvent) {
+              setContextMenu({
+                x: domEvent.clientX - rect.left,
+                y: domEvent.clientY - rect.top,
+                lat: e.latLng.lat(),
+                lng: e.latLng.lng()
+              });
+            }
+          }
+        });
       } else {
         googleMapInstanceRef.current.setMapTypeId(mapTypeId);
         googleMapInstanceRef.current.setOptions({ styles: mapStyles.length > 0 ? mapStyles : null });
@@ -3197,89 +3242,104 @@ export default function GoogleHomeMap({
 
               const actionsSection = (
                 <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-white/5">
-                  <button
-                    onClick={() => {
-                      const action = () => {
-                        if (onBillboardClick) onBillboardClick(selectedBillboardForCard);
-                        window.dispatchEvent(new CustomEvent('edit-billboard', { detail: bb.ID || bb.id }));
-                      };
-                      if (document.fullscreenElement) {
-                        document.exitFullscreen().then(() => {
-                          setTimeout(action, 100);
-                        }).catch(() => {
-                          action();
-                        });
-                      } else {
-                        action();
-                      }
-                    }}
-                    className="py-2 rounded-lg text-[10px] font-extrabold border border-white/10 hover:bg-white/5 text-slate-200 hover:text-white transition-all cursor-pointer"
-                  >تعديل</button>
-                  <button
-                    onClick={() => {
-                      const action = () => {
-                        window.dispatchEvent(new CustomEvent('billboard-maintenance', { detail: bb.ID || bb.id }));
-                      };
-                      if (document.fullscreenElement) {
-                        document.exitFullscreen().then(() => {
-                          setTimeout(action, 100);
-                        }).catch(() => {
-                          action();
-                        });
-                      } else {
-                        action();
-                      }
-                    }}
-                    className="py-2 rounded-lg text-[10px] font-extrabold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 transition-all cursor-pointer"
-                  >صيانة</button>
-                  <button
-                    onClick={() => {
-                      const bid = bb.ID || bb.id;
-                      const isTorn = tornSet.has(Number(bid));
-                      if (confirm(isTorn ? 'إلغاء حالة الإعلان الممزق؟' : 'تسجيل اللوحة كإعلان ممزق؟')) {
-                        window.dispatchEvent(new CustomEvent('billboard-mark-torn', { detail: bid }));
-                      }
-                    }}
-                    className="py-2 rounded-lg text-[10px] font-extrabold bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 text-red-300 transition-all cursor-pointer"
-                  >{tornSet.has(Number(bb.ID || bb.id)) ? 'سليم' : 'تمزق'}</button>
-                  <button
-                    onClick={async () => {
-                      try {
-                        const newStatus = bb.is_visible_in_available === false;
-                        const { error } = await supabase
-                          .from('billboards')
-                          .update({ is_visible_in_available: newStatus })
-                          .eq('ID', bb.ID || bb.id);
+                  {onRemoveFromList ? (
+                    <button
+                      onClick={() => {
+                        onRemoveFromList(selectedBillboardForCard);
+                        setSelectedBillboardForCard(null);
+                      }}
+                      className="col-span-5 py-2.5 rounded-lg text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>إزالة اللوحة من القائمة</span>
+                    </button>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          const action = () => {
+                            if (onBillboardClick) onBillboardClick(selectedBillboardForCard);
+                            window.dispatchEvent(new CustomEvent('edit-billboard', { detail: bb.ID || bb.id }));
+                          };
+                          if (document.fullscreenElement) {
+                            document.exitFullscreen().then(() => {
+                              setTimeout(action, 100);
+                            }).catch(() => {
+                              action();
+                            });
+                          } else {
+                            action();
+                          }
+                        }}
+                        className="py-2 rounded-lg text-[10px] font-extrabold border border-white/10 hover:bg-white/5 text-slate-200 hover:text-white transition-all cursor-pointer"
+                      >تعديل</button>
+                      <button
+                        onClick={() => {
+                          const action = () => {
+                            window.dispatchEvent(new CustomEvent('billboard-maintenance', { detail: bb.ID || bb.id }));
+                          };
+                          if (document.fullscreenElement) {
+                            document.exitFullscreen().then(() => {
+                              setTimeout(action, 100);
+                            }).catch(() => {
+                              action();
+                            });
+                          } else {
+                            action();
+                          }
+                        }}
+                        className="py-2 rounded-lg text-[10px] font-extrabold bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 transition-all cursor-pointer"
+                      >صيانة</button>
+                      <button
+                        onClick={() => {
+                          const bid = bb.ID || bb.id;
+                          const isTorn = tornSet.has(Number(bid));
+                          if (confirm(isTorn ? 'إلغاء حالة الإعلان الممزق؟' : 'تسجيل اللوحة كإعلان ممزق؟')) {
+                            window.dispatchEvent(new CustomEvent('billboard-mark-torn', { detail: bid }));
+                          }
+                        }}
+                        className="py-2 rounded-lg text-[10px] font-extrabold bg-red-500/15 hover:bg-red-500/25 border border-red-400/30 text-red-300 transition-all cursor-pointer"
+                      >{tornSet.has(Number(bb.ID || bb.id)) ? 'سليم' : 'تمزق'}</button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const newStatus = bb.is_visible_in_available === false;
+                            const { error } = await supabase
+                              .from('billboards')
+                              .update({ is_visible_in_available: newStatus })
+                              .eq('ID', bb.ID || bb.id);
 
-                        if (error) throw error;
+                            if (error) throw error;
 
-                        toast.success(newStatus ? 'ستظهر اللوحة في قائمة المتاح' : 'لن تظهر اللوحة في قائمة المتاح');
-                        setSelectedBillboardForCard(prev => prev ? { ...prev, is_visible_in_available: newStatus } : null);
-                        window.dispatchEvent(new CustomEvent('billboard-toggle-visibility', { detail: bb.ID || bb.id }));
-                      } catch (error) {
-                        console.error('Error updating visibility status:', error);
-                        toast.error('فشل في تحديث حالة الظهور');
-                      }
-                    }}
-                    className={`py-2 rounded-lg text-[10px] font-extrabold border transition-all cursor-pointer ${
-                      bb.is_visible_in_available !== false
-                        ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
-                        : 'border-red-500/40 bg-red-500/15 text-red-300'
-                    }`}
-                  >
-                    {bb.is_visible_in_available !== false ? 'إخفاء' : 'إظهار'}
-                  </button>
-                  <button
-                    onClick={() => {
-                      const coords = parseCoords(selectedBillboardForCard);
-                      if (coords) {
-                        window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`, '_blank');
-                      } else {
-                        toast.error('إحداثيات اللوحة غير صالحة');
-                      }
-                    }}
-                    className="py-2 rounded-lg text-[10px] font-extrabold bg-[#d6ac40] hover:bg-[#f4c25a] text-[#0a0a14] shadow-lg shadow-[#d6ac40]/20 transition-all cursor-pointer"
-                  >توجيه</button>
+                            toast.success(newStatus ? 'ستظهر اللوحة في قائمة المتاح' : 'لن تظهر اللوحة في قائمة المتاح');
+                            setSelectedBillboardForCard(prev => prev ? { ...prev, is_visible_in_available: newStatus } : null);
+                            window.dispatchEvent(new CustomEvent('billboard-toggle-visibility', { detail: bb.ID || bb.id }));
+                          } catch (error) {
+                            console.error('Error updating visibility status:', error);
+                            toast.error('فشل في تحديث حالة الظهور');
+                          }
+                        }}
+                        className={`py-2 rounded-lg text-[10px] font-extrabold border transition-all cursor-pointer ${
+                          bb.is_visible_in_available !== false
+                            ? 'border-emerald-500/40 bg-emerald-500/15 text-emerald-300'
+                            : 'border-red-500/40 bg-red-500/15 text-red-300'
+                        }`}
+                      >
+                        {bb.is_visible_in_available !== false ? 'إخفاء' : 'إظهار'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          const coords = parseCoords(selectedBillboardForCard);
+                          if (coords) {
+                            window.open(`https://www.google.com/maps/dir/?api=1&destination=${coords.lat},${coords.lng}`, '_blank');
+                          } else {
+                            toast.error('إحداثيات اللوحة غير صالحة');
+                          }
+                        }}
+                        className="py-2 rounded-lg text-[10px] font-extrabold bg-[#d6ac40] hover:bg-[#f4c25a] text-[#0a0a14] shadow-lg shadow-[#d6ac40]/20 transition-all cursor-pointer"
+                      >توجيه</button>
+                    </>
+                  )}
                 </div>
               );
 
@@ -3593,6 +3653,36 @@ export default function GoogleHomeMap({
               }
             })()}
           </div>
+        </div>
+      )}
+
+      {/* Custom Context Menu */}
+      {contextMenu && (
+        <div
+          className="absolute z-[9999] bg-slate-950/95 backdrop-blur-md border border-amber-500/20 rounded-xl shadow-2xl p-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+          style={{
+            top: contextMenu.y,
+            left: contextMenu.x,
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            onClick={() => {
+              if (onMapRightClick) {
+                onMapRightClick(contextMenu.lat, contextMenu.lng);
+              } else {
+                const coordsText = `${contextMenu.lat.toFixed(6)}, ${contextMenu.lng.toFixed(6)}`;
+                navigator.clipboard.writeText(coordsText).then(() => {
+                  toast.success(`تم نسخ الإحداثيات: ${coordsText}`);
+                });
+              }
+              setContextMenu(null);
+            }}
+            className="flex items-center justify-end gap-2 w-full px-3 py-2 text-xs font-bold text-slate-200 hover:bg-amber-500/10 hover:text-amber-500 rounded-lg transition-colors cursor-pointer text-right"
+          >
+            <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة لوحة هنا</span>
+            <MapPin className="h-3.5 w-3.5 text-amber-500" />
+          </button>
         </div>
       )}
     </div>

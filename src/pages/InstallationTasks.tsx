@@ -1300,6 +1300,298 @@ export default function InstallationTasks() {
     },
   });
 
+  // Duplicate task as reinstallation mutation
+  const duplicateAsReinstallationMutation = useMutation({
+    mutationFn: async (originalTaskId: string) => {
+      // 1. Fetch original task details
+      const originalTask = tasks.find(t => t.id === originalTaskId);
+      if (!originalTask) throw new Error('لم يتم العثور على المهمة الأصلية');
+
+      const contractId = originalTask.contract_id;
+      const teamId = originalTask.team_id;
+
+      // 2. Calculate the next reinstallation number for this contract
+      const { data: existingReinstalls, error: countError } = await supabase
+        .from('installation_tasks')
+        .select('reinstallation_number')
+        .eq('contract_id', contractId)
+        .eq('task_type', 'reinstallation')
+        .order('reinstallation_number', { ascending: false })
+        .limit(1);
+
+      if (countError) throw countError;
+
+      const nextNumber = ((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1;
+
+      // 3. Create the new task record
+      const { data: newTask, error: taskError } = await supabase
+        .from('installation_tasks')
+        .insert({
+          contract_id: contractId,
+          team_id: teamId,
+          status: 'pending',
+          task_type: 'reinstallation',
+          reinstallation_number: nextNumber,
+          contract_ids: originalTask.contract_ids,
+        })
+        .select()
+        .single();
+
+      if (taskError) throw taskError;
+      if (!newTask) throw new Error('فشل في إنشاء مهمة إعادة التركيب الجديدة');
+
+      const newTaskId = newTask.id;
+
+      // 4. Fetch the designs associated with the original task
+      const { data: originalDesigns, error: designsFetchError } = await supabase
+        .from('task_designs')
+        .select('*')
+        .eq('task_id', originalTaskId);
+
+      if (designsFetchError) throw designsFetchError;
+
+      const designIdMap: Record<string, string> = {};
+
+      if (originalDesigns && originalDesigns.length > 0) {
+        // Prepare new designs to insert
+        const designsToInsert = originalDesigns.map(({ id, created_at, updated_at, task_id, ...rest }) => ({
+          ...rest,
+          task_id: newTaskId,
+        }));
+
+        // Insert new designs
+        const { data: newDesigns, error: designsInsertError } = await supabase
+          .from('task_designs')
+          .insert(designsToInsert)
+          .select();
+
+        if (designsInsertError) throw designsInsertError;
+
+        // Map original design IDs to new design IDs
+        if (newDesigns) {
+          originalDesigns.forEach((od) => {
+            const nd = newDesigns.find(
+              n => n.design_name === od.design_name &&
+                   n.design_order === od.design_order &&
+                   n.billboard_id === od.billboard_id
+            );
+            if (nd) {
+              designIdMap[od.id] = nd.id;
+            }
+          });
+        }
+      }
+
+      // 5. Fetch the original task items
+      const { data: originalItems, error: itemsFetchError } = await supabase
+        .from('installation_task_items')
+        .select('*')
+        .eq('task_id', originalTaskId);
+
+      if (itemsFetchError) throw itemsFetchError;
+
+      if (originalItems && originalItems.length > 0) {
+        const itemsToInsert = originalItems.map(({
+          id,
+          created_at,
+          updated_at,
+          task_id,
+          status,
+          installation_date,
+          installed_image_face_a_url,
+          installed_image_face_b_url,
+          installed_image_url,
+          selected_design_id,
+          reinstall_count,
+          replacement_status,
+          ...rest
+        }) => {
+          // Determine the new selected_design_id
+          const newSelectedDesignId = selected_design_id ? (designIdMap[selected_design_id] || null) : null;
+
+          return {
+            ...rest,
+            task_id: newTaskId,
+            status: 'pending',
+            installation_date: null,
+            installed_image_face_a_url: null,
+            installed_image_face_b_url: null,
+            installed_image_url: null,
+            selected_design_id: newSelectedDesignId,
+            reinstall_count: (reinstall_count || 0) + 1,
+            replacement_status: 'reinstalled',
+          };
+        });
+
+        // Insert the items into the new task
+        const { error: itemsInsertError } = await supabase
+          .from('installation_task_items')
+          .insert(itemsToInsert);
+
+        if (itemsInsertError) throw itemsInsertError;
+      }
+
+      return newTaskId;
+    },
+    onSuccess: (newTaskId) => {
+      toast.success('تم تكرار المهمة بنجاح كمهمة إعادة تركيب');
+      refetchTasks();
+      refetchTaskItems();
+      refetchDesigns();
+      setSelectedTaskId(newTaskId);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'فشل في تكرار المهمة');
+    },
+  });
+
+  // Duplicate multiple tasks as reinstallation group mutation
+  const duplicateAsReinstallationGroupMutation = useMutation({
+    mutationFn: async (taskIds: string[]) => {
+      const newTaskIdList: string[] = [];
+
+      for (const originalTaskId of taskIds) {
+        // 1. Fetch original task details
+        const originalTask = tasks.find(t => t.id === originalTaskId);
+        if (!originalTask) continue;
+
+        const contractId = originalTask.contract_id;
+        const teamId = originalTask.team_id;
+
+        // 2. Calculate the next reinstallation number for this contract
+        const { data: existingReinstalls, error: countError } = await supabase
+          .from('installation_tasks')
+          .select('reinstallation_number')
+          .eq('contract_id', contractId)
+          .eq('task_type', 'reinstallation')
+          .order('reinstallation_number', { ascending: false })
+          .limit(1);
+
+        if (countError) throw countError;
+
+        const nextNumber = ((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1;
+
+        // 3. Create the new task record
+        const { data: newTask, error: taskError } = await supabase
+          .from('installation_tasks')
+          .insert({
+            contract_id: contractId,
+            team_id: teamId,
+            status: 'pending',
+            task_type: 'reinstallation',
+            reinstallation_number: nextNumber,
+            contract_ids: originalTask.contract_ids,
+          })
+          .select()
+          .single();
+
+        if (taskError) throw taskError;
+        if (!newTask) continue;
+
+        const newTaskId = newTask.id;
+        newTaskIdList.push(newTaskId);
+
+        // 4. Fetch the designs associated with the original task
+        const { data: originalDesigns, error: designsFetchError } = await supabase
+          .from('task_designs')
+          .select('*')
+          .eq('task_id', originalTaskId);
+
+        if (designsFetchError) throw designsFetchError;
+
+        const designIdMap: Record<string, string> = {};
+
+        if (originalDesigns && originalDesigns.length > 0) {
+          const designsToInsert = originalDesigns.map(({ id, created_at, updated_at, task_id, ...rest }) => ({
+            ...rest,
+            task_id: newTaskId,
+          }));
+
+          const { data: newDesigns, error: designsInsertError } = await supabase
+            .from('task_designs')
+            .insert(designsToInsert)
+            .select();
+
+          if (designsInsertError) throw designsInsertError;
+
+          if (newDesigns) {
+            originalDesigns.forEach((od) => {
+              const nd = newDesigns.find(
+                n => n.design_name === od.design_name &&
+                     n.design_order === od.design_order &&
+                     n.billboard_id === od.billboard_id
+              );
+              if (nd) {
+                designIdMap[od.id] = nd.id;
+              }
+            });
+          }
+        }
+
+        // 5. Fetch the original task items
+        const { data: originalItems, error: itemsFetchError } = await supabase
+          .from('installation_task_items')
+          .select('*')
+          .eq('task_id', originalTaskId);
+
+        if (itemsFetchError) throw itemsFetchError;
+
+        if (originalItems && originalItems.length > 0) {
+          const itemsToInsert = originalItems.map(({
+            id,
+            created_at,
+            updated_at,
+            task_id,
+            status,
+            installation_date,
+            installed_image_face_a_url,
+            installed_image_face_b_url,
+            installed_image_url,
+            selected_design_id,
+            reinstall_count,
+            replacement_status,
+            ...rest
+          }) => {
+            const newSelectedDesignId = selected_design_id ? (designIdMap[selected_design_id] || null) : null;
+
+            return {
+              ...rest,
+              task_id: newTaskId,
+              status: 'pending',
+              installation_date: null,
+              installed_image_face_a_url: null,
+              installed_image_face_b_url: null,
+              installed_image_url: null,
+              selected_design_id: newSelectedDesignId,
+              reinstall_count: (reinstall_count || 0) + 1,
+              replacement_status: 'reinstalled',
+            };
+          });
+
+          const { error: itemsInsertError } = await supabase
+            .from('installation_task_items')
+            .insert(itemsToInsert);
+
+          if (itemsInsertError) throw itemsInsertError;
+        }
+      }
+
+      return newTaskIdList;
+    },
+    onSuccess: (newTaskIdList) => {
+      toast.success(`تم تكرار ${newTaskIdList.length} مهام بنجاح كمهام إعادة تركيب للفرق`);
+      refetchTasks();
+      refetchTaskItems();
+      refetchDesigns();
+      if (newTaskIdList.length === 1) {
+        setSelectedTaskId(newTaskIdList[0]);
+      }
+    },
+    onError: (error: any) => {
+      toast.error(error.message || 'فشل في تكرار المهام للفرق');
+    },
+  });
+
   // ── تنظيف اللوحات المكررة (التركيب) — يستثني مهام إعادة التركيب ──
   const taskTypeById = useMemo(() => {
     const m: Record<string, string> = {};
@@ -1836,6 +2128,15 @@ export default function InstallationTasks() {
               onTransferBillboards={() => { setSelectedTaskForTransfer({ taskId: selectedTaskId, teamId: selectedTaskObj.team_id, teamName: selectedTeam?.team_name || 'غير محدد', contractId: selectedTaskObj.contract_id }); setTransferDialogOpen(true); }}
               onPrintAll={() => { setSelectedContractForPrint({ contractNumber: selectedTaskObj.contract_id, customerName: selectedTaskContract?.['Customer Name'] || 'غير محدد', adType: selectedTaskContract?.['Ad Type'] || '' }); setPrintAllDialogOpen(true); }}
               onDelete={async () => { if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف مهمة التركيب؟', variant: 'destructive', confirmText: 'حذف' })) { deleteTaskMutation.mutate(selectedTaskId); setSelectedTaskId(null); } }}
+              onDuplicateAsReinstallation={async () => {
+                if (await systemConfirm({
+                  title: 'تأكيد التكرار كإعادة تركيب',
+                  message: 'هل أنت متأكد من تكرار هذه المهمة كمهمة إعادة تركيب؟ سيتم نسخ جميع التفاصيل وتوزيعات التصاميم، وإعادة تعيين اللوحات كمعلقة.',
+                  confirmText: 'تكرار كإعادة تركيب'
+                })) {
+                  duplicateAsReinstallationMutation.mutate(selectedTaskId);
+                }
+              }}
               onCreatePrintTask={() => { setSelectedTaskForPrint(selectedTaskId); setCreatePrintTaskDialogOpen(true); }}
               onCompleteBillboards={() => { setSelectedTaskIdForCompletion(selectedTaskId); setSelectedItemsForCompletion(prev => selectedItemsForDate.length > 0 ? [...selectedItemsForDate] : prev.length > 0 ? prev : []); setSelectedItemsForDate([]); setSelectedTaskIdForBulk(null); setShowCompletionDialog(true); }}
               onSetInstallationDate={() => { setSelectedTaskIdForBulk(selectedTaskId); setSelectedItemsForDate(selectedTaskItemsList.map(i => i.id)); }}
@@ -2108,6 +2409,24 @@ export default function InstallationTasks() {
             page={boardPage}
             onPageChange={setBoardPage}
             onOpenTask={(taskId) => setSelectedTaskId(taskId)}
+            onDuplicateAsReinstallation={async (taskId) => {
+              if (await systemConfirm({
+                title: 'تأكيد التكرار كإعادة تركيب',
+                message: 'هل أنت متأكد من تكرار هذه المهمة كمهمة إعادة تركيب؟ سيتم نسخ جميع التفاصيل وتوزيعات التصاميم، وإعادة تعيين اللوحات كمعلقة.',
+                confirmText: 'تكرار كإعادة تركيب'
+              })) {
+                duplicateAsReinstallationMutation.mutate(taskId);
+              }
+            }}
+            onDuplicateAsReinstallationGroup={async (taskIds) => {
+              if (await systemConfirm({
+                title: 'تأكيد التكرار كإعادة تركيب للفرق',
+                message: 'هل أنت متأكد من تكرار كافة مهام هذه المجموعة كمهام إعادة تركيب؟ سيتم تكرارها لجميع الفرق المحددة مع المحافظة على توزيع اللوحات والتصاميم.',
+                confirmText: 'تكرار كإعادة تركيب للجميع'
+              })) {
+                duplicateAsReinstallationGroupMutation.mutate(taskIds);
+              }
+            }}
             onAddTask={() => setAddTaskDialogOpen(true)}
             onRefresh={handleRefreshAll}
             onPrintTask={(taskId) => { setPrintTaskId(taskId); setPrintDialogOpen(true); }}

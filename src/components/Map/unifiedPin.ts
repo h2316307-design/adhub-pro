@@ -23,6 +23,9 @@ function adjustColor(hex: string, amount: number): string {
 }
 
 const shortLabelFor = (billboard: any): string => {
+  if (billboard?.Status === 'temp_adding' || billboard?.status === 'temp_adding') {
+    return '📍';
+  }
   const size = String(billboard?.Size || billboard?.size || '')
     .trim()
     .replace(/\s+/g, '')
@@ -35,12 +38,16 @@ const shortLabelFor = (billboard: any): string => {
 export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPinResult {
   const status = getBillboardStatus(billboard);
   const isHidden = billboard?.is_visible_in_available === false;
+  const isTemp = billboard?.Status === 'temp_adding' || billboard?.status === 'temp_adding';
   
   // Status colors matching standard conventions (for the central ring stroke)
   let statusColor = '#ef4444' // Default: Red (Rented/Reserved)
   let glow = '239,68,68'
   
-  if (isHidden) {
+  if (isTemp) {
+    statusColor = '#06b6d4'; // Cyan core for temporary adding pin
+    glow = '6,182,212';
+  } else if (isHidden) {
     statusColor = '#94a3b8'
     glow = '148,163,184'
   } else if (status.label === 'متاحة' || status.label === 'متاح') {
@@ -63,8 +70,8 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
   // Size color resolving - body of the pin represents size color (dynamic)
   const sizeStr = billboard?.Size || billboard?.size || ''
   const sizeColor = getSizeColor(sizeStr);
-  const start = sizeColor.bg;
-  const end = adjustColor(sizeColor.bg, -35);
+  const start = isTemp ? '#6366f1' : sizeColor.bg; // Indigo body for temporary pin
+  const end = isTemp ? '#4f46e5' : adjustColor(sizeColor.bg, -35);
 
   const label = shortLabelFor(billboard);
   const adTypeStr = String(billboard?.Ad_Type || billboard?.ad_type || billboard?.adType || billboard?.AdType || billboard?.contracts?.[0]?.['Ad Type'] || '').trim();

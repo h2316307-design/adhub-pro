@@ -49,7 +49,7 @@ const parseRaw = (val: string): number => { const n = parseFloat(val); return is
 
 const parseDimensions = (sizeStr: string) => {
   if (!sizeStr) return { length: '', width: '', height: '' };
-  const normalized = sizeStr.replace(/×/g, 'x').replace(/X/g, 'x');
+  const normalized = sizeStr.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
   const parts = normalized.split('x').map(p => p.trim());
   return {
     length: parts[0] || '',
@@ -316,7 +316,7 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
       if (row) {
         const [lat, lng] = (row.GPS_Coordinates || '').split(',').map((s: string) => s.trim());
         const rawSize = row.Size || '12x4';
-        const normalized = rawSize.replace(/×/g, 'x').replace(/X/g, 'x');
+        const normalized = rawSize.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
         const parts = normalized.split('x').map(s => s.trim());
         const sizeWithHeight = parts.length >= 3 ? rawSize : `${parts[0] || '12'}x${parts[1] || '4'}x3`;
         setSampleBillboard({

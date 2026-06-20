@@ -125,6 +125,7 @@ export default function ContractEdit() {
   const [customerQuery, setCustomerQuery] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [customerName, setCustomerName] = useState('');
+  const [customerLinkedFriendCompanyId, setCustomerLinkedFriendCompanyId] = useState<string | null>(null);
   const [adType, setAdType] = useState('');
 
   // Pricing and categories
@@ -956,6 +957,80 @@ export default function ContractEdit() {
     return () => window.removeEventListener('paused-billboards-changed', handler);
   }, [contractNumber]);
 
+  // Load customer linked_friend_company_id
+  useEffect(() => {
+    const id = customerId || currentContract?.customer_id;
+    if (!id) {
+      setCustomerLinkedFriendCompanyId(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('customers')
+          .select('linked_friend_company_id')
+          .eq('id', id)
+          .maybeSingle();
+        if (data) {
+          setCustomerLinkedFriendCompanyId(data.linked_friend_company_id);
+        } else {
+          setCustomerLinkedFriendCompanyId(null);
+        }
+      } catch (err) {
+        console.warn('Failed to load customer linked friend company ID:', err);
+      }
+    })();
+  }, [customerId, currentContract]);
+
+  // Auto-initialize friend billboard costs when selected billboards or customer change
+  useEffect(() => {
+    if (selected.length === 0) {
+      setFriendBillboardCosts([]);
+      return;
+    }
+
+    setFriendBillboardCosts(prev => {
+      // Keep only selected friend billboards
+      const updated = prev.filter(item => selected.includes(item.billboardId));
+      
+      // Add missing ones
+      selected.forEach(id => {
+        const billboard = billboards.find(b => String((b as any).ID) === id);
+        if (billboard && (billboard as any).friend_company_id) {
+          const isCustomerFriend = !customerLinkedFriendCompanyId || (billboard as any).friend_company_id === customerLinkedFriendCompanyId;
+          
+          if (isCustomerFriend) {
+            const exists = updated.some(item => item.billboardId === id);
+            if (!exists) {
+              const price = calculateBillboardPrice(billboard);
+              
+              updated.push({
+                billboardId: id,
+                friendCompanyId: (billboard as any).friend_company_id,
+                friendCompanyName: (billboard as any).friend_companies?.name || 'شركة صديقة',
+                friendRentalCost: price
+              });
+            }
+          }
+        }
+      });
+      return updated;
+    });
+  }, [selected, billboards, calculateBillboardPrice, customerLinkedFriendCompanyId]);
+
+  // Recalculate/apply pricing when customer category or duration changes
+  useEffect(() => {
+    setFriendBillboardCosts(prev => {
+      return prev.map(item => {
+        const billboard = billboards.find(b => String((b as any).ID) === item.billboardId);
+        if (billboard) {
+          const price = calculateBillboardPrice(billboard);
+          return { ...item, friendRentalCost: price };
+        }
+        return item;
+      });
+    });
+  }, [calculateBillboardPrice]);
 
   // Calculate installation_cost when selected billboards change
   useEffect(() => {
@@ -2566,22 +2641,41 @@ export default function ContractEdit() {
 
     if (customer.id) {
       try {
-        const { data, error } = await supabase
-          .from('Contract')
-          .select('customer_category')
-          .eq('customer_id', customer.id)
-          .order('id', { ascending: false })
-          .limit(1)
+        let pricingCategory = null;
+
+        // 1. Try to fetch directly from customer record
+        const { data: custData } = await supabase
+          .from('customers')
+          .select('pricing_category')
+          .eq('id', customer.id)
           .maybeSingle();
-        
-        if (!error && data && data.customer_category) {
-          if (pricingCategories && pricingCategories.includes(data.customer_category)) {
-            setPricingCategory(data.customer_category);
-            toast.info(`تم جلب الفئة السعرية الأخيرة للزبون تلقائياً: ${data.customer_category}`);
+        if (custData && custData.pricing_category) {
+          pricingCategory = custData.pricing_category;
+        }
+
+        // 2. Fallback to last contract category
+        if (!pricingCategory) {
+          const { data, error } = await supabase
+            .from('Contract')
+            .select('customer_category')
+            .eq('customer_id', customer.id)
+            .order('id', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          
+          if (!error && data && data.customer_category) {
+            pricingCategory = data.customer_category;
+          }
+        }
+
+        if (pricingCategory) {
+          if (pricingCategories && pricingCategories.includes(pricingCategory)) {
+            setPricingCategory(pricingCategory);
+            toast.info(`تم تطبيق الفئة السعرية للزبون تلقائياً: ${pricingCategory}`);
           }
         }
       } catch (err) {
-        console.warn('Failed to fetch last customer pricing category:', err);
+        console.warn('Failed to fetch customer pricing category:', err);
       }
     }
   };

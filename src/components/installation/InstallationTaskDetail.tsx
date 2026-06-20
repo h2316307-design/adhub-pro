@@ -58,6 +58,7 @@ interface Props {
   onPrintBillboard: (taskId: string) => void;
   onRefreshItems: () => void;
   isMergedTask: boolean;
+  onDuplicateAsReinstallation?: () => void;
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; dot: string }> = {
@@ -113,6 +114,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
   onPrintBillboard,
   onRefreshItems,
   isMergedTask,
+  onDuplicateAsReinstallation,
 }) => {
   // استخدام derivedContractIds لتحديد العقود الفعلية للمهمة
   const effectiveContractIds = derivedContractIds && derivedContractIds.length > 0
@@ -452,6 +454,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
                 { onClick: onPrintAll, icon: Printer, label: 'طباعة الكل', color: 'text-foreground' },
                 ...(onCreateCompositeTask ? [{ onClick: onCreateCompositeTask, icon: Layers, label: 'إنشاء مهمة مجمعة', color: 'text-purple-500' }] : []),
                 ...(isMergedTask && onUnmerge ? [{ onClick: onUnmerge, icon: AlertCircle, label: 'إلغاء الدمج', color: 'text-orange-500' }] : []),
+                ...(onDuplicateAsReinstallation ? [{ onClick: onDuplicateAsReinstallation, icon: RefreshCw, label: 'تكرار كإعادة تركيب', color: 'text-amber-600' }] : []),
               ].map(({ onClick, icon: Icon, label, color, disabled }) => (
                 <Button
                   key={label}

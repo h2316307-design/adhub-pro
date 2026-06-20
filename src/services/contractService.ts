@@ -37,6 +37,11 @@ interface ContractData {
   duration_days?: number | null;
   use_30_day_month?: boolean | null;
   previous_contract_number?: number | null;
+  installation_enabled?: boolean;
+  friend_rental_data?: string | null;
+  friend_rental_includes_installation?: boolean | null;
+  friend_rental_operating_fee_enabled?: boolean | null;
+  friend_rental_operating_fee_rate?: number | null;
 }
 
 interface ContractCreate {
@@ -69,6 +74,11 @@ interface ContractCreate {
   ['Remaining']?: number | string;
   billboard_prices?: any; // To support current usage, consider typing properly later
   previous_contract_number?: number | null;
+  installation_enabled?: boolean;
+  friend_rental_data?: string | null;
+  friend_rental_includes_installation?: boolean | null;
+  friend_rental_operating_fee_enabled?: boolean | null;
+  friend_rental_operating_fee_rate?: number | null;
 }
 
 // إنشاء عقد جديد مع معالجة محسنة للأخطاء وحفظ بيانات اللوحات والتركيب
@@ -76,7 +86,21 @@ export async function createContract(contractData: ContractData) {
   console.log('Creating contract with data:', contractData);
 
   // فصل معرفات اللوحات عن بيانات العقد
-  const { billboard_ids, installments, installments_data, print_cost_enabled, print_price_per_meter, operating_fee_rate, previous_contract_number, ...contractPayload } = contractData;
+  const { 
+    billboard_ids, 
+    installments, 
+    installments_data, 
+    print_cost_enabled, 
+    print_price_per_meter, 
+    operating_fee_rate, 
+    previous_contract_number,
+    friend_rental_data,
+    friend_rental_includes_installation,
+    friend_rental_operating_fee_enabled,
+    friend_rental_operating_fee_rate,
+    installation_enabled,
+    ...contractPayload 
+  } = contractData;
 
   // Determine customer_id: prefer explicit, else find by name, else create new customer
   let customer_id: string | null = contractData.customer_id || null;
@@ -134,8 +158,12 @@ export async function createContract(contractData: ContractData) {
         }));
 
         // حساب تكلفة التركيب
-        const installationResult = await calculateInstallationCostFromIds(billboard_ids);
-        installationCost = installationResult.totalInstallationCost;
+        if (installation_enabled === false) {
+          installationCost = 0;
+        } else {
+          const installationResult = await calculateInstallationCostFromIds(billboard_ids);
+          installationCost = installationResult.totalInstallationCost;
+        }
 
         // ✅ NEW: حساب تكلفة الطباعة إذا كانت مفعلة
         if (print_cost_enabled && print_price_per_meter && print_price_per_meter > 0) {
@@ -184,6 +212,28 @@ export async function createContract(contractData: ContractData) {
   if (includeOpInInstall) operatingFee += Math.round(installationCost * (opRateInstall / 100) * 100) / 100;
   if (includeOpInPrint) operatingFee += Math.round(printCost * (opRatePrint / 100) * 100) / 100;
 
+  // ✅ حساب رسوم التشغيل للوحات الصديقة
+  let friendOperatingFee = 0;
+  if (friend_rental_operating_fee_enabled && friend_rental_data) {
+    try {
+      const friendRentals = typeof friend_rental_data === 'string'
+        ? JSON.parse(friend_rental_data)
+        : friend_rental_data;
+      if (Array.isArray(friendRentals)) {
+        const selectedFriendRentals = billboard_ids
+          ? friendRentals.filter((f: any) => billboard_ids.includes(f.billboardId))
+          : friendRentals;
+        const totalFriendCosts = selectedFriendRentals.reduce((sum: number, f: any) => sum + (Number(f.friendRentalCost) || 0), 0);
+        const friendRate = Number(friend_rental_operating_fee_rate || 3);
+        friendOperatingFee = Math.round(totalFriendCosts * (friendRate / 100) * 100) / 100;
+      }
+    } catch (e) {
+      console.warn('Failed to calculate friend operating fee in backend:', e);
+    }
+  }
+
+  const totalOperatingFee = Math.round((operatingFee + friendOperatingFee) * 100) / 100;
+
   console.log('Final total from UI:', finalTotal);
   console.log('Installation cost:', installationCost);
   console.log('Print cost:', printCost);
@@ -225,6 +275,17 @@ export async function createContract(contractData: ContractData) {
     console.log('Using legacy installments format:', installmentsForSaving);
   }
 
+  let parsedFriendRentalData = null;
+  if (friend_rental_data) {
+    try {
+      parsedFriendRentalData = typeof friend_rental_data === 'string'
+        ? JSON.parse(friend_rental_data)
+        : friend_rental_data;
+    } catch (e) {
+      console.warn('Failed to parse friend_rental_data:', e);
+    }
+  }
+
   // إعداد بيانات العقد للإدراج - استخدام الأسماء الصحيحة للأعمدة من schema
   const insertPayload: any = {
     Contract_Number: nextContractNumber,
@@ -239,9 +300,15 @@ export async function createContract(contractData: ContractData) {
     'Total Rent': rentalCostOnly, // ✅ CORRECTED: حفظ سعر الإيجار فقط (بدون التركيب والطباعة)
     Discount: contractPayload.discount || 0,
     installation_cost: installationCost, // ✅ بأحرف صغيرة كما في 
+    installation_enabled: installation_enabled !== false,
     print_cost: printCost, // ✅ NEW: حفظ تكلفة الطباعة
     // ✅ FIX: fee is TEXT column
-    fee: String(operatingFeeRate), // ✅ حفظ نسبة التشغيل في عمود fee
+    fee: String(totalOperatingFee), // ✅ حفظ إجمالي رسوم التشغيل في عمود fee
+    operating_fee_rate: operatingFeeRate, // ✅ حفظ نسبة التشغيل في عمودها الخاص
+    friend_rental_data: parsedFriendRentalData,
+    friend_rental_includes_installation: friend_rental_includes_installation || false,
+    friend_rental_operating_fee_enabled: friend_rental_operating_fee_enabled || false,
+    friend_rental_operating_fee_rate: friend_rental_operating_fee_rate || 3,
     Total: finalTotal, // ✅ CORRECTED: الإجمالي النهائي الكامل
     'Print Status': null,
     'Renewal Status': null,

@@ -14,6 +14,7 @@ import { useContractCalculations } from '@/hooks/useContractCalculations';
 import { useContractInstallments } from '@/hooks/useContractInstallments';
 import { useContractPricing } from '@/hooks/useContractPricing';
 import { ContractFormSidebar } from '@/components/contracts/ContractFormSidebar';
+import { FriendBillboardsBulkRental } from '@/components/contracts/edit/FriendBillboardsBulkRental';
 import { ContractExpensesManager } from '@/components/contracts/ContractExpensesManager';
 import { BillboardSelector } from '@/components/contracts/BillboardSelector';
 import { BillboardFilters } from '@/components/contracts/edit/BillboardFilters';
@@ -63,6 +64,18 @@ export default function ContractCreate() {
 
   // ✅ NEW: Operating fee rate state
   const [operatingFeeRate, setOperatingFeeRate] = useState<number>(3);
+
+  // ✅ NEW: Friend rentals states
+  const [friendBillboardCosts, setFriendBillboardCosts] = useState<Array<{
+    billboardId: string;
+    friendCompanyId: string;
+    friendCompanyName: string;
+    friendRentalCost: number;
+  }>>([]);
+  const [friendRentalIncludesInstallation, setFriendRentalIncludesInstallation] = useState<boolean>(false);
+  const [friendRentalOperatingFeeEnabled, setFriendRentalOperatingFeeEnabled] = useState<boolean>(false);
+  const [friendRentalOperatingFeeRate, setFriendRentalOperatingFeeRate] = useState<number>(3);
+  const [customerLinkedFriendCompanyId, setCustomerLinkedFriendCompanyId] = useState<string | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -166,6 +179,110 @@ export default function ContractCreate() {
     return Math.round((priceInLYD * exchangeRate) * 100) / 100;
   };
 
+  // Helper functions for friend costs
+  const updateFriendBillboardCost = (billboardId: string, friendCompanyId: string, friendCompanyName: string, cost: number) => {
+    setFriendBillboardCosts(prev => {
+      const existing = prev.find(f => f.billboardId === billboardId);
+      if (existing) {
+        return prev.map(f => 
+          f.billboardId === billboardId 
+            ? { ...f, friendCompanyId, friendCompanyName, friendRentalCost: cost }
+            : f
+        );
+      } else {
+        return [...prev, { billboardId, friendCompanyId, friendCompanyName, friendRentalCost: cost }];
+      }
+    });
+  };
+
+  // Load customer linked_friend_company_id
+  useEffect(() => {
+    if (!formData.customerId) {
+      setCustomerLinkedFriendCompanyId(null);
+      return;
+    }
+    (async () => {
+      try {
+        const { data } = await supabase
+          .from('customers')
+          .select('linked_friend_company_id')
+          .eq('id', formData.customerId)
+          .maybeSingle();
+        if (data) {
+          setCustomerLinkedFriendCompanyId(data.linked_friend_company_id);
+        } else {
+          setCustomerLinkedFriendCompanyId(null);
+        }
+      } catch (err) {
+        console.warn('Failed to load customer linked friend company ID:', err);
+      }
+    })();
+  }, [formData.customerId]);
+
+  // Auto-initialize friend billboard costs when selected billboards or customer/dates change
+  useEffect(() => {
+    if (selected.length === 0) {
+      setFriendBillboardCosts([]);
+      return;
+    }
+
+    setFriendBillboardCosts(prev => {
+      // Keep only selected friend billboards
+      const updated = prev.filter(item => selected.includes(item.billboardId));
+      
+      // Add missing ones
+      selected.forEach(id => {
+        const billboard = billboards.find(b => String((b as any).ID) === id);
+        if (billboard && (billboard as any).friend_company_id) {
+          const isCustomerFriend = !customerLinkedFriendCompanyId || (billboard as any).friend_company_id === customerLinkedFriendCompanyId;
+          
+          if (isCustomerFriend) {
+            const exists = updated.some(item => item.billboardId === id);
+            if (!exists) {
+              const price = pricing.calculateBillboardPrice(
+                billboard,
+                formData.pricingMode,
+                formData.durationMonths,
+                formData.durationDays,
+                formData.pricingCategory,
+                convertPrice
+              );
+              
+              updated.push({
+                billboardId: id,
+                friendCompanyId: (billboard as any).friend_company_id,
+                friendCompanyName: (billboard as any).friend_companies?.name || 'شركة صديقة',
+                friendRentalCost: price
+              });
+            }
+          }
+        }
+      });
+      return updated;
+    });
+  }, [selected, billboards, formData.pricingMode, formData.durationMonths, formData.durationDays, formData.pricingCategory, customerLinkedFriendCompanyId, convertPrice]);
+
+  // Recalculate/apply pricing when customer category or duration changes
+  useEffect(() => {
+    setFriendBillboardCosts(prev => {
+      return prev.map(item => {
+        const billboard = billboards.find(b => String((b as any).ID) === item.billboardId);
+        if (billboard) {
+          const price = pricing.calculateBillboardPrice(
+            billboard,
+            formData.pricingMode,
+            formData.durationMonths,
+            formData.durationDays,
+            formData.pricingCategory,
+            convertPrice
+          );
+          return { ...item, friendRentalCost: price };
+        }
+        return item;
+      });
+    });
+  }, [formData.pricingMode, formData.durationMonths, formData.durationDays, formData.pricingCategory, convertPrice]);
+
   // ✅ REMOVED: Now using unified pricing hook - pricing.getPriceFromDatabase & pricing.getDailyPriceFromDatabase
 
   // ✅ UPDATED: Calculate print cost only if enabled
@@ -234,13 +351,26 @@ export default function ContractCreate() {
     return Math.max(0, calculations.finalTotal - actualInstallationCost - printCostTotal);
   }, [calculations.finalTotal, installationCost, installationEnabled, printCostTotal, exchangeRate]);
 
-  // ✅ FIXED: Calculate operating fee based on installationEnabled
+  // ✅ NEW: Friend costs and operating fee calculations
+  const totalFriendCosts = React.useMemo(() => {
+    return friendBillboardCosts
+      .filter(f => selected.includes(f.billboardId))
+      .reduce((sum, f) => sum + f.friendRentalCost, 0);
+  }, [friendBillboardCosts, selected]);
+
+  const friendOperatingFeeAmount = React.useMemo(() => {
+    if (!friendRentalOperatingFeeEnabled || friendBillboardCosts.length === 0) return 0;
+    return Math.round(totalFriendCosts * (friendRentalOperatingFeeRate / 100));
+  }, [friendRentalOperatingFeeEnabled, totalFriendCosts, friendRentalOperatingFeeRate]);
+
+  // ✅ FIXED: Calculate operating fee based on installationEnabled and include friend operating fee
   const operatingFee = React.useMemo(() => {
     // When installation is disabled, calculate from finalTotal - printCost
     // When installation is enabled, calculate from rentalCostOnly
     const baseForFee = !installationEnabled ? calculations.finalTotal - printCostTotal : rentalCostOnly;
-    return Math.round(baseForFee * (operatingFeeRate / 100) * 100) / 100;
-  }, [installationEnabled, calculations.finalTotal, printCostTotal, rentalCostOnly, operatingFeeRate]);
+    const baseFee = Math.round(baseForFee * (operatingFeeRate / 100) * 100) / 100;
+    return baseFee + friendOperatingFeeAmount;
+  }, [installationEnabled, calculations.finalTotal, printCostTotal, rentalCostOnly, operatingFeeRate, friendOperatingFeeAmount]);
 
   // Installments management hook
   const installmentManager = useContractInstallments({
@@ -562,6 +692,10 @@ export default function ContractCreate() {
         installment_interval: installmentInterval,
         installment_count: installmentCount,
         installment_first_at_signing: installmentFirstAtSigning,
+        friend_rental_data: friendBillboardCosts.length > 0 ? JSON.stringify(friendBillboardCosts) : null,
+        friend_rental_includes_installation: friendRentalIncludesInstallation,
+        friend_rental_operating_fee_enabled: friendRentalOperatingFeeEnabled,
+        friend_rental_operating_fee_rate: friendRentalOperatingFeeRate,
       };
       
       if (formData.customerId) payload.customer_id = formData.customerId;
@@ -1022,6 +1156,33 @@ export default function ContractCreate() {
               </div>
             )}
           </div>
+
+          {/* ✅ NEW: إيجارات اللوحات الصديقة بالجملة */}
+          {selected.length > 0 && billboards.filter(b => 
+            selected.includes(String((b as any).ID)) && (b as any).friend_company_id
+          ).length > 0 && (
+            <FriendBillboardsBulkRental
+              friendBillboards={billboards
+                .filter(b => selected.includes(String((b as any).ID)) && (b as any).friend_company_id)
+                .map(b => ({
+                  id: String((b as any).ID),
+                  size: (b as any).Size || (b as any).size || 'غير محدد',
+                  friendCompanyId: (b as any).friend_company_id,
+                  friendCompanyName: (b as any).friend_companies?.name || 'شركة صديقة'
+                }))
+              }
+              friendBillboardCosts={friendBillboardCosts}
+              onUpdateFriendCost={updateFriendBillboardCost}
+              includesInstallation={friendRentalIncludesInstallation}
+              onIncludesInstallationChange={setFriendRentalIncludesInstallation}
+              currencySymbol={getCurrentCurrency().symbol}
+              operatingFeeEnabled={friendRentalOperatingFeeEnabled}
+              operatingFeeRate={friendRentalOperatingFeeRate}
+              onOperatingFeeEnabledChange={setFriendRentalOperatingFeeEnabled}
+              onOperatingFeeRateChange={setFriendRentalOperatingFeeRate}
+              operatingFeeAmount={friendOperatingFeeAmount}
+            />
+          )}
         </div>
 
         {/* Sidebar */}

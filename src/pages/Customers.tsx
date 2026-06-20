@@ -59,6 +59,7 @@ interface CustomerSummary {
   name: string;
   phone: string | null;
   company: string | null;
+  pricingCategory?: string | null;
   contractsCount: number;
   totalRent: number;       // إجمالي الديون (العقود + الفواتير + المهام المجمعة)
   totalPaid: number;       // إجمالي المدفوعات الصحيحة
@@ -136,10 +137,15 @@ function CustomerRow({
                 {customer.name}
               </span>
             </div>
-            <div className="flex gap-1.5 mt-1">
+            <div className="flex gap-1.5 mt-1 flex-wrap">
               {customer.isCustomer && (
                 <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-[10px] px-1.5 py-0">
                   زبون
+                </Badge>
+              )}
+              {customer.isCustomer && customer.pricingCategory && (
+                <Badge variant="outline" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 text-[10px] px-1.5 py-0">
+                  فئة: {customer.pricingCategory}
                 </Badge>
               )}
               {customer.isSupplier && (
@@ -354,6 +360,8 @@ export default function Customers() {
   const [customerNameInput, setCustomerNameInput] = useState('');
   const [customerPhoneInput, setCustomerPhoneInput] = useState('');
   const [customerCompanyInput, setCustomerCompanyInput] = useState('');
+  const [pricingCategoryInput, setPricingCategoryInput] = useState<string>('عادي');
+  const [pricingCategories, setPricingCategories] = useState<string[]>([]);
   const [isCustomerChecked, setIsCustomerChecked] = useState(true);
   const [isSupplierChecked, setIsSupplierChecked] = useState(false);
   const [supplierTypeInput, setSupplierTypeInput] = useState<string>('');
@@ -433,7 +441,7 @@ export default function Customers() {
       ] = await Promise.all([
         supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes, method, reference').order('paid_at', { ascending: false }).range(0, 9999),
         supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 9999),
-        supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id').order('name', { ascending: true }).range(0, 9999),
+        supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id, pricing_category').order('name', { ascending: true }).range(0, 9999),
         supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 9999),
         supabase.from('printed_invoices').select('id, customer_id, total_amount, print_cost, invoice_type, included_in_contract').range(0, 9999),
         supabase.from('purchase_invoices').select('id, customer_id, total_amount, used_as_payment').range(0, 9999),
@@ -482,7 +490,22 @@ export default function Customers() {
     loadData();
     // load printers list
     loadPrinters();
+    loadPricingCategories();
   }, []);
+
+  const loadPricingCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('pricing_categories')
+        .select('name')
+        .order('name', { ascending: true });
+      if (!error && data) {
+        setPricingCategories(data.map((d: any) => d.name));
+      }
+    } catch (e) {
+      console.warn('Failed to load pricing categories in Customers.tsx', e);
+    }
+  };
 
   const loadPrinters = async () => {
     try {
@@ -660,6 +683,7 @@ export default function Customers() {
         isSupplier: (c as any).is_supplier ?? false,
         isCustomer: (c as any).is_customer ?? true,
         supplierType: (c as any).supplier_type ?? null,
+        pricingCategory: (c as any).pricing_category ?? null,
         overdueInfo: {
           hasOverdue: false,
           oldestDueDate: null,
@@ -1563,7 +1587,7 @@ export default function Customers() {
               <span className="hidden sm:inline">تقرير الديون للإدارة</span>
               <span className="sm:hidden">تقرير ديون</span>
             </Button>
-            <Button onClick={() => { setEditingCustomerId(null); setNewCustomerOpen(true); setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setIsCustomerChecked(true); setIsSupplierChecked(false); setSupplierTypeInput(''); setSelectedPrinterId(''); }} size="sm" className="shadow-lg">
+            <Button onClick={() => { setEditingCustomerId(null); setNewCustomerOpen(true); setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setPricingCategoryInput('عادي'); setIsCustomerChecked(true); setIsSupplierChecked(false); setSupplierTypeInput(''); setSelectedPrinterId(''); }} size="sm" className="shadow-lg">
               <Plus className="h-4 w-4 ml-1" />
               إضافة زبون
             </Button>
@@ -1665,7 +1689,7 @@ export default function Customers() {
           {/* Action buttons */}
           <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
-              <Button onClick={() => { setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setEditingCustomerId(null); setDuplicateNameWarning(null); setNewCustomerOpen(true); }}>
+              <Button onClick={() => { setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setPricingCategoryInput('عادي'); setEditingCustomerId(null); setDuplicateNameWarning(null); setNewCustomerOpen(true); }}>
                 <Plus className="h-4 w-4 ml-2" />
                 إضافة زبون جديد
               </Button>
@@ -1762,6 +1786,7 @@ export default function Customers() {
               setCustomerNameInput('');
               setCustomerPhoneInput('');
               setCustomerCompanyInput('');
+              setPricingCategoryInput('عادي');
               setIsCustomerChecked(true);
               setIsSupplierChecked(false);
               setSupplierTypeInput('');
@@ -1802,6 +1827,21 @@ export default function Customers() {
                 </div>
                 <Input placeholder="هاتف" value={customerPhoneInput} onChange={(e)=>setCustomerPhoneInput(e.target.value)} />
                 <Input placeholder="اسم الشركة" value={customerCompanyInput} onChange={(e)=>setCustomerCompanyInput(e.target.value)} />
+                
+                <div>
+                  <label className="text-sm font-medium mb-1.5 block">فئة السعر</label>
+                  <Select value={pricingCategoryInput} onValueChange={setPricingCategoryInput}>
+                    <SelectTrigger className="w-full bg-background border border-border rounded-md px-3 py-2 text-sm">
+                      <SelectValue placeholder="اختر فئة السعر" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="عادي">عادي (الفئة الافتراضية)</SelectItem>
+                      {pricingCategories.filter(cat => cat !== 'عادي').map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
                 
                 <div className="border-t pt-4">
                   <label className="text-sm font-medium mb-3 block">نوع الحساب</label>
@@ -1901,7 +1941,8 @@ export default function Customers() {
                         is_customer: isCustomerChecked,
                         is_supplier: isSupplierChecked,
                         supplier_type: isSupplierChecked ? supplierTypeInput : null,
-                        printer_id: (isSupplierChecked && supplierTypeInput === 'printer') ? selectedPrinterId : null
+                        printer_id: (isSupplierChecked && supplierTypeInput === 'printer') ? selectedPrinterId : null,
+                        pricing_category: pricingCategoryInput || 'عادي'
                       };
                       
                       if (editingCustomerId) {
@@ -2017,7 +2058,7 @@ export default function Customers() {
                         if (!c.id.startsWith('name:')) {
                           const { data } = await supabase
                             .from('customers')
-                            .select('is_customer, is_supplier, supplier_type, printer_id')
+                            .select('is_customer, is_supplier, supplier_type, printer_id, pricing_category')
                             .eq('id', c.id)
                             .single();
                           
@@ -2026,6 +2067,7 @@ export default function Customers() {
                             setIsSupplierChecked(data.is_supplier ?? false);
                             setSupplierTypeInput(data.supplier_type || '');
                             setSelectedPrinterId((data as any).printer_id || '');
+                            setPricingCategoryInput((data as any).pricing_category || 'عادي');
                           }
                         }
                         

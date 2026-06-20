@@ -86,6 +86,8 @@ interface Props {
   onPrintInvoice?: (taskId: string, type: 'customer' | 'installation_team' | 'print_vendor') => void;
   onCreatePrintTask?: (taskId: string) => void;
   onSyncMissingBillboards?: (contractId: number, taskIds: string[]) => void;
+  onDuplicateAsReinstallation?: (taskId: string) => void;
+  onDuplicateAsReinstallationGroup?: (taskIds: string[]) => void;
 }
 
 type SortField = 'id' | 'client' | 'contract' | 'billboards' | 'status' | 'date' | 'team' | 'cost';
@@ -342,7 +344,7 @@ const TaskCardRowInner = ({
   task, idx, cfg, isSelected, deleteConfirmId,
   onOpenTask, onToggle, onPrintTask, onPrintAll, onSendWhatsApp, onDistributeDesigns, onManageDesigns,
   onAddBillboard, onDeleteTask, setDeleteConfirmId, onEditTask, onCompleteAllBillboards, onPrintInvoice,
-  onCreatePrintTask, onGroupColorExtracted,
+  onCreatePrintTask, onGroupColorExtracted, onDuplicateAsReinstallation,
 }: any) => {
   const [dominantColor, setDominantColor] = useState<string | null>(null);
 
@@ -610,6 +612,12 @@ const TaskCardRowInner = ({
                       <Edit className="h-4 w-4 text-amber-500" />
                       تعديل نوع المهمة
                     </DropdownMenuItem>
+                    {onDuplicateAsReinstallation && (
+                      <DropdownMenuItem onClick={() => onDuplicateAsReinstallation(task.id)} className="gap-2">
+                        <RefreshCw className="h-4 w-4 text-amber-600" />
+                        تكرار كإعادة تركيب
+                      </DropdownMenuItem>
+                    )}
 
                     {onPrintInvoice && (
                       <>
@@ -799,6 +807,9 @@ const TaskCardRowInner = ({
               {onCreatePrintTask && (
                 <ActionBtn icon={Printer} label="مهمة طباعة" onClick={() => onCreatePrintTask(task.id)} color="text-cyan-400" />
               )}
+              {onDuplicateAsReinstallation && (
+                <ActionBtn icon={RefreshCw} label="تكرار كإعادة تركيب" onClick={() => onDuplicateAsReinstallation(task.id)} color="text-amber-600" />
+              )}
               <ActionBtn icon={Plus} label="إضافة لوحة" onClick={() => onAddBillboard(task.id)} color="text-emerald-400" />
               <ActionBtn icon={Edit} label="تعديل" onClick={() => onEditTask(task.id)} color="text-amber-400" />
               {onPrintInvoice && (
@@ -852,6 +863,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
   onPrintTask, onPrintAll, onSendWhatsApp, onDistributeDesigns, onManageDesigns,
   onManageDesignsGroup, onDistributeDesignsGroup,
   onAddBillboard, onDeleteTask, onEditTask, onCompleteAllBillboards, onPrintInvoice, onCreatePrintTask, onSyncMissingBillboards,
+  onDuplicateAsReinstallation, onDuplicateAsReinstallationGroup,
 }) => {
   const { filters, setFilter } = usePersistedFilters('installation-tasks', {
     search: '',
@@ -1513,6 +1525,30 @@ export const InstallationTasksTable: React.FC<Props> = ({
                               طباعة الكل
                             </Button>
 
+                            {onSyncMissingBillboards && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 rounded-xl text-[11px] font-semibold gap-1 bg-muted/30 border-border/30 text-muted-foreground hover:bg-emerald-500/10 hover:text-emerald-500 hover:border-emerald-500/20 transition-all"
+                                onClick={() => onSyncMissingBillboards(cid, groupTasks.map(t => t.id))}
+                              >
+                                <Plus className="h-3.5 w-3.5" />
+                                إضافة الناقصة
+                              </Button>
+                            )}
+
+                            {onDuplicateAsReinstallationGroup && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 px-2.5 rounded-xl text-[11px] font-semibold gap-1 bg-muted/30 border-border/30 text-muted-foreground hover:bg-amber-500/10 hover:text-amber-600 hover:border-amber-500/20 transition-all"
+                                onClick={() => onDuplicateAsReinstallationGroup(groupTasks.map(t => t.id))}
+                              >
+                                <RefreshCw className="h-3.5 w-3.5 text-amber-500" />
+                                تكرار كإعادة تركيب
+                              </Button>
+                            )}
+
                             <Button
                               size="sm"
                               variant="outline"
@@ -1614,6 +1650,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
                               onPrintInvoice={onPrintInvoice}
                               onCreatePrintTask={onCreatePrintTask}
                               onGroupColorExtracted={(color: string) => registerGroupColor(groupKey, color)}
+                              onDuplicateAsReinstallation={onDuplicateAsReinstallation}
                             />
                           );
                         })}
@@ -1649,6 +1686,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
                   onCompleteAllBillboards={onCompleteAllBillboards}
                   onPrintInvoice={onPrintInvoice}
                   onCreatePrintTask={onCreatePrintTask}
+                  onDuplicateAsReinstallation={onDuplicateAsReinstallation}
                 />
               );
             })

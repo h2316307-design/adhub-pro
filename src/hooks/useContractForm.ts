@@ -115,7 +115,7 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
     userPickedCategoryRef.current = false;
   }, [formData.customerId, formData.customerName]);
 
-  // Fetch last pricing category للعميل (id أولاً ثم الاسم) — لا نكتب فوق اختيار المستخدم
+  // Fetch pricing category للعميل (id أولاً ثم الاسم) — لا نكتب فوق اختيار المستخدم
   useEffect(() => {
     const name = (formData.customerName || '').trim();
     if (!formData.customerId && !name) return;
@@ -123,42 +123,62 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
 
     (async () => {
       try {
-        let row: any = null;
+        let pricingCategory = null;
 
+        // 1. Try to fetch directly from customer record
         if (formData.customerId) {
-          const { data } = await supabase
-            .from('Contract')
-            .select('customer_category, created_at, id')
-            .eq('customer_id', formData.customerId)
-            .not('customer_category', 'is', null)
-            .order('created_at', { ascending: false, nullsFirst: false })
-            .order('id', { ascending: false })
-            .limit(1)
+          const { data: custData } = await supabase
+            .from('customers')
+            .select('pricing_category')
+            .eq('id', formData.customerId)
             .maybeSingle();
-          row = data;
+          if (custData && custData.pricing_category) {
+            pricingCategory = custData.pricing_category;
+          }
         }
 
-        if (!row && name) {
-          const safe = name.replace(/[,()"']/g, ' ').trim();
-          const { data } = await supabase
-            .from('Contract')
-            .select('customer_category, created_at, id, customer_name, "Customer Name"')
-            .or(`customer_name.ilike.${safe},"Customer Name".ilike.${safe}`)
-            .not('customer_category', 'is', null)
-            .order('created_at', { ascending: false, nullsFirst: false })
-            .order('id', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          row = data;
+        // 2. Fallback to last contract category
+        if (!pricingCategory) {
+          let row: any = null;
+
+          if (formData.customerId) {
+            const { data } = await supabase
+              .from('Contract')
+              .select('customer_category, created_at, id')
+              .eq('customer_id', formData.customerId)
+              .not('customer_category', 'is', null)
+              .order('created_at', { ascending: false, nullsFirst: false })
+              .order('id', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            row = data;
+          }
+
+          if (!row && name) {
+            const safe = name.replace(/[,()"']/g, ' ').trim();
+            const { data } = await supabase
+              .from('Contract')
+              .select('customer_category, created_at, id, customer_name, "Customer Name"')
+              .or(`customer_name.ilike.${safe},"Customer Name".ilike.${safe}`)
+              .not('customer_category', 'is', null)
+              .order('created_at', { ascending: false, nullsFirst: false })
+              .order('id', { ascending: false })
+              .limit(1)
+              .maybeSingle();
+            row = data;
+          }
+
+          if (row && (row as any).customer_category) {
+            pricingCategory = (row as any).customer_category as string;
+          }
         }
 
-        if (row && (row as any).customer_category && !userPickedCategoryRef.current) {
-          const cat = (row as any).customer_category as string;
-          setFormData(prev => (prev.pricingCategory === cat ? prev : { ...prev, pricingCategory: cat }));
-          toast.info(`تم جلب الفئة السعرية الأخيرة للعميل: ${cat}`);
+        if (pricingCategory && !userPickedCategoryRef.current) {
+          setFormData(prev => (prev.pricingCategory === pricingCategory ? prev : { ...prev, pricingCategory }));
+          toast.info(`تم تطبيق الفئة السعرية للعميل: ${pricingCategory}`);
         }
       } catch (err) {
-        console.warn('Failed to fetch last customer pricing category:', err);
+        console.warn('Failed to fetch customer pricing category:', err);
       }
     })();
   }, [formData.customerId, formData.customerName]);

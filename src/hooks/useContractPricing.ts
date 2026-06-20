@@ -69,7 +69,8 @@ export function useContractPricing() {
     .trim()
     .toLowerCase()
     .replace(/\s+/g, '')
-    .replace(/×/g, 'x');
+    .replace(/×/g, 'x')
+    .replace(/\*/g, 'x');
 
   const monthColumnMap: { [key: number]: string } = {
     1: 'one_month',

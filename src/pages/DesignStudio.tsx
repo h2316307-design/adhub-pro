@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import html2canvas from 'html2canvas';
-import { toBlob as htmlToImageBlob, getFontEmbedCSS } from 'html-to-image';
+import { toBlob as htmlToImageBlob } from 'html-to-image';
 import { extractImagePalette, pickAccentColor, pickGlowColor, pickSecondaryColor, alphaToHex } from '@/utils/extractImagePalette';
 import {
   Image as ImageIcon,
@@ -361,6 +361,136 @@ const DEFAULT_TEXT_ELEMENTS: CanvasElement[] = [
   { id: 'landmark', type: 'text', label: 'أقرب نقطة', textKey: 'landmark', visible: true, fontSize: 20, fontColor: '#4a4a6a', fontWeight: '400', alignment: 'center', x: 750, y: 85, parentStrip: 'location' },
 ];
 
+// Caching variables for inlined font CSS
+let cachedFontEmbedCSS = '';
+let isFetchingFonts = false;
+
+// Helper to fetch any font URL and return it as a base64 Data URL
+const fetchFontAsBase64 = async (url: string): Promise<string> => {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch font from ${url}`);
+  const blob = await res.blob();
+  return new Promise<string>((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(String(fr.result));
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+};
+
+// Generates fully inlined @font-face declarations for both local and Google Fonts without scanning document.styleSheets
+const getStudioFontEmbedCSS = async (): Promise<string> => {
+  if (cachedFontEmbedCSS) return cachedFontEmbedCSS;
+  if (isFetchingFonts) {
+    while (isFetchingFonts) {
+      await new Promise(r => setTimeout(r, 100));
+    }
+    return cachedFontEmbedCSS;
+  }
+
+  isFetchingFonts = true;
+  try {
+    let css = '';
+
+    // 1. Inline local Doran fonts
+    try {
+      const doranReg = await fetchFontAsBase64('/Doran-Regular.otf');
+      const doranBold = await fetchFontAsBase64('/Doran-Bold.otf');
+      const doranMedium = await fetchFontAsBase64('/Doran-Medium.otf');
+      
+      css += `
+        @font-face {
+          font-family: 'Doran';
+          src: url('${doranReg}') format('opentype');
+          font-weight: 400;
+          font-style: normal;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Doran';
+          src: url('${doranBold}') format('opentype');
+          font-weight: 700;
+          font-style: normal;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Doran';
+          src: url('${doranMedium}') format('opentype');
+          font-weight: 500;
+          font-style: normal;
+          font-display: swap;
+        }
+      `;
+    } catch (e) {
+      console.error('Failed to inline local Doran fonts:', e);
+    }
+
+    // 2. Inline local Manrope fonts
+    try {
+      const manropeReg = await fetchFontAsBase64('/Manrope-Regular.otf');
+      const manropeBold = await fetchFontAsBase64('/Manrope-Bold.otf');
+
+      css += `
+        @font-face {
+          font-family: 'Manrope';
+          src: url('${manropeReg}') format('opentype');
+          font-weight: 400;
+          font-style: normal;
+          font-display: swap;
+        }
+        @font-face {
+          font-family: 'Manrope';
+          src: url('${manropeBold}') format('opentype');
+          font-weight: 700;
+          font-style: normal;
+          font-display: swap;
+        }
+      `;
+    } catch (e) {
+      console.error('Failed to inline local Manrope fonts:', e);
+    }
+
+    // 3. Inline Google Fonts (Cairo, Tajawal, Almarai, Montserrat, Outfit, Amiri, Scheherazade New)
+    try {
+      const googleFontsUrl = "https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Tajawal:wght@300;400;500;700;900&family=Almarai:wght@300;400;700;800&family=Amiri:wght@400;700&family=Scheherazade+New:wght@400;700&family=Montserrat:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap";
+      const res = await fetch(googleFontsUrl);
+      if (res.ok) {
+        let googleCss = await res.text();
+        
+        // Find all font URLs in CSS: url(https://fonts.gstatic.com/s/...)
+        const urlMatches = Array.from(googleCss.matchAll(/url\((https:\/\/fonts\.gstatic\.com\/[^)]+)\)/g));
+        
+        // Fetch and base64-encode each font URL
+        const fontUrlToBase64 = new Map<string, string>();
+        await Promise.all(urlMatches.map(async (match) => {
+          const fontUrl = match[1];
+          if (!fontUrlToBase64.has(fontUrl)) {
+            try {
+              const b64 = await fetchFontAsBase64(fontUrl);
+              fontUrlToBase64.set(fontUrl, b64);
+            } catch (err) {
+              console.warn(`Failed to inline Google Font file: ${fontUrl}`, err);
+            }
+          }
+        }));
+
+        // Replace all URL links with their base64 representation
+        for (const [fontUrl, b64] of fontUrlToBase64.entries()) {
+          googleCss = googleCss.split(fontUrl).join(b64);
+        }
+        css += "\n" + googleCss;
+      }
+    } catch (e) {
+      console.error('Failed to inline Google Fonts:', e);
+    }
+
+    cachedFontEmbedCSS = css;
+  } finally {
+    isFetchingFonts = false;
+  }
+  return cachedFontEmbedCSS;
+};
+
 export default function DesignStudio() {
   const navigate = useNavigate();
 
@@ -426,6 +556,12 @@ export default function DesignStudio() {
         if (s.coverT5BgColorOnly !== undefined) setCoverT5BgColorOnly(s.coverT5BgColorOnly);
         if (s.coverT5SlatCount !== undefined) setCoverT5SlatCount(s.coverT5SlatCount);
         if (s.coverT5BgShatter !== undefined) setCoverT5BgShatter(s.coverT5BgShatter);
+        if (s.coverT5SceneZoom !== undefined) setCoverT5SceneZoom(s.coverT5SceneZoom);
+        if (s.coverT5SceneX !== undefined) setCoverT5SceneX(s.coverT5SceneX);
+        if (s.coverT5SceneY !== undefined) setCoverT5SceneY(s.coverT5SceneY);
+        if (s.coverT5DesignZoom !== undefined) setCoverT5DesignZoom(s.coverT5DesignZoom);
+        if (s.coverT5DesignX !== undefined) setCoverT5DesignX(s.coverT5DesignX);
+        if (s.coverT5DesignY !== undefined) setCoverT5DesignY(s.coverT5DesignY);
         if (s.coverAccentColor) setCoverAccentColor(s.coverAccentColor);
         if (s.coverSecondaryColor) setCoverSecondaryColor(s.coverSecondaryColor);
         if (s.coverGlowColor) setCoverGlowColor(s.coverGlowColor);
@@ -442,6 +578,10 @@ export default function DesignStudio() {
         if (s.bgColor1) setBgColor1(s.bgColor1);
         if (s.bgColor2) setBgColor2(s.bgColor2);
         if (s.blurAmount !== undefined) setBlurAmount(s.blurAmount);
+        if (s.coverLightLeaksIntensity !== undefined) setCoverLightLeaksIntensity(s.coverLightLeaksIntensity);
+        if (s.coverCustomGlassMask) setCoverCustomGlassMask(s.coverCustomGlassMask);
+        if (s.coverCustomGlassTexture) setCoverCustomGlassTexture(s.coverCustomGlassTexture);
+        if (s.coverT8StaticOnly !== undefined) setCoverT8StaticOnly(s.coverT8StaticOnly);
         return; // Skip hardcoded defaults
       }
     } catch (e) {
@@ -464,6 +604,7 @@ export default function DesignStudio() {
       setCoverT4({ cardHeight: 0.6, fgBlur: 0.6, bgBlur: 20, zoom: 1.3 });
     } else if (id === 'template8') {
       setCoverT4({ cardHeight: 0.5, fgBlur: 0.8, bgBlur: 1.0, zoom: 1.25 });
+      setCoverT8StaticOnly(false);
     }
   };
 
@@ -476,6 +617,12 @@ export default function DesignStudio() {
       coverT5BgColorOnly,
       coverT5SlatCount,
       coverT5BgShatter,
+      coverT5SceneZoom,
+      coverT5SceneX,
+      coverT5SceneY,
+      coverT5DesignZoom,
+      coverT5DesignX,
+      coverT5DesignY,
       coverAccentColor,
       coverSecondaryColor,
       coverGlowColor,
@@ -492,6 +639,10 @@ export default function DesignStudio() {
       bgColor1,
       bgColor2,
       blurAmount,
+      coverLightLeaksIntensity,
+      coverCustomGlassMask,
+      coverCustomGlassTexture,
+      coverT8StaticOnly,
     };
     try {
       localStorage.setItem(`design_studio:default_settings:${coverTemplate}`, JSON.stringify(defaultSettings));
@@ -525,6 +676,7 @@ export default function DesignStudio() {
         setCoverT4({ cardHeight: 0.6, fgBlur: 0.6, bgBlur: 20, zoom: 1.3 });
       } else if (id === 'template8') {
         setCoverT4({ cardHeight: 0.5, fgBlur: 0.8, bgBlur: 1.0, zoom: 1.25 });
+        setCoverT8StaticOnly(false);
       }
     } catch (e) {
       toast.error('فشل إعادة تعيين الإعدادات الافتراضية');
@@ -545,6 +697,16 @@ export default function DesignStudio() {
   const [coverT5BgColorOnly, setCoverT5BgColorOnly] = useState<boolean>(false);
   const [coverT5SlatCount, setCoverT5SlatCount] = useState<number>(5);
   const [coverT5BgShatter, setCoverT5BgShatter] = useState<boolean>(true);
+  const [coverT5SceneZoom, setCoverT5SceneZoom] = useState<number>(1.0);
+  const [coverT5SceneX, setCoverT5SceneX] = useState<number>(0);
+  const [coverT5SceneY, setCoverT5SceneY] = useState<number>(0);
+  const [coverT5DesignZoom, setCoverT5DesignZoom] = useState<number>(1.0);
+  const [coverT5DesignX, setCoverT5DesignX] = useState<number>(0);
+  const [coverT5DesignY, setCoverT5DesignY] = useState<number>(0);
+  const [coverLightLeaksIntensity, setCoverLightLeaksIntensity] = useState<number>(1.0);
+  const [coverCustomGlassMask, setCoverCustomGlassMask] = useState<string>('/cover-template8-mask.png');
+  const [coverCustomGlassTexture, setCoverCustomGlassTexture] = useState<string>('/cover-template8-glass.jpg');
+  const [coverT8StaticOnly, setCoverT8StaticOnly] = useState<boolean>(false);
 
   // Glow / blur intensity behind text — sliders
   const [coverGlowIntensity, setCoverGlowIntensity] = useState({ opacity: 1, blur: 90, spread: 70 });
@@ -818,6 +980,12 @@ export default function DesignStudio() {
       if (state.coverT5BgColorOnly !== undefined) setCoverT5BgColorOnly(state.coverT5BgColorOnly);
       if (state.coverT5SlatCount !== undefined) setCoverT5SlatCount(state.coverT5SlatCount);
       if (state.coverT5BgShatter !== undefined) setCoverT5BgShatter(state.coverT5BgShatter);
+      if (state.coverT5SceneZoom !== undefined) setCoverT5SceneZoom(state.coverT5SceneZoom);
+      if (state.coverT5SceneX !== undefined) setCoverT5SceneX(state.coverT5SceneX);
+      if (state.coverT5SceneY !== undefined) setCoverT5SceneY(state.coverT5SceneY);
+      if (state.coverT5DesignZoom !== undefined) setCoverT5DesignZoom(state.coverT5DesignZoom);
+      if (state.coverT5DesignX !== undefined) setCoverT5DesignX(state.coverT5DesignX);
+      if (state.coverT5DesignY !== undefined) setCoverT5DesignY(state.coverT5DesignY);
       if (state.coverAccentColor !== undefined) setCoverAccentColor(state.coverAccentColor);
       if (state.coverSecondaryColor !== undefined) setCoverSecondaryColor(state.coverSecondaryColor);
       if (state.coverGlowColor !== undefined) setCoverGlowColor(state.coverGlowColor);
@@ -828,6 +996,7 @@ export default function DesignStudio() {
       if (state.coverUseInstalledImages !== undefined) setCoverUseInstalledImages(state.coverUseInstalledImages);
       if (state.coverIncludeBackFace !== undefined) setCoverIncludeBackFace(state.coverIncludeBackFace);
       if (state.coverShuffleSeed !== undefined) setCoverShuffleSeed(state.coverShuffleSeed);
+      if (state.coverT8StaticOnly !== undefined) setCoverT8StaticOnly(state.coverT8StaticOnly);
     } catch (e) {
       console.error('Failed to restore history state:', e);
     }
@@ -877,6 +1046,12 @@ export default function DesignStudio() {
       coverT5BgColorOnly,
       coverT5SlatCount,
       coverT5BgShatter,
+      coverT5SceneZoom,
+      coverT5SceneX,
+      coverT5SceneY,
+      coverT5DesignZoom,
+      coverT5DesignX,
+      coverT5DesignY,
       coverAccentColor,
       coverSecondaryColor,
       coverGlowColor,
@@ -887,6 +1062,7 @@ export default function DesignStudio() {
       coverUseInstalledImages,
       coverIncludeBackFace,
       coverShuffleSeed,
+      coverT8StaticOnly,
     });
     pushHistory(stateStr);
   }, [
@@ -922,6 +1098,12 @@ export default function DesignStudio() {
     coverT5BgColorOnly,
     coverT5SlatCount,
     coverT5BgShatter,
+    coverT5SceneZoom,
+    coverT5SceneX,
+    coverT5SceneY,
+    coverT5DesignZoom,
+    coverT5DesignX,
+    coverT5DesignY,
     coverAccentColor,
     coverSecondaryColor,
     coverGlowColor,
@@ -932,6 +1114,7 @@ export default function DesignStudio() {
     coverUseInstalledImages,
     coverIncludeBackFace,
     coverShuffleSeed,
+    coverT8StaticOnly,
     pushHistory
   ]);
 
@@ -1402,23 +1585,42 @@ export default function DesignStudio() {
     }
   }, [selectedItemId, loadItemDetails]);
 
-  // Automatically fit image height when switching billboard images
+  // Automatically fit image height when switching billboard images or template dimensions
   const prevImageUrlRef = useRef<string>('');
+  const prevCanvasWidthRef = useRef<number>(canvasWidth);
+  const prevCanvasHeightRef = useRef<number>(canvasHeight);
+  const prevLocationStripVisibleRef = useRef<boolean>(locationStrip.visible);
+  const prevLocationStripHeightRef = useRef<number>(locationStrip.height);
+
   useEffect(() => {
     const currentImageUrl = getCanvasImageUrl();
-    if (currentImageUrl && currentImageUrl !== prevImageUrlRef.current) {
-      prevImageUrlRef.current = currentImageUrl;
-      // Skip auto-reset if user/template has customized imageStyle.
-      if (imageStyleUserModifiedRef.current) return;
-      const targetHeight = canvasHeight - (locationStrip.visible ? (locationStrip.height ?? 120) : 0);
-      setImageStyleSynced(prev => ({
-        ...prev,
-        x: 0,
-        y: 0,
-        width: canvasWidth,
-        height: targetHeight,
-        objectFit: 'cover',
-      }));
+    if (!currentImageUrl) return;
+
+    const urlChanged = currentImageUrl !== prevImageUrlRef.current;
+    const dimsChanged = canvasWidth !== prevCanvasWidthRef.current || 
+                        canvasHeight !== prevCanvasHeightRef.current || 
+                        locationStrip.visible !== prevLocationStripVisibleRef.current || 
+                        locationStrip.height !== prevLocationStripHeightRef.current;
+
+    prevImageUrlRef.current = currentImageUrl;
+    prevCanvasWidthRef.current = canvasWidth;
+    prevCanvasHeightRef.current = canvasHeight;
+    prevLocationStripVisibleRef.current = locationStrip.visible;
+    prevLocationStripHeightRef.current = locationStrip.height;
+
+    // If image url changed, or if template/strip dimensions changed and user hasn't manually modified it:
+    if (urlChanged || (dimsChanged && !imageStyleUserModifiedRef.current)) {
+      if (!imageStyleUserModifiedRef.current) {
+        const targetHeight = canvasHeight - (locationStrip.visible ? (locationStrip.height ?? 120) : 0);
+        setImageStyleSynced(prev => ({
+          ...prev,
+          x: 0,
+          y: 0,
+          width: canvasWidth,
+          height: targetHeight,
+          objectFit: 'cover',
+        }));
+      }
     }
   }, [selectedItemDetails, imageSource, canvasWidth, canvasHeight, locationStrip.visible, locationStrip.height]);
 
@@ -1651,12 +1853,73 @@ export default function DesignStudio() {
   //              PRESETS
   // ══════════════════════════════════════════
 
+  const updateCanvasWidth = (newW: number) => {
+    const oldW = canvasWidth || 1500;
+    const scaleFactor = newW / oldW;
+    setCanvasWidth(newW);
+    setGlassPanel(prev => {
+      const wasFullWidth = Math.abs(prev.width - oldW) < 5;
+      const newWidth = wasFullWidth ? newW : prev.width;
+      return { ...prev, width: newWidth };
+    });
+    setTextElements(prev => prev.map(el => ({
+      ...el,
+      x: Math.round(el.x * scaleFactor)
+    })));
+    if (!imageStyleUserModifiedRef.current) {
+      setImageStyleSynced(prev => ({ ...prev, width: newW }));
+    }
+  };
+
+  const updateCanvasHeight = (newH: number) => {
+    setCanvasHeight(newH);
+    setGlassPanel(prev => {
+      const heightDelta = newH - canvasHeight;
+      const newY = prev.y + heightDelta;
+      return { ...prev, y: newY };
+    });
+    if (!imageStyleUserModifiedRef.current) {
+      const targetHeight = newH - (locationStrip.visible ? (locationStrip.height ?? 120) : 0);
+      setImageStyleSynced(prev => ({ ...prev, height: targetHeight }));
+    }
+  };
+
   const handlePresetSize = (preset: string) => {
-    if (preset === 'portrait') { setCanvasWidth(1500); setCanvasHeight(2000); }
-    else if (preset === 'landscape') { setCanvasWidth(2000); setCanvasHeight(1500); }
-    else if (preset === 'fhd') { setCanvasWidth(1920); setCanvasHeight(1080); }
-    else if (preset === 'square') { setCanvasWidth(1500); setCanvasHeight(1500); }
-    else if (preset === 'story') { setCanvasWidth(1080); setCanvasHeight(1920); }
+    let newW = canvasWidth;
+    let newH = canvasHeight;
+    if (preset === 'portrait') { newW = 1500; newH = 2000; }
+    else if (preset === 'landscape') { newW = 2000; newH = 1500; }
+    else if (preset === 'fhd') { newW = 1920; newH = 1080; }
+    else if (preset === 'square') { newW = 1500; newH = 1500; }
+    else if (preset === 'story') { newW = 1080; newH = 1920; }
+    
+    const oldW = canvasWidth || 1500;
+    const heightDelta = newH - canvasHeight;
+    const scaleFactor = newW / oldW;
+    
+    setCanvasWidth(newW);
+    setCanvasHeight(newH);
+    
+    setGlassPanel(prev => {
+      const wasFullWidth = Math.abs(prev.width - oldW) < 5;
+      const newWidth = wasFullWidth ? newW : prev.width;
+      const newY = prev.y + heightDelta;
+      return { ...prev, y: newY, width: newWidth };
+    });
+
+    setTextElements(prev => prev.map(el => ({
+      ...el,
+      x: Math.round(el.x * scaleFactor)
+    })));
+
+    if (!imageStyleUserModifiedRef.current) {
+      const targetHeight = newH - (locationStrip.visible ? (locationStrip.height ?? 120) : 0);
+      setImageStyleSynced(prev => ({
+        ...prev,
+        width: newW,
+        height: targetHeight
+      }));
+    }
   };
 
   // ══════════════════════════════════════════
@@ -2359,9 +2622,9 @@ export default function DesignStudio() {
           coverTitle1, coverTitle2, coverBadge,
           coverKicker, coverCampaignName, coverTagline,
           coverCopyright, coverFooterRight, coverShow,
-          coverTemplate, coverSwapSides, coverTextCentered, coverShuffleSeed, coverT4, coverFontSizes, coverT5Style, coverT5ColorMode, coverT5FillBackground, coverT5BgColorOnly, coverT5SlatCount, coverT5BgShatter,
+          coverTemplate, coverSwapSides, coverTextCentered, coverShuffleSeed, coverT4, coverFontSizes, coverT5Style, coverT5ColorMode, coverT5FillBackground, coverT5BgColorOnly, coverT5SlatCount, coverT5BgShatter, coverT5SceneZoom, coverT5SceneX, coverT5SceneY, coverT5DesignZoom, coverT5DesignX, coverT5DesignY,
           coverAccentColor, coverSecondaryColor, coverGlowColor, coverGlowIntensity, coverElementColors, coverThemeMode,
-          coverMixImages, coverUseInstalledImages, coverIncludeBackFace,
+          coverMixImages, coverUseInstalledImages, coverIncludeBackFace, coverT8StaticOnly,
         },
         text_elements: textElements,
         image_style: imageStyle,
@@ -2404,9 +2667,9 @@ export default function DesignStudio() {
           coverTitle1, coverTitle2, coverBadge,
           coverKicker, coverCampaignName, coverTagline,
           coverCopyright, coverFooterRight, coverShow,
-          coverTemplate, coverSwapSides, coverTextCentered, coverShuffleSeed, coverT4, coverFontSizes, coverT5Style, coverT5ColorMode, coverT5FillBackground, coverT5BgColorOnly, coverT5SlatCount, coverT5BgShatter,
+          coverTemplate, coverSwapSides, coverTextCentered, coverShuffleSeed, coverT4, coverFontSizes, coverT5Style, coverT5ColorMode, coverT5FillBackground, coverT5BgColorOnly, coverT5SlatCount, coverT5BgShatter, coverT5SceneZoom, coverT5SceneX, coverT5SceneY, coverT5DesignZoom, coverT5DesignX, coverT5DesignY,
           coverAccentColor, coverSecondaryColor, coverGlowColor, coverGlowIntensity, coverElementColors, coverThemeMode,
-          coverMixImages, coverUseInstalledImages, coverIncludeBackFace,
+          coverMixImages, coverUseInstalledImages, coverIncludeBackFace, coverT8StaticOnly,
         },
         text_elements: textElements,
         image_style: imageStyle,
@@ -2480,9 +2743,16 @@ export default function DesignStudio() {
       if (typeof gpsAny.coverT5BgColorOnly === 'boolean') setCoverT5BgColorOnly(gpsAny.coverT5BgColorOnly);
       if (gpsAny.coverT5SlatCount !== undefined) setCoverT5SlatCount(Number(gpsAny.coverT5SlatCount) || 5);
       if (typeof gpsAny.coverT5BgShatter === 'boolean') setCoverT5BgShatter(gpsAny.coverT5BgShatter);
+      if (gpsAny.coverT5SceneZoom !== undefined) setCoverT5SceneZoom(Number(gpsAny.coverT5SceneZoom) || 1.0);
+      if (gpsAny.coverT5SceneX !== undefined) setCoverT5SceneX(Number(gpsAny.coverT5SceneX) || 0);
+      if (gpsAny.coverT5SceneY !== undefined) setCoverT5SceneY(Number(gpsAny.coverT5SceneY) || 0);
+      if (gpsAny.coverT5DesignZoom !== undefined) setCoverT5DesignZoom(Number(gpsAny.coverT5DesignZoom) || 1.0);
+      if (gpsAny.coverT5DesignX !== undefined) setCoverT5DesignX(Number(gpsAny.coverT5DesignX) || 0);
+      if (gpsAny.coverT5DesignY !== undefined) setCoverT5DesignY(Number(gpsAny.coverT5DesignY) || 0);
       if (typeof gpsAny.coverMixImages === 'boolean') setCoverMixImages(gpsAny.coverMixImages);
       if (typeof gpsAny.coverUseInstalledImages === 'boolean') setCoverUseInstalledImages(gpsAny.coverUseInstalledImages);
       if (typeof gpsAny.coverIncludeBackFace === 'boolean') setCoverIncludeBackFace(gpsAny.coverIncludeBackFace);
+      if (typeof gpsAny.coverT8StaticOnly === 'boolean') setCoverT8StaticOnly(gpsAny.coverT8StaticOnly);
       if (gpsAny.coverFontSizes && typeof gpsAny.coverFontSizes === 'object') setCoverFontSizes((p) => ({ ...p, ...gpsAny.coverFontSizes }));
       if (typeof gpsAny.coverAccentColor === 'string') setCoverAccentColor(gpsAny.coverAccentColor);
       if (typeof gpsAny.coverSecondaryColor === 'string') setCoverSecondaryColor(gpsAny.coverSecondaryColor);
@@ -2608,9 +2878,24 @@ export default function DesignStudio() {
       toast.dismiss(toastId);
       toast.success('تم تنزيل البطاقة بنجاح!');
     } catch (e) {
-      console.error(e);
+      console.error('Export error details:', e);
       toast.dismiss(toastId);
-      toast.error(`حدث خطأ أثناء التصدير: ${e instanceof Error ? e.message : 'error'}`);
+      let errorMsg = 'حدث خطأ غير معروف';
+      if (e instanceof Error) {
+        errorMsg = e.message;
+      } else if (e && typeof e === 'object') {
+        const ev = e as any;
+        if (ev.target) {
+          if (ev.target.tagName === 'IMG') {
+            errorMsg = `فشل تحميل صورة أثناء التصدير: ${ev.target.src || 'صورة فارغة'}`;
+          } else {
+            errorMsg = `فشل تحميل عنصر: <${ev.target.tagName.toLowerCase()}> - ${ev.target.src || ev.target.href || 'بدون مسار'}`;
+          }
+        } else if (ev.type) {
+          errorMsg = `خطأ من نوع: ${ev.type}`;
+        }
+      }
+      toast.error(`حدث خطأ أثناء التصدير: ${errorMsg}`);
     } finally {
       setIsExporting(false);
     }
@@ -2661,11 +2946,34 @@ export default function DesignStudio() {
     document.body.appendChild(host);
 
     try {
+      const TRANSPARENT_PIXEL = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+
       // Pre-fetch every external <img> inside the clone and replace its
       // src with an inlined data: URL — guarantees canvas isn't tainted.
       const urlToDataUrl = new Map<string, string>();
       const toDataUrl = async (src: string): Promise<string | null> => {
-        if (!src || src.startsWith('data:')) return src || null;
+        if (!src) return null;
+        if (src.startsWith('data:')) {
+          if (src.startsWith('data:image/svg+xml') && !src.includes(';base64,')) {
+            try {
+              const commaIdx = src.indexOf(',');
+              if (commaIdx !== -1) {
+                const rawSvg = src.substring(commaIdx + 1);
+                let decoded = rawSvg;
+                try {
+                  decoded = decodeURIComponent(rawSvg);
+                } catch {}
+                const b64 = btoa(unescape(encodeURIComponent(decoded)));
+                const cleanUrl = `data:image/svg+xml;base64,${b64}`;
+                urlToDataUrl.set(src, cleanUrl);
+                return cleanUrl;
+              }
+            } catch (e) {
+              console.error('Error base64 encoding SVG data URL:', e);
+            }
+          }
+          return src;
+        }
         if (urlToDataUrl.has(src)) return urlToDataUrl.get(src)!;
         try {
           const res = await fetch(src, { mode: 'cors' });
@@ -2702,14 +3010,38 @@ export default function DesignStudio() {
       const cloneImgs = Array.from(clone.querySelectorAll('img'));
       await Promise.all(cloneImgs.map(async (img) => {
         const src = img.getAttribute('src') || '';
-        if (!src || src.startsWith('data:')) return;
+        if (!src) {
+          img.setAttribute('src', TRANSPARENT_PIXEL);
+          return;
+        }
+        if (src.startsWith('data:')) return;
         const dataUrl = await toDataUrl(src);
         img.removeAttribute('crossorigin');
         if (dataUrl) {
           img.setAttribute('src', dataUrl);
         } else {
-          img.setAttribute('src', '');
+          img.setAttribute('src', TRANSPARENT_PIXEL);
           img.style.background = 'linear-gradient(135deg,#222,#444)';
+        }
+      }));
+
+      // Inline SVG <image> elements (such as shatter mask assets) to avoid sandbox blockages
+      const cloneSvgImgs = Array.from(clone.querySelectorAll('image'));
+      await Promise.all(cloneSvgImgs.map(async (img) => {
+        const href = img.getAttribute('href') || img.getAttribute('xlink:href') || '';
+        if (!href) {
+          img.setAttribute('href', TRANSPARENT_PIXEL);
+          img.removeAttribute('xlink:href');
+          return;
+        }
+        if (href.startsWith('data:')) return;
+        const dataUrl = await toDataUrl(href);
+        if (dataUrl) {
+          img.setAttribute('href', dataUrl);
+          img.removeAttribute('xlink:href');
+        } else {
+          img.setAttribute('href', TRANSPARENT_PIXEL);
+          img.removeAttribute('xlink:href');
         }
       }));
 
@@ -2724,7 +3056,11 @@ export default function DesignStudio() {
           const orig = m[2];
           if (orig.startsWith('data:')) continue;
           const du = await toDataUrl(orig);
-          if (du) newStyle = newStyle.split(orig).join(du);
+          if (du) {
+            newStyle = newStyle.split(orig).join(du);
+          } else {
+            newStyle = newStyle.split(orig).join(TRANSPARENT_PIXEL);
+          }
         }
         if (newStyle !== styleAttr) node.setAttribute('style', newStyle);
       }));
@@ -2743,7 +3079,9 @@ export default function DesignStudio() {
       // shape correctly (otherwise the browser falls back to a font that
       // doesn't join Arabic glyphs — the "broken letters" bug).
       let fontEmbedCSS = '';
-      try { fontEmbedCSS = await getFontEmbedCSS(clone); } catch {}
+      try { fontEmbedCSS = await getStudioFontEmbedCSS(); } catch (e) {
+        console.error('Failed to get custom font embed CSS:', e);
+      }
       // Ensure font readiness inside the host as well.
       try { await (document as any).fonts?.ready; } catch {}
       // Stable text rendering for the capture.
@@ -2762,7 +3100,7 @@ export default function DesignStudio() {
         pixelRatio: SCALE,
         cacheBust: true,
         backgroundColor: undefined,
-        skipFonts: false,
+        skipFonts: true, // Use our custom pre-inlined font styles to completely avoid scanning external sheets (stops SecurityErrors)
         fontEmbedCSS,
         style: {
           transform: 'none',
@@ -3423,7 +3761,7 @@ export default function DesignStudio() {
     );
   };
 
-  const Header = ({ accent, brandRight = true, align = 'center', imagesSide, showBlurCard = false }: { accent: string; brandRight?: boolean; align?: 'right' | 'center' | 'left'; imagesSide?: 'left' | 'right'; showBlurCard?: boolean }) => {
+  const Header = ({ accent, brandRight = true, align = 'center', imagesSide, showBlurCard = false, scaleFactor = 1.0 }: { accent: string; brandRight?: boolean; align?: 'right' | 'center' | 'left'; imagesSide?: 'left' | 'right'; showBlurCard?: boolean; scaleFactor?: number }) => {
     const panelLogoEl = textElements.find(el => el.id === 'company_logo');
     const logoSrc = companyInfo.logoUrl || panelLogoEl?.url || '';
     const isT7 = coverTemplate === 'template7' || coverTemplate === 'template8';
@@ -3442,7 +3780,7 @@ export default function DesignStudio() {
     const clientSide = isT5 ? (imagesSide === 'right' ? 'left' : 'right') : (brandRight ? 'left' : 'right');
 
     return (
-      <div className="absolute z-30" style={{ top: '64px', left: '64px', right: '64px' }}>
+      <div className="absolute z-30" style={{ top: `${64 * scaleFactor}px`, left: `${64 * scaleFactor}px`, right: `${64 * scaleFactor}px` }}>
         {coverShow.clientInfo && (
           <div
             className="absolute top-0 flex flex-col gap-1 items-end text-right"
@@ -3450,11 +3788,11 @@ export default function DesignStudio() {
               [clientSide]: 0, 
               direction: 'rtl', 
               fontFamily: "'Tajawal', 'Cairo', sans-serif",
-              fontSize: isT5 ? '13px' : '18px'
+              fontSize: `${(isT5 ? 13 : 18) * scaleFactor}px`
             } as React.CSSProperties}
           >
-            <div className="text-white/85 font-bold tracking-wide" style={{ fontSize: isT5 ? '14px' : 'inherit' }}>العميل: {selectedItemDetails?.customer_name || 'العميل'}</div>
-            <div className="text-white/60 font-medium tracking-wide" style={{ fontSize: isT5 ? '12px' : 'inherit' }}>الموقع: {selectedItemDetails?.municipality || 'طرابلس'}{selectedItemDetails?.region ? `، ${selectedItemDetails.region}` : ''}</div>
+            <div className="text-white/85 font-bold tracking-wide" style={{ fontSize: `${(isT5 ? 14 : 18) * scaleFactor}px` }}>العميل: {selectedItemDetails?.customer_name || 'العميل'}</div>
+            <div className="text-white/60 font-medium tracking-wide" style={{ fontSize: `${(isT5 ? 12 : 16) * scaleFactor}px` }}>الموقع: {selectedItemDetails?.municipality || 'طرابلس'}{selectedItemDetails?.region ? `، ${selectedItemDetails.region}` : ''}</div>
           </div>
         )}
         {(showLogo || showName) && (
@@ -3465,14 +3803,14 @@ export default function DesignStudio() {
               marginRight: brandMarginRight,
               display: 'grid',
               placeItems: 'center',
-              minHeight: `${isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo}px`,
+              minHeight: `${(isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo) * scaleFactor}px`,
               ...(showBlurCard ? {
                 backgroundColor: 'rgba(8, 12, 24, 0.48)',
                 backdropFilter: 'blur(20px)',
                 WebkitBackdropFilter: 'blur(20px)',
-                border: `1.5px solid ${getRGBAColor(accent, 0.28)}`,
-                borderRadius: '16px',
-                padding: '12px 32px',
+                border: `${1.5 * scaleFactor}px solid ${getRGBAColor(accent, 0.28)}`,
+                borderRadius: `${16 * scaleFactor}px`,
+                padding: `${12 * scaleFactor}px ${32 * scaleFactor}px`,
                 boxShadow: '0 10px 30px rgba(0,0,0,0.6)',
               } : {})
             }}
@@ -3483,16 +3821,16 @@ export default function DesignStudio() {
                 className="object-contain"
                 style={{ 
                   gridArea: '1 / 1', 
-                  height: `${isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo}px`, 
-                  maxWidth: `${(isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo) * 3.5}px` 
+                  height: `${(isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo) * scaleFactor}px`, 
+                  maxWidth: `${(isT5 ? Math.round(coverFontSizes.companyBrandLogo * 0.8) : coverFontSizes.companyBrandLogo) * 3.5 * scaleFactor}px` 
                 }}
               />
             )}
             {showName && (
               <div className="text-center" style={{ gridArea: '1 / 1' }}>
-                <div className="font-black font-sans leading-none" style={{ color: elColors.brandName || accent, fontSize: `${isT5 ? Math.round(coverFontSizes.companyBrandName * 0.8) : coverFontSizes.companyBrandName}px` }}>{companyInfo.name}</div>
+                <div className="font-black font-sans leading-none" style={{ color: elColors.brandName || accent, fontSize: `${(isT5 ? Math.round(coverFontSizes.companyBrandName * 0.8) : coverFontSizes.companyBrandName) * scaleFactor}px` }}>{companyInfo.name}</div>
                 {companyInfo.subtitle && (
-                  <div className="text-white/60 font-semibold tracking-wider uppercase" style={{ fontSize: `${Math.max(10, Math.round((isT5 ? Math.round(coverFontSizes.companyBrandName * 0.8) : coverFontSizes.companyBrandName) * 0.4))}px`, marginTop: `${Math.max(8, Math.round((isT5 ? Math.round(coverFontSizes.companyBrandName * 0.8) : coverFontSizes.companyBrandName) * 0.35))}px` }}>{companyInfo.subtitle}</div>
+                  <div className="text-white/60 font-semibold tracking-wider uppercase" style={{ fontSize: `${Math.max(10, Math.round((isT5 ? Math.round(coverFontSizes.companyBrandName * 0.8) : coverFontSizes.companyBrandName) * 0.4)) * scaleFactor}px`, marginTop: `${Math.max(8, Math.round((isT5 ? Math.round(coverFontSizes.companyBrandName * 0.8) : coverFontSizes.companyBrandName) * 0.35)) * scaleFactor}px` }}>{companyInfo.subtitle}</div>
                 )}
               </div>
             )}
@@ -3539,14 +3877,14 @@ export default function DesignStudio() {
     );
   };
 
-  const Footer = ({ accent, reverse = false }: { accent: string; reverse?: boolean }) => (
+  const Footer = ({ accent, reverse = false, scaleFactor = 1.0 }: { accent: string; reverse?: boolean; scaleFactor?: number }) => (
     (coverShow.copyright || coverShow.footerRight) ? (
-      <div className={`absolute bottom-8 inset-x-16 flex ${reverse ? 'flex-row-reverse' : ''} justify-between items-end z-30 pointer-events-none`}>
+      <div className={`absolute z-30 pointer-events-none flex ${reverse ? 'flex-row-reverse' : ''} justify-between items-end`} style={{ bottom: `${32 * scaleFactor}px`, left: `${64 * scaleFactor}px`, right: `${64 * scaleFactor}px` }}>
         {coverShow.copyright ? (
-          <div className="text-white/65 italic max-w-[55%] leading-tight" style={{ direction: 'ltr', fontFamily: "'Manrope', sans-serif", fontSize: `${coverFontSizes.copyright}px` }}>{coverCopyright}</div>
+          <div className="text-white/65 italic max-w-[55%] leading-tight" style={{ direction: 'ltr', fontFamily: "'Manrope', sans-serif", fontSize: `${coverFontSizes.copyright * scaleFactor}px` }}>{coverCopyright}</div>
         ) : <div />}
         {coverShow.footerRight && (
-          <div className="font-semibold tracking-wider" style={{ direction: 'ltr', fontFamily: "'Manrope', sans-serif", fontSize: `${coverFontSizes.footerRight}px`, color: elColors.footerRight || accent }}>{coverFooterRight}</div>
+          <div className="font-semibold tracking-wider" style={{ direction: 'ltr', fontFamily: "'Manrope', sans-serif", fontSize: `${coverFontSizes.footerRight * scaleFactor}px`, color: elColors.footerRight || accent }}>{coverFooterRight}</div>
         )}
       </div>
     ) : null
@@ -4504,19 +4842,101 @@ export default function DesignStudio() {
                                   )}
 
                                   {coverTemplate === 'template8' && (
-                                    <div className="space-y-1 pt-2 border-t border-border/10">
-                                      <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
-                                        <span>قوة تفاصيل وتكرار الزجاج</span>
-                                        <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.bgBlur ?? 1.0) * 100)}%</span>
+                                    <>
+                                      <div className="flex items-center justify-between pt-2 pb-1 border-t border-border/10">
+                                        <div className="space-y-0.5 pr-2">
+                                          <Label className="text-[11px] font-medium text-foreground">تأثير زجاج ثابت فقط (بدون حركة 3D)</Label>
+                                          <div className="text-[9px] text-muted-foreground leading-normal">إزالة ميلان وتشتيت القطع والاعتماد على لوح زجاجي متشقق ومسطح</div>
+                                        </div>
+                                        <Switch 
+                                          checked={coverT8StaticOnly} 
+                                          onCheckedChange={setCoverT8StaticOnly} 
+                                        />
                                       </div>
-                                      <Slider 
-                                        min={0.0} 
-                                        max={1.5} 
-                                        step={0.05} 
-                                        value={[coverT4.bgBlur ?? 1.0]} 
-                                        onValueChange={([v]) => setCoverT4(p => ({ ...p, bgBlur: v }))} 
-                                      />
-                                    </div>
+
+                                      <div className="space-y-1 pt-2 border-t border-border/10">
+                                        <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                          <span>قوة تفاصيل وتكرار الزجاج</span>
+                                          <span className="text-[10px] text-muted-foreground font-mono">{Math.round((coverT4.bgBlur ?? 1.0) * 100)}%</span>
+                                        </div>
+                                        <Slider 
+                                          min={0.0} 
+                                          max={1.5} 
+                                          step={0.05} 
+                                          value={[coverT4.bgBlur ?? 1.0]} 
+                                          onValueChange={([v]) => setCoverT4(p => ({ ...p, bgBlur: v }))} 
+                                        />
+                                      </div>
+
+                                      <div className="space-y-1 pt-2 border-t border-border/10">
+                                        <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                          <span>قوة تأثيرات الإضاءة (Light Leaks)</span>
+                                          <span className="text-[10px] text-muted-foreground font-mono">{Math.round(coverLightLeaksIntensity * 100)}%</span>
+                                        </div>
+                                        <Slider 
+                                          min={0.0} 
+                                          max={1.5} 
+                                          step={0.05} 
+                                          value={[coverLightLeaksIntensity]} 
+                                          onValueChange={([v]) => setCoverLightLeaksIntensity(v)} 
+                                        />
+                                      </div>
+
+                                      <div className="space-y-2 pt-2 border-t border-border/10">
+                                        <div className="text-[11px] font-bold text-primary">استبدال صور تأثير الزجاج</div>
+                                        
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] text-muted-foreground">صورة قناع الزجاج (Mask PNG)</Label>
+                                          <Input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            className="text-[10px] h-7 p-1 cursor-pointer bg-background/50 border-dashed border-border/40" 
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                const url = URL.createObjectURL(file);
+                                                setCoverCustomGlassMask(url);
+                                                toast.success('تم تحميل قناع الزجاج المخصص بنجاح!');
+                                              }
+                                            }} 
+                                          />
+                                        </div>
+
+                                        <div className="space-y-1">
+                                          <Label className="text-[10px] text-muted-foreground">صورة خامات الزجاج (Glass Texture JPG)</Label>
+                                          <Input 
+                                            type="file" 
+                                            accept="image/*" 
+                                            className="text-[10px] h-7 p-1 cursor-pointer bg-background/50 border-dashed border-border/40" 
+                                            onChange={(e) => {
+                                              const file = e.target.files?.[0];
+                                              if (file) {
+                                                const url = URL.createObjectURL(file);
+                                                setCoverCustomGlassTexture(url);
+                                                toast.success('تم تحميل خامة الزجاج المخصصة بنجاح!');
+                                              }
+                                            }} 
+                                          />
+                                        </div>
+
+                                        <div className="mt-3 p-2.5 rounded-lg bg-primary/5 border border-primary/10 text-[10px] text-muted-foreground space-y-1.5 leading-relaxed">
+                                          <div className="font-bold text-foreground flex items-center gap-1">
+                                            <span className="w-1 h-3 rounded bg-primary shrink-0" />
+                                            إرشادات الاستبدال الدائم (للمطورين):
+                                          </div>
+                                          <p>
+                                            الحقول أعلاه تقوم باستبدال مؤقت في المتصفح. لتغيير التصميم الافتراضي بشكل دائم لجميع المستخدمين، يرجى استبدال الملفات التالية في مجلد المشروع:
+                                          </p>
+                                          <div className="font-mono bg-background/50 p-1.5 rounded space-y-1 text-[9px] border border-border/20 select-all">
+                                            <div>قناع الكسور (Mask PNG):<br/><span className="text-primary">public/cover-template8-mask.png</span></div>
+                                            <div className="pt-1 border-t border-border/10">خامة الزجاج (Glass JPG):<br/><span className="text-primary">public/cover-template8-glass.jpg</span></div>
+                                          </div>
+                                          <p className="text-[9px] italic text-amber-500/90 font-medium">
+                                            * تنويه: يرجى الحفاظ على نفس أسماء الملفات وصيغها لضمان عمل القالب تلقائياً.
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </>
                                   )}
                                 </div>
                               )}
@@ -4566,14 +4986,67 @@ export default function DesignStudio() {
                                     </div>
                                   )}
                                   {!coverT5BgColorOnly && (
-                                    <div className="space-y-1 pt-1">
-                                      <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
-                                        <span>عدد شرائح الزجاج بالخلفية</span>
-                                        <span className="text-[10px] text-primary">{coverT5SlatCount}</span>
-                                      </div>
-                                      <Slider min={2} max={12} step={1} value={[coverT5SlatCount]} onValueChange={([v]) => setCoverT5SlatCount(v)} />
-                                    </div>
-                                  )}
+                                     <div className="space-y-3">
+                                       <div className="space-y-1 pt-1">
+                                         <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                           <span>عدد شرائح الزجاج بالخلفية</span>
+                                           <span className="text-[10px] text-primary">{coverT5SlatCount}</span>
+                                         </div>
+                                         <Slider min={2} max={12} step={1} value={[coverT5SlatCount]} onValueChange={([v]) => setCoverT5SlatCount(v)} />
+                                       </div>
+
+                                       <div className="space-y-1 pt-1 border-t border-border/10">
+                                         <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                           <span>تكبير/تصغير المشهد الداخلي</span>
+                                           <span className="text-[10px] text-primary">{coverT5SceneZoom.toFixed(2)}x</span>
+                                         </div>
+                                         <Slider min={0.5} max={3.0} step={0.05} value={[coverT5SceneZoom]} onValueChange={([v]) => setCoverT5SceneZoom(v)} />
+                                       </div>
+
+                                       <div className="space-y-1 pt-1">
+                                         <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                           <span>تحريك المشهد أفقياً</span>
+                                           <span className="text-[10px] text-primary">{coverT5SceneX}px</span>
+                                         </div>
+                                         <Slider min={-800} max={800} step={1} value={[coverT5SceneX]} onValueChange={([v]) => setCoverT5SceneX(v)} />
+                                       </div>
+
+                                       <div className="space-y-1 pt-1">
+                                         <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                           <span>تحريك المشهد رأسياً</span>
+                                           <span className="text-[10px] text-primary">{coverT5SceneY}px</span>
+                                         </div>
+                                         <Slider min={-800} max={800} step={1} value={[coverT5SceneY]} onValueChange={([v]) => setCoverT5SceneY(v)} />
+                                       </div>
+                                     </div>
+                                   )}
+
+                                   <div className="space-y-1 pt-2 border-t border-border/20">
+                                     <Label className="text-[11px] font-bold text-primary">تحريك وتكبير التصميم بالكامل</Label>
+                                     <div className="space-y-1 pt-1">
+                                       <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                         <span>تكبير/تصغير التصميم</span>
+                                         <span className="text-[10px] text-primary">{coverT5DesignZoom.toFixed(2)}x</span>
+                                       </div>
+                                       <Slider min={0.3} max={2.0} step={0.05} value={[coverT5DesignZoom]} onValueChange={([v]) => setCoverT5DesignZoom(v)} />
+                                     </div>
+
+                                     <div className="space-y-1 pt-1">
+                                       <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                         <span>إزاحة التصميم أفقياً</span>
+                                         <span className="text-[10px] text-primary">{coverT5DesignX}px</span>
+                                       </div>
+                                       <Slider min={-1000} max={1000} step={1} value={[coverT5DesignX]} onValueChange={([v]) => setCoverT5DesignX(v)} />
+                                     </div>
+
+                                     <div className="space-y-1 pt-1">
+                                       <div className="flex items-center justify-between text-[11px] font-medium text-foreground">
+                                         <span>إزاحة التصميم رأسياً</span>
+                                         <span className="text-[10px] text-primary">{coverT5DesignY}px</span>
+                                       </div>
+                                       <Slider min={-1000} max={1000} step={1} value={[coverT5DesignY]} onValueChange={([v]) => setCoverT5DesignY(v)} />
+                                     </div>
+                                   </div>
                                 </div>
                               )}
                             </>
@@ -5670,9 +6143,9 @@ export default function DesignStudio() {
                   </SelectContent>
                 </Select>
                 <div className="flex items-center gap-1">
-                  <Input type="number" value={canvasWidth} onChange={(e) => setCanvasWidth(parseInt(e.target.value) || 1500)} className="h-8 w-14 text-center text-[11px]" />
+                  <Input type="number" value={canvasWidth} onChange={(e) => updateCanvasWidth(parseInt(e.target.value) || 1500)} className="h-8 w-14 text-center text-[11px]" />
                   <span className="text-muted-foreground">×</span>
-                  <Input type="number" value={canvasHeight} onChange={(e) => setCanvasHeight(parseInt(e.target.value) || 2000)} className="h-8 w-14 text-center text-[11px]" />
+                  <Input type="number" value={canvasHeight} onChange={(e) => updateCanvasHeight(parseInt(e.target.value) || 2000)} className="h-8 w-14 text-center text-[11px]" />
                 </div>
               </div>
 
@@ -6150,7 +6623,7 @@ export default function DesignStudio() {
                             className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
                             style={{
                               mixBlendMode: 'screen',
-                              opacity: 0.32,
+                              opacity: 0.32 * coverLightLeaksIntensity,
                             }}
                           />
 
@@ -6329,7 +6802,7 @@ export default function DesignStudio() {
                             className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
                             style={{
                               mixBlendMode: 'screen',
-                              opacity: 0.35,
+                              opacity: 0.35 * coverLightLeaksIntensity,
                             }}
                           />
                           <Footer accent={accent} reverse={!swap} />
@@ -6592,6 +7065,31 @@ export default function DesignStudio() {
                       const imagesSide: 'left' | 'right' = swap ? 'left' : 'right';
                       const textAlign: 'left' | 'right' | 'center' = coverTextCentered ? 'center' : (swap ? 'right' : 'left');
                       const photos = pickPhotos(7);
+
+                      // Calculate dynamic scaling and offsets based on canvas dimensions to align exactly with backgroundSize: cover
+                      const W = canvasWidth;
+                      const H = canvasHeight;
+                      const W_orig = 1500;
+                      const H_orig = 2000;
+                      const R = W / H;
+                      const R_orig = W_orig / H_orig; // 0.75
+
+                      let S = 1;
+                      let offset_x = 0;
+                      let offset_y = 0;
+
+                      if (R > R_orig) {
+                        S = W / W_orig;
+                        offset_y = (H - H_orig * S) / 2;
+                      } else {
+                        S = H / H_orig;
+                        offset_x = (W - W_orig * S) / 2;
+                      }
+
+                      const winLeft = 630 * S;
+                      const winTop = 140 * S;
+                      const winWidth = 760 * S;
+                      const winHeight = 1420 * S;
                       
                       const cardsLayout = [
                         { left: '26%', top: '22%', width: '48%', height: '56%', rot: -3, zIndex: 10, zoom: 2.4, posX: 92, posY: 50, isTall: true },
@@ -6752,14 +7250,14 @@ export default function DesignStudio() {
                             transform,
                             transformOrigin: 'center center',
                             zIndex,
-                            borderRadius: '24px',
-                            border: '2.5px solid rgba(255, 255, 255, 0.18)',
-                            outline: `1.5px solid ${accent}aa`,
+                            borderRadius: `${24 * S}px`,
+                            border: `${2.5 * S}px solid rgba(255, 255, 255, 0.18)`,
+                            outline: `${1.5 * S}px solid ${accent}aa`,
                             background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
                             backdropFilter: isReflection ? 'none' : 'blur(20px)',
                             WebkitBackdropFilter: isReflection ? 'none' : 'blur(20px)',
-                            filter: isReflection ? 'blur(12px) brightness(0.6)' : 'none',
-                            boxShadow: isReflection ? 'none' : `0 45px 95px rgba(0,0,0,0.9), inset 0 0 25px ${accent}45, inset 0 1px 2px rgba(255,255,255,0.55), 0 0 45px ${accent}25`,
+                            filter: isReflection ? `blur(${12 * S}px) brightness(0.6)` : 'none',
+                            boxShadow: isReflection ? 'none' : `0 ${45 * S}px ${95 * S}px rgba(0,0,0,0.9), inset 0 0 ${25 * S}px ${accent}45, inset 0 ${1 * S}px ${2 * S}px rgba(255,255,255,0.55), 0 0 ${45 * S}px ${accent}25`,
                           };
                         };
 
@@ -7266,19 +7764,26 @@ export default function DesignStudio() {
 
                       return (
                         <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" style={{ ['--cover-accent' as any]: accent, padding: '64px' }}>
-                          <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: `url('/cover-bg-portal.png')`, backgroundSize: 'cover', backgroundPosition: 'center', width: '100%', height: '100%', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
-                          {/* Color tint overlays to unify room mood with theme accent color (color + multiply mode) */}
-                          <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.28, mixBlendMode: 'color', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
-                          <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.12, mixBlendMode: 'multiply', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
                           
-                          {/* Repositioned text background glows to left side */}
-                          <div className="absolute pointer-events-none z-[7]" style={{ [swap ? 'left' : 'right']: '55%', [swap ? 'right' : 'left']: '4%', top: '18%', height: '64%', background: `radial-gradient(ellipse ${gI.spread}% ${gI.spread * 0.93}% at 50% 50%, ${glow}${alphaToHex(0.4 * gI.opacity)} 0%, ${glow}${alphaToHex(0.2 * gI.opacity)} 50%, transparent 85%)`, filter: `blur(${gI.blur}px)` } as React.CSSProperties} />
-                          <div className="absolute pointer-events-none z-[8]" style={{ [swap ? 'left' : 'right']: '55%', [swap ? 'right' : 'left']: '4%', top: '22%', height: '56%', background: `radial-gradient(ellipse ${gI.spread * 0.93}% ${gI.spread * 0.86}% at 50% 50%, ${glow}${alphaToHex(1 * gI.opacity)} 0%, ${glow}${alphaToHex(0.9 * gI.opacity)} 30%, ${glow}${alphaToHex(0.6 * gI.opacity)} 55%, ${glow}${alphaToHex(0.25 * gI.opacity)} 75%, transparent 92%)`, filter: `blur(${Math.max(8, gI.blur * 0.67)}px)` } as React.CSSProperties} />
-                          
-                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={imagesSide} />
-                          <TextBlock accent={accent} align={textAlign} imagesSide={imagesSide} />
- 
-                           {coverShow.collage && (
+                          {/* 1. ROOM SCENE WRAPPER (Scales & Moves background, window collage, reflection, chair, overlays) */}
+                          <div 
+                            className="absolute" 
+                            style={{ 
+                              left: `${offset_x}px`,
+                              top: `${offset_y}px`,
+                              width: `${1500 * S}px`,
+                              height: `${2000 * S}px`,
+                              transform: `scale(${coverT5DesignZoom}) translate(${coverT5DesignX * S}px, ${coverT5DesignY * S}px)`,
+                              transformOrigin: 'center center',
+                            }}
+                          >
+                            <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: `url('/cover-bg-portal.png')`, backgroundSize: '100% 100%', backgroundPosition: 'center', width: '100%', height: '100%', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
+                            
+                            {/* Color tint overlays */}
+                            <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.28 * coverLightLeaksIntensity, mixBlendMode: 'color', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
+                            <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.12, mixBlendMode: 'multiply', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
+                            
+                            {coverShow.collage && (
                             <>
                               {/* Main collage inside the window using custom Photoshop mask */}
                               <div
@@ -7286,57 +7791,62 @@ export default function DesignStudio() {
                                 style={{
                                   zIndex: 10,
                                   WebkitMaskImage: coverPortalMaskWindowUrl ? `url(${coverPortalMaskWindowUrl})` : 'none',
-                                  WebkitMaskSize: 'cover',
+                                  WebkitMaskSize: '100% 100%',
                                   WebkitMaskPosition: 'center',
                                   maskImage: coverPortalMaskWindowUrl ? `url(${coverPortalMaskWindowUrl})` : 'none',
-                                  maskSize: 'cover',
+                                  maskSize: '100% 100%',
                                   maskPosition: 'center',
                                   transform: swap ? 'scaleX(-1)' : 'none',
                                   transformOrigin: 'center center',
-                                  // Clip to exclude reflection and chair (always x: 531px..1500px, y: 0px..1551px in local space, mirrored dynamically)
-                                  clipPath: swap 
-                                    ? 'polygon(0px 0px, 969px 0px, 969px 1551px, 0px 1551px)' 
-                                    : 'polygon(531px 0px, 1500px 0px, 1500px 1551px, 531px 1551px)',
+                                  // Clip to exclude reflection and chair (always x: 531px..1500px, y: 0px..1551px in local space, mirrored dynamically by transform scaleX)
+                                  clipPath: `polygon(${531 * S}px 0px, ${1500 * S}px 0px, ${1500 * S}px ${1551 * S}px, ${531 * S}px ${1551 * S}px)`,
                                 }}
                               >
                                 <div
                                   style={{
                                     position: 'absolute',
-                                    top: '140px',
-                                    left: '630px',
-                                    width: '760px',
-                                    height: '1420px',
+                                    top: `${winTop}px`,
+                                    left: `${winLeft}px`,
+                                    width: `${winWidth}px`,
+                                    height: `${winHeight}px`,
                                     background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}25 50%, #040302 100%)`, // Deep warm core glow
-                                    borderRadius: '8px',
+                                    borderRadius: `${8 * S}px`,
                                     overflow: 'hidden', // Contain all overlays
                                   }}
                                 >
-                                  <div className="relative w-full h-full" style={{ perspective: '1500px' }}>
+                                  <div 
+                                    className="relative w-full h-full" 
+                                    style={{ 
+                                      perspective: `${1500 * S}px`,
+                                      transform: `scale(${coverT5SceneZoom}) translate(${coverT5SceneX * S}px, ${coverT5SceneY * S}px)`,
+                                      transformOrigin: 'center center'
+                                    }}
+                                  >
                                     {renderWindowSlats(false)}
                                     
                                     {/* Starfield overlay (sharp stars behind cards, in front of slats) */}
                                     <div className="absolute inset-0 pointer-events-none z-10 opacity-75" style={{
                                       backgroundImage: `
-                                        radial-gradient(1.2px 1.2px at 30px 40px, #fff, transparent),
-                                        radial-gradient(2px 2px at 170px 90px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 90px 290px, #fff, transparent),
-                                        radial-gradient(2.5px 2.5px at 320px 150px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 390px 380px, ${accent}, transparent),
-                                        radial-gradient(1.2px 1.2px at 490px 100px, #fff, transparent),
-                                        radial-gradient(2.2px 2.2px at 620px 330px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 680px 480px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 740px 220px, ${accent}, transparent),
-                                        radial-gradient(1.2px 1.2px at 60px 650px, #fff, transparent),
-                                        radial-gradient(2.5px 2.5px at 200px 790px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 350px 880px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 520px 1050px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 650px 1200px, #fff, transparent),
-                                        radial-gradient(2.5px 2.5px at 240px 1350px, ${accent}, transparent),
-                                        radial-gradient(1.8px 1.8px at 450px 1450px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 180px 1500px, #fff, transparent),
-                                        radial-gradient(2.8px 2.8px at 710px 920px, #fff, transparent)
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${30 * S}px ${40 * S}px, #fff, transparent),
+                                        radial-gradient(${2 * S}px ${2 * S}px at ${170 * S}px ${90 * S}px, #fff, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${90 * S}px ${290 * S}px, #fff, transparent),
+                                        radial-gradient(${2.5 * S}px ${2.5 * S}px at ${320 * S}px ${150 * S}px, #fff, transparent),
+                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${390 * S}px ${380 * S}px, ${accent}, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${490 * S}px ${100 * S}px, #fff, transparent),
+                                        radial-gradient(${2.2 * S}px ${2.2 * S}px at ${620 * S}px ${330 * S}px, #fff, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${680 * S}px ${480 * S}px, #fff, transparent),
+                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${740 * S}px ${220 * S}px, ${accent}, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${60 * S}px ${650 * S}px, #fff, transparent),
+                                        radial-gradient(${2.5 * S}px ${2.5 * S}px at ${200 * S}px ${790 * S}px, #fff, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${350 * S}px ${880 * S}px, #fff, transparent),
+                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${520 * S}px ${1050 * S}px, #fff, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${650 * S}px ${1200 * S}px, #fff, transparent),
+                                        radial-gradient(${2.5 * S}px ${2.5 * S}px at ${240 * S}px ${1350 * S}px, ${accent}, transparent),
+                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${450 * S}px ${1450 * S}px, #fff, transparent),
+                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${180 * S}px ${1500 * S}px, #fff, transparent),
+                                        radial-gradient(${2.8 * S}px ${2.8 * S}px at ${710 * S}px ${920 * S}px, #fff, transparent)
                                       `,
-                                      backgroundSize: '400px 600px',
+                                      backgroundSize: `${400 * S}px ${600 * S}px`,
                                       mixBlendMode: 'screen',
                                     }} />
 
@@ -7351,9 +7861,9 @@ export default function DesignStudio() {
 
                                     {/* Deep inner shadow frame overlay (z-20) to force shadow on top of background & slats */}
                                     <div className="absolute inset-0 pointer-events-none z-20" style={{
-                                      boxShadow: `inset 0 0 120px rgba(0,0,0,0.98), inset 0 0 50px ${accent}40`,
-                                      borderRadius: '8px',
-                                      border: `2.5px solid ${accent}50`, // Glowing golden frame rim
+                                      boxShadow: `inset 0 0 ${120 * S}px rgba(0,0,0,0.98), inset 0 0 ${50 * S}px ${accent}40`,
+                                      borderRadius: `${8 * S}px`,
+                                      border: `${2.5 * S}px solid ${accent}50`, // Glowing golden frame rim
                                     }} />
 
                                     {renderCollageItems(false)}
@@ -7367,36 +7877,41 @@ export default function DesignStudio() {
                                 style={{
                                   zIndex: 9,
                                   WebkitMaskImage: coverPortalMaskReflectionUrl ? `url(${coverPortalMaskReflectionUrl})` : 'none',
-                                  WebkitMaskSize: 'cover',
+                                  WebkitMaskSize: '100% 100%',
                                   WebkitMaskPosition: 'center',
                                   maskImage: coverPortalMaskReflectionUrl ? `url(${coverPortalMaskReflectionUrl})` : 'none',
-                                  maskSize: 'cover',
+                                  maskSize: '100% 100%',
                                   maskPosition: 'center',
                                   transform: swap ? 'scaleX(-1)' : 'none',
                                   transformOrigin: 'center center',
-                                  // Clip to reflection area (always x: 531px..1500px, y: 1551px..2000px in local space, mirrored dynamically)
-                                  clipPath: swap 
-                                    ? 'polygon(0px 1551px, 969px 1551px, 969px 2000px, 0px 2000px)' 
-                                    : 'polygon(531px 1551px, 1500px 1551px, 1500px 2000px, 531px 2000px)',
+                                  // Clip to reflection area (always x: 531px..1500px, y: 1551px..2000px in local space, mirrored dynamically by transform scaleX)
+                                  clipPath: `polygon(${531 * S}px ${1551 * S}px, ${1500 * S}px ${1551 * S}px, ${1500 * S}px ${2000 * S}px, ${531 * S}px ${2000 * S}px)`,
                                   opacity: 0.28,
-                                  filter: 'blur(2px) brightness(0.85)',
+                                  filter: `blur(${2 * S}px) brightness(0.85)`,
                                 }}
                               >
                                 <div
                                   style={{
                                     position: 'absolute',
-                                    top: '140px', // Matches collage top exactly
-                                    left: '630px',
-                                    width: '760px',
-                                    height: '1420px', // Matches collage height exactly
+                                    top: `${winTop}px`, // Matches collage top exactly
+                                    left: `${winLeft}px`,
+                                    width: `${winWidth}px`,
+                                    height: `${winHeight}px`, // Matches collage height exactly
                                     transform: 'scaleY(-1)',
-                                    transformOrigin: 'center 1411px', // Flips about the floor line (y = 1551px / local 1411px) downwards
+                                    transformOrigin: `center ${(1551 - 140) * S}px`, // Flips about the floor line (y = 1551px / local 1411px) downwards
                                     background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}25 50%, #040302 100%)`,
-                                    borderRadius: '8px',
+                                    borderRadius: `${8 * S}px`,
                                     overflow: 'hidden',
                                   }}
                                 >
-                                  <div className="relative w-full h-full" style={{ perspective: '1500px' }}>
+                                  <div 
+                                    className="relative w-full h-full" 
+                                    style={{ 
+                                      perspective: `${1500 * S}px`,
+                                      transform: `scale(${coverT5SceneZoom}) translate(${coverT5SceneX * S}px, ${coverT5SceneY * S}px)`,
+                                      transformOrigin: 'center center'
+                                    }}
+                                  >
                                     {renderWindowSlats(true)}
                                     
                                     {/* Starfield overlay inside reflection */}
@@ -7442,36 +7957,33 @@ export default function DesignStudio() {
                                     }} />
 
                                     {renderCollageItems(true)}
-                                  </div>
-                                </div>
-                              </div>
-                            </>
-                          )}
-
-                          {/* Chair depth overlay to let text/tagline sit behind the chair silhouette (extended to 2000px for reflection) */}
+                                   </div>
+                                 </div>
+                               </div>
+                             </>
+                           )}
+                            {/* Chair depth overlay to let text/tagline sit behind the chair silhouette (extended to 2000px for reflection) */}
                           <div
                             className="absolute inset-0 pointer-events-none"
                             style={{
                               zIndex: 25, // above TextBlock and Tagline!
                               backgroundImage: "url('/cover-bg-portal.png')",
-                              backgroundSize: 'cover',
+                              backgroundSize: '100% 100%',
                               backgroundPosition: 'center',
                               WebkitMaskImage: coverPortalMaskChairUrl ? `url(${coverPortalMaskChairUrl})` : 'none',
-                              WebkitMaskSize: 'cover',
+                              WebkitMaskSize: '100% 100%',
                               WebkitMaskPosition: 'center',
                               maskImage: coverPortalMaskChairUrl ? `url(${coverPortalMaskChairUrl})` : 'none',
-                              maskSize: 'cover',
+                              maskSize: '100% 100%',
                               maskPosition: 'center',
                               transform: swap ? 'scaleX(-1)' : 'none',
                               transformOrigin: 'center center',
-                              // Clip to chair area (always x: 0px..580px, y: 1200px..2000px in local space, mirrored dynamically)
-                              clipPath: swap 
-                                ? 'polygon(920px 1200px, 1500px 1200px, 1500px 2000px, 920px 2000px)' 
-                                : 'polygon(0px 1200px, 580px 1200px, 580px 2000px, 0px 2000px)',
+                              // Clip to chair area (always x: 0px..580px, y: 1200px..2000px in local space, scaled with viewport, mirrored dynamically by transform scaleX)
+                              clipPath: `polygon(0px ${1200 * S}px, ${580 * S}px ${1200 * S}px, ${580 * S}px ${2000 * S}px, 0px ${2000 * S}px)`,
                             }}
                           />
-
-                          {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                            
+                            {/* Light Leak Effect Overlay — professional cinematic light effect */}
                           <img
                             src={LIGHT_LEAK_OVERLAYS[2]}
                             alt=""
@@ -7481,7 +7993,15 @@ export default function DesignStudio() {
                               opacity: 0.35,
                             }}
                           />
+                          </div>
 
+                          {/* 2. WRITINGS & GLOWS (Stay in fixed position on the canvas, outside the wrapper) */}
+                          <div className="absolute pointer-events-none z-[7]" style={{ [swap ? 'left' : 'right']: '55%', [swap ? 'right' : 'left']: '4%', top: '18%', height: '64%', background: `radial-gradient(ellipse ${gI.spread}% ${gI.spread * 0.93}% at 50% 50%, ${glow}${alphaToHex(0.4 * gI.opacity)} 0%, ${glow}${alphaToHex(0.2 * gI.opacity)} 50%, transparent 85%)`, filter: `blur(${gI.blur}px)` } as React.CSSProperties} />
+                          <div className="absolute pointer-events-none z-[8]" style={{ [swap ? 'left' : 'right']: '55%', [swap ? 'right' : 'left']: '4%', top: '22%', height: '56%', background: `radial-gradient(ellipse ${gI.spread * 0.93}% ${gI.spread * 0.86}% at 50% 50%, ${glow}${alphaToHex(1 * gI.opacity)} 0%, ${glow}${alphaToHex(0.9 * gI.opacity)} 30%, ${glow}${alphaToHex(0.6 * gI.opacity)} 55%, ${glow}${alphaToHex(0.25 * gI.opacity)} 75%, transparent 92%)`, filter: `blur(${Math.max(8, gI.blur * 0.67)}px)` } as React.CSSProperties} />
+                          
+                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={imagesSide} />
+                          <TextBlock accent={accent} align={textAlign} imagesSide={imagesSide} />
+                          
                           <Footer accent={accent} reverse={!swap} />
                         </div>
                       );
@@ -7500,6 +8020,7 @@ export default function DesignStudio() {
 
                       const w = canvasWidth;
                       const h = canvasHeight;
+                      const scaleFactor = w / 1200;
 
                       const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
                       const activeIntensity = coverT5ColorMode ? (coverT4.fgBlur ?? 0.6) : 0;
@@ -8579,6 +9100,7 @@ export default function DesignStudio() {
 
                       const w = canvasWidth;
                       const h = canvasHeight;
+                      const scaleFactor = w / 1200;
 
                       const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
 
@@ -8713,7 +9235,7 @@ export default function DesignStudio() {
                           />
 
                           {/* 1. Header (Logo & Brand Info) */}
-                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} showBlurCard={true} />
+                          <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} showBlurCard={true} scaleFactor={scaleFactor} />
 
                           {/* 2. 3D Floating Mosaic Puzzle Blocks (Z-index: 10) */}
                           {coverShow.collage && (
@@ -8844,7 +9366,8 @@ export default function DesignStudio() {
                               left: '50%',
                               top: '50%',
                               width: `${cardW}px`,
-                              height: `${cardH}px`,
+                              minHeight: `${cardH}px`,
+                              height: 'auto',
                               transform: `translate(-50%, -50%) perspective(1200px) rotateX(${2 * activeIntensity}deg) rotateY(${-2 * activeIntensity}deg) translateZ(${80 * activeIntensity}px)`,
                               borderRadius: '24px',
                               backgroundColor: 'rgba(8, 12, 24, 0.52)',
@@ -8889,22 +9412,22 @@ export default function DesignStudio() {
 
                             {/* Brand Logo or Company Name inside the Frosted Panel at the Top */}
                             {coverShow.companyLogo && logoSrc ? (
-                              <div className="mb-14 z-10 flex justify-center items-center">
+                              <div className="z-10 flex justify-center items-center" style={{ marginBottom: `${Math.round(56 * scaleFactor)}px` }}>
                                 <img
                                   src={logoSrc}
                                   className="object-contain"
                                   style={{
-                                    height: `${coverFontSizes.companyBrandLogo * 0.85}px`,
-                                    maxWidth: `${coverFontSizes.companyBrandLogo * 3.2}px`
+                                    height: `${coverFontSizes.companyBrandLogo * 0.85 * scaleFactor}px`,
+                                    maxWidth: `${coverFontSizes.companyBrandLogo * 3.2 * scaleFactor}px`
                                   }}
                                 />
                               </div>
                             ) : (
                               coverShow.companyName && (
-                                <div className="mb-14 text-center z-10">
-                                  <div className="font-black font-sans leading-none" style={{ color: elColors.brandName || accent, fontSize: `${coverFontSizes.companyBrandName * 0.85}px` }}>{companyInfo.name}</div>
+                                <div className="text-center z-10" style={{ marginBottom: `${Math.round(56 * scaleFactor)}px` }}>
+                                  <div className="font-black font-sans leading-none" style={{ color: elColors.brandName || accent, fontSize: `${coverFontSizes.companyBrandName * 0.85 * scaleFactor}px` }}>{companyInfo.name}</div>
                                   {companyInfo.subtitle && (
-                                    <div className="text-white/60 font-semibold tracking-wider uppercase" style={{ fontSize: `${Math.max(9, Math.round(coverFontSizes.companyBrandName * 0.32))}px`, marginTop: '3px' }}>{companyInfo.subtitle}</div>
+                                    <div className="text-white/60 font-semibold tracking-wider uppercase" style={{ fontSize: `${Math.max(9, Math.round(coverFontSizes.companyBrandName * 0.32 * scaleFactor))}px`, marginTop: `${3 * scaleFactor}px` }}>{companyInfo.subtitle}</div>
                                   )}
                                 </div>
                               )
@@ -8914,11 +9437,12 @@ export default function DesignStudio() {
                             {coverShow.kicker && kickerText && (
                               <div 
                                 dir="rtl" 
-                                className="font-bold text-center tracking-widest mb-3 select-none z-10 uppercase" 
+                                className="font-bold text-center tracking-widest select-none z-10 uppercase" 
                                 style={{ 
                                   color: accent,
-                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9)}px`, 
+                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9 * scaleFactor)}px`, 
                                   textShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                                  marginBottom: `${Math.round(12 * scaleFactor)}px`
                                 }}
                               >
                                 {kickerText}
@@ -8930,7 +9454,7 @@ export default function DesignStudio() {
                               className="font-black text-center text-white select-none max-w-[85%] break-words z-10" 
                               style={{ 
                                 fontFamily: "'Tajawal', sans-serif", 
-                                fontSize: `${coverFontSizes.campaignName * 0.95}px`, 
+                                fontSize: `${coverFontSizes.campaignName * 0.95 * scaleFactor}px`, 
                                 lineHeight: 1.2,
                                 textShadow: '0 0 15px rgba(255,255,255,0.4), 0 4px 10px rgba(0,0,0,0.8)'
                               }}
@@ -8939,8 +9463,11 @@ export default function DesignStudio() {
                             </div>
 
                             {/* Horizontal Gold Line Divider */}
-                            <div className="w-20 h-[2px] mx-auto my-5 rounded-full z-10"
+                            <div className="mx-auto rounded-full z-10"
                               style={{
+                                width: `${Math.round(80 * scaleFactor)}px`,
+                                height: `${Math.max(1, Math.round(2 * scaleFactor))}px`,
+                                margin: `${Math.round(20 * scaleFactor)}px auto`,
                                 background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
                                 boxShadow: `0 0 8px ${getRGBAColor(accent, 0.7)}`
                               }}
@@ -8954,8 +9481,8 @@ export default function DesignStudio() {
                                   color: '#0a0a14', 
                                   background: `linear-gradient(135deg, #ffd700 0%, ${accent} 50%, #b8860b 100%)`, 
                                   borderRadius: '9999px', 
-                                  padding: '10px 36px', 
-                                  fontSize: `${coverFontSizes.tagline * 0.9}px`,
+                                  padding: `${Math.round(10 * scaleFactor)}px ${Math.round(36 * scaleFactor)}px`, 
+                                  fontSize: `${coverFontSizes.tagline * 0.9 * scaleFactor}px`,
                                   boxShadow: `0 10px 24px ${getRGBAColor(accent, 0.32)}, inset 0 1px 0 rgba(255, 255, 255, 0.4)`,
                                   fontFamily: "'Tajawal', sans-serif"
                                 }}
@@ -8972,12 +9499,12 @@ export default function DesignStudio() {
                             className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[22]"
                             style={{
                               mixBlendMode: 'screen',
-                              opacity: 0.38,
+                              opacity: 0.38 * coverLightLeaksIntensity,
                             }}
                           />
 
                           {/* Footer information displayed conditionally */}
-                          <Footer accent={accent} />
+                          <Footer accent={accent} scaleFactor={scaleFactor} />
                         </div>
                       );
                     }
@@ -8998,30 +9525,98 @@ export default function DesignStudio() {
                       // Gap size ratio derived from coverT4.cardHeight (default to 0.5)
                       const gapRatio = coverT4.cardHeight ?? 0.5;
                       
-                      const photos = pickPhotos(12); // 12 shards
-                      const crops = getTemplateCrops(photos, 12);
+                      const photos = pickPhotos(24); // 24 collage photos for more diversity
+                      const crops = getTemplateCrops(photos, 24);
 
                       const w = canvasWidth;
                       const h = canvasHeight;
+                      const scaleFactor = w / 1200;
                       const circleSize = Math.round(Math.min(w, h) * 0.48);
 
                       const spotlightColor = (!glow || glow === '#000000' || glow === 'black' || glow === '#000') ? accent : glow;
 
-                      // Define the 12 non-overlapping glass shards partitioning the canvas around center (50%, 50%)
-                      const shards = [
-                        { p: [{x: 0, y: 0}, {x: 35, y: 0}, {x: 48, y: 45}, {x: 0, y: 30}], cx: 20, cy: 18, rotX: -10, rotY: -10, rotZ: -4, tz: -15 },
-                        { p: [{x: 35, y: 0}, {x: 50, y: 0}, {x: 50, y: 43}, {x: 48, y: 45}], cx: 44, cy: 21, rotX: -12, rotY: -3, rotZ: -1, tz: -10 },
-                        { p: [{x: 50, y: 0}, {x: 68, y: 0}, {x: 53, y: 44}, {x: 50, y: 43}], cx: 57, cy: 21, rotX: -12, rotY: 3, rotZ: 1, tz: -10 },
-                        { p: [{x: 68, y: 0}, {x: 100, y: 0}, {x: 100, y: 35}, {x: 55, y: 46}, {x: 53, y: 44}], cx: 80, cy: 18, rotX: -10, rotY: 10, rotZ: 4, tz: -15 },
-                        { p: [{x: 55, y: 46}, {x: 100, y: 35}, {x: 100, y: 55}, {x: 56, y: 50}], cx: 82, cy: 45, rotX: -2, rotY: 12, rotZ: 2, tz: 5 },
-                        { p: [{x: 56, y: 50}, {x: 100, y: 55}, {x: 100, y: 75}, {x: 55, y: 54}], cx: 82, cy: 62, rotX: 2, rotY: 12, rotZ: -2, tz: 5 },
-                        { p: [{x: 55, y: 54}, {x: 100, y: 75}, {x: 100, y: 100}, {x: 75, y: 100}, {x: 53, y: 56}], cx: 80, cy: 82, rotX: 10, rotY: 10, rotZ: -4, tz: -20 },
-                        { p: [{x: 53, y: 56}, {x: 75, y: 100}, {x: 52, y: 100}, {x: 51, y: 57}], cx: 57, cy: 79, rotX: 12, rotY: 3, rotZ: -1, tz: -12 },
-                        { p: [{x: 51, y: 57}, {x: 52, y: 100}, {x: 30, y: 100}, {x: 48, y: 56}], cx: 44, cy: 79, rotX: 12, rotY: -3, rotZ: 1, tz: -12 },
-                        { p: [{x: 48, y: 56}, {x: 30, y: 100}, {x: 0, y: 100}, {x: 0, y: 75}, {x: 47, y: 54}], cx: 20, cy: 82, rotX: 10, rotY: -10, rotZ: 4, tz: -20 },
-                        { p: [{x: 47, y: 54}, {x: 0, y: 75}, {x: 0, y: 52}, {x: 46, y: 50}], cx: 18, cy: 62, rotX: 2, rotY: -12, rotZ: 2, tz: 8 },
-                        { p: [{x: 46, y: 50}, {x: 0, y: 52}, {x: 0, y: 30}, {x: 48, y: 45}], cx: 18, cy: 45, rotX: -2, rotY: -12, rotZ: -2, tz: 8 },
-                      ];
+                      // Dynamically generate 48 radial glass shards partitioning the canvas (16 rays x 3 concentric rings) to cover all 360° directions and corners
+                      const generateShatterShards = () => {
+                        const numRays = 16;
+                        const numRings = 3;
+                        const radii = [0, 18, 48, 115]; // Outer radius 115 ensures full corners coverage (sqrt(50^2 + 50^2) = 70.7)
+                        const center = { x: 50, y: 50 };
+                        const generated: Array<{ p: Array<{x: number; y: number}>; cx: number; cy: number; rotX: number; rotY: number; rotZ: number; tz: number }> = [];
+
+                        const shardRng = mulberry32(coverShuffleSeed + 999);
+
+                        for (let ring = 0; ring < numRings; ring++) {
+                          const rInner = radii[ring];
+                          const rOuter = radii[ring + 1];
+
+                          for (let ray = 0; ray < numRays; ray++) {
+                            const angle1 = (ray * 360) / numRays;
+                            const angle2 = ((ray + 1) * 360) / numRays;
+
+                            const rad1_1 = (angle1 * Math.PI) / 180;
+                            const rad2_1 = (angle2 * Math.PI) / 180;
+
+                            const points: Array<{x: number; y: number}> = [];
+                            
+                            if (ring === 0) {
+                              points.push({ x: center.x, y: center.y });
+                              points.push({
+                                x: center.x + rOuter * Math.cos(rad1_1),
+                                y: center.y + rOuter * Math.sin(rad1_1)
+                              });
+                              points.push({
+                                x: center.x + rOuter * Math.cos(rad2_1),
+                                y: center.y + rOuter * Math.sin(rad2_1)
+                              });
+                            } else {
+                              points.push({
+                                x: center.x + rInner * Math.cos(rad1_1),
+                                y: center.y + rInner * Math.sin(rad1_1)
+                              });
+                              points.push({
+                                x: center.x + rInner * Math.cos(rad2_1),
+                                y: center.y + rInner * Math.sin(rad2_1)
+                              });
+                              points.push({
+                                x: center.x + rOuter * Math.cos(rad2_1),
+                                y: center.y + rOuter * Math.sin(rad2_1)
+                              });
+                              points.push({
+                                x: center.x + rOuter * Math.cos(rad1_1),
+                                y: center.y + rOuter * Math.sin(rad1_1)
+                              });
+                            }
+
+                            let sumX = 0;
+                            let sumY = 0;
+                            points.forEach(pt => {
+                              sumX += pt.x;
+                              sumY += pt.y;
+                            });
+                            const cx = Math.max(2, Math.min(98, sumX / points.length));
+                            const cy = Math.max(2, Math.min(98, sumY / points.length));
+
+                            const tiltScale = (ring + 1) / numRings;
+                            const rotX = (shardRng() * 12 - 6) * tiltScale;
+                            const rotY = (shardRng() * 12 - 6) * tiltScale;
+                            const rotZ = (shardRng() * 8 - 4) * tiltScale;
+                            const tz = (shardRng() * 24 - 12) * tiltScale;
+
+                            generated.push({
+                              p: points,
+                              cx,
+                              cy,
+                              rotX,
+                              rotY,
+                              rotZ,
+                              tz
+                            });
+                          }
+                        }
+                        return generated;
+                      };
+
+                      const shards = generateShatterShards();
 
                       const campaignTitle = (adTypeOverride && adTypeOverride.trim()) || ((groupedContracts.find((x:any) => String(x.contract_id) === selectedContractId) as any)?.adType) || coverCampaignName || coverTitle2;
                       const kickerText = coverKicker;
@@ -9041,6 +9636,13 @@ export default function DesignStudio() {
                         <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" 
                           style={{ 
                             ['--cover-accent' as any]: accent, 
+                            ['--t8-bg-photo' as any]: `url('${bgPhoto}')`,
+                            ['--t8-glass-texture' as any]: `url('${coverCustomGlassTexture}')`,
+                            ['--t8-glass-sphere' as any]: `url('/cover-template3-glass-sphere.png')`,
+                            ['--t8-light-leak-0' as any]: `url('${LIGHT_LEAK_OVERLAYS[0]}')`,
+                            ['--t8-light-leak-1' as any]: `url('${LIGHT_LEAK_OVERLAYS[1]}')`,
+                            ['--t8-light-leak-2' as any]: `url('${LIGHT_LEAK_OVERLAYS[2]}')`,
+                            ['--t8-light-leak-4' as any]: `url('${LIGHT_LEAK_OVERLAYS[4]}')`,
                             background: '#010103',
                             padding: '64px' 
                           }}
@@ -9049,7 +9651,7 @@ export default function DesignStudio() {
                           <div 
                             className="absolute inset-0 z-0 pointer-events-none scale-105"
                             style={{
-                              backgroundImage: `url('${bgPhoto}')`,
+                              backgroundImage: 'var(--t8-bg-photo)',
                               backgroundSize: 'cover',
                               backgroundPosition: 'center',
                               filter: coverT5ColorMode
@@ -9113,7 +9715,7 @@ export default function DesignStudio() {
                               <mask id="shatter-mask" maskUnits="userSpaceOnUse" x="0" y="0" width={w} height={h}>
                                 <rect x="0" y="0" width={w} height={h} fill="black" />
                                 <image 
-                                  href="/cover-template8-mask.png" 
+                                  href={coverCustomGlassMask} 
                                   x="0" 
                                   y="0" 
                                   width={w} 
@@ -9135,6 +9737,23 @@ export default function DesignStudio() {
                                 WebkitMask: "url(#shatter-mask)",
                               }}
                             >
+                              {/* Flat base design layer inside the mask to fill any 3D gaps */}
+                              <div 
+                                className="absolute inset-0 pointer-events-none" 
+                                style={{ 
+                                  zIndex: 1,
+                                  backgroundImage: 'var(--t8-bg-photo)',
+                                  backgroundSize: 'cover',
+                                  backgroundPosition: 'center',
+                                  width: '100%',
+                                  height: '100%',
+                                  opacity: 0.92, // High opacity to ensure a full and rich fill
+                                  filter: coverT5ColorMode 
+                                    ? `contrast(1.05) brightness(0.85)` 
+                                    : 'none',
+                                }}
+                              />
+
                               {shards.map((c, idx) => {
                                 const photo = photos[idx % photos.length] || photos[0];
                                 if (!photo) return null;
@@ -9153,16 +9772,22 @@ export default function DesignStudio() {
 
                                 // Seeded random for glass refraction translation and rotation
                                 const shardRng = mulberry32(coverShuffleSeed + idx * 83);
-                                const zoomFactor = 1.22 + shardRng() * 0.28; // between 1.22x and 1.5x zoom
-                                const rotateAngle = (shardRng() * 14 - 7) * effectIntensity;
-                                const translateX = (shardRng() * 50 - 25) * effectIntensity;
-                                const translateY = (shardRng() * 50 - 25) * effectIntensity;
+                                const zoomFactor = coverT8StaticOnly ? 1.0 : 1.22 + shardRng() * 0.28; // between 1.22x and 1.5x zoom
+                                
+                                // Random horizontal and vertical flips for shattered puzzle mirroring
+                                const flipH = coverT8StaticOnly ? 1 : (shardRng() > 0.5 ? -1 : 1);
+                                const flipV = coverT8StaticOnly ? 1 : (shardRng() > 0.5 ? -1 : 1);
+                                
+                                // Larger, more dramatic random rotations and translations for shattered puzzle effect
+                                const rotateAngle = coverT8StaticOnly ? 0 : (shardRng() * 90 - 45) * effectIntensity;
+                                const translateX = coverT8StaticOnly ? 0 : (shardRng() * 80 - 40) * effectIntensity;
+                                const translateY = coverT8StaticOnly ? 0 : (shardRng() * 80 - 40) * effectIntensity;
 
-                                // 3D Rotations and Depth translation
-                                const rx = c.rotX * depthIntensity;
-                                const ry = c.rotY * depthIntensity;
-                                const rz = c.rotZ * depthIntensity;
-                                const tz = c.tz * depthIntensity;
+                                // Random 3D tilt offsets based on shuffle seed for realistic shattered depth changes
+                                const rx = coverT8StaticOnly ? 0 : (c.rotX + (shardRng() * 16 - 8)) * depthIntensity;
+                                const ry = coverT8StaticOnly ? 0 : (c.rotY + (shardRng() * 16 - 8)) * depthIntensity;
+                                const rz = coverT8StaticOnly ? 0 : (c.rotZ + (shardRng() * 40 - 20)) * depthIntensity;
+                                const tz = coverT8StaticOnly ? 0 : (c.tz + (shardRng() * 20 - 10)) * depthIntensity;
 
                                 return (
                                   <div
@@ -9171,7 +9796,10 @@ export default function DesignStudio() {
                                     style={{
                                       transform: `perspective(1200px) rotateX(${rx}deg) rotateY(${ry}deg) rotateZ(${rz}deg) translateZ(${tz}px)`,
                                       transformStyle: 'preserve-3d',
-                                      filter: `drop-shadow(0 ${8 * effectIntensity}px ${18 * effectIntensity}px rgba(0, 0, 0, ${0.5 * effectIntensity}))`,
+                                      filter: coverT8StaticOnly 
+                                        ? 'none' 
+                                        : `drop-shadow(0 ${8 * effectIntensity}px ${18 * effectIntensity}px rgba(0, 0, 0, ${0.5 * effectIntensity}))`,
+                                      zIndex: 10,
                                     }}
                                   >
                                     {/* Clipped image wrapper */}
@@ -9183,31 +9811,48 @@ export default function DesignStudio() {
                                       }}
                                     >
                                       {/* Image inside shard */}
-                                      <img
-                                        src={coverMixImages ? photo.url : bgPhoto}
-                                        crossOrigin="anonymous"
-                                        alt="Design Shard"
-                                        className="absolute object-cover"
-                                        style={coverMixImages ? {
-                                          left: `${c.cx}%`,
-                                          top: `${c.cy}%`,
-                                          width: '55%',
-                                          height: '55%',
-                                          objectFit: 'cover',
-                                          objectPosition: `${crop.x}% ${crop.y}%`,
-                                          transform: `translate(-50%, -50%) scale(${zoomFactor * (coverT4.zoom ?? 1.25)}) rotate(${rotateAngle}deg) translate(${translateX}px, ${translateY}px)`,
-                                          filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
-                                        } : {
-                                          left: 0,
-                                          top: 0,
-                                          width: '100%',
-                                          height: '100%',
-                                          objectFit: 'cover',
-                                          transform: `scale(${zoomFactor}) rotate(${rotateAngle}deg) translate(${translateX}px, ${translateY}px)`,
-                                          transformOrigin: `${c.cx}% ${c.cy}%`,
-                                          filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
-                                        }}
-                                      />
+                                      {coverMixImages ? (
+                                        <img
+                                          src={photo.url}
+                                          crossOrigin="anonymous"
+                                          alt="Design Shard"
+                                          className="absolute object-cover"
+                                          style={{
+                                            left: `${c.cx}%`,
+                                            top: `${c.cy}%`,
+                                            width: '75%',
+                                            height: '75%',
+                                            objectFit: 'cover',
+                                            objectPosition: `${crop.x}% ${crop.y}%`,
+                                            transform: `translate(-50%, -50%) scale(${zoomFactor * (coverT4.zoom ?? 1.25) * flipH}, ${zoomFactor * (coverT4.zoom ?? 1.25) * flipV}) rotate(${rotateAngle}deg) translate(${translateX}px, ${translateY}px)`,
+                                            filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                          }}
+                                        />
+                                      ) : (
+                                        <div
+                                          className="absolute"
+                                          style={coverT8StaticOnly ? {
+                                            left: 0,
+                                            top: 0,
+                                            width: '100%',
+                                            height: '100%',
+                                            backgroundImage: 'var(--t8-bg-photo)',
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: 'center',
+                                            filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                          } : {
+                                            left: `${c.cx}%`,
+                                            top: `${c.cy}%`,
+                                            width: '75%',
+                                            height: '75%',
+                                            backgroundImage: 'var(--t8-bg-photo)',
+                                            backgroundSize: 'cover',
+                                            backgroundPosition: `${Math.max(5, Math.min(95, c.cx + (shardRng() * 24 - 12)))}% ${Math.max(5, Math.min(95, c.cy + (shardRng() * 24 - 12)))}%`,
+                                            transform: `translate(-50%, -50%) scale(${zoomFactor * (coverT4.zoom ?? 1.25) * flipH}, ${zoomFactor * (coverT4.zoom ?? 1.25) * flipV}) rotate(${rotateAngle}deg) translate(${translateX}px, ${translateY}px)`,
+                                            filter: `contrast(${1.03 + (shardRng() * 0.06)}) brightness(${0.96 - activeIntensity * 0.05 + (shardRng() * 0.04 - 0.02)}) saturate(${0.95 - activeIntensity * 0.75}) grayscale(${activeIntensity * 0.8})`,
+                                          }}
+                                        />
+                                      )}
 
                                       {/* Color grading overlay */}
                                       <div className="absolute inset-0 pointer-events-none z-[4]"
@@ -9221,11 +9866,11 @@ export default function DesignStudio() {
                                       />
 
                                       {/* Specular light overlay 1: Liquid glass/rainbow sheen */}
-                                      <img
-                                        src={LIGHT_LEAK_OVERLAYS[2]}
-                                        alt=""
-                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[7]"
+                                      <div
+                                        className="absolute inset-0 w-full h-full pointer-events-none z-[7]"
                                         style={{
+                                          backgroundImage: 'var(--t8-light-leak-2)',
+                                          backgroundSize: 'cover',
                                           mixBlendMode: 'screen',
                                           opacity: 0.28,
                                           transform: `scale(${1.15 + shardRng() * 0.2}) rotate(${shardRng() * 60 - 30}deg)`,
@@ -9233,11 +9878,11 @@ export default function DesignStudio() {
                                       />
 
                                       {/* Specular light overlay 2: Scattered prisms */}
-                                      <img
-                                        src={LIGHT_LEAK_OVERLAYS[4]}
-                                        alt=""
-                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[7]"
+                                      <div
+                                        className="absolute inset-0 w-full h-full pointer-events-none z-[7]"
                                         style={{
+                                          backgroundImage: 'var(--t8-light-leak-4)',
+                                          backgroundSize: 'cover',
                                           mixBlendMode: 'screen',
                                           opacity: 0.32,
                                           transform: `scale(${1.2 + shardRng() * 0.15}) rotate(${shardRng() * 90 - 45}deg)`,
@@ -9245,11 +9890,11 @@ export default function DesignStudio() {
                                       />
 
                                       {/* Photorealistic glass reflection texture overlay */}
-                                      <img
-                                        src="/cover-template8-glass.jpg"
-                                        alt=""
-                                        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[8]"
+                                      <div
+                                        className="absolute inset-0 w-full h-full pointer-events-none z-[8]"
                                         style={{
+                                          backgroundImage: 'var(--t8-glass-texture)',
+                                          backgroundSize: 'cover',
                                           mixBlendMode: 'screen',
                                           opacity: 0.35 * Math.min(1.0, glassIntensity),
                                           transform: `scale(${1.1 + shardRng() * 0.1}) rotate(${shardRng() * 20 - 10}deg)`,
@@ -9306,23 +9951,22 @@ export default function DesignStudio() {
                               </svg>
 
                               {/* Ambient rainbow prisms overlay across all shards */}
-                              <img
-                                src={LIGHT_LEAK_OVERLAYS[4]}
-                                alt=""
-                                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[13]"
+                              <div
+                                className="absolute inset-0 w-full h-full pointer-events-none z-[13]"
                                 style={{
+                                  backgroundImage: 'var(--t8-light-leak-4)',
+                                  backgroundSize: 'cover',
                                   mixBlendMode: 'screen',
                                   opacity: 0.35,
                                 }}
                               />
 
                               {/* Global realistic glass shards render overlay */}
-                              {/* Global realistic glass shards render overlay */}
-                              <img
-                                src="/cover-template8-glass.jpg"
-                                alt=""
-                                className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[14]"
+                              <div
+                                className="absolute inset-0 w-full h-full pointer-events-none z-[14]"
                                 style={{
+                                  backgroundImage: 'var(--t8-glass-texture)',
+                                  backgroundSize: 'cover',
                                   mixBlendMode: 'screen',
                                   opacity: Math.min(1.0, glassIntensity) * 0.95,
                                   filter: `brightness(${1.0 + Math.min(1.0, glassIntensity) * 0.2}) contrast(${1.0 + Math.min(1.0, glassIntensity) * 0.15})`,
@@ -9331,11 +9975,11 @@ export default function DesignStudio() {
 
                               {/* Secondary duplicate glass overlay for extra density (rotated to fill gaps) */}
                               {glassIntensity > 0.8 && (
-                                <img
-                                  src="/cover-template8-glass.jpg"
-                                  alt=""
-                                  className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[14]"
+                                <div
+                                  className="absolute inset-0 w-full h-full pointer-events-none z-[14]"
                                   style={{
+                                    backgroundImage: 'var(--t8-glass-texture)',
+                                    backgroundSize: 'cover',
                                     mixBlendMode: 'screen',
                                     opacity: (glassIntensity - 0.8) * 0.95,
                                     transform: 'scale(1.05) rotate(180deg)',
@@ -9347,13 +9991,13 @@ export default function DesignStudio() {
                           )}
 
                           {/* Light Leak Layer 1: Warm amber/blue diagonal streak */}
-                          <img
-                            src={LIGHT_LEAK_OVERLAYS[1]}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[12]"
+                          <div
+                            className="absolute inset-0 w-full h-full pointer-events-none z-[12]"
                             style={{
+                              backgroundImage: 'var(--t8-light-leak-1)',
+                              backgroundSize: 'cover',
                               mixBlendMode: 'screen',
-                              opacity: 0.3,
+                              opacity: 0.3 * coverLightLeaksIntensity,
                             }}
                           />
 
@@ -9387,9 +10031,7 @@ export default function DesignStudio() {
                           />
 
                           {/* 3D Glass Sphere Texture Overlay */}
-                          <img
-                            src="/cover-template3-glass-sphere.png"
-                            alt=""
+                          <div
                             className="absolute pointer-events-none"
                             style={{
                               left: '50%',
@@ -9398,6 +10040,8 @@ export default function DesignStudio() {
                               height: `${circleSize}px`,
                               transform: `translate(-50%, -50%) scale(${coverT4.zoom ?? 1.25})`,
                               transformOrigin: 'center center',
+                              backgroundImage: 'var(--t8-glass-sphere)',
+                              backgroundSize: 'cover',
                               mixBlendMode: 'screen',
                               opacity: 0.98,
                               zIndex: 18
@@ -9430,13 +10074,13 @@ export default function DesignStudio() {
 
                             {/* Brand Logo inside the Frosted Panel at the Top */}
                             {coverShow.companyLogo && logoSrc && (
-                              <div className="mb-4 z-10 flex justify-center items-center">
+                              <div className="z-10 flex justify-center items-center" style={{ marginBottom: `${Math.round(16 * scaleFactor)}px` }}>
                                 <img
                                   src={logoSrc}
                                   className="object-contain"
                                   style={{
-                                    height: `${coverFontSizes.companyBrandLogo * 0.7}px`,
-                                    maxWidth: `${coverFontSizes.companyBrandLogo * 2.5}px`
+                                    height: `${coverFontSizes.companyBrandLogo * 0.7 * scaleFactor}px`,
+                                    maxWidth: `${coverFontSizes.companyBrandLogo * 2.5 * scaleFactor}px`
                                   }}
                                 />
                               </div>
@@ -9446,11 +10090,12 @@ export default function DesignStudio() {
                             {coverShow.kicker && kickerText && (
                               <div 
                                 dir="rtl" 
-                                className="font-bold text-center tracking-wide mb-1 select-none z-10" 
+                                className="font-bold text-center tracking-wide select-none z-10" 
                                 style={{ 
                                   color: accent,
-                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9)}px`, 
+                                  fontSize: `${Math.round(coverFontSizes.kicker * 0.9 * scaleFactor)}px`, 
                                   textShadow: '0 2px 4px rgba(0,0,0,0.6)',
+                                  marginBottom: `${Math.round(4 * scaleFactor)}px`
                                 }}
                               >
                                 {kickerText}
@@ -9462,7 +10107,7 @@ export default function DesignStudio() {
                               className="font-black text-center text-white select-none max-w-[90%] break-words z-10" 
                               style={{ 
                                 fontFamily: "'Tajawal', sans-serif", 
-                                fontSize: `${coverFontSizes.campaignName * 0.9}px`, 
+                                fontSize: `${coverFontSizes.campaignName * 0.9 * scaleFactor}px`, 
                                 lineHeight: 1.15,
                                 textShadow: '0 0 20px rgba(255,255,255,0.45), 0 4px 12px rgba(0,0,0,0.9)'
                               }}
@@ -9471,8 +10116,11 @@ export default function DesignStudio() {
                             </div>
 
                             {/* Small horizontal gold line divider */}
-                            <div className="w-14 h-[2px] mx-auto my-3.5 rounded-full z-10"
+                            <div className="mx-auto rounded-full z-10"
                               style={{
+                                width: `${Math.round(56 * scaleFactor)}px`,
+                                height: `${Math.max(1, Math.round(2 * scaleFactor))}px`,
+                                margin: `${Math.round(14 * scaleFactor)}px auto`,
                                 background: `linear-gradient(90deg, transparent, ${accent}, transparent)`,
                                 boxShadow: `0 0 8px ${getRGBAColor(accent, 0.7)}`
                               }}
@@ -9486,8 +10134,8 @@ export default function DesignStudio() {
                                   color: '#010103', 
                                   background: `linear-gradient(135deg, #ffd700 0%, ${accent} 50%, #b8860b 100%)`, 
                                   borderRadius: '9999px', 
-                                  padding: '8px 28px', 
-                                  fontSize: `${coverFontSizes.tagline * 0.85}px`,
+                                  padding: `${Math.round(8 * scaleFactor)}px ${Math.round(28 * scaleFactor)}px`, 
+                                  fontSize: `${coverFontSizes.tagline * 0.85 * scaleFactor}px`,
                                   boxShadow: `0 10px 20px ${getRGBAColor(accent, 0.3)}, inset 0 1px 0 rgba(255, 255, 255, 0.4)`,
                                   fontFamily: "'Tajawal', sans-serif"
                                 }}
@@ -9498,11 +10146,11 @@ export default function DesignStudio() {
                           </div>
 
                           {/* Light Leak Effect Overlay — professional cinematic light effect */}
-                          <img
-                            src={LIGHT_LEAK_OVERLAYS[0]}
-                            alt=""
-                            className="absolute inset-0 w-full h-full object-cover pointer-events-none z-[22]"
+                          <div
+                            className="absolute inset-0 w-full h-full pointer-events-none z-[22]"
                             style={{
+                              backgroundImage: 'var(--t8-light-leak-0)',
+                              backgroundSize: 'cover',
                               mixBlendMode: 'screen',
                               opacity: 0.38,
                             }}
@@ -10105,6 +10753,20 @@ export default function DesignStudio() {
                       </div>
                     )}
                   </>
+                )}
+
+                {/* Dashed boundary outline overlay during editing */}
+                {!isExporting && (
+                  <div
+                    style={{
+                      position: 'absolute',
+                      inset: 0,
+                      outline: '3px dashed #c9a84c',
+                      outlineOffset: '4px',
+                      pointerEvents: 'none',
+                      zIndex: 9999,
+                    }}
+                  />
                 )}
 
               </div>
