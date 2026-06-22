@@ -179,41 +179,51 @@ export function PrintAllContractBillboardsDialog({
 
   // دالة مساعدة: حل بيانات التصميم بشكل ذكي عبر جميع مهام العقد
   const resolveDesignDetails = (item: any) => {
-    let designFaceA = item.design_face_a as string | undefined;
-    let designFaceB = item.design_face_b as string | undefined;
+    let designFaceA = undefined;
+    let designFaceB = undefined;
     let designName = '';
 
-    // تجميع كل تصاميم العقد من جميع المهام
-    const allContractDesigns = contractTasks.flatMap(t => designsByTask[t.id] || []);
+    // تجميع تصاميم المهمة الحالية التي ينتمي إليها العنصر أولاً لضمان عدم ظهور تصاميم مهام قديمة
+    const currentTaskDesigns = designsByTask[item.task_id] || [];
 
-    // 1. محاولة المطابقة بـ selected_design_id
-    let matched = allContractDesigns.find((d: any) => d.id === item.selected_design_id);
+    // 1. محاولة المطابقة بـ selected_design_id داخل مهمة العنصر
+    let matched = currentTaskDesigns.find((d: any) => d.id === item.selected_design_id);
 
-    // 2. fallback: مطابقة بعنوان URL للصورة
-    if (!matched && (designFaceA || designFaceB)) {
-      matched = allContractDesigns.find((d: any) =>
-        (designFaceA && d.design_face_a_url === designFaceA) ||
-        (designFaceB && d.design_face_b_url === designFaceB)
+    // 2. fallback: مطابقة بعنوان URL للصورة داخل مهمة العنصر
+    if (!matched && (item.design_face_a || item.design_face_b)) {
+      matched = currentTaskDesigns.find((d: any) =>
+        (item.design_face_a && d.design_face_a_url === item.design_face_a) ||
+        (item.design_face_b && d.design_face_b_url === item.design_face_b)
       );
     }
 
-    // 3. fallback: أول تصميم لنفس المهمة
-    if (!matched) {
-      const taskDesigns = designsByTask[item.task_id] || [];
-      if (taskDesigns.length > 0) matched = taskDesigns[0];
+    // 3. fallback: أول تصميم لنفس مهمة العنصر
+    if (!matched && currentTaskDesigns.length > 0) {
+      matched = currentTaskDesigns[0];
     }
 
-    // 4. fallback: أول تصميم في العقد
-    if (!matched && allContractDesigns.length > 0) {
-      matched = allContractDesigns[0];
+    // 4. fallback: البحث عبر جميع مهام العقد إذا لم نعثر على تصميم في المهمة الحالية
+    if (!matched) {
+      const allContractDesigns = contractTasks.flatMap(t => designsByTask[t.id] || []);
+      matched = allContractDesigns.find((d: any) => d.id === item.selected_design_id);
+      if (!matched && (item.design_face_a || item.design_face_b)) {
+        matched = allContractDesigns.find((d: any) =>
+          (item.design_face_a && d.design_face_a_url === item.design_face_a) ||
+          (item.design_face_b && d.design_face_b_url === item.design_face_b)
+        );
+      }
+      if (!matched && allContractDesigns.length > 0) {
+        matched = allContractDesigns[0];
+      }
     }
 
     if (matched) {
       designName = matched.design_name || '';
-      if (!designFaceA) {
-        designFaceA = matched.design_face_a_url;
-        designFaceB = matched.design_face_b_url;
-      }
+      designFaceA = matched.design_face_a_url;
+      designFaceB = matched.design_face_b_url;
+    } else {
+      designFaceA = item.design_face_a;
+      designFaceB = item.design_face_b;
     }
 
     return { designFaceA, designFaceB, designName };

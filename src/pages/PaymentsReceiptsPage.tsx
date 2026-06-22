@@ -15,7 +15,7 @@ import { DistributedPaymentDetailsDialog } from '@/components/billing/Distribute
 import { PaymentsStatementPrintDialog } from '@/components/billing/PaymentsStatementPrintDialog';
 import { SendPaymentsReportDialog } from '@/components/billing/SendPaymentsReportDialog';
 
-import { calculateTotalRemainingDebt } from '@/components/billing/BillingUtils';
+import { calculateTotalRemainingDebt, filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
 import './PaymentsReceiptsPage.css';
 
 interface Payment {
@@ -134,13 +134,15 @@ export default function PaymentsReceiptsPage() {
 
   const fetchAllFinancialData = async () => {
     try {
-      const [contractsResult, salesInvoicesResult, printedInvoicesResult, purchaseInvoicesResult, discountsResult, compositeTasksResult] = await Promise.all([
+      const [contractsResult, salesInvoicesResult, printedInvoicesResult, purchaseInvoicesResult, discountsResult, compositeTasksResult, printTasksResult, cutoutTasksResult] = await Promise.all([
         supabase.from('Contract').select('Contract_Number, customer_id, Total, "Customer Name", friend_rental_data'),
         supabase.from('sales_invoices').select('customer_id, total_amount'),
         supabase.from('printed_invoices').select('id, customer_id, total_amount, included_in_contract'),
         supabase.from('purchase_invoices').select('customer_id, total_amount, used_as_payment'),
         supabase.from('customer_general_discounts').select('customer_id, discount_value, status').eq('status', 'active'),
         supabase.from('composite_tasks').select('customer_id, customer_total, combined_invoice_id'),
+        supabase.from('print_tasks').select('id, customer_id, invoice_id, is_composite, installation_task_id, composite_task_id'),
+        supabase.from('cutout_tasks' as any).select('id, customer_id, invoice_id, is_composite, installation_task_id'),
       ]);
 
       return {
@@ -150,10 +152,21 @@ export default function PaymentsReceiptsPage() {
         purchaseInvoices: purchaseInvoicesResult.data || [],
         discounts: discountsResult.data || [],
         compositeTasks: compositeTasksResult.data || [],
+        printTasks: printTasksResult.data || [],
+        cutoutTasks: cutoutTasksResult.data || [],
       };
     } catch (error) {
       console.error('خطأ في جلب البيانات المالية:', error);
-      return { contracts: [], salesInvoices: [], printedInvoices: [], purchaseInvoices: [], discounts: [], compositeTasks: [] };
+      return { 
+        contracts: [], 
+        salesInvoices: [], 
+        printedInvoices: [], 
+        purchaseInvoices: [], 
+        discounts: [], 
+        compositeTasks: [],
+        printTasks: [],
+        cutoutTasks: []
+      };
     }
   };
 
@@ -301,7 +314,9 @@ export default function PaymentsReceiptsPage() {
         financialData.printedInvoices,
         financialData.purchaseInvoices,
         financialData.discounts,
-        financialData.compositeTasks
+        financialData.compositeTasks,
+        (financialData as any).printTasks || [],
+        (financialData as any).cutoutTasks || []
       );
       setPayments(paymentsWithBalance);
       calculateStats(paymentsWithBalance);
@@ -320,7 +335,9 @@ export default function PaymentsReceiptsPage() {
     printedInvoices: any[],
     purchaseInvoices: any[],
     discounts: any[],
-    compositeTasks: any[] = []
+    compositeTasks: any[] = [],
+    printTasks: any[] = [],
+    cutoutTasks: any[] = []
   ): Payment[] => {
     const customerDiscounts: Record<string, number> = {};
     discounts.forEach(discount => {
@@ -362,11 +379,20 @@ export default function PaymentsReceiptsPage() {
       });
       const customerContracts = contracts.filter(c => c.customer_id === cid);
       const customerSalesInvoices = salesInvoices.filter(inv => inv.customer_id === cid);
-      const customerPrintedInvoices = printedInvoices.filter(inv => inv.customer_id === cid);
+      const rawCustomerPrintedInvoices = printedInvoices.filter(inv => inv.customer_id === cid);
       const customerPurchaseInvoices = purchaseInvoices.filter(inv => inv.customer_id === cid);
       const customerCompositeTasks = compositeTasks.filter(t => t.customer_id === cid);
+      const customerPrintTasks = printTasks.filter(t => t.customer_id === cid);
+      const customerCutoutTasks = cutoutTasks.filter(t => t.customer_id === cid);
       const totalDiscounts = customerDiscounts[cid] || 0;
       const friendRentals = customerFriendRentals[cid] || 0;
+
+      const customerPrintedInvoices = filterCompositeRelatedPrintedInvoices(
+        rawCustomerPrintedInvoices,
+        customerCompositeTasks,
+        customerPrintTasks,
+        customerCutoutTasks
+      );
 
       let runningBalance = 0;
       for (let i = 0; i < cPayments.length; i++) {
@@ -566,7 +592,17 @@ export default function PaymentsReceiptsPage() {
       if (!data || data.length === 0) { toast.error('لم يتم العثور على الدفعة'); return; }
       
       const financialData = await fetchAllFinancialData();
-      const paymentsWithBalance = calculateBalances(data, financialData.contracts, financialData.salesInvoices, financialData.printedInvoices, financialData.purchaseInvoices, financialData.discounts, financialData.compositeTasks);
+      const paymentsWithBalance = calculateBalances(
+        data, 
+        financialData.contracts, 
+        financialData.salesInvoices, 
+        financialData.printedInvoices, 
+        financialData.purchaseInvoices, 
+        financialData.discounts, 
+        financialData.compositeTasks,
+        (financialData as any).printTasks || [],
+        (financialData as any).cutoutTasks || []
+      );
       setSelectedDistributedPayments(paymentsWithBalance);
       setDistributedPaymentDialogOpen(true);
     } catch (error) {

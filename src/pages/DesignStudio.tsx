@@ -729,40 +729,55 @@ export default function DesignStudio() {
   const [coverPortalMaskWindowUrl, setCoverPortalMaskWindowUrl] = useState<string>('');
   const [coverPortalMaskReflectionUrl, setCoverPortalMaskReflectionUrl] = useState<string>('');
   const [coverPortalMaskChairUrl, setCoverPortalMaskChairUrl] = useState<string>('');
+  const [coverCustomGlassMaskProcessed, setCoverCustomGlassMaskProcessed] = useState<string>('');
+  const [coverCustomGlassTextureProcessed, setCoverCustomGlassTextureProcessed] = useState<string>('');
+
+  const processMask = useCallback((src: string, setUrl: (url: string) => void) => {
+    if (!src) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0);
+      const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imgData.data;
+      for (let i = 0; i < data.length; i += 4) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+        data[i + 3] = lum; // Set alpha channel to luminance
+      }
+      ctx.putImageData(imgData, 0, 0);
+      setUrl(canvas.toDataURL('image/png'));
+    };
+    img.onerror = (e) => {
+      console.error(`Failed to load mask image: ${src}`, e);
+    };
+    img.src = src;
+  }, []);
 
   useEffect(() => {
-    const processMask = (src: string, setUrl: (url: string) => void) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext('2d');
-        if (!ctx) return;
-        ctx.drawImage(img, 0, 0);
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const data = imgData.data;
-        for (let i = 0; i < data.length; i += 4) {
-          const r = data[i];
-          const g = data[i + 1];
-          const b = data[i + 2];
-          const lum = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-          data[i + 3] = lum; // Set alpha channel to luminance
-        }
-        ctx.putImageData(imgData, 0, 0);
-        setUrl(canvas.toDataURL('image/png'));
-      };
-      img.onerror = (e) => {
-        console.error(`Failed to load mask image: ${src}`, e);
-      };
-      img.src = src;
-    };
-
     processMask('/cover-portal-mask-window.png', setCoverPortalMaskWindowUrl);
     processMask('/cover-portal-mask-reflection.png', setCoverPortalMaskReflectionUrl);
     processMask('/cover-portal-mask-chair.png', setCoverPortalMaskChairUrl);
-  }, []);
+  }, [processMask]);
+
+  useEffect(() => {
+    if (coverCustomGlassMask) {
+      processMask(coverCustomGlassMask, setCoverCustomGlassMaskProcessed);
+    }
+  }, [coverCustomGlassMask, processMask]);
+
+  useEffect(() => {
+    if (coverCustomGlassTexture) {
+      processMask(coverCustomGlassTexture, setCoverCustomGlassTextureProcessed);
+    }
+  }, [coverCustomGlassTexture, processMask]);
 
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
@@ -3624,6 +3639,7 @@ export default function DesignStudio() {
     zoom,
     cropX,
     cropY,
+    objectFit = 'cover',
   }: {
     src: string;
     blur: number;
@@ -3637,6 +3653,7 @@ export default function DesignStudio() {
     zoom?: number;
     cropX?: number;
     cropY?: number;
+    objectFit?: 'cover' | 'contain' | 'fill';
   }) => {
     const filterId = useMemo(() => Math.random().toString(36).substring(2, 9), []);
 
@@ -3647,34 +3664,50 @@ export default function DesignStudio() {
       top: 0,
       width: '100%',
       height: '100%',
-      objectFit: 'cover',
+      objectFit: objectFit,
       objectPosition: objectPosition || '50% 50%',
       transform: transform,
       transformOrigin: transformOrigin || '50% 50%',
     };
 
-    if (zoom !== undefined && zoom > 1 && cropX !== undefined && cropY !== undefined) {
-      const cX = cropX;
-      const cY = cropY;
-      
-      const maxShiftX = -(zoom - 1) * 100;
-      const calculatedLeft = 50 - cX * zoom;
-      const finalLeft = Math.min(0, Math.max(maxShiftX, calculatedLeft));
+    if (zoom !== undefined && cropX !== undefined && cropY !== undefined) {
+      if (zoom >= 1.0) {
+        const cX = cropX;
+        const cY = cropY;
+        
+        const maxShiftX = -(zoom - 1) * 100;
+        const calculatedLeft = 50 - cX * zoom;
+        const finalLeft = Math.min(0, Math.max(maxShiftX, calculatedLeft));
 
-      const maxShiftY = -(zoom - 1) * 100;
-      const calculatedTop = 50 - cY * zoom;
-      const finalTop = Math.min(0, Math.max(maxShiftY, calculatedTop));
-      
-      imgStyle = {
-        ...imgStyle,
-        left: `${finalLeft.toFixed(2)}%`,
-        top: `${finalTop.toFixed(2)}%`,
-        width: `${(zoom * 100).toFixed(2)}%`,
-        height: `${(zoom * 100).toFixed(2)}%`,
-        maxWidth: 'none',
-        maxHeight: 'none',
-        objectPosition: `${cX}% ${cY}%`,
-      };
+        const maxShiftY = -(zoom - 1) * 100;
+        const calculatedTop = 50 - cY * zoom;
+        const finalTop = Math.min(0, Math.max(maxShiftY, calculatedTop));
+        
+        imgStyle = {
+          ...imgStyle,
+          left: `${finalLeft.toFixed(2)}%`,
+          top: `${finalTop.toFixed(2)}%`,
+          width: `${(zoom * 100).toFixed(2)}%`,
+          height: `${(zoom * 100).toFixed(2)}%`,
+          maxWidth: 'none',
+          maxHeight: 'none',
+          objectPosition: `${cX}% ${cY}%`,
+          objectFit: objectFit,
+        };
+      } else {
+        // For zoom < 1.0 (slats container background compensation), scale uniformly via transform
+        // to prevent aspect ratio distortion (stretching) inside narrow viewport boxes
+        imgStyle = {
+          ...imgStyle,
+          width: '100%',
+          height: '100%',
+          left: 0,
+          top: 0,
+          transform: transform ? `${transform} scale(${zoom})` : `scale(${zoom})`,
+          transformOrigin: 'center center',
+          objectFit: objectFit,
+        };
+      }
     } else if (cropX !== undefined && cropY !== undefined) {
       imgStyle = {
         ...imgStyle,
@@ -3701,9 +3734,7 @@ export default function DesignStudio() {
           style={{
             ...imgStyle,
             filter: blur > 0 
-              ? (isExporting 
-                  ? `url(#svg-blur-${filterId}) saturate(${saturate}) brightness(${brightness})`
-                  : `blur(${blur}px) saturate(${saturate}) brightness(${brightness})`)
+              ? `blur(${blur}px) saturate(${saturate}) brightness(${brightness})`
               : `saturate(${saturate}) brightness(${brightness})`
           }}
         />
@@ -4894,9 +4925,14 @@ export default function DesignStudio() {
                                             onChange={(e) => {
                                               const file = e.target.files?.[0];
                                               if (file) {
-                                                const url = URL.createObjectURL(file);
-                                                setCoverCustomGlassMask(url);
-                                                toast.success('تم تحميل قناع الزجاج المخصص بنجاح!');
+                                                const reader = new FileReader();
+                                                reader.onload = (event) => {
+                                                  if (event.target?.result) {
+                                                    setCoverCustomGlassMask(event.target.result as string);
+                                                    toast.success('تم تحميل قناع الزجاج المخصص بنجاح!');
+                                                  }
+                                                };
+                                                reader.readAsDataURL(file);
                                               }
                                             }} 
                                           />
@@ -4911,9 +4947,14 @@ export default function DesignStudio() {
                                             onChange={(e) => {
                                               const file = e.target.files?.[0];
                                               if (file) {
-                                                const url = URL.createObjectURL(file);
-                                                setCoverCustomGlassTexture(url);
-                                                toast.success('تم تحميل خامة الزجاج المخصصة بنجاح!');
+                                                const reader = new FileReader();
+                                                reader.onload = (event) => {
+                                                  if (event.target?.result) {
+                                                    setCoverCustomGlassTexture(event.target.result as string);
+                                                    toast.success('تم تحميل خامة الزجاج المخصصة بنجاح!');
+                                                  }
+                                                };
+                                                reader.readAsDataURL(file);
                                               }
                                             }} 
                                           />
@@ -5008,7 +5049,7 @@ export default function DesignStudio() {
                                            <span>تحريك المشهد أفقياً</span>
                                            <span className="text-[10px] text-primary">{coverT5SceneX}px</span>
                                          </div>
-                                         <Slider min={-800} max={800} step={1} value={[coverT5SceneX]} onValueChange={([v]) => setCoverT5SceneX(v)} />
+                                         <Slider min={-1500} max={1500} step={1} value={[coverT5SceneX]} onValueChange={([v]) => setCoverT5SceneX(v)} />
                                        </div>
 
                                        <div className="space-y-1 pt-1">
@@ -5016,7 +5057,7 @@ export default function DesignStudio() {
                                            <span>تحريك المشهد رأسياً</span>
                                            <span className="text-[10px] text-primary">{coverT5SceneY}px</span>
                                          </div>
-                                         <Slider min={-800} max={800} step={1} value={[coverT5SceneY]} onValueChange={([v]) => setCoverT5SceneY(v)} />
+                                         <Slider min={-1500} max={1500} step={1} value={[coverT5SceneY]} onValueChange={([v]) => setCoverT5SceneY(v)} />
                                        </div>
                                      </div>
                                    )}
@@ -7125,10 +7166,35 @@ export default function DesignStudio() {
 
                       const renderWindowSlats = (isReflection = false) => {
                         const bgCrops = getTemplateCrops(photos, coverT5SlatCount);
+                        
+                        const outerStyle: React.CSSProperties = {
+                          position: 'absolute',
+                          left: 0,
+                          top: 0,
+                          right: 0,
+                          bottom: 0,
+                          opacity: isReflection ? 0.45 : 0.8,
+                        };
+
+                        const sceneZoom = coverT5SceneZoom;
+                        const panX = coverT5SceneX * S;
+                        const panY = (isReflection ? -coverT5SceneY : coverT5SceneY) * S;
+
                         return (
-                          <div className="absolute inset-0 flex pointer-events-none" style={{ opacity: isReflection ? 0.45 : 0.8 }}>
-                            {/* Unified continuous blurred background of design images */}
-                            <div className="absolute inset-0 flex z-0">
+                          <div className="flex pointer-events-none" style={outerStyle}>
+                            {/* Unified continuous blurred background of design images (oversized wrapper to prevent gaps) */}
+                            <div 
+                              className="absolute z-0" 
+                              style={{
+                                left: '-75%',
+                                top: '-75%',
+                                width: '250%',
+                                height: '250%',
+                                transform: `scale(${sceneZoom}) translate(${panX}px, ${panY}px)`,
+                                transformOrigin: 'center center',
+                                display: 'block', // Use block instead of flex to prevent layout squeezing
+                              }}
+                            >
                               <div className="absolute inset-0 z-0 bg-black" />
                               <div 
                                 className="absolute inset-0 z-10" 
@@ -7157,30 +7223,37 @@ export default function DesignStudio() {
                                        blur={coverT4.bgBlur} 
                                        saturate={1.95} 
                                        brightness={0.78} 
-                                       transform={`scale(1.2) ${isReflection ? 'scaleY(-1)' : ''}`} 
+                                       zoom={1.2 / 2.5}
+                                       cropX={50}
+                                       cropY={50}
+                                       objectFit={coverT5Style === 'style5' && !coverT5FillBackground ? 'contain' : 'cover'}
                                        className="w-full h-full"
                                      />
                                   </div>
                                 ) : (
-                                  Array.from({ length: coverT5SlatCount }).map((_, colIdx) => {
-                                    const photo = photos[colIdx % photos.length];
-                                    if (!photo) return null;
-                                    return (
-                                      <div key={`win-bg-photo-${colIdx}`} className="h-full flex-1 relative z-10">
-                                         <BlurredImage 
-                                           src={photo.url} 
-                                           blur={coverT4.bgBlur} 
-                                           saturate={1.95} 
-                                           brightness={0.78} 
-                                           zoom={1.6}
-                                           cropX={bgCrops[colIdx]?.x ?? 50}
-                                           cropY={50}
-                                           transform={isReflection ? 'scaleY(-1)' : undefined} 
-                                           className="w-full h-full"
-                                         />
-                                      </div>
-                                    );
-                                  })
+                                  <div className="absolute inset-0 z-10 flex">
+                                    {Array.from({ length: coverT5SlatCount }).map((_, colIdx) => {
+                                      const photo = photos[colIdx % photos.length] || photos[0];
+                                      if (!photo) return null;
+                                      // Continuous slicing crop for a natural shattered glass effect
+                                      const sliceCropX = ((colIdx + 0.5) / coverT5SlatCount) * 100;
+                                      return (
+                                        <div key={`win-bg-photo-${colIdx}`} className="h-full flex-1 relative z-10">
+                                           <BlurredImage 
+                                             src={photo.url} 
+                                             blur={coverT4.bgBlur} 
+                                             saturate={1.95} 
+                                             brightness={0.78} 
+                                             zoom={1.6 / 2.5}
+                                             cropX={sliceCropX}
+                                             cropY={50}
+                                             objectFit="cover"
+                                             className="w-full h-full"
+                                           />
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
                                 )
                               )}
                             </div>
@@ -7215,9 +7288,11 @@ export default function DesignStudio() {
                             </div>
 
                             {/* Wavy Glass Columns applied inside the background slats */}
-                            <div className="absolute inset-0 z-20">
-                              <WavyGlass accent={accent} opacity={0.65} density="ultra" blur={coverT4.bgBlur} />
-                            </div>
+                            {coverT4.bgBlur > 0 && (
+                              <div className="absolute inset-0 z-20">
+                                <WavyGlass accent={accent} opacity={0.65} density="ultra" blur={coverT4.bgBlur} />
+                              </div>
+                            )}
                           </div>
                         );
                       };
@@ -7762,6 +7837,11 @@ export default function DesignStudio() {
                         return null;
                       };
 
+                      const sceneW = 2752 * (2000 / 1536) * S; // 3583.33 * S
+                      const sceneH = 2000 * S;
+                      const sceneLeft = (1500 * S - sceneW) / 2; // -1041.67 * S
+
+
                       return (
                         <div className="w-full h-full relative flex flex-col select-none text-white overflow-hidden" style={{ ['--cover-accent' as any]: accent, padding: '64px' }}>
                           
@@ -7777,213 +7857,179 @@ export default function DesignStudio() {
                               transformOrigin: 'center center',
                             }}
                           >
-                            <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: `url('/cover-bg-portal.png')`, backgroundSize: '100% 100%', backgroundPosition: 'center', width: '100%', height: '100%', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
-                            
-                            {/* Color tint overlays */}
-                            <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.28 * coverLightLeaksIntensity, mixBlendMode: 'color', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
-                            <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.12, mixBlendMode: 'multiply', transform: swap ? 'scaleX(-1)' : 'none', transformOrigin: 'center center' }} />
-                            
-                            {coverShow.collage && (
-                            <>
-                              {/* Main collage inside the window using custom Photoshop mask */}
-                              <div
-                                className="absolute inset-0 pointer-events-none"
-                                style={{
-                                  zIndex: 10,
-                                  WebkitMaskImage: coverPortalMaskWindowUrl ? `url(${coverPortalMaskWindowUrl})` : 'none',
-                                  WebkitMaskSize: '100% 100%',
-                                  WebkitMaskPosition: 'center',
-                                  maskImage: coverPortalMaskWindowUrl ? `url(${coverPortalMaskWindowUrl})` : 'none',
-                                  maskSize: '100% 100%',
-                                  maskPosition: 'center',
-                                  transform: swap ? 'scaleX(-1)' : 'none',
-                                  transformOrigin: 'center center',
-                                  // Clip to exclude reflection and chair (always x: 531px..1500px, y: 0px..1551px in local space, mirrored dynamically by transform scaleX)
-                                  clipPath: `polygon(${531 * S}px 0px, ${1500 * S}px 0px, ${1500 * S}px ${1551 * S}px, ${531 * S}px ${1551 * S}px)`,
-                                }}
-                              >
+                            {/* Inner scene box maintaining 2752x1536 aspect ratio to prevent room stretching */}
+                            <div 
+                              className="absolute" 
+                              style={{ 
+                                left: `${sceneLeft}px`,
+                                top: 0,
+                                width: `${sceneW}px`,
+                                height: `${sceneH}px`,
+                                transform: swap ? 'scaleX(-1)' : 'none',
+                                transformOrigin: 'center center'
+                              }}
+                            >
+                              <div className="absolute inset-0 z-0 pointer-events-none" style={{ backgroundImage: `url('/cover-bg-portal.png')`, backgroundSize: '100% 100%', backgroundPosition: 'center' }} />
+                              
+                              {/* Color tint overlays */}
+                              <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.28 * coverLightLeaksIntensity, mixBlendMode: 'color' }} />
+                              <div className="absolute inset-0 z-[26] pointer-events-none" style={{ backgroundColor: accent, opacity: 0.12, mixBlendMode: 'multiply' }} />
+                              
+                              {coverShow.collage && (
+                              <>
+                                {/* Main collage inside the window using custom Photoshop mask */}
                                 <div
+                                  className="absolute inset-0 pointer-events-none"
                                   style={{
-                                    position: 'absolute',
-                                    top: `${winTop}px`,
-                                    left: `${winLeft}px`,
-                                    width: `${winWidth}px`,
-                                    height: `${winHeight}px`,
-                                    background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}25 50%, #040302 100%)`, // Deep warm core glow
-                                    borderRadius: `${8 * S}px`,
-                                    overflow: 'hidden', // Contain all overlays
+                                    zIndex: 10,
+                                    WebkitMaskImage: coverPortalMaskWindowUrl ? `url(${coverPortalMaskWindowUrl})` : 'none',
+                                    WebkitMaskSize: '100% 100%',
+                                    WebkitMaskPosition: 'center',
+                                    maskImage: coverPortalMaskWindowUrl ? `url(${coverPortalMaskWindowUrl})` : 'none',
+                                    maskSize: '100% 100%',
+                                    maskPosition: 'center',
                                   }}
                                 >
-                                  <div 
-                                    className="relative w-full h-full" 
-                                    style={{ 
-                                      perspective: `${1500 * S}px`,
-                                      transform: `scale(${coverT5SceneZoom}) translate(${coverT5SceneX * S}px, ${coverT5SceneY * S}px)`,
-                                      transformOrigin: 'center center'
+                                  {/* Collage content fills entire mask — mask defines visible area */}
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}25 50%, #040302 100%)`,
                                     }}
                                   >
-                                    {renderWindowSlats(false)}
-                                    
-                                    {/* Starfield overlay (sharp stars behind cards, in front of slats) */}
-                                    <div className="absolute inset-0 pointer-events-none z-10 opacity-75" style={{
-                                      backgroundImage: `
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${30 * S}px ${40 * S}px, #fff, transparent),
-                                        radial-gradient(${2 * S}px ${2 * S}px at ${170 * S}px ${90 * S}px, #fff, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${90 * S}px ${290 * S}px, #fff, transparent),
-                                        radial-gradient(${2.5 * S}px ${2.5 * S}px at ${320 * S}px ${150 * S}px, #fff, transparent),
-                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${390 * S}px ${380 * S}px, ${accent}, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${490 * S}px ${100 * S}px, #fff, transparent),
-                                        radial-gradient(${2.2 * S}px ${2.2 * S}px at ${620 * S}px ${330 * S}px, #fff, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${680 * S}px ${480 * S}px, #fff, transparent),
-                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${740 * S}px ${220 * S}px, ${accent}, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${60 * S}px ${650 * S}px, #fff, transparent),
-                                        radial-gradient(${2.5 * S}px ${2.5 * S}px at ${200 * S}px ${790 * S}px, #fff, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${350 * S}px ${880 * S}px, #fff, transparent),
-                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${520 * S}px ${1050 * S}px, #fff, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${650 * S}px ${1200 * S}px, #fff, transparent),
-                                        radial-gradient(${2.5 * S}px ${2.5 * S}px at ${240 * S}px ${1350 * S}px, ${accent}, transparent),
-                                        radial-gradient(${1.8 * S}px ${1.8 * S}px at ${450 * S}px ${1450 * S}px, #fff, transparent),
-                                        radial-gradient(${1.2 * S}px ${1.2 * S}px at ${180 * S}px ${1500 * S}px, #fff, transparent),
-                                        radial-gradient(${2.8 * S}px ${2.8 * S}px at ${710 * S}px ${920 * S}px, #fff, transparent)
-                                      `,
-                                      backgroundSize: `${400 * S}px ${600 * S}px`,
-                                      mixBlendMode: 'screen',
-                                    }} />
+                                    <div 
+                                      className="relative w-full h-full" 
+                                      style={{ 
+                                        perspective: `${1500 * S}px`,
+                                        transform: `scale(${coverT5SceneZoom}) translate(${coverT5SceneX * S}px, ${coverT5SceneY * S}px)`,
+                                        transformOrigin: 'center center'
+                                      }}
+                                    >
+                                      {renderWindowSlats(false)}
+                                      
+                                      {/* Starfield overlay */}
+                                      <div className="absolute inset-0 pointer-events-none z-10 opacity-75" style={{
+                                        backgroundImage: `
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${30 * S}px ${40 * S}px, #fff, transparent),
+                                          radial-gradient(${2 * S}px ${2 * S}px at ${170 * S}px ${90 * S}px, #fff, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${90 * S}px ${290 * S}px, #fff, transparent),
+                                          radial-gradient(${2.5 * S}px ${2.5 * S}px at ${320 * S}px ${150 * S}px, #fff, transparent),
+                                          radial-gradient(${1.8 * S}px ${1.8 * S}px at ${390 * S}px ${380 * S}px, ${accent}, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${490 * S}px ${100 * S}px, #fff, transparent),
+                                          radial-gradient(${2.2 * S}px ${2.2 * S}px at ${620 * S}px ${330 * S}px, #fff, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${680 * S}px ${480 * S}px, #fff, transparent),
+                                          radial-gradient(${1.8 * S}px ${1.8 * S}px at ${740 * S}px ${220 * S}px, ${accent}, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${60 * S}px ${650 * S}px, #fff, transparent),
+                                          radial-gradient(${2.5 * S}px ${2.5 * S}px at ${200 * S}px ${790 * S}px, #fff, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${350 * S}px ${880 * S}px, #fff, transparent),
+                                          radial-gradient(${1.8 * S}px ${1.8 * S}px at ${520 * S}px ${1050 * S}px, #fff, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${650 * S}px ${1200 * S}px, #fff, transparent),
+                                          radial-gradient(${2.5 * S}px ${2.5 * S}px at ${240 * S}px ${1350 * S}px, ${accent}, transparent),
+                                          radial-gradient(${1.8 * S}px ${1.8 * S}px at ${450 * S}px ${1450 * S}px, #fff, transparent),
+                                          radial-gradient(${1.2 * S}px ${1.2 * S}px at ${180 * S}px ${1500 * S}px, #fff, transparent),
+                                          radial-gradient(${2.8 * S}px ${2.8 * S}px at ${710 * S}px ${920 * S}px, #fff, transparent)
+                                        `,
+                                        backgroundSize: `${400 * S}px ${600 * S}px`,
+                                        mixBlendMode: 'screen',
+                                      }} />
 
-                                    {/* Cosmic cloud SVG overlay for organic nebula dust detail */}
-                                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 opacity-30 mix-blend-color-dodge">
-                                      <filter id="cosmic-dust">
-                                        <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="noise" />
-                                        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
-                                      </filter>
-                                      <rect width="100%" height="100%" filter="url(#cosmic-dust)" fill={accent} />
-                                    </svg>
+                                      {/* Cosmic cloud SVG overlay */}
+                                      <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 opacity-30 mix-blend-color-dodge">
+                                        <filter id="cosmic-dust">
+                                          <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="noise" />
+                                          <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
+                                        </filter>
+                                        <rect width="100%" height="100%" filter="url(#cosmic-dust)" fill={accent} />
+                                      </svg>
 
-                                    {/* Deep inner shadow frame overlay (z-20) to force shadow on top of background & slats */}
-                                    <div className="absolute inset-0 pointer-events-none z-20" style={{
-                                      boxShadow: `inset 0 0 ${120 * S}px rgba(0,0,0,0.98), inset 0 0 ${50 * S}px ${accent}40`,
-                                      borderRadius: `${8 * S}px`,
-                                      border: `${2.5 * S}px solid ${accent}50`, // Glowing golden frame rim
-                                    }} />
+                                      {/* Deep inner shadow frame overlay */}
+                                      <div className="absolute inset-0 pointer-events-none z-20" style={{
+                                        boxShadow: `inset 0 0 ${120 * S}px rgba(0,0,0,0.98), inset 0 0 ${50 * S}px ${accent}40`,
+                                        border: `${2.5 * S}px solid ${accent}50`,
+                                      }} />
 
-                                    {renderCollageItems(false)}
+                                      {renderCollageItems(false)}
+                                    </div>
                                   </div>
                                 </div>
-                              </div>
- 
-                              {/* Floor reflection of the collage using custom Photoshop mask */}
-                              <div
-                                className="absolute inset-0 pointer-events-none"
-                                style={{
-                                  zIndex: 9,
-                                  WebkitMaskImage: coverPortalMaskReflectionUrl ? `url(${coverPortalMaskReflectionUrl})` : 'none',
-                                  WebkitMaskSize: '100% 100%',
-                                  WebkitMaskPosition: 'center',
-                                  maskImage: coverPortalMaskReflectionUrl ? `url(${coverPortalMaskReflectionUrl})` : 'none',
-                                  maskSize: '100% 100%',
-                                  maskPosition: 'center',
-                                  transform: swap ? 'scaleX(-1)' : 'none',
-                                  transformOrigin: 'center center',
-                                  // Clip to reflection area (always x: 531px..1500px, y: 1551px..2000px in local space, mirrored dynamically by transform scaleX)
-                                  clipPath: `polygon(${531 * S}px ${1551 * S}px, ${1500 * S}px ${1551 * S}px, ${1500 * S}px ${2000 * S}px, ${531 * S}px ${2000 * S}px)`,
-                                  opacity: 0.28,
-                                  filter: `blur(${2 * S}px) brightness(0.85)`,
-                                }}
-                              >
+   
+                                {/* Floor reflection of the collage using custom Photoshop mask (decoupled mask & filter to prevent SVG rasterization bugs) */}
                                 <div
+                                  className="absolute inset-0 pointer-events-none"
                                   style={{
-                                    position: 'absolute',
-                                    top: `${winTop}px`, // Matches collage top exactly
-                                    left: `${winLeft}px`,
-                                    width: `${winWidth}px`,
-                                    height: `${winHeight}px`, // Matches collage height exactly
-                                    transform: 'scaleY(-1)',
-                                    transformOrigin: `center ${(1551 - 140) * S}px`, // Flips about the floor line (y = 1551px / local 1411px) downwards
-                                    background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}25 50%, #040302 100%)`,
-                                    borderRadius: `${8 * S}px`,
-                                    overflow: 'hidden',
+                                    zIndex: 9,
+                                    filter: `blur(${2 * S}px) brightness(0.85)`,
                                   }}
                                 >
-                                  <div 
-                                    className="relative w-full h-full" 
-                                    style={{ 
-                                      perspective: `${1500 * S}px`,
-                                      transform: `scale(${coverT5SceneZoom}) translate(${coverT5SceneX * S}px, ${coverT5SceneY * S}px)`,
-                                      transformOrigin: 'center center'
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      inset: 0,
+                                      WebkitMaskImage: coverPortalMaskReflectionUrl ? `url(${coverPortalMaskReflectionUrl})` : 'none',
+                                      WebkitMaskSize: '100% 100%',
+                                      WebkitMaskPosition: 'center',
+                                      maskImage: coverPortalMaskReflectionUrl ? `url(${coverPortalMaskReflectionUrl})` : 'none',
+                                      maskSize: '100% 100%',
+                                      maskPosition: 'center',
+                                      opacity: 0.28,
                                     }}
                                   >
-                                    {renderWindowSlats(true)}
-                                    
-                                    {/* Starfield overlay inside reflection */}
-                                    <div className="absolute inset-0 pointer-events-none z-10 opacity-70" style={{
-                                      backgroundImage: `
-                                        radial-gradient(1.2px 1.2px at 30px 40px, #fff, transparent),
-                                        radial-gradient(2px 2px at 170px 90px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 90px 290px, #fff, transparent),
-                                        radial-gradient(2.5px 2.5px at 320px 150px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 390px 380px, ${accent}, transparent),
-                                        radial-gradient(1.2px 1.2px at 490px 100px, #fff, transparent),
-                                        radial-gradient(2.2px 2.2px at 620px 330px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 680px 480px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 740px 220px, ${accent}, transparent),
-                                        radial-gradient(1.2px 1.2px at 60px 650px, #fff, transparent),
-                                        radial-gradient(2.5px 2.5px at 200px 790px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 350px 880px, #fff, transparent),
-                                        radial-gradient(1.8px 1.8px at 520px 1050px, ${accent}, transparent),
-                                        radial-gradient(1.2px 1.2px at 650px 1200px, #fff, transparent),
-                                        radial-gradient(2.5px 2.5px at 240px 1350px, ${accent}, transparent),
-                                        radial-gradient(1.8px 1.8px at 450px 1450px, #fff, transparent),
-                                        radial-gradient(1.2px 1.2px at 180px 1500px, #fff, transparent),
-                                        radial-gradient(2.8px 2.8px at 710px 920px, #fff, transparent)
-                                      `,
-                                      backgroundSize: '400px 600px',
-                                      mixBlendMode: 'screen',
-                                    }} />
+                                    {/* Reflection content fills entire mask — mask defines visible area */}
+                                    <div
+                                      style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        transform: 'scaleY(-1)',
+                                        transformOrigin: 'center center',
+                                        background: `radial-gradient(circle at 50% 50%, ${accent}cc 0%, ${accent}25 50%, #040302 100%)`,
+                                      }}
+                                    >
+                                      <div 
+                                        className="relative w-full h-full" 
+                                        style={{ 
+                                          perspective: `${1500 * S}px`,
+                                          transform: `scale(${coverT5SceneZoom}) translate(${coverT5SceneX * S}px, ${-coverT5SceneY * S}px)`,
+                                          transformOrigin: 'center center'
+                                        }}
+                                      >
+                                        {renderWindowSlats(true)}
+                                        {renderCollageItems(true)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </div>
+                               </>
+                               )}
 
-                                    {/* Cosmic cloud SVG overlay inside reflection */}
-                                    <svg className="absolute inset-0 w-full h-full pointer-events-none z-10 opacity-30 mix-blend-color-dodge">
-                                      <filter id="cosmic-dust-refl">
-                                        <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="noise" />
-                                        <feColorMatrix type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.4 0" />
-                                      </filter>
-                                      <rect width="100%" height="100%" filter="url(#cosmic-dust-refl)" fill={accent} />
-                                    </svg>
-
-                                    {/* Deep inner shadow frame overlay inside reflection (z-20) */}
-                                    <div className="absolute inset-0 pointer-events-none z-20" style={{
-                                      boxShadow: `inset 0 0 120px rgba(0,0,0,0.98), inset 0 0 50px ${accent}40`,
-                                      borderRadius: '8px',
-                                      border: `2.5px solid ${accent}50`, // Glowing golden frame rim
-                                    }} />
-
-                                    {renderCollageItems(true)}
-                                   </div>
-                                 </div>
+                               {/* Chair depth overlay to let text/tagline sit behind the chair silhouette (un-stretched) (decoupled mask & clipPath) */}
+                               <div
+                                 className="absolute inset-0 pointer-events-none"
+                                 style={{
+                                   zIndex: 25, // above TextBlock and Tagline!
+                                   clipPath: `polygon(0px ${1200 * S}px, ${1265 * S}px ${1200 * S}px, ${1265 * S}px ${sceneH}px, 0px ${sceneH}px)`,
+                                 }}
+                               >
+                                 <div
+                                   style={{
+                                     position: 'absolute',
+                                     inset: 0,
+                                     backgroundImage: "url('/cover-bg-portal.png')",
+                                     backgroundSize: '100% 100%',
+                                     backgroundPosition: 'center',
+                                     WebkitMaskImage: coverPortalMaskChairUrl ? `url(${coverPortalMaskChairUrl})` : 'none',
+                                     WebkitMaskSize: '100% 100%',
+                                     WebkitMaskPosition: 'center',
+                                     maskImage: coverPortalMaskChairUrl ? `url(${coverPortalMaskChairUrl})` : 'none',
+                                     maskSize: '100% 100%',
+                                     maskPosition: 'center',
+                                   }}
+                                 />
                                </div>
-                             </>
-                           )}
-                            {/* Chair depth overlay to let text/tagline sit behind the chair silhouette (extended to 2000px for reflection) */}
-                          <div
-                            className="absolute inset-0 pointer-events-none"
-                            style={{
-                              zIndex: 25, // above TextBlock and Tagline!
-                              backgroundImage: "url('/cover-bg-portal.png')",
-                              backgroundSize: '100% 100%',
-                              backgroundPosition: 'center',
-                              WebkitMaskImage: coverPortalMaskChairUrl ? `url(${coverPortalMaskChairUrl})` : 'none',
-                              WebkitMaskSize: '100% 100%',
-                              WebkitMaskPosition: 'center',
-                              maskImage: coverPortalMaskChairUrl ? `url(${coverPortalMaskChairUrl})` : 'none',
-                              maskSize: '100% 100%',
-                              maskPosition: 'center',
-                              transform: swap ? 'scaleX(-1)' : 'none',
-                              transformOrigin: 'center center',
-                              // Clip to chair area (always x: 0px..580px, y: 1200px..2000px in local space, scaled with viewport, mirrored dynamically by transform scaleX)
-                              clipPath: `polygon(0px ${1200 * S}px, ${580 * S}px ${1200 * S}px, ${580 * S}px ${2000 * S}px, 0px ${2000 * S}px)`,
-                            }}
-                          />
-                            
-                            {/* Light Leak Effect Overlay — professional cinematic light effect */}
+                            </div>
+                          </div>
+                          
+                          {/* Light Leak Effect Overlay — covers the full canvas */}
                           <img
                             src={LIGHT_LEAK_OVERLAYS[2]}
                             alt=""
@@ -7993,8 +8039,7 @@ export default function DesignStudio() {
                               opacity: 0.35,
                             }}
                           />
-                          </div>
-
+                          
                           {/* 2. WRITINGS & GLOWS (Stay in fixed position on the canvas, outside the wrapper) */}
                           <div className="absolute pointer-events-none z-[7]" style={{ [swap ? 'left' : 'right']: '55%', [swap ? 'right' : 'left']: '4%', top: '18%', height: '64%', background: `radial-gradient(ellipse ${gI.spread}% ${gI.spread * 0.93}% at 50% 50%, ${glow}${alphaToHex(0.4 * gI.opacity)} 0%, ${glow}${alphaToHex(0.2 * gI.opacity)} 50%, transparent 85%)`, filter: `blur(${gI.blur}px)` } as React.CSSProperties} />
                           <div className="absolute pointer-events-none z-[8]" style={{ [swap ? 'left' : 'right']: '55%', [swap ? 'right' : 'left']: '4%', top: '22%', height: '56%', background: `radial-gradient(ellipse ${gI.spread * 0.93}% ${gI.spread * 0.86}% at 50% 50%, ${glow}${alphaToHex(1 * gI.opacity)} 0%, ${glow}${alphaToHex(0.9 * gI.opacity)} 30%, ${glow}${alphaToHex(0.6 * gI.opacity)} 55%, ${glow}${alphaToHex(0.25 * gI.opacity)} 75%, transparent 92%)`, filter: `blur(${Math.max(8, gI.blur * 0.67)}px)` } as React.CSSProperties} />
@@ -9637,7 +9682,7 @@ export default function DesignStudio() {
                           style={{ 
                             ['--cover-accent' as any]: accent, 
                             ['--t8-bg-photo' as any]: `url('${bgPhoto}')`,
-                            ['--t8-glass-texture' as any]: `url('${coverCustomGlassTexture}')`,
+                            ['--t8-glass-texture' as any]: `url('${coverCustomGlassTextureProcessed || coverCustomGlassTexture}')`,
                             ['--t8-glass-sphere' as any]: `url('/cover-template3-glass-sphere.png')`,
                             ['--t8-light-leak-0' as any]: `url('${LIGHT_LEAK_OVERLAYS[0]}')`,
                             ['--t8-light-leak-1' as any]: `url('${LIGHT_LEAK_OVERLAYS[1]}')`,
@@ -9710,33 +9755,21 @@ export default function DesignStudio() {
                           <Header accent={accent} brandRight={swap} align={textAlign} imagesSide={undefined} showBlurCard={true} />
 
                           {/* SVG Shatter Mask Definition using userSpaceOnUse to fit exactly to the canvas dimensions */}
-                          <svg style={{ position: 'absolute', width: 0, height: 0 }}>
-                            <defs>
-                              <mask id="shatter-mask" maskUnits="userSpaceOnUse" x="0" y="0" width={w} height={h}>
-                                <rect x="0" y="0" width={w} height={h} fill="black" />
-                                <image 
-                                  href={coverCustomGlassMask} 
-                                  x="0" 
-                                  y="0" 
-                                  width={w} 
-                                  height={h} 
-                                  preserveAspectRatio="xMidYMid slice" 
-                                />
-                              </mask>
-                            </defs>
-                          </svg>
-
-                          {/* 2. Shattered Glass Shards (Z-index: 10) */}
-                          {coverShow.collage && (
-                            <div 
-                              className="absolute inset-0 z-10 pointer-events-none" 
-                              style={{ 
-                                perspective: '1200px', 
-                                transformStyle: 'preserve-3d',
-                                mask: "url(#shatter-mask)",
-                                WebkitMask: "url(#shatter-mask)",
-                              }}
-                            >
+                           {/* 2. Shattered Glass Shards (Z-index: 10) (CSS mask-image with base64 data URL to support canvas export) */}
+                           {coverShow.collage && (
+                             <div 
+                               className="absolute inset-0 z-10 pointer-events-none" 
+                               style={{ 
+                                 perspective: '1200px', 
+                                 transformStyle: 'preserve-3d',
+                                 WebkitMaskImage: coverCustomGlassMaskProcessed ? `url(${coverCustomGlassMaskProcessed})` : 'none',
+                                 WebkitMaskSize: 'cover',
+                                 WebkitMaskPosition: 'center',
+                                 maskImage: coverCustomGlassMaskProcessed ? `url(${coverCustomGlassMaskProcessed})` : 'none',
+                                 maskSize: 'cover',
+                                 maskPosition: 'center',
+                               }}
+                             >
                               {/* Flat base design layer inside the mask to fill any 3D gaps */}
                               <div 
                                 className="absolute inset-0 pointer-events-none" 
@@ -9895,6 +9928,7 @@ export default function DesignStudio() {
                                         style={{
                                           backgroundImage: 'var(--t8-glass-texture)',
                                           backgroundSize: 'cover',
+                                          backgroundPosition: 'center',
                                           mixBlendMode: 'screen',
                                           opacity: 0.35 * Math.min(1.0, glassIntensity),
                                           transform: `scale(${1.1 + shardRng() * 0.1}) rotate(${shardRng() * 20 - 10}deg)`,
@@ -9967,6 +10001,7 @@ export default function DesignStudio() {
                                 style={{
                                   backgroundImage: 'var(--t8-glass-texture)',
                                   backgroundSize: 'cover',
+                                  backgroundPosition: 'center',
                                   mixBlendMode: 'screen',
                                   opacity: Math.min(1.0, glassIntensity) * 0.95,
                                   filter: `brightness(${1.0 + Math.min(1.0, glassIntensity) * 0.2}) contrast(${1.0 + Math.min(1.0, glassIntensity) * 0.15})`,
@@ -9980,6 +10015,7 @@ export default function DesignStudio() {
                                   style={{
                                     backgroundImage: 'var(--t8-glass-texture)',
                                     backgroundSize: 'cover',
+                                    backgroundPosition: 'center',
                                     mixBlendMode: 'screen',
                                     opacity: (glassIntensity - 0.8) * 0.95,
                                     transform: 'scale(1.05) rotate(180deg)',

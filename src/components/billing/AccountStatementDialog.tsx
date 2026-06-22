@@ -377,6 +377,58 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         }
       }
 
+      // ✅ استبعاد فواتير الطباعة والقص المرتبطة بالمهام المجمعة لتفادي التكرار
+      const excludedInvoiceIds = new Set<string>();
+      try {
+        if (customerId) {
+          const { data: printTasks } = await supabase
+            .from('print_tasks')
+            .select('invoice_id')
+            .eq('customer_id', customerId)
+            .or('is_composite.eq.true,installation_task_id.not.is.null,composite_task_id.not.is.null');
+
+          (printTasks || [])
+            .map((t: any) => t.invoice_id)
+            .filter(Boolean)
+            .forEach((id: string) => excludedInvoiceIds.add(id));
+
+          const { data: cutoutTasks } = await supabase
+            .from('cutout_tasks')
+            .select('invoice_id')
+            .eq('customer_id', customerId)
+            .or('is_composite.eq.true,installation_task_id.not.is.null');
+
+          (cutoutTasks || [])
+            .map((t: any) => t.invoice_id)
+            .filter(Boolean)
+            .forEach((id: string) => excludedInvoiceIds.add(id));
+        } else if (customerName) {
+          const { data: printTasks } = await supabase
+            .from('print_tasks')
+            .select('invoice_id')
+            .eq('customer_name', customerName)
+            .or('is_composite.eq.true,installation_task_id.not.is.null,composite_task_id.not.is.null');
+
+          (printTasks || [])
+            .map((t: any) => t.invoice_id)
+            .filter(Boolean)
+            .forEach((id: string) => excludedInvoiceIds.add(id));
+
+          const { data: cutoutTasks } = await supabase
+            .from('cutout_tasks')
+            .select('invoice_id')
+            .eq('customer_name', customerName)
+            .or('is_composite.eq.true,installation_task_id.not.is.null');
+
+          (cutoutTasks || [])
+            .map((t: any) => t.invoice_id)
+            .filter(Boolean)
+            .forEach((id: string) => excludedInvoiceIds.add(id));
+        }
+      } catch (e) {
+        console.warn('Error fetching composite print/cutout task invoices in dialog:', e);
+      }
+
       // تحميل الخصومات العامة
       let generalDiscountsData: any[] = [];
       
@@ -648,12 +700,12 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
             id: `suspension-discount-${contract.Contract_Number}`,
             date: latestPauseDate,
             type: 'discount',
-            description: `خصم إيقاف لوحات عقد رقم ${contract.Contract_Number}${latestBoardName ? ` - ${latestBoardName}` : ''}`,
+            description: `آخر تسكير حساب الإيقاف لعقد رقم ${contract.Contract_Number}`,
             debit: 0,
             credit: totalSuspensionDiscount,
             balance: 0,
             reference: `عقد-${contract.Contract_Number}`,
-            notes: cleanStatementNote(`خصم إيقاف اللوحات حسب آخر إيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
+            notes: cleanStatementNote(`تسكير حساب الإيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
             itemTotal: originalContractTotal,
             itemRemaining: null, // سيتم حسابه لاحقاً حسب التسلسل الزمني
             targetContractNumber: contract.Contract_Number,
@@ -684,6 +736,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
       // إضافة فواتير الطباعة - مع حساب المدفوع والمتبقي
       printedInvoicesData.forEach(invoice => {
         if (compositeTaskInvoiceIds.has(invoice.id)) return;
+        if (excludedInvoiceIds.has(invoice.id)) return;
         
         let invoiceTypeText = '';
         if (invoice.invoice_type === 'print_only') {

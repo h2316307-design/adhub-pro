@@ -67,21 +67,27 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
     glow = '75,85,99'
   }
 
+  const showSeq = billboard?.sequence_number !== undefined && billboard?.sequence_number !== 999999;
+  
+  // Inside the pin core: always show size label (standard size behavior)
+  const label = shortLabelFor(billboard);
+  
+  // Decide top badge content: in organizer show sequence number (e.g. "#1"), in normal mode show ad type
+  const adTypeStr = String(billboard?.Ad_Type || billboard?.ad_type || billboard?.adType || billboard?.AdType || billboard?.contracts?.[0]?.['Ad Type'] || '').trim();
+  const topBadgeText = showSeq ? `#${billboard.sequence_number}` : adTypeStr;
+  const showTopBadge = showSeq ? true : !!adTypeStr;
+  const displayTopBadge = topBadgeText.length > 14 ? topBadgeText.slice(0, 12) + '..' : topBadgeText;
+
   // Size color resolving - body of the pin represents size color (dynamic)
   const sizeStr = billboard?.Size || billboard?.size || ''
   const sizeColor = getSizeColor(sizeStr);
   const start = isTemp ? '#6366f1' : sizeColor.bg; // Indigo body for temporary pin
   const end = isTemp ? '#4f46e5' : adjustColor(sizeColor.bg, -35);
 
-  const label = shortLabelFor(billboard);
-  const adTypeStr = String(billboard?.Ad_Type || billboard?.ad_type || billboard?.adType || billboard?.AdType || billboard?.contracts?.[0]?.['Ad Type'] || '').trim();
-  const showAd = !!adTypeStr;
-  const displayAd = adTypeStr.length > 14 ? adTypeStr.slice(0, 12) + '..' : adTypeStr;
-
   const W = isSelected ? 60 : 52;
   const H = isSelected ? 76 : 66;
   const cx = W / 2;
-  const topPad = showAd ? 16 : 4;
+  const topPad = showTopBadge ? 16 : 4;
   const r = isSelected ? 22 : 19;
   const innerR = r - 4.5;
   const headCy = topPad + r;
@@ -111,10 +117,10 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
       </filter>
     </defs>
     <ellipse cx="${cx}" cy="${tipY + 0.5}" rx="${r * 0.55}" ry="2.2" fill="rgba(0,0,0,0.3)"/>
-    ${showAd ? `
+    ${showTopBadge ? `
       <g>
-        <rect x="${cx - 32}" y="0" width="64" height="14" rx="7" fill="#0a0a14" stroke="#d6ac40" stroke-width="1"/>
-        <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="9" font-weight="800" fill="#f4c25a">${displayAd}</text>
+        <rect x="${cx - 28}" y="0" width="56" height="14" rx="7" fill="#0a0a14" stroke="#d6ac40" stroke-width="1"/>
+        <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="8.5" font-weight="900" fill="#f4c25a">${displayTopBadge}</text>
       </g>` : ''}
     <g filter="url(#s${uid})" opacity="${isHidden ? '0.7' : '1'}">
       <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#f4c25a' : 'white'}" stroke-width="${isSelected ? 2.2 : 1.6}"/>

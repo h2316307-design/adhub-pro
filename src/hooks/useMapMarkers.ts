@@ -332,9 +332,10 @@ export const createPinSvgUrl = (
   billboardType?: string,
   billboardCode?: string,
   zoomLevel: number = 10,
-  imageUrl?: string
+  imageUrl?: string,
+  hideStatusRing?: boolean
 ) => {
-  const cacheKey = `${size}-${status}-${isSelected}-${adType || ''}-${customerName || ''}-${overrideColor || ''}-${overrideTextColor || ''}-${billboardType || ''}-${billboardCode || ''}-${zoomLevel}-${imageUrl || ''}-v32-dynamic-statusring`
+  const cacheKey = `${size}-${status}-${isSelected}-${adType || ''}-${customerName || ''}-${overrideColor || ''}-${overrideTextColor || ''}-${billboardType || ''}-${billboardCode || ''}-${zoomLevel}-${imageUrl || ''}-${hideStatusRing || false}-v33-dynamic-statusring`
   if (pinIconCache[cacheKey]) return pinIconCache[cacheKey]
 
   const isHidden = status === "مخفية" || status === "مخفية من المتاح" || status === "مخفية من متاح"
@@ -466,7 +467,7 @@ export const createPinSvgUrl = (
         <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#f4c25a' : 'white'}" stroke-width="${isSelected ? 2.2 : 1.6}"/>
         <path d="${path}" fill="url(#g${uid})"/>
         <!-- Inner core (white fill with thick status-colored stroke border ring) -->
-        <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${statusColor}" stroke-width="2.8"/>
+        <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${hideStatusRing ? 'white' : statusColor}" stroke-width="2.8"/>
         <text x="${cx}" y="${headCy + 3.4}" text-anchor="middle" font-family="'Manrope','Tajawal',sans-serif" font-size="${innerR > 11 ? 9.5 : 8.5}" font-weight="900" fill="${overrideTextColor || '#0f172a'}" letter-spacing="0.1">${label}</text>
       </g>
       ${isAvailable ? `

@@ -182,6 +182,26 @@ const DimensionInput = ({
 export default function MunicipalityBillboardOrganizer() {
   const [collections, setCollections] = useState<{ id: string; name: string; created_at: string }[]>([]);
   const [currentCollection, setCurrentCollection] = useState<Collection>({ name: '', municipality_name: '', items: [] });
+  
+  // Helper to parse size and calculate area
+  const parseDimensions = (sizeStr: string) => {
+    if (!sizeStr) return { length: 0, width: 0 };
+    const normalized = sizeStr.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
+    const parts = normalized.split('x').map(p => parseFloat(p.trim()));
+    return {
+      length: parts[0] || 0,
+      width: parts[1] || 0
+    };
+  };
+
+  const getFacesCountNumber = (facesStr: string | number | undefined | null): number => {
+    if (!facesStr) return 2;
+    if (typeof facesStr === 'number') return facesStr;
+    const clean = facesStr.trim();
+    if (clean === 'وجه' || clean === 'وجه واحد' || clean === '1') return 1;
+    return 2;
+  };
+
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showAddDialog, setShowAddDialog] = useState(false);
@@ -195,6 +215,72 @@ export default function MunicipalityBillboardOrganizer() {
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
   const [printLoading, setPrintLoading] = useState(false);
   const { settings: customSettings, updateStatusOverride, saveSettings, refetch } = usePrintCustomization('municipality');
+  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+
+  const totalAreaMeters = useMemo(() => {
+    const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
+    return currentCollection.items.reduce((sum, item) => {
+      const { length, width } = parseDimensions(item.size);
+      const area = length * width;
+      const faces = getFacesCountNumber(item.faces_count);
+      return sum + (multiplyByFaces ? area * faces : area);
+    }, 0);
+  }, [currentCollection.items, customSettings.calc_meters_by_faces]);
+
+  const sizeStats = useMemo(() => {
+    const stats: Record<string, { count: number; totalMeters: number }> = {};
+    const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
+    
+    currentCollection.items.forEach(item => {
+      const sizeStr = item.size || 'بدون مقاس';
+      if (!stats[sizeStr]) {
+        stats[sizeStr] = { count: 0, totalMeters: 0 };
+      }
+      stats[sizeStr].count += 1;
+      
+      const { length, width } = parseDimensions(item.size);
+      const area = length * width;
+      const faces = getFacesCountNumber(item.faces_count);
+      stats[sizeStr].totalMeters += multiplyByFaces ? area * faces : area;
+    });
+    
+    return Object.entries(stats).map(([size, data]) => ({
+      size,
+      count: data.count,
+      totalMeters: data.totalMeters
+    })).sort((a, b) => b.count - a.count);
+  }, [currentCollection.items, customSettings.calc_meters_by_faces]);
+
+  const selectedItemsStats = useMemo(() => {
+    const stats: Record<string, { count: number; totalMeters: number }> = {};
+    const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
+    
+    const selItems = currentCollection.items.filter(item => selectedItems.has(item.sequence_number));
+    selItems.forEach(item => {
+      const sizeStr = item.size || 'بدون مقاس';
+      if (!stats[sizeStr]) {
+        stats[sizeStr] = { count: 0, totalMeters: 0 };
+      }
+      stats[sizeStr].count += 1;
+      
+      const { length, width } = parseDimensions(item.size);
+      const area = length * width;
+      const faces = getFacesCountNumber(item.faces_count);
+      stats[sizeStr].totalMeters += multiplyByFaces ? area * faces : area;
+    });
+    
+    const totalArea = Object.values(stats).reduce((sum, d) => sum + d.totalMeters, 0);
+    
+    return {
+      totalArea,
+      totalCount: selItems.length,
+      sizeStats: Object.entries(stats).map(([size, data]) => ({
+        size,
+        count: data.count,
+        totalMeters: data.totalMeters
+      })).sort((a, b) => b.count - a.count)
+    };
+  }, [currentCollection.items, selectedItems, customSettings.calc_meters_by_faces]);
   const [collectionName, setCollectionName] = useState('');
   const [municipalityName, setMunicipalityName] = useState('');
   const [cityName, setCityName] = useState('');
@@ -246,7 +332,6 @@ export default function MunicipalityBillboardOrganizer() {
   const [bulkStatusTarget, setBulkStatusTarget] = useState<'all' | 'selected'>('all');
   const [bulkStatusValue, setBulkStatusValue] = useState('متاحة');
   const [bulkStatusCustom, setBulkStatusCustom] = useState('');
-  const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
   const [bulkSize, setBulkSize] = useState('');
   const [searchItems, setSearchItems] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
@@ -294,6 +379,74 @@ export default function MunicipalityBillboardOrganizer() {
   // Drag state
   const dragItem = useRef<number | null>(null);
   const dragOverItem = useRef<number | null>(null);
+
+  const cleanArabicName = (str: string) => {
+    if (!str) return '';
+    return str
+      .replace(/^(بلدية|مدينة|البلدية|المدينة)\s+/g, '')
+      .replace(/^ال/g, '')
+      .trim();
+  };
+
+  const formatLocationText = (b: any, cityBindValue: string, muniVal?: string) => {
+    const cleanMuni = cleanArabicName(muniVal || municipalityName);
+    const cleanCity = cleanArabicName(cityBindValue || b.City);
+    
+    if (!cityBindValue || (cleanMuni && cleanCity && cleanMuni === cleanCity)) {
+      return b.District || b.City || '';
+    }
+    return [b.City, b.District].filter(Boolean).join(' - ');
+  };
+
+  const handleCityChange = (value: string) => {
+    const nextCity = value === '__none__' ? '' : value;
+    setCityName(nextCity);
+    
+    setCurrentCollection(prev => {
+      const cleanMuni = cleanArabicName(prev.municipality_name || municipalityName);
+      
+      const updatedItems = prev.items.map(item => {
+        if (!item.billboard_id) return item;
+        const original = allBillboards.find(b => b.ID === item.billboard_id);
+        if (!original || !original.City) return item;
+        
+        const cityPrefix = original.City;
+        let newLoc = item.location_text;
+        
+        const cleanOrigCity = cleanArabicName(original.City);
+        const shouldStrip = nextCity === '' || (cleanMuni && cleanOrigCity && cleanMuni === cleanOrigCity);
+        
+        if (shouldStrip) {
+          // Strip prefix
+          if (newLoc.startsWith(cityPrefix)) {
+            newLoc = newLoc.substring(cityPrefix.length);
+            if (newLoc.startsWith(' - ')) {
+              newLoc = newLoc.substring(3);
+            }
+            newLoc = newLoc.trim();
+          }
+          if (!newLoc) {
+            newLoc = original.District || original.City || '';
+          }
+        } else {
+          // Prepend prefix if not present
+          if (!newLoc.startsWith(cityPrefix)) {
+            newLoc = [cityPrefix, newLoc].filter(Boolean).join(' - ');
+          }
+        }
+        
+        return {
+          ...item,
+          location_text: newLoc,
+        };
+      });
+      
+      return {
+        ...prev,
+        items: updatedItems,
+      };
+    });
+  };
 
   // New item form state
   const [newItem, setNewItem] = useState<Partial<CollectionItem>>({
@@ -437,19 +590,38 @@ export default function MunicipalityBillboardOrganizer() {
         const muni = (collRes.data as any).municipality_name || desc || '';
         const cty = (collRes.data as any).city || '';
         const dsize = (collRes.data as any).default_size || '';
-        setCurrentCollection({
-          id: collRes.data.id,
-          name: name,
-          municipality_name: muni,
-          description: desc,
-          items: itemsRes.data.map((item: any) => ({
+        
+        // Auto-clean duplicates on load
+        const cleanMuni = cleanArabicName(muni);
+        
+        const loadedItems = itemsRes.data.map((item: any) => {
+          let locText = item.location_text || '';
+          
+          if (item.billboard_id) {
+            const original = allBillboards.find(b => b.ID === item.billboard_id);
+            if (original && original.City) {
+              const cityPrefix = original.City;
+              const cleanCity = cleanArabicName(cty || original.City);
+              const shouldStrip = !cty || (cleanMuni && cleanCity && cleanMuni === cleanCity);
+              
+              if (shouldStrip && locText.startsWith(cityPrefix)) {
+                locText = locText.substring(cityPrefix.length);
+                if (locText.startsWith(' - ')) {
+                  locText = locText.substring(3);
+                }
+                locText = locText.trim() || original.District || original.City || '';
+              }
+            }
+          }
+          
+          return {
             id: item.id,
             sequence_number: item.sequence_number,
             billboard_id: item.billboard_id,
             billboard_name: item.billboard_name,
             size: item.size,
             faces_count: item.faces_count || 'وجهين',
-            location_text: item.location_text || '',
+            location_text: locText,
             nearest_landmark: item.nearest_landmark || '',
             latitude: item.latitude,
             longitude: item.longitude,
@@ -459,7 +631,15 @@ export default function MunicipalityBillboardOrganizer() {
             image_url: item.image_url,
             municipality: item.municipality || '',
             status: item.status || 'متاحة',
-          })),
+          };
+        });
+
+        setCurrentCollection({
+          id: collRes.data.id,
+          name: name,
+          municipality_name: muni,
+          description: desc,
+          items: loadedItems,
         });
         setCollectionName(name);
         setMunicipalityName(muni);
@@ -605,7 +785,7 @@ export default function MunicipalityBillboardOrganizer() {
       billboard_name: b.Billboard_Name || `لوحة ${b.ID}`,
       size: b.Size || defaultSize || '',
       faces_count: b.Faces_Count ? (b.Faces_Count === 1 ? 'وجه' : 'وجهين') : 'وجهين',
-      location_text: [b.City, b.District].filter(Boolean).join(' - '),
+      location_text: formatLocationText(b, cityName),
       nearest_landmark: b.Nearest_Landmark || '',
       latitude: coords?.[0] || null,
       longitude: coords?.[1] || null,
@@ -627,12 +807,13 @@ export default function MunicipalityBillboardOrganizer() {
       toast.error('اختر لوحات أولاً');
       return;
     }
+    const existingIds = new Set(currentCollection.items.map(it => it.billboard_id).filter(Boolean));
     const startSeq = currentCollection.items.length + 1;
     const newItems: CollectionItem[] = [];
     let seq = startSeq;
 
     allBillboards
-      .filter(b => selectedBillboardIds.has(b.ID))
+      .filter(b => selectedBillboardIds.has(b.ID) && !existingIds.has(b.ID))
       .forEach(b => {
         const coords = b.GPS_Coordinates?.split(',').map((c: string) => parseFloat(c.trim()));
         const dbStatus = (b.Status || '').trim();
@@ -643,7 +824,7 @@ export default function MunicipalityBillboardOrganizer() {
           billboard_name: b.Billboard_Name || `لوحة ${b.ID}`,
           size: b.Size || '',
           faces_count: b.Faces_Count ? (b.Faces_Count === 1 ? 'وجه' : 'وجهين') : 'وجهين',
-          location_text: [b.City, b.District].filter(Boolean).join(' - '),
+          location_text: formatLocationText(b, cityName),
           nearest_landmark: b.Nearest_Landmark || '',
           latitude: coords?.[0] || null,
           longitude: coords?.[1] || null,
@@ -907,7 +1088,7 @@ export default function MunicipalityBillboardOrganizer() {
       billboard_name: b.Billboard_Name || `لوحة ${b.ID}`,
       size: b.Size || '',
       faces_count: b.Faces_Count ? (b.Faces_Count === 1 ? 'وجه' : 'وجهين') : 'وجهين',
-      location_text: [b.City, b.District].filter(Boolean).join(' - '),
+      location_text: formatLocationText(b, cityName),
       nearest_landmark: b.Nearest_Landmark || '',
       latitude: coords?.[0] || null,
       longitude: coords?.[1] || null,
@@ -1029,9 +1210,16 @@ export default function MunicipalityBillboardOrganizer() {
 
   // Import all billboards from a specific municipality
   const importByMunicipality = (municipality: string) => {
-    const filtered = allBillboards.filter(b => b.Municipality === municipality);
+    const totalCount = allBillboards.filter(b => b.Municipality === municipality).length;
+    if (totalCount === 0) {
+      toast.error(`لا توجد لوحات في بلدية "${municipality}" في النظام`);
+      return;
+    }
+
+    const existingIds = new Set(currentCollection.items.map(it => it.billboard_id).filter(Boolean));
+    const filtered = allBillboards.filter(b => b.Municipality === municipality && !existingIds.has(b.ID));
     if (filtered.length === 0) {
-      toast.error(`لا توجد لوحات في بلدية "${municipality}"`);
+      toast.info(`جميع لوحات بلدية "${municipality}" مضافة بالفعل إلى القائمة`);
       return;
     }
     
@@ -1057,9 +1245,10 @@ export default function MunicipalityBillboardOrganizer() {
   };
 
   const executeImportByMunicipality = (municipality: string) => {
-    let filtered = allBillboards.filter(b => b.Municipality === municipality);
+    const existingIds = new Set(currentCollection.items.map(it => it.billboard_id).filter(Boolean));
+    let filtered = allBillboards.filter(b => b.Municipality === municipality && !existingIds.has(b.ID));
     if (filtered.length === 0) {
-      toast.error(`لا توجد لوحات في بلدية "${municipality}"`);
+      toast.error(`لا توجد لوحات جديدة للاستيراد في بلدية "${municipality}"`);
       return;
     }
 
@@ -1081,6 +1270,7 @@ export default function MunicipalityBillboardOrganizer() {
       return (a.ID || 0) - (b.ID || 0);
     });
 
+    const firstCity = !cityName ? (filtered.find(b => b.City)?.City || '') : cityName;
     const startSeq = currentCollection.items.length + 1;
     const newItems: CollectionItem[] = sortedBillboards.map((b, idx) => {
       const coords = b.GPS_Coordinates?.split(',').map((c: string) => parseFloat(c.trim()));
@@ -1092,7 +1282,7 @@ export default function MunicipalityBillboardOrganizer() {
         billboard_name: b.Billboard_Name || `لوحة ${b.ID}`,
         size: b.Size || '',
         faces_count: b.Faces_Count ? (b.Faces_Count === 1 ? 'وجه' : 'وجهين') : 'وجهين',
-        location_text: [b.City, b.District].filter(Boolean).join(' - '),
+        location_text: formatLocationText(b, firstCity, municipality),
         nearest_landmark: b.Nearest_Landmark || '',
         latitude: coords?.[0] || null,
         longitude: coords?.[1] || null,
@@ -1108,9 +1298,8 @@ export default function MunicipalityBillboardOrganizer() {
     setCurrentCollection(prev => ({ ...prev, items: [...prev.items, ...newItems] }));
     setMunicipalityName(municipality);
     // Auto-bind city from first billboard if empty
-    if (!cityName) {
-      const firstCity = filtered.find(b => b.City)?.City;
-      if (firstCity) setCityName(firstCity);
+    if (!cityName && firstCity) {
+      setCityName(firstCity);
     }
     if (!collectionName) setCollectionName(municipality);
     setShowImportConfigDialog(false);
@@ -1133,12 +1322,13 @@ export default function MunicipalityBillboardOrganizer() {
         GPS_Coordinates: `${item.latitude},${item.longitude}`,
         Status: item.item_type === 'existing' ? 'محجوز' : 'متاح',
         City: item.location_text,
-        Municipality: '',
+        Municipality: currentCollection.municipality_name || '',
         District: '',
         Nearest_Landmark: item.nearest_landmark,
         Image_URL: item.image_url || '',
         design_face_a: item.design_face_a || '',
         design_face_b: item.design_face_b || '',
+        sequence_number: item.sequence_number,
       } as any));
 
     if (showAddDialog && newItem.latitude && newItem.longitude) {
@@ -1172,9 +1362,14 @@ export default function MunicipalityBillboardOrganizer() {
     }
   }, [mapBillboards.length]);
 
+  // Set of IDs already in the current collection to prevent duplicates
+  const existingIds = useMemo(() => {
+    return new Set(currentCollection.items.map(it => it.billboard_id).filter(Boolean));
+  }, [currentCollection.items]);
+
   // Filtered billboards for import dialog
   const filteredImportBillboards = useMemo(() => {
-    let base = allBillboards;
+    let base = allBillboards.filter(b => !existingIds.has(b.ID));
     if (restrictImportToMunicipality) {
       if (municipalityName) base = base.filter(b => (b.Municipality || '') === municipalityName);
       if (cityName) base = base.filter(b => (b.City || '') === cityName);
@@ -1189,7 +1384,7 @@ export default function MunicipalityBillboardOrganizer() {
       (b.Size || '').includes(q) ||
       (b.Municipality || '').toLowerCase().includes(q)
     ).slice(0, 200);
-  }, [allBillboards, searchBillboard, restrictImportToMunicipality, municipalityName, cityName]);
+  }, [allBillboards, searchBillboard, restrictImportToMunicipality, municipalityName, cityName, existingIds]);
 
   // Filtered items in table
   const sortedItems = useMemo(() => {
@@ -1355,8 +1550,9 @@ export default function MunicipalityBillboardOrganizer() {
         const rowHeightVal = compactSummary ? 12.5 : 14.5;
         
         // Total table width is 190mm (210mm A4 width - 20mm margins). Allocating exact column widths in mm:
+        const showFacesCol = s.faces_count_show !== 'false';
         const indexWidth = 10;
-        const facesWidth = 14;
+        const facesWidth = showFacesCol ? 14 : 0;
         const sizeWidth = 20;
         const qrWidth = rowHeightVal; // Perfectly square width
         
@@ -1392,7 +1588,7 @@ export default function MunicipalityBillboardOrganizer() {
                 <td class="loc">${it.location_text || '-'}</td>
                 <td class="loc">${it.nearest_landmark || '-'}</td>
                 <td class="num">${formatSizeForPrint(it.size, showHeightInPrint) || '-'}</td>
-                <td class="num">${it.faces_count || '-'}</td>
+                ${showFacesCol ? `<td class="num">${it.faces_count || '-'}</td>` : ''}
                 <td class="coords">${it.latitude && it.longitude ? `${it.latitude}, ${it.longitude}` : '-'}</td>
                 ${showStatusInPrint ? `<td class="num">${it.status || '-'}</td>` : ''}
                 <td class="qr-col-cell">
@@ -1405,6 +1601,30 @@ export default function MunicipalityBillboardOrganizer() {
               </tr>
             `;
           }).join('');
+
+          const totalColumnsCount = 6 + (showFacesCol ? 1 : 0) + (showStatusInPrint ? 1 : 0);
+          const multiplyByFaces = s.calc_meters_by_faces === 'true';
+          const totalAreaMeters = printItems.reduce((sum, item) => {
+            const { length, width } = parseDimensions(item.size);
+            const area = length * width;
+            const faces = getFacesCountNumber(item.faces_count);
+            return sum + (multiplyByFaces ? area * faces : area);
+          }, 0);
+
+          const isLastPage = pIdx === totalSummaryPages - 1;
+          const tableFooterHtml = isLastPage ? `
+            <tfoot>
+              <tr style="background-color: #f8fafc !important; font-weight: bold; border-top: 2px solid #000; height: ${rowHeight};">
+                <td colspan="${totalColumnsCount}" style="text-align: center; padding: 6px 8px; font-size: 13px; color: #000; background-color: #f8fafc !important; font-weight: 700;">
+                  <span>إجمالي مساحة اللوحات: </span>
+                  <span style="font-size: 15px; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; color: #000; margin: 0 4px; font-weight: 800;">
+                    ${totalAreaMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
+                  </span>
+                </td>
+              </tr>
+            </tfoot>
+          ` : '';
+
           pages.push(`
           <div class="page summary-page">
             <div class="summary-inner">
@@ -1419,7 +1639,7 @@ export default function MunicipalityBillboardOrganizer() {
                     <th style="width:${locWidth}mm;">الموقع</th>
                     <th style="width:${landmarkWidth}mm;">أقرب نقطة</th>
                     <th style="width:${sizeWidth}mm;">المقاس</th>
-                    <th style="width:${facesWidth}mm;">الأوجه</th>
+                    ${showFacesCol ? `<th style="width:${facesWidth}mm;">الأوجه</th>` : ''}
                     <th style="width:${coordsWidth}mm;">الإحداثيات</th>
                     ${showStatusInPrint ? `<th style="width:${statusWidth}mm;">الحالة</th>` : ''}
                     <th class="qr-col-cell" style="width:${qrWidth}mm !important;">QR</th>
@@ -1428,6 +1648,7 @@ export default function MunicipalityBillboardOrganizer() {
                 <tbody>
                   ${tableRowsHtml}
                 </tbody>
+                ${tableFooterHtml}
               </table>
             </div>
             <style>
@@ -1473,7 +1694,7 @@ export default function MunicipalityBillboardOrganizer() {
         const pinColor = (s as any).pin_color?.trim() || undefined;
         const pinTextColor = (s as any).pin_text_color?.trim() || undefined;
         const printedSize = formatSizeForPrint(item.size, showHeightInPrint);
-        const pinData = createPinSvgUrl(printedSize || 'متاحة', item.status || 'متاحة', false, undefined, undefined, pinColor, pinTextColor);
+        const pinData = createPinSvgUrl(printedSize || 'متاحة', item.status || 'متاحة', false, undefined, undefined, pinColor, pinTextColor, undefined, undefined, undefined, undefined, true);
         const customPinUrl = (s as any).custom_pin_url?.trim();
         const pinSvgDataUrl = customPinUrl || pinData.url;
 
@@ -1488,9 +1709,7 @@ export default function MunicipalityBillboardOrganizer() {
             const hasUploadedImage = printImageSource === 'map_pin' && !!item.image_url;
             // The printed pin must anchor by its real SVG tip, not by the image bounds.
             const pinWidth = parseInt(String(s.pin_size || '80')) || 80;
-            const pinTotalHeight = pinData.pinSize + 20 + 12;
-            const pinTipY = pinData.labelOffset + pinData.pinSize - 2;
-            const pinTipOffsetPercent = customPinUrl ? 100 : (pinTipY / pinTotalHeight) * 100;
+            const pinTipOffsetPercent = customPinUrl ? 100 : (pinData.anchorY / pinData.height) * 100;
             const mapBlockHtml = `
               <div style="width: 100%; height: 100%; position: relative; overflow: hidden;">
                 ${mapDataUrl
@@ -1510,7 +1729,7 @@ export default function MunicipalityBillboardOrganizer() {
               ">
                 ${hasUploadedImage ? `
                   <div style="flex: 1 1 50%; min-height: 0; overflow: hidden; border-bottom: 1px solid #ddd;">
-                    <img src="${item.image_url}" alt="صورة اللوحة" style="width: 100%; height: 100%; object-fit: cover; display: block;" />
+                    <img src="${item.image_url}" alt="صورة اللوحة" style="width: 100%; height: 100%; object-fit: ${s.main_image_object_fit || 'cover'}; display: block;" />
                   </div>
                   <div style="flex: 1 1 50%; min-height: 0; position: relative; overflow: hidden;">
                     ${mapBlockHtml}
@@ -1596,9 +1815,11 @@ export default function MunicipalityBillboardOrganizer() {
               ${generatePrintedSizeHtml(item.size, showHeightInPrint)}
             </div>
 
+            ${s.faces_count_show !== 'false' ? `
             <div class="absolute-field" style="top: ${s.faces_count_top}; left: ${s.faces_count_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color}; z-index: 5; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif;">
               ${item.faces_count}
             </div>
+            ` : ''}
 
             ${imageSectionHtml}
 
@@ -1784,6 +2005,29 @@ export default function MunicipalityBillboardOrganizer() {
                 <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
                 <span>{currentCollection.items.length} لوحة</span>
               </div>
+              {currentCollection.items.length > 0 && (
+                <div className="bg-card/65 backdrop-blur-sm border border-border/15 rounded-xl px-3 py-1.5 text-xs font-medium flex items-center gap-3 shadow-sm">
+                  <div className="flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                    <span>إجمالي المساحة: {totalAreaMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²</span>
+                  </div>
+                  <span className="border-r border-border/15 h-3" />
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-foreground hover:text-indigo-500 transition-colors">
+                    <Checkbox
+                      checked={customSettings.calc_meters_by_faces === 'true'}
+                      onCheckedChange={async (checked) => {
+                        const val = checked ? 'true' : 'false';
+                        await saveSettings({ 
+                          calc_meters_by_faces: val,
+                          faces_count_show: val
+                        });
+                      }}
+                      className="rounded-md h-3.5 w-3.5"
+                    />
+                    <span>حساب بعدد الأوجه</span>
+                  </label>
+                </div>
+              )}
               <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={handleNewProject}>
                 <Plus className="h-4 w-4" />
                 مشروع جديد
@@ -1856,7 +2100,7 @@ export default function MunicipalityBillboardOrganizer() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground font-medium">المدينة المرتبطة</Label>
-                <Select value={cityName || '__none__'} onValueChange={v => setCityName(v === '__none__' ? '' : v)}>
+                <Select value={cityName || '__none__'} onValueChange={handleCityChange}>
                   <SelectTrigger className="h-10 rounded-xl bg-background/50 border-border/15 focus:ring-indigo-500"><SelectValue placeholder="اختر المدينة" /></SelectTrigger>
                   <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
                     <SelectItem value="__none__">— بدون —</SelectItem>
@@ -1889,6 +2133,98 @@ export default function MunicipalityBillboardOrganizer() {
             )}
           </CardContent>
         </Card>
+        {/* Statistics Dashboard Cards */}
+        {currentCollection.items.length > 0 && (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 animate-in fade-in duration-300">
+            <Card className="border border-border/15 bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between">
+              <span className="text-[10px] text-indigo-500/80 font-bold uppercase tracking-wider">إجمالي اللوحات</span>
+              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{currentCollection.items.length}</span>
+              <span className="text-[10px] text-muted-foreground mt-1">لوحة مسجلة</span>
+            </Card>
+            <Card className="border border-border/15 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between">
+              <span className="text-[10px] text-emerald-500/80 font-bold uppercase tracking-wider">إجمالي المساحة</span>
+              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
+                {totalAreaMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-1">
+                {customSettings.calc_meters_by_faces === 'true' ? 'محتسباً بعدد الأوجه' : 'مساحة الوجه الواحد'}
+              </span>
+            </Card>
+            {sizeStats.map(stat => (
+              <Card key={stat.size} className="border border-border/15 bg-gradient-to-br from-card/60 to-card/30 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between relative group overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/40 transition-colors" />
+                <span className="text-[10px] text-muted-foreground font-bold truncate" title={stat.size}>{stat.size}</span>
+                <span className="text-xl font-bold text-foreground mt-1">{stat.count} <span className="text-xs font-normal text-muted-foreground">لوحات</span></span>
+                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1">
+                  {stat.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
+                </span>
+              </Card>
+            ))}
+          </div>
+        )}
+
+        {/* Map Selection Statistics Cards */}
+        {selectedItems.size > 0 && (
+          <div className="border border-indigo-500/20 bg-indigo-500/[0.02] rounded-3xl p-5 space-y-4 animate-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center justify-between border-b border-indigo-500/10 pb-3">
+              <h3 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
+                <span>إحصائيات اللوحات المحددة ({selectedItems.size} لوحة)</span>
+              </h3>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => {
+                  setCurrentCollection(prev => {
+                    const filtered = prev.items.filter(i => !selectedItems.has(i.sequence_number));
+                    const reSequenced = filtered.map((item, idx) => ({ ...item, sequence_number: idx + 1 }));
+                    return { ...prev, items: reSequenced };
+                  });
+                  toast.success(`تم حذف ${selectedItems.size} لوحة`);
+                  setSelectedItems(new Set());
+                }}
+                className="h-8 rounded-lg text-xs text-red-500 hover:bg-red-500/10 hover:text-red-600 gap-1"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                حذف المحدد ({selectedItems.size})
+              </Button>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={() => setSelectedItems(new Set())}
+                className="h-8 rounded-lg text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                إلغاء التحديد
+              </Button>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <Card className="border border-indigo-500/15 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-2xl shadow-sm p-4 flex flex-col justify-between">
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider">اللوحات المحددة</span>
+                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{selectedItemsStats.totalCount}</span>
+                <span className="text-[10px] text-muted-foreground mt-1">لوحة محددة</span>
+              </Card>
+              <Card className="border border-indigo-500/15 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-2xl shadow-sm p-4 flex flex-col justify-between">
+                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider">مساحة المحددة</span>
+                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+                  {selectedItemsStats.totalArea.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
+                </span>
+                <span className="text-[10px] text-muted-foreground mt-1">
+                  {customSettings.calc_meters_by_faces === 'true' ? 'محتسباً بعدد الأوجه' : 'مساحة الوجه الواحد'}
+                </span>
+              </Card>
+              {selectedItemsStats.sizeStats.map(stat => (
+                <Card key={stat.size} className="border border-border/15 bg-card/40 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-indigo-500/40" />
+                  <span className="text-[10px] text-muted-foreground font-bold truncate" title={stat.size}>{stat.size}</span>
+                  <span className="text-xl font-bold text-foreground mt-1">{stat.count} <span className="text-xs font-normal text-muted-foreground">لوحات</span></span>
+                  <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1">
+                    {stat.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
+                  </span>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 flex-wrap">
@@ -2448,6 +2784,19 @@ export default function MunicipalityBillboardOrganizer() {
                 onRemoveFromList={(b) => {
                   removeItem(b.ID);
                 }}
+                onSelectionChange={setSelectedItems}
+                externalSelectedIds={selectedItems}
+                showStatsOverlay={true}
+                calcMetersByFaces={customSettings.calc_meters_by_faces === 'true'}
+                onDeleteSelected={() => {
+                  setCurrentCollection(prev => {
+                    const filtered = prev.items.filter(i => !selectedItems.has(i.sequence_number));
+                    const reSequenced = filtered.map((item, idx) => ({ ...item, sequence_number: idx + 1 }));
+                    return { ...prev, items: reSequenced };
+                  });
+                  toast.success(`تم حذف ${selectedItems.size} لوحة`);
+                  setSelectedItems(new Set());
+                }}
               />
             </div>
           </CardContent>
@@ -2769,7 +3118,7 @@ export default function MunicipalityBillboardOrganizer() {
                 لا توجد مجموعات محفوظة حالياً
               </div>
             ) : (
-              <ScrollArea className="max-h-[350px] pr-1">
+              <div className="max-h-[350px] overflow-y-auto custom-scrollbar pr-1">
                 <div className="space-y-2">
                   {collections.map(c => (
                     <div
@@ -2788,7 +3137,7 @@ export default function MunicipalityBillboardOrganizer() {
                     </div>
                   ))}
                 </div>
-              </ScrollArea>
+              </div>
             )}
           </div>
         </DialogContent>
@@ -2833,6 +3182,20 @@ export default function MunicipalityBillboardOrganizer() {
                   </label>
                 </div>
               </RadioGroup>
+            </div>
+
+            <div className="flex items-center justify-between p-3.5 border border-border/15 rounded-xl">
+              <div>
+                <Label htmlFor="faces_count_show" className="font-bold text-xs text-muted-foreground">إظهار عدد الأوجه في الطباعة</Label>
+                <div className="text-[11px] text-muted-foreground mt-0.5">إظهار عمود عدد الأوجه في جدول ملخص اللوحات</div>
+              </div>
+              <Switch 
+                id="faces_count_show" 
+                checked={customSettings.faces_count_show !== 'false'} 
+                onCheckedChange={async (v) => {
+                  await saveSettings({ faces_count_show: v ? 'true' : 'false' });
+                }} 
+              />
             </div>
 
             <div className="flex items-center justify-between p-3.5 border border-border/15 rounded-xl">

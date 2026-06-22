@@ -56,6 +56,7 @@ interface Billboard {
   Faces_Count: number;
   Level: string;
   contractId?: number;
+  isPaused?: boolean;
 }
 
 interface Contract {
@@ -291,15 +292,22 @@ export function EnhancedAddInstallationTaskDialog({
         }
       }
       
-      if (allBillboardIds.length === 0) return [];
-
       const { data: pausedRows } = await supabase
         .from('paused_billboards' as any)
-        .select('billboard_id')
+        .select('billboard_id, contract_number')
         .in('contract_number', selectedContractIds);
       const pausedSet = new Set<number>((pausedRows || []).map((p: any) => Number(p.billboard_id)));
 
-      const uniqueIds = [...new Set(allBillboardIds.map(b => b.id))].filter(id => !pausedSet.has(id));
+      // Add paused ones to allBillboardIds too
+      if (pausedRows) {
+        pausedRows.forEach((p: any) => {
+          if (p.billboard_id) {
+            allBillboardIds.push({ id: Number(p.billboard_id), contractId: Number(p.contract_number) });
+          }
+        });
+      }
+      
+      const uniqueIds = [...new Set(allBillboardIds.map(b => b.id))];
       if (uniqueIds.length === 0) return [];
 
       const { data, error } = await supabase
@@ -313,7 +321,8 @@ export function EnhancedAddInstallationTaskDialog({
         const contractInfo = allBillboardIds.find(b => b.id === billboard.ID);
         return {
           ...billboard,
-          contractId: contractInfo?.contractId
+          contractId: contractInfo?.contractId,
+          isPaused: pausedSet.has(billboard.ID)
         };
       }) as Billboard[];
     },
@@ -390,7 +399,7 @@ export function EnhancedAddInstallationTaskDialog({
       if (taskType === 'reinstallation' && tornIds.length > 0) {
         setSelectedBillboardIds(tornIds);
       } else {
-        setSelectedBillboardIds(contractBillboards.map(b => b.ID));
+        setSelectedBillboardIds(contractBillboards.filter((b: any) => !b.isPaused).map(b => b.ID));
       }
     }
   }, [contractBillboards, selectedContractIds, taskType, tornIds]);
@@ -1027,8 +1036,13 @@ export function EnhancedAddInstallationTaskDialog({
                                 )}
                               </div>
                               <div className="p-3 space-y-1.5">
-                                <div className="font-extrabold text-xs truncate group-hover:text-primary transition-colors">
+                                <div className="font-extrabold text-xs truncate group-hover:text-primary transition-colors flex items-center gap-1.5 flex-wrap">
                                   {billboard.Billboard_Name}
+                                  {billboard.isPaused && (
+                                    <Badge className="bg-amber-600 hover:bg-amber-700 text-white text-[8px] h-4 rounded-md px-1 shrink-0 font-bold border-0 shadow">
+                                      موقوفة
+                                    </Badge>
+                                  )}
                                 </div>
                                 {bbStatuses.length > 0 && (
                                   <BillboardStatusBadges statuses={bbStatuses} size="xs" />

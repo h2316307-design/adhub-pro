@@ -6,7 +6,8 @@ import {
   ZoomOut, 
   Layers, 
   Target,
-  Navigation
+  Navigation,
+  Compass
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -17,6 +18,7 @@ interface MapControlButtonsProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onToggleLayers: () => void;
+  onFitAll?: () => void;
   isTracking?: boolean;
   onToggleTracking?: () => void;
   isRecording?: boolean;
@@ -35,6 +37,7 @@ const MapControlButtons = memo(function MapControlButtons({
   onZoomIn,
   onZoomOut,
   onToggleLayers,
+  onFitAll,
   onCenterOnUser,
   isSimpleTracking = false,
   onToggleSimpleTracking,
@@ -74,6 +77,13 @@ const MapControlButtons = memo(function MapControlButtons({
       tooltip: 'تصغير',
       activeClass: '',
     },
+    ...(onFitAll ? [{
+      key: 'fitAll',
+      onClick: onFitAll,
+      icon: <Compass className={iconSize} />,
+      tooltip: 'احتواء جميع اللوحات بالخريطة',
+      activeClass: '',
+    }] : []),
     {
       key: 'layers',
       onClick: onToggleLayers,

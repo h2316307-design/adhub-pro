@@ -711,6 +711,7 @@ export type Database = {
           cover_logo_size: string | null
           cover_logo_top: string | null
           cover_logo_url: string | null
+          calc_meters_by_faces: string | null
           cover_municipality_align: string | null
           cover_municipality_font_size: string | null
           cover_municipality_left: string | null
@@ -733,6 +734,7 @@ export type Database = {
           faces_count_font_size: string | null
           faces_count_left: string | null
           faces_count_offset_x: string | null
+          faces_count_show: string | null
           faces_count_top: string | null
           id: string
           installation_date_alignment: string | null
@@ -763,6 +765,7 @@ export type Database = {
           location_info_width: string | null
           main_image_height: string | null
           main_image_left: string | null
+          main_image_object_fit: string | null
           main_image_top: string | null
           main_image_width: string | null
           map_show_labels: string | null
@@ -827,6 +830,7 @@ export type Database = {
           cover_logo_size?: string | null
           cover_logo_top?: string | null
           cover_logo_url?: string | null
+          calc_meters_by_faces?: string | null
           cover_municipality_align?: string | null
           cover_municipality_font_size?: string | null
           cover_municipality_left?: string | null
@@ -850,6 +854,7 @@ export type Database = {
           faces_count_left?: string | null
           faces_count_offset_x?: string | null
           faces_count_top?: string | null
+          faces_count_show?: string | null
           id?: string
           installation_date_alignment?: string | null
           installation_date_color?: string | null
@@ -879,6 +884,7 @@ export type Database = {
           location_info_width?: string | null
           main_image_height?: string | null
           main_image_left?: string | null
+          main_image_object_fit?: string | null
           main_image_top?: string | null
           main_image_width?: string | null
           map_show_labels?: string | null
@@ -943,6 +949,7 @@ export type Database = {
           cover_logo_size?: string | null
           cover_logo_top?: string | null
           cover_logo_url?: string | null
+          calc_meters_by_faces?: string | null
           cover_municipality_align?: string | null
           cover_municipality_font_size?: string | null
           cover_municipality_left?: string | null
@@ -966,6 +973,7 @@ export type Database = {
           faces_count_left?: string | null
           faces_count_offset_x?: string | null
           faces_count_top?: string | null
+          faces_count_show?: string | null
           id?: string
           installation_date_alignment?: string | null
           installation_date_color?: string | null
@@ -995,6 +1003,7 @@ export type Database = {
           location_info_width?: string | null
           main_image_height?: string | null
           main_image_left?: string | null
+          main_image_object_fit?: string | null
           main_image_top?: string | null
           main_image_width?: string | null
           map_show_labels?: string | null

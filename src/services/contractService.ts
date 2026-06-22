@@ -202,19 +202,10 @@ export async function createContract(contractData: ContractData) {
   const finalTotal = contractPayload.rent_cost; // هذا هو الإجمالي النهائي من الواجهة
   const rentalCostOnly = Math.max(0, finalTotal - installationCost - printCost); // سعر الإيجار = الإجمالي النهائي - التركيب - الطباعة
 
-  // ✅ حساب رسوم التشغيل مع نسب مستقلة للتركيب والطباعة
-  const operatingFeeRate = operating_fee_rate || 3;
-  const includeOpInInstall = contractData.include_operating_in_installation === true;
-  const includeOpInPrint = contractData.include_operating_in_print === true;
-  const opRateInstall = Number(contractData.operating_fee_rate_installation || operatingFeeRate);
-  const opRatePrint = Number(contractData.operating_fee_rate_print || operatingFeeRate);
-  operatingFee = Math.round(rentalCostOnly * (operatingFeeRate / 100) * 100) / 100;
-  if (includeOpInInstall) operatingFee += Math.round(installationCost * (opRateInstall / 100) * 100) / 100;
-  if (includeOpInPrint) operatingFee += Math.round(printCost * (opRatePrint / 100) * 100) / 100;
-
-  // ✅ حساب رسوم التشغيل للوحات الصديقة
+  // ✅ حساب رسوم التشغيل للوحات الصديقة أولاً لمعرفة التكاليف وطرحها من وعاء النسبة العادية
   let friendOperatingFee = 0;
-  if (friend_rental_operating_fee_enabled && friend_rental_data) {
+  let totalFriendCosts = 0;
+  if (friend_rental_data) {
     try {
       const friendRentals = typeof friend_rental_data === 'string'
         ? JSON.parse(friend_rental_data)
@@ -223,14 +214,29 @@ export async function createContract(contractData: ContractData) {
         const selectedFriendRentals = billboard_ids
           ? friendRentals.filter((f: any) => billboard_ids.includes(f.billboardId))
           : friendRentals;
-        const totalFriendCosts = selectedFriendRentals.reduce((sum: number, f: any) => sum + (Number(f.friendRentalCost) || 0), 0);
-        const friendRate = Number(friend_rental_operating_fee_rate || 3);
-        friendOperatingFee = Math.round(totalFriendCosts * (friendRate / 100) * 100) / 100;
+        totalFriendCosts = selectedFriendRentals.reduce((sum: number, f: any) => sum + (Number(f.friendRentalCost) || 0), 0);
+        if (friend_rental_operating_fee_enabled) {
+          const friendRate = Number(friend_rental_operating_fee_rate || 3);
+          friendOperatingFee = Math.round(totalFriendCosts * (friendRate / 100) * 100) / 100;
+        }
       }
     } catch (e) {
       console.warn('Failed to calculate friend operating fee in backend:', e);
     }
   }
+
+  // ✅ حساب رسوم التشغيل مع نسب مستقلة للتركيب والطباعة
+  const operatingFeeRate = operating_fee_rate || 3;
+  const includeOpInInstall = contractData.include_operating_in_installation === true;
+  const includeOpInPrint = contractData.include_operating_in_print === true;
+  const opRateInstall = Number(contractData.operating_fee_rate_installation || operatingFeeRate);
+  const opRatePrint = Number(contractData.operating_fee_rate_print || operatingFeeRate);
+
+  // ✅ طرح تكاليف الصديق من وعاء الإيجار لمنع التكرار
+  const regularRentalBase = Math.max(0, rentalCostOnly - totalFriendCosts);
+  operatingFee = Math.round(regularRentalBase * (operatingFeeRate / 100) * 100) / 100;
+  if (includeOpInInstall) operatingFee += Math.round(installationCost * (opRateInstall / 100) * 100) / 100;
+  if (includeOpInPrint) operatingFee += Math.round(printCost * (opRatePrint / 100) * 100) / 100;
 
   const totalOperatingFee = Math.round((operatingFee + friendOperatingFee) * 100) / 100;
 
@@ -840,32 +846,38 @@ export async function updateContract(contractId: string, updates: any) {
       const finalTotal = Number(merged['Total']) || Number(merged.rent_cost) || 0; // هذا هو الإجمالي النهائي
       const rentalCostOnly = Math.max(0, finalTotal - installationCost - printCost); // سعر الإيجار = الإجمالي النهائي - التركيب - الطباعة
 
+      // ✅ رسوم تشغيل اللوحات الصديقة أولاً لمعرفة التكاليف وطرحها من وعاء النسبة العادية
+      let friendOperatingFee = 0;
+      let friendCostsTotal = 0;
+      const friendOpEnabled = merged.friend_rental_operating_fee_enabled === true || merged.friend_rental_operating_fee_enabled === 'true';
+      const friendOpRate = Number(merged.friend_rental_operating_fee_rate ?? 3) || 0;
+      const rawFriendData = merged.friend_rental_data;
+      if (rawFriendData) {
+        try {
+          const friendData = typeof rawFriendData === 'string' ? JSON.parse(rawFriendData) : rawFriendData;
+          if (Array.isArray(friendData)) {
+            friendCostsTotal = friendData.reduce((sum: number, item: any) => sum + (Number(item.friendRentalCost || item.friend_rental_cost) || 0), 0);
+            if (friendOpEnabled) {
+              friendOperatingFee = Math.round(friendCostsTotal * (friendOpRate / 100) * 100) / 100;
+            }
+          }
+        } catch (e) {
+          console.warn('Failed to parse friend_rental_data in backend updateContract:', e);
+        }
+      }
+
       // ✅ حساب رسوم التشغيل مع مراعاة إعدادات شمول التركيب والطباعة
       const operatingFeeRate = Number(merged.operating_fee_rate) || 3;
       const includeOpInInstall = merged.include_operating_in_installation === true || merged.include_operating_in_installation === 'true';
       const includeOpInPrint = merged.include_operating_in_print === true || merged.include_operating_in_print === 'true';
       const opRateInstall = Number(merged.operating_fee_rate_installation || operatingFeeRate);
       const opRatePrint = Number(merged.operating_fee_rate_print || operatingFeeRate);
-      let operatingFee = Math.round(rentalCostOnly * (operatingFeeRate / 100) * 100) / 100;
+
+      // ✅ طرح تكاليف الصديق من وعاء الإيجار لمنع التكرار
+      const regularRentalBase = Math.max(0, rentalCostOnly - friendCostsTotal);
+      let operatingFee = Math.round(regularRentalBase * (operatingFeeRate / 100) * 100) / 100;
       if (includeOpInInstall) operatingFee += Math.round(installationCost * (opRateInstall / 100) * 100) / 100;
       if (includeOpInPrint) operatingFee += Math.round(printCost * (opRatePrint / 100) * 100) / 100;
-
-      // ✅ رسوم تشغيل اللوحات الصديقة
-      let friendOperatingFee = 0;
-      const friendOpEnabled = merged.friend_rental_operating_fee_enabled === true || merged.friend_rental_operating_fee_enabled === 'true';
-      const friendOpRate = Number(merged.friend_rental_operating_fee_rate ?? 3) || 0;
-      const rawFriendData = merged.friend_rental_data;
-      if (friendOpEnabled && rawFriendData) {
-        try {
-          const friendData = typeof rawFriendData === 'string' ? JSON.parse(rawFriendData) : rawFriendData;
-          if (Array.isArray(friendData)) {
-            const friendCostsTotal = friendData.reduce((sum: number, item: any) => sum + (Number(item.friendRentalCost || item.friend_rental_cost) || 0), 0);
-            friendOperatingFee = Math.round(friendCostsTotal * (friendOpRate / 100) * 100) / 100;
-          }
-        } catch (e) {
-          console.warn('Failed to parse friend_rental_data in backend updateContract:', e);
-        }
-      }
 
       // ✅ رسوم تشغيل الشراكة
       let partnershipOperatingFee = 0;

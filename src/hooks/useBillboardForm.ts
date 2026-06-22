@@ -67,7 +67,7 @@ export const useBillboardForm = (municipalities: any[]) => {
   };
 
   // ✅ FIXED: Initialize add form with auto-generated values
-  const initializeAddForm = async () => {
+  const initializeAddForm = async (initialValues?: any) => {
     // Start with basic form structure
     const basicForm = {
       ID: '',
@@ -86,7 +86,8 @@ export const useBillboardForm = (municipalities: any[]) => {
       is_partnership: false,
       partner_companies: [],
       capital: 0,
-      capital_remaining: 0
+      capital_remaining: 0,
+      ...initialValues
     };
 
     setAddForm(basicForm);
@@ -100,13 +101,16 @@ export const useBillboardForm = (municipalities: any[]) => {
       if (addForm.Municipality) {
         const { nextId, municipalityCode, billboardName } = await getNextBillboardData(addForm.Municipality);
         
-        setAddForm(prev => ({
-          ...prev,
-          ID: nextId,
-          Billboard_Name: billboardName,
-          image_name: generateImageName(billboardName),
-          Image_URL: `/image/${generateImageName(billboardName)}`
-        }));
+        setAddForm(prev => {
+          const keepImage = prev.hasCustomImage || (prev.Image_URL && !prev.Image_URL.startsWith('/image/'));
+          return {
+            ...prev,
+            ID: nextId,
+            Billboard_Name: billboardName,
+            image_name: keepImage ? prev.image_name : generateImageName(billboardName),
+            Image_URL: keepImage ? prev.Image_URL : `/image/${generateImageName(billboardName)}`
+          };
+        });
       }
     };
 

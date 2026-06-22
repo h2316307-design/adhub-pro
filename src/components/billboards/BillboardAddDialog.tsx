@@ -44,7 +44,7 @@ interface BillboardAddDialogProps {
   setBillboardTypes: (types: string[]) => void;
   setDbMunicipalities: (municipalities: string[]) => void;
   setDbSizes: (sizes: string[]) => void;
-  loadBillboards: () => Promise<void>;
+  loadBillboards: (options?: { silent?: boolean }) => Promise<void>;
   uploadImageToFolder: (file: File, fileName: string) => Promise<boolean>;
   addMunicipalityIfNew: (name: string, municipalities: any[], setMunicipalities: any, setDbMunicipalities: any) => Promise<void>;
   addSizeIfNew: (sizeName: string, level: string, sizes: any[], setSizes: any, setDbSizes: any) => Promise<void>;
@@ -382,7 +382,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       const { error } = await supabase.from('billboards').insert(payload).select().single();
       if (error) throw error;
       toast.success('تم إضافة اللوحة مع حفظ اسم الصورة');
-      await loadBillboards();
+      await loadBillboards({ silent: true });
       setAddOpen(false);
       setImagePreview('');
       setSelectedFile(null);

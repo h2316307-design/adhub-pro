@@ -63,6 +63,7 @@ interface BillboardTaskCardProps {
   onApplyFacesToAll?: (faces: number) => void;
   pausedInfo?: { pauseDate?: string };
   replacementInfo?: { replacedName?: string; startDate?: string };
+  isPrintActive?: boolean;
 }
 
 export function BillboardTaskCard({
@@ -70,6 +71,7 @@ export function BillboardTaskCard({
   billboard,
   isSelected,
   isCompleted,
+  isPrintActive = false,
   taskDesigns = [],
   installationPrice = 0,
   allItems = [],
@@ -713,6 +715,12 @@ export function BillboardTaskCard({
                   مجسم
                 </Badge>
               )}
+              {isPrintActive && (
+                <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-blue-600/90 backdrop-blur-sm text-white border-0 shadow-sm flex items-center gap-0.5">
+                  <Printer className="h-3 w-3" />
+                  طباعة ✓
+                </Badge>
+              )}
             </div>
 
             {/* ID Badge */}
@@ -746,6 +754,12 @@ export function BillboardTaskCard({
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 مكتملة بنجاح
               </Badge>
+              {isPrintActive && (
+                <Badge className="text-[9px] px-2 py-0.5 font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 flex items-center gap-1">
+                  <Printer className="h-3 w-3" />
+                  تم احتساب الطباعة ✓
+                </Badge>
+              )}
               {onUncomplete && (
                 <Button
                   variant="ghost"
@@ -1089,7 +1103,20 @@ export function BillboardTaskCard({
             />
           </div>
 
-
+          {/* Badges Overlay */}
+          <div className="absolute top-2.5 left-2.5 flex items-center gap-1 z-10">
+            {isPrintActive && (
+              <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-blue-600/90 backdrop-blur-sm text-white border-0 shadow-sm flex items-center gap-0.5">
+                <Printer className="h-3 w-3" />
+                طباعة ✓
+              </Badge>
+            )}
+            {hasCutout && (
+              <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-accent/90 backdrop-blur-sm text-white border-0 shadow-sm">
+                مجسم
+              </Badge>
+            )}
+          </div>
 
           {/* Overdue delay badge */}
           {isDelayed && (
@@ -1131,6 +1158,11 @@ export function BillboardTaskCard({
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   قيد التركيب
                 </span>
+                {isPrintActive && (
+                  <Badge className="text-[9px] px-2 py-0.5 font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 flex items-center gap-1 rounded-full">
+                    تم تفعيل الطباعة ✓
+                  </Badge>
+                )}
                 {billboard?.friend_companies?.name && (
                   <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-bold">
                     <Building2 className="h-3 w-3.5 shrink-0" />

@@ -201,11 +201,11 @@ export function useAccountStatementPDF() {
         transactions.push({
           date: latestPauseDate,
           type: 'discount',
-          description: `خصم إيقاف لوحات عقد رقم ${contract.Contract_Number}${latestBoardName ? ` - ${latestBoardName}` : ''}`,
+          description: `آخر تسكير حساب الإيقاف لعقد رقم ${contract.Contract_Number}`,
           debit: 0,
           credit: totalSuspensionDiscount,
           reference: `عقد-${contract.Contract_Number}`,
-          notes: cleanStatementNote(`خصم إيقاف اللوحات حسب آخر إيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
+          notes: cleanStatementNote(`تسكير حساب الإيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
         });
       }
     });

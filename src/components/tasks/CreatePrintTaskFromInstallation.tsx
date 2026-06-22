@@ -12,6 +12,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { DesignDisplayCard } from '@/components/print-tasks/DesignDisplayCard';
 import { PrintTaskInvoice } from './PrintTaskInvoice';
 import { CutoutTaskInvoice } from './CutoutTaskInvoice';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Badge } from '@/components/ui/badge';
 
 interface DesignGroup {
   design: string;
@@ -87,6 +89,7 @@ export function CreatePrintTaskFromInstallation({
   // أسعار التعديل الجماعي
   const [bulkPrinterCostPerMeter, setBulkPrinterCostPerMeter] = useState<number>(10);
   const [bulkCustomerCostPerMeter, setBulkCustomerCostPerMeter] = useState<number>(20);
+  const [selectedBillboardIds, setSelectedBillboardIds] = useState<number[]>([]);
 
   useEffect(() => {
     if (!open) {
@@ -104,6 +107,7 @@ export function CreatePrintTaskFromInstallation({
       setBulkPrinterCostPerMeter(10);
       setBulkCustomerCostPerMeter(20);
       hasFetchedRef.current = false;
+      setSelectedBillboardIds([]);
     }
   }, [open, installationTaskId]);
 
@@ -179,8 +183,16 @@ export function CreatePrintTaskFromInstallation({
           return item;
         });
         setEnrichedTaskItems(updatedItems);
+        const idsWithDesigns = updatedItems
+          .filter(item => item.design_face_a || item.design_face_b)
+          .map(item => item.billboard_id);
+        setSelectedBillboardIds(idsWithDesigns);
       } else {
         setEnrichedTaskItems(taskItems);
+        const idsWithDesigns = taskItems
+          .filter(item => item.design_face_a || item.design_face_b)
+          .map(item => item.billboard_id);
+        setSelectedBillboardIds(idsWithDesigns);
       }
 
       if (printersResult.data && printersResult.data.length > 0) {
@@ -207,6 +219,8 @@ export function CreatePrintTaskFromInstallation({
     let hasDesigns = false;
 
     enrichedTaskItems.forEach(item => {
+      if (!selectedBillboardIds.includes(item.billboard_id)) return;
+      
       const billboard = billboardsMap[item.billboard_id];
       if (!billboard) return;
       
@@ -296,7 +310,8 @@ export function CreatePrintTaskFromInstallation({
       }
     });
 
-    if (!hasDesigns) {
+    const itemsWithDesigns = enrichedTaskItems.filter(item => item.design_face_a || item.design_face_b);
+    if (itemsWithDesigns.length === 0) {
       toast.error('لم يتم العثور على تصاميم! يرجى تعيين التصاميم للوحات أولاً.');
     }
 
@@ -538,6 +553,12 @@ export function CreatePrintTaskFromInstallation({
 
       if (printTaskError) throw printTaskError;
 
+      // تحديث مهمة التركيب لربطها بمهمة الطباعة
+      await supabase
+        .from('installation_tasks')
+        .update({ print_task_id: printTask.id })
+        .eq('id', installationTaskId);
+
       // إنشاء بنود مهمة الطباعة - بند منفصل لكل لوحة مع مراعاة عدد الأوجه
       const printTaskItems = printGroups.flatMap(group => 
         group.billboards.map(billboardId => {
@@ -623,6 +644,12 @@ export function CreatePrintTaskFromInstallation({
           .single();
 
         if (cutoutTaskError) throw cutoutTaskError;
+
+        // تحديث مهمة التركيب لربطها بمهمة القص/المجسمات
+        await supabase
+          .from('installation_tasks')
+          .update({ cutout_task_id: createdCutoutTask.id })
+          .eq('id', installationTaskId);
 
         // إنشاء بنود مهمة القص لكل لوحة بها مجسم مع مراعاة عدد الأوجه
         const cutoutTaskItems = cutoutGroups.flatMap(group => 
@@ -774,6 +801,75 @@ export function CreatePrintTaskFromInstallation({
         </DialogHeader>
 
         <div className="space-y-6">
+          {/* اختيار اللوحات المطلوب طباعتها */}
+          <Card className="border-blue-200 dark:border-blue-800 bg-blue-50/5 dark:bg-blue-950/5">
+            <CardContent className="pt-6 space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Printer className="h-5 w-5 text-blue-600 animate-pulse" />
+                <h3 className="font-bold text-lg text-blue-700 dark:text-blue-500">تحديد اللوحات المطلوب طباعتها</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                يرجى تحديد اللوحات التي ترغب في طباعتها فعلياً ضمن هذه المهمة المجمعة. سيتم استبعاد اللوحات غير المحددة من مهمة الطباعة وفاتورة الطباعة لتجنب أي فروقات مالية.
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-2">
+                {enrichedTaskItems.map((item) => {
+                  const billboard = billboardsMap[item.billboard_id];
+                  if (!billboard) return null;
+
+                  const hasDesign = !!item.design_face_a || !!item.design_face_b;
+                  const isSelected = selectedBillboardIds.includes(item.billboard_id);
+
+                  return (
+                    <div 
+                      key={item.billboard_id} 
+                      className={`flex items-center justify-between p-3.5 rounded-xl border transition-all duration-200 ${
+                        !hasDesign 
+                          ? 'bg-muted/40 border-muted text-muted-foreground/60' 
+                          : isSelected
+                            ? 'bg-blue-500/5 border-blue-500/30 text-blue-900 dark:text-blue-250 shadow-sm'
+                            : 'bg-background border-border hover:border-blue-500/25'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <Checkbox 
+                          id={`print-bb-${item.billboard_id}`}
+                          disabled={!hasDesign}
+                          checked={isSelected}
+                          onCheckedChange={(checked) => {
+                            if (checked === true) {
+                              setSelectedBillboardIds(prev => [...prev, item.billboard_id]);
+                            } else {
+                              setSelectedBillboardIds(prev => prev.filter(id => id !== item.billboard_id));
+                            }
+                          }}
+                          className="h-4.5 w-4.5 text-blue-600 border-border rounded focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
+                        />
+                        <label 
+                          htmlFor={`print-bb-${item.billboard_id}`}
+                          className={`flex flex-col text-xs font-semibold cursor-pointer ${!hasDesign ? 'cursor-not-allowed' : ''}`}
+                        >
+                          <span>لوحة رقم #{item.billboard_id} ({billboard.Size})</span>
+                          <span className="text-[10px] text-muted-foreground font-normal mt-0.5">
+                            {!hasDesign 
+                              ? 'بدون تصميم (لا يمكن طباعتها)' 
+                              : `${item.design_face_a ? 'وجه أمامي' : ''}${item.design_face_a && item.design_face_b ? ' + ' : ''}${item.design_face_b ? 'وجه خلفي' : ''}`
+                            }
+                          </span>
+                        </label>
+                      </div>
+                      {hasDesign && (
+                        <Badge variant={isSelected ? "default" : "outline"} className="text-[10px] font-semibold shrink-0">
+                          {isSelected ? 'مشمولة' : 'مستثناة'}
+                        </Badge>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* اختيار المطابع */}
           <Card className="bg-gradient-to-br from-primary/5 to-primary/10 border-primary/30">
             <CardContent className="pt-6 space-y-4">

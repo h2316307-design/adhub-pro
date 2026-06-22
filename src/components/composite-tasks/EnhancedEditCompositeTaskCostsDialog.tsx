@@ -258,11 +258,22 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
     companyCost: number; customerCost: number; additionalCost: number;
     additionalNotes: string; companyAdditionalCost: number; companyAdditionalNotes: string;
     hasCutout: boolean;
-  }>({ companyCost: 0, customerCost: 0, additionalCost: 0, additionalNotes: '', companyAdditionalCost: 0, companyAdditionalNotes: '', hasCutout: false });
+    hasPrint: boolean;
+  }>({ 
+    companyCost: 0, 
+    customerCost: 0, 
+    additionalCost: 0, 
+    additionalNotes: '', 
+    companyAdditionalCost: 0, 
+    companyAdditionalNotes: '', 
+    hasCutout: false,
+    hasPrint: false
+  });
   
   const [customCompanyCosts, setCustomCompanyCosts] = useState<Record<string, number>>({});
   
   // Print details
+  const [printBillboardIds, setPrintBillboardIds] = useState<number[]>([]);
   const [totalPrintArea, setTotalPrintArea] = useState(0);
   const [customerPrintPerMeter, setCustomerPrintPerMeter] = useState(0);
   const [companyPrintPerMeter, setCompanyPrintPerMeter] = useState(0);
@@ -329,6 +340,26 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
     else if (hasCutoutTab) setActiveTab('cutout');
     else setActiveTab('summary');
   }, [loading, task, open, isInstallationActive, isPrintActive, isCutoutActive]);
+
+  // Recalculate print area reactively when printBillboardIds or billboards change
+  useEffect(() => {
+    if (!task?.print_task_id) return;
+    let areaSum = 0;
+    const uniquePrintBillboardIds = Array.from(new Set(printBillboardIds));
+    uniquePrintBillboardIds.forEach(bbId => {
+      const item = taskItems.find(i => i.billboard_id === bbId);
+      if (!item) return; // Skip if this billboard is not part of this team's installation task
+
+      const billboard = billboards[bbId];
+      if (billboard) {
+        const sizeName = billboard.Size || 'غير محدد';
+        const area = calculateAreaFromSizeData(sizeName, sizesMap);
+        const faces = item.faces_to_install || billboard.Faces_Count || 2;
+        areaSum += area * faces;
+      }
+    });
+    setTotalPrintArea(areaSum);
+  }, [printBillboardIds, taskItems, billboards, sizesMap, task?.print_task_id]);
 
   // Load all DB elements
   const loadAllData = async () => {
@@ -434,6 +465,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
           .select('billboard_id, design_face_a, design_face_b')
           .eq('task_id', task.print_task_id);
         if (ptItems) {
+          setPrintBillboardIds(Array.from(new Set((ptItems as any[]).map(r => r.billboard_id).filter(Boolean))));
           const m: Record<number, string> = {};
           (ptItems as any[]).forEach(r => {
             const img = r.design_face_a || r.design_face_b;
@@ -609,7 +641,8 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
       companyCost: existingCompanyCost, customerCost: item.customer_installation_cost || 0,
       additionalCost: item.additional_cost || 0, additionalNotes: item.additional_cost_notes || '',
       companyAdditionalCost: item.company_additional_cost || 0, companyAdditionalNotes: item.company_additional_cost_notes || '',
-      hasCutout: !!item.has_cutout
+      hasCutout: !!item.has_cutout,
+      hasPrint: printBillboardIds.includes(item.billboard_id)
     });
   };
 
@@ -642,6 +675,9 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
     if (!editingItemId) return;
     setDistributing(true);
     try {
+      const editingItem = taskItems.find(item => item.id === editingItemId);
+      if (!editingItem) throw new Error('Item not found');
+
       setCustomCompanyCosts(prev => ({ ...prev, [editingItemId]: editValues.companyCost }));
       const { error } = await supabase.from('installation_task_items').update({
         customer_installation_cost: editValues.customerCost, company_installation_cost: editValues.companyCost,
@@ -650,6 +686,56 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
         has_cutout: editValues.hasCutout
       }).eq('id', editingItemId);
       if (error) throw error;
+
+      // Handle print status change
+      if (task.print_task_id) {
+        const wasPrint = printBillboardIds.includes(editingItem.billboard_id);
+        const isPrint = editValues.hasPrint;
+        if (wasPrint !== isPrint) {
+          if (isPrint) {
+            const billboard = billboards[editingItem.billboard_id];
+            if (billboard) {
+              const sizeName = billboard.Size || 'غير محدد';
+              const area = calculateAreaFromSizeData(sizeName, sizesMap);
+              const faces = editingItem.faces_to_install || billboard.Faces_Count || 2;
+              const totalItemArea = area * faces;
+              
+              const { data: existing } = await supabase
+                .from('print_task_items')
+                .select('id')
+                .eq('task_id', task.print_task_id)
+                .eq('billboard_id', editingItem.billboard_id)
+                .maybeSingle();
+
+              if (!existing) {
+                await supabase.from('print_task_items').insert({
+                  task_id: task.print_task_id,
+                  billboard_id: editingItem.billboard_id,
+                  description: `${sizeName} - ${faces === 1 ? 'وجه واحد' : 'وجهين'}`,
+                  width: sizesMap[sizeName]?.width || null,
+                  height: sizesMap[sizeName]?.height || null,
+                  area: totalItemArea,
+                  quantity: 1,
+                  faces_count: faces,
+                  unit_cost: companyPrintPerMeter * totalItemArea,
+                  printer_unit_cost: companyPrintPerMeter * totalItemArea,
+                  customer_unit_cost: customerPrintPerMeter * totalItemArea,
+                  total_cost: companyPrintPerMeter * totalItemArea,
+                  status: 'pending'
+                });
+              }
+            }
+            setPrintBillboardIds(prev => Array.from(new Set([...prev, editingItem.billboard_id])));
+          } else {
+            await supabase
+              .from('print_task_items')
+              .delete()
+              .eq('task_id', task.print_task_id)
+              .eq('billboard_id', editingItem.billboard_id);
+            setPrintBillboardIds(prev => prev.filter(id => id !== editingItem.billboard_id));
+          }
+        }
+      }
       
       const newItems = taskItems.map(item => 
         item.id === editingItemId ? { ...item, customer_installation_cost: editValues.customerCost, company_installation_cost: editValues.companyCost,
@@ -669,8 +755,67 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
       await updateCompositeTaskInstallationCosts(newCustomerTotal, newCompanyTotal);
       toast.success('تم حفظ التغييرات على اللوحة بنجاح');
       setEditingItemId(null);
-    } catch (error) { toast.error('فشل في حفظ تعديلات اللوحة'); }
+    } catch (error) { 
+      console.error(error);
+      toast.error('فشل في حفظ تعديلات اللوحة'); 
+    }
     finally { setDistributing(false); }
+  };
+
+  const handleTogglePrintStatus = async (billboardId: number, isChecked: boolean) => {
+    if (!task?.print_task_id) return;
+    setDistributing(true);
+    try {
+      if (isChecked) {
+        const billboard = billboards[billboardId];
+        const item = taskItems.find(i => i.billboard_id === billboardId);
+        if (billboard) {
+          const sizeName = billboard.Size || 'غير محدد';
+          const area = calculateAreaFromSizeData(sizeName, sizesMap);
+          const faces = item?.faces_to_install || billboard.Faces_Count || 2;
+          const totalItemArea = area * faces;
+
+          const { data: existing } = await supabase
+            .from('print_task_items')
+            .select('id')
+            .eq('task_id', task.print_task_id)
+            .eq('billboard_id', billboardId)
+            .maybeSingle();
+
+          if (!existing) {
+            await supabase.from('print_task_items').insert({
+              task_id: task.print_task_id,
+              billboard_id: billboardId,
+              description: `${sizeName} - ${faces === 1 ? 'وجه واحد' : 'وجهين'}`,
+              width: sizesMap[sizeName]?.width || null,
+              height: sizesMap[sizeName]?.height || null,
+              area: totalItemArea,
+              quantity: 1,
+              faces_count: faces,
+              unit_cost: companyPrintPerMeter * totalItemArea,
+              printer_unit_cost: companyPrintPerMeter * totalItemArea,
+              customer_unit_cost: customerPrintPerMeter * totalItemArea,
+              total_cost: companyPrintPerMeter * totalItemArea,
+              status: 'pending'
+            });
+          }
+        }
+        setPrintBillboardIds(prev => Array.from(new Set([...prev, billboardId])));
+      } else {
+        await supabase
+          .from('print_task_items')
+          .delete()
+          .eq('task_id', task.print_task_id)
+          .eq('billboard_id', billboardId);
+        setPrintBillboardIds(prev => prev.filter(id => id !== billboardId));
+      }
+      toast.success(isChecked ? 'تم إضافة اللوحة للطباعة بنجاح' : 'تم استثناء اللوحة من الطباعة بنجاح');
+    } catch (error) {
+      console.error('Error toggling print status:', error);
+      toast.error('حدث خطأ أثناء تعديل حالة الطباعة');
+    } finally {
+      setDistributing(false);
+    }
   };
 
   const handleSetFree = async (itemId: string) => {
@@ -817,11 +962,47 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
     // Sync printer with database print task
     try {
       if (task.print_task_id) {
-        await (supabase.from('print_tasks') as any).update({
+        const { data: updatedPrintTask, error: ptUpdateError } = await (supabase.from('print_tasks') as any).update({
           printer_id: selectedPrinterId || null,
           customer_price_per_meter: customerPrintPerMeter || 0,
           price_per_meter: companyPrintPerMeter || 0,
-        }).eq('id', task.print_task_id);
+          total_area: totalPrintArea,
+          customer_total_amount: customerPrintTotal,
+          total_cost: companyPrintTotal,
+          printer_total_cost: companyPrintTotal,
+        }).eq('id', task.print_task_id).select('invoice_id').maybeSingle();
+
+        if (ptUpdateError) throw ptUpdateError;
+
+        if (updatedPrintTask?.invoice_id) {
+          await supabase.from('printed_invoices').update({
+            total_amount: customerPrintTotal,
+            printer_cost: companyPrintTotal,
+            updated_at: new Date().toISOString()
+          }).eq('id', updatedPrintTask.invoice_id);
+        }
+
+        const { data: currentItems } = await supabase
+          .from('print_task_items')
+          .select('id, area')
+          .eq('task_id', task.print_task_id);
+
+        if (currentItems) {
+          await Promise.all(
+            currentItems.map(item => {
+              const itemArea = item.area || 0;
+              return supabase
+                .from('print_task_items')
+                .update({
+                  unit_cost: companyPrintPerMeter * itemArea,
+                  printer_unit_cost: companyPrintPerMeter * itemArea,
+                  customer_unit_cost: customerPrintPerMeter * itemArea,
+                  total_cost: companyPrintPerMeter * itemArea,
+                })
+                .eq('id', item.id);
+            })
+          );
+        }
       }
     } catch (e) { console.error('printer sync error', e); }
 
@@ -1053,6 +1234,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                           return (
                             <div key={type} className="border border-border/15 rounded-2xl overflow-hidden bg-card/45 backdrop-blur-md shadow-sm transition-all duration-300">
                               <div 
+                                dir="rtl"
                                 className="flex items-center justify-between p-5 bg-muted/10 cursor-pointer hover:bg-muted/15 transition-all select-none border-b border-border/10 gap-4 text-right"
                                 onClick={() => toggleTypeCollapse(type)}
                               >
@@ -1143,6 +1325,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                       <div key={sizeKey} className="bg-card/20">
                                         {/* Size Accordion Header */}
                                         <div 
+                                          dir="rtl"
                                           className="flex items-center justify-between px-6 py-4.5 bg-muted/[0.04] cursor-pointer hover:bg-muted/[0.08] transition-all select-none border-b border-border/5 gap-4 text-right"
                                           onClick={() => toggleSizeCollapse(sizeKey)}
                                         >
@@ -1401,6 +1584,19 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                                           <span className="text-xs sm:text-sm text-muted-foreground font-semibold leading-relaxed">نعم، تفعيل خيارات ومواصفات المجسمات لهذه اللوحة</span>
                                                         </div>
                                                       </div>
+
+                                                      {task.print_task_id && (
+                                                        <div className="space-y-2 col-span-2 border-t border-border/10 pt-4 mt-2">
+                                                          <Label className="text-sm font-semibold text-blue-600 block leading-relaxed">هل تتطلب هذه اللوحة طباعة؟</Label>
+                                                          <div className="flex items-center gap-3.5 h-11 px-4 bg-background border border-border/15 rounded-xl">
+                                                            <Switch 
+                                                              checked={editValues.hasPrint} 
+                                                              onCheckedChange={val => setEditValues(prev => ({...prev, hasPrint: val}))} 
+                                                            />
+                                                            <span className="text-xs sm:text-sm text-muted-foreground font-semibold leading-relaxed">نعم، تتطلب طباعة فلكس لهذه اللوحة ومزامنتها في جدول مهمة الطباعة</span>
+                                                          </div>
+                                                        </div>
+                                                      )}
                                                     </div>
                                                   </div>
                                                 );
@@ -1507,22 +1703,60 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                                           </div>
                                                         </div>
                                                         
-                                                        {task.print_task_id && (customerPrintPerMeter > 0 || companyPrintPerMeter > 0) && (
+                                                        {task.print_task_id && (
                                                            <div className="flex items-center justify-between gap-3 text-xs font-semibold border-t sm:border-t-0 pt-2.5 sm:pt-0 border-border/10">
                                                             <span className="text-muted-foreground/80 flex items-center gap-1.5">
                                                               <Printer className="h-3.5 w-3.5 text-blue-500/70" /> 
                                                               <span>الطباعة المقابلة:</span>
                                                             </span>
-                                                             <div className="flex items-center gap-2 flex-wrap justify-end font-mono text-xs text-left">
-                                                              <span className="text-blue-600 font-medium">{itemPrintCostCompany.toLocaleString('ar-LY', { maximumFractionDigits: 0 })} د.ل (شركة)</span>
-                                                              <span className="text-muted-foreground/30">•</span>
-                                                              <span className="font-bold text-blue-600">{itemPrintCostCustomer.toLocaleString('ar-LY', { maximumFractionDigits: 0 })} د.ل (زبون)</span>
-                                                            </div>
+                                                             {printBillboardIds.includes(item.billboard_id) ? (
+                                                               <div className="flex items-center gap-2 flex-wrap justify-end font-mono text-xs text-left">
+                                                                 <span className="text-blue-600 font-medium">{itemPrintCostCompany.toLocaleString('ar-LY', { maximumFractionDigits: 0 })} د.ل (شركة)</span>
+                                                                 <span className="text-muted-foreground/30">•</span>
+                                                                 <span className="font-bold text-blue-600">{itemPrintCostCustomer.toLocaleString('ar-LY', { maximumFractionDigits: 0 })} د.ل (زبون)</span>
+                                                               </div>
+                                                             ) : (
+                                                               <Badge variant="outline" className="text-xs bg-muted text-muted-foreground border-border/10 font-bold px-2 py-0.5 rounded-lg shadow-none">
+                                                                 مستثناة من الطباعة
+                                                               </Badge>
+                                                             )}
                                                           </div>
                                                         )}
                                                       </div>
 
                                                     </div>
+                                                    
+                                                    {/* Side Print Toggle Column */}
+                                                    {task.print_task_id && (
+                                                      <div className={cn(
+                                                        "w-full sm:w-44 shrink-0 flex flex-col items-center justify-center gap-2.5 p-5 border-t sm:border-t-0 sm:border-r border-border/10 transition-all duration-300 text-center select-none",
+                                                        printBillboardIds.includes(item.billboard_id) 
+                                                          ? "bg-blue-500/[0.03] text-blue-600 dark:text-blue-400" 
+                                                          : "bg-muted/[0.05] text-muted-foreground/50"
+                                                      )}>
+                                                        <div className="flex items-center gap-2">
+                                                          <Printer className={cn(
+                                                            "h-5 w-5 transition-all duration-300",
+                                                            printBillboardIds.includes(item.billboard_id) ? "text-blue-500 scale-110 drop-shadow-[0_0_8px_rgba(59,130,246,0.3)] animate-pulse" : "text-muted-foreground/30"
+                                                          )} />
+                                                          <span className="text-xs font-bold">حالة الطباعة</span>
+                                                        </div>
+                                                        <div className={cn(
+                                                          "flex items-center gap-2.5 bg-background border rounded-xl px-3 py-1.5 shadow-sm transition-all",
+                                                          printBillboardIds.includes(item.billboard_id) ? "border-blue-500/30" : "border-border/15"
+                                                        )}>
+                                                          <span className={cn("text-xs font-bold", printBillboardIds.includes(item.billboard_id) ? "text-blue-600 dark:text-blue-400" : "text-muted-foreground/60")}>
+                                                            {printBillboardIds.includes(item.billboard_id) ? "تتطلب طباعة" : "مستثناة"}
+                                                          </span>
+                                                          <Switch 
+                                                            checked={printBillboardIds.includes(item.billboard_id)} 
+                                                            onCheckedChange={(checked) => handleTogglePrintStatus(item.billboard_id, checked)}
+                                                            disabled={distributing}
+                                                            className="scale-90 origin-center data-[state=checked]:bg-blue-500"
+                                                          />
+                                                        </div>
+                                                      </div>
+                                                    )}
                                                   </div>
                                                 </div>
                                               );

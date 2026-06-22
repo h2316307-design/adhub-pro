@@ -3,7 +3,8 @@ import { PaymentRow, ContractRow, InstallationPrintPricing } from './BillingType
 export const filterCompositeRelatedPrintedInvoices = (
   printedInvoices: any[] = [],
   compositeTasks: any[] = [],
-  printTasks: any[] = []
+  printTasks: any[] = [],
+  cutoutTasks: any[] = []
 ): any[] => {
   const compositeInvoiceIds = new Set(
     compositeTasks.map((task) => String(task?.combined_invoice_id || '')).filter(Boolean)
@@ -15,10 +16,25 @@ export const filterCompositeRelatedPrintedInvoices = (
 
   const compositePrintInvoiceIds = new Set(
     printTasks
-      .filter((task) => compositePrintTaskIds.has(String(task?.id || '')))
+      .filter((task) => 
+        compositePrintTaskIds.has(String(task?.id || '')) || 
+        task?.is_composite === true || 
+        task?.installation_task_id || 
+        task?.composite_task_id
+      )
       .map((task) => String(task?.invoice_id || ''))
       .filter(Boolean)
   );
+
+  // Add cutout task invoice IDs to exclude
+  cutoutTasks
+    .filter((task) => 
+      task?.is_composite === true || 
+      task?.installation_task_id
+    )
+    .map((task) => String(task?.invoice_id || ''))
+    .filter(Boolean)
+    .forEach(id => compositePrintInvoiceIds.add(id));
 
   return printedInvoices.filter((invoice) => {
     const invoiceId = String(invoice?.id || '');

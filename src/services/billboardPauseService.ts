@@ -281,8 +281,8 @@ export const pauseBillboardFromContract = async (
     } else {
       const { error: historyError } = await supabase
         .from('billboard_history')
-        .upsert(historyRow, { onConflict: 'billboard_id,contract_number' });
-      if (historyError) console.error('Error upserting billboard_history:', historyError);
+        .insert(historyRow);
+      if (historyError) console.error('Error inserting billboard_history:', historyError);
     }
   } catch (err) {
     console.error('Error in billboard_history operation:', err);

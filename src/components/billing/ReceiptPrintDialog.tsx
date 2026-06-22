@@ -167,32 +167,37 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
         .select('*')
         .eq('customer_id', customerId);
 
-      // ✅ حساب إيجارات الشركات الصديقة لطرحها من إجمالي العقود
-      // لأن Total في العقد يتضمن إيجارات الصديقة ونريد استبعادها
-      let totalFriendRentals = 0;
-      for (const contract of (contracts || [])) {
-        const friendData = (contract as any).friend_rental_data;
-        if (friendData && typeof friendData === 'object') {
-          const entries = Object.values(friendData) as any[];
-          for (const entry of entries) {
-            if (entry && typeof entry.rental_cost === 'number') {
-              totalFriendRentals += entry.rental_cost;
-            }
-          }
-        }
-      }
+      // مهام الطباعة وقص الموتيف لفلترة فواتير الطباعة
+      const [printTasksRes, cutoutTasksRes] = await Promise.all([
+        supabase
+          .from('print_tasks')
+          .select('id, invoice_id, is_composite, installation_task_id, composite_task_id')
+          .eq('customer_id', customerId),
+        supabase
+          .from('cutout_tasks' as any)
+          .select('id, invoice_id, is_composite, installation_task_id')
+          .eq('customer_id', customerId)
+      ]);
 
       // ✅ استخدام الدالة الموحدة مع جميع المعاملات
-      const { calculateTotalRemainingDebtExcludingFriendRentals } = await import('./BillingUtils');
-      const remainingBalance = calculateTotalRemainingDebtExcludingFriendRentals(
+      const { calculateTotalRemainingDebt, filterCompositeRelatedPrintedInvoices } = await import('./BillingUtils');
+      
+      const filteredPrintedInvoices = filterCompositeRelatedPrintedInvoices(
+        printedInvoices || [],
+        compositeTasks || [],
+        printTasksRes.data || [],
+        cutoutTasksRes.data || []
+      );
+
+      const remainingBalance = calculateTotalRemainingDebt(
         (contracts || []) as any[],
         (allPayments || []) as any[],
         salesInvoices || [],
-        printedInvoices || [],
+        filteredPrintedInvoices,
         purchaseInvoices || [],
         totalDiscounts,
         compositeTasks || [],
-        totalFriendRentals
+        0 // لا نطرح إيجارات الصديقة من ديون الزبون في إيصال الاستلام
       );
 
       return {

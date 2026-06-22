@@ -182,8 +182,6 @@ export const useContractInstallments = ({
         description: `الدفعة ${installmentNumber}`,
         dueDate: dueDate.toISOString().split('T')[0]
       });
-      
-      runningTotal += amount;
     }
 
     setInstallments(newInstallments);

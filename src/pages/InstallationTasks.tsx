@@ -422,17 +422,24 @@ export default function InstallationTasks() {
         .from('installation_tasks')
         .select(`
           *,
-          print_tasks!installation_tasks_print_task_id_fkey(id, status),
-          cutout_tasks!installation_tasks_cutout_task_id_fkey(id, status)
+          print_tasks:print_tasks!print_tasks_installation_task_id_fkey(id, status),
+          cutout_tasks:cutout_tasks!cutout_tasks_installation_task_id_fkey(id, status)
         `)
         .gte('created_at', oct2025.toISOString())
         .order('created_at', { ascending: false });
       
       if (error) throw error;
       
-      console.log(`📋 Loaded ${allTasks?.length || 0} installation tasks`);
+      // Map arrays returned by PostgREST one-to-many relationship back to single objects
+      const mapped = (allTasks || []).map((t: any) => ({
+        ...t,
+        print_tasks: t.print_tasks && t.print_tasks.length > 0 ? t.print_tasks[0] : null,
+        cutout_tasks: t.cutout_tasks && t.cutout_tasks.length > 0 ? t.cutout_tasks[0] : null,
+      }));
       
-      return allTasks as any[];
+      console.log(`📋 Loaded ${mapped.length || 0} installation tasks`);
+      
+      return mapped;
     },
   });
 
@@ -2126,7 +2133,7 @@ export default function InstallationTasks() {
               }}
               onEditTaskType={() => { setSelectedTaskForEdit({ id: selectedTaskId, taskType: selectedTaskObj.task_type || 'installation' }); setEditTaskTypeDialogOpen(true); }}
               onTransferBillboards={() => { setSelectedTaskForTransfer({ taskId: selectedTaskId, teamId: selectedTaskObj.team_id, teamName: selectedTeam?.team_name || 'غير محدد', contractId: selectedTaskObj.contract_id }); setTransferDialogOpen(true); }}
-              onPrintAll={() => { setSelectedContractForPrint({ contractNumber: selectedTaskObj.contract_id, customerName: selectedTaskContract?.['Customer Name'] || 'غير محدد', adType: selectedTaskContract?.['Ad Type'] || '' }); setPrintAllDialogOpen(true); }}
+              onPrintAll={() => { setSelectedContractForPrint({ contractNumber: selectedTaskObj.contract_id, customerName: selectedTaskContract?.['Customer Name'] || 'غير محدد', adType: selectedTaskContract?.['Ad Type'] || '', taskId: selectedTaskObj.id }); setPrintAllDialogOpen(true); }}
               onDelete={async () => { if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف مهمة التركيب؟', variant: 'destructive', confirmText: 'حذف' })) { deleteTaskMutation.mutate(selectedTaskId); setSelectedTaskId(null); } }}
               onDuplicateAsReinstallation={async () => {
                 if (await systemConfirm({

@@ -78,19 +78,57 @@ export function AddBillboardsToTaskDialog({
     }
   });
 
+  const contractNumbers = useMemo(() => {
+    return customerContracts.map(c => Number(c.Contract_Number)).filter(Boolean);
+  }, [customerContracts]);
+
+  // Fetch paused billboards for these contracts
+  const { data: pausedRows = [] } = useQuery({
+    queryKey: ['paused-billboards-for-customer-contracts', contractNumbers.join(',')],
+    enabled: open && contractNumbers.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('paused_billboards' as any)
+        .select('billboard_id, contract_number')
+        .in('contract_number', contractNumbers);
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
+  const pausedSet = useMemo(() => {
+    return new Set<number>(pausedRows.map((r: any) => Number(r.billboard_id)));
+  }, [pausedRows]);
+
   // Extract all billboard IDs from all customer contracts
   const contractBillboardMap = useMemo(() => {
     const map = new Map<number, number[]>();
     customerContracts.forEach((c: any) => {
+      const ids: number[] = [];
       if (c.billboard_ids) {
-        const ids = c.billboard_ids.split(',')
+        const parsed = c.billboard_ids.split(',')
           .map((id: string) => parseInt(id.trim()))
           .filter((n: number) => !isNaN(n) && n > 0);
-        map.set(c.Contract_Number, ids);
+        ids.push(...parsed);
+      }
+      map.set(c.Contract_Number, ids);
+    });
+
+    // Merge paused billboards
+    pausedRows.forEach((r: any) => {
+      const cNum = Number(r.contract_number);
+      const bId = Number(r.billboard_id);
+      if (cNum && bId) {
+        const existing = map.get(cNum) || [];
+        if (!existing.includes(bId)) {
+          existing.push(bId);
+          map.set(cNum, existing);
+        }
       }
     });
+
     return map;
-  }, [customerContracts]);
+  }, [customerContracts, pausedRows]);
 
   const allBillboardIds = useMemo(() => {
     const ids = new Set<number>();
@@ -389,10 +427,15 @@ export function AddBillboardsToTaskDialog({
                                       </div>
 
                                       {/* Billboard name on image */}
-                                      <div className="absolute bottom-3 right-3 z-20">
-                                        <h4 className="font-bold text-white text-sm drop-shadow-lg truncate max-w-[180px]">
+                                      <div className="absolute bottom-3 right-3 z-20 flex items-center gap-1.5 flex-wrap">
+                                        <h4 className="font-bold text-white text-sm drop-shadow-lg truncate max-w-[150px]">
                                           {billboard.Billboard_Name}
                                         </h4>
+                                        {pausedSet.has(billboard.ID) && (
+                                          <Badge className="bg-amber-600 hover:bg-amber-700 text-white text-[9px] h-4 rounded px-1 shrink-0 font-bold border-0 shadow-lg">
+                                            موقوفة
+                                          </Badge>
+                                        )}
                                       </div>
                                     </div>
 

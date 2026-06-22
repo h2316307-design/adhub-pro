@@ -653,7 +653,8 @@ export const ContractCard: React.FC<ContractCardProps> = ({
   const friendOperatingFee = friendOpEnabled ? Math.round(friendCostsTotal * (friendOpRate / 100) * 100) / 100 : 0;
 
   const computedOperatingFee = (() => {
-    let fee = Math.round(totalRent * (operatingFeeRate / 100) * 100) / 100;
+    const regularRentalBase = Math.max(0, totalRent - friendCostsTotal);
+    let fee = Math.round(regularRentalBase * (operatingFeeRate / 100) * 100) / 100;
     if (includeOperatingInInstallation && installationEnabledFlag) {
       fee += Math.round(installationCost * (operatingFeeRateInstall / 100) * 100) / 100;
     }

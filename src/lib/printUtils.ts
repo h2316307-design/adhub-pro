@@ -161,12 +161,12 @@ export function cleanStatementNote(note: string | null | undefined): string {
   let clean = note.trim();
 
   // 1. معالجة ملاحظات خصومات الإيقاف
-  if (clean.includes('خصم إيقاف اللوحات')) {
+  if (clean.includes('خصم إيقاف اللوحات') || clean.includes('تسكير حساب الإيقاف') || clean.includes('تسكير حساب الايقاف')) {
     const dateMatch = clean.match(/(?:بتاريخ|يوم)\s*([\d٠-٩/.-]+)/) || clean.match(/([\d٠-٩/.-]+)/);
     if (dateMatch) {
-      return `إيقاف بتاريخ: ${dateMatch[1]}`;
+      return `آخر تسكير حساب الإيقاف بتاريخ: ${dateMatch[1]}`;
     }
-    return 'خصم إيقاف اللوحات';
+    return 'آخر تسكير حساب الإيقاف';
   }
 
   // 2. معالجة ملاحظات الدفعات الموزعة الافتراضية

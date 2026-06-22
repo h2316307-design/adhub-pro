@@ -132,6 +132,8 @@ interface SelectedBillboardsCardProps {
   installDatesByBillboard?: Map<string, string>;
   previousContractNumber?: number | null;
   previousContractBillboardIds?: Set<string>;
+  individualDiscounts?: Record<string, { value: number; type: 'amount' | 'percent' }>;
+  onUpdateIndividualDiscount?: (billboardId: string, value: number, type: 'amount' | 'percent') => void;
 }
 
 export function SelectedBillboardsCard({
@@ -177,6 +179,8 @@ export function SelectedBillboardsCard({
   installDatesByBillboard,
   previousContractNumber,
   previousContractBillboardIds = new Set(),
+  individualDiscounts = {},
+  onUpdateIndividualDiscount,
 }: SelectedBillboardsCardProps) {
   const { map: activeLoansByBillboard } = useActiveLoansByBillboard();
 
@@ -786,6 +790,7 @@ export function SelectedBillboardsCard({
         const id = String((bb as any).ID);
         const installRaw = installationDetails.find((d) => d.billboardId === id)?.installationPrice || 0;
         const printRaw = printCostDetails.find((d) => d.billboardId === id)?.printCost || 0;
+        const indDiscount = individualDiscounts[id];
 
         return {
           billboardId: id,
@@ -793,6 +798,8 @@ export function SelectedBillboardsCard({
           installationPrice: installRaw,
           printCost: printRaw,
           isSingleFace: singleFaceBillboards.has(id),
+          individualDiscountValue: indDiscount?.value,
+          individualDiscountType: indDiscount?.type,
         };
       }),
       {
@@ -817,6 +824,7 @@ export function SelectedBillboardsCard({
     includePrintInPrice,
     installationEnabled,
     includeInstallationInPrice,
+    individualDiscounts,
   ]);
 
   // ملخص المقاسات والوجوه
@@ -1120,6 +1128,7 @@ export function SelectedBillboardsCard({
                 const includedInstallCost = pricingData?.includedInstallCost ?? ((installationEnabled && includeInstallationInPrice) ? installPrice : 0);
                 const netRentalBeforeDiscount = pricingData?.netRentalBeforeDiscount ?? (baseTotalForBoard - includedPrintCost - includedInstallCost);
                 const discountPerBillboard = pricingData?.discountPerBillboard ?? 0;
+                const individualDiscountAmt = pricingData?.individualDiscountAmt ?? 0;
                 const netRentalAfterDiscount = pricingData?.netRentalAfterDiscount ?? Math.max(0, netRentalBeforeDiscount - discountPerBillboard);
                 const extraPrintCost = pricingData?.extraPrintCost ?? ((printCostEnabled && !includePrintInPrice) ? printCostForBillboard : 0);
                 const extraInstallCost = pricingData?.extraInstallCost ?? ((installationEnabled && !includeInstallationInPrice) ? installPrice : 0);
@@ -1469,10 +1478,18 @@ export function SelectedBillboardsCard({
                           </div>
                         )}
 
+                        {/* Individual Discount */}
+                        {individualDiscountAmt > 0 && (
+                          <div className="flex justify-between items-center bg-red-500/10 rounded-lg px-3 py-1.5 -mx-1 border border-red-500/20">
+                            <span className="text-xs font-bold text-red-600">خصم اللوحة المحدد</span>
+                            <span className="text-sm font-bold text-red-600 font-manrope">- {formatAmount(individualDiscountAmt)} {currencySymbol}</span>
+                          </div>
+                        )}
+
                         {/* Discount */}
                         {discountPerBillboard > 0 && (
                           <div className="flex justify-between items-center bg-destructive/10 rounded-lg px-3 py-1.5 -mx-1">
-                            <span className="text-xs font-medium text-destructive">الخصم</span>
+                            <span className="text-xs font-medium text-destructive">خصم العقد الموزع</span>
                             <span className="text-sm font-bold text-destructive font-manrope">- {formatAmount(discountPerBillboard)} {currencySymbol}</span>
                           </div>
                         )}
@@ -1485,8 +1502,45 @@ export function SelectedBillboardsCard({
                           </div>
                         )}
 
+                        {/* Edit Individual Discount (خصم محدد على لوحة معينة) */}
+                        {onUpdateIndividualDiscount && (
+                          <div className="pt-2 border-t border-border/40 flex items-center justify-between gap-2 mt-1">
+                            <span className="text-xs font-bold text-muted-foreground">تعديل خصم اللوحة</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <Input
+                                type="number"
+                                min="0"
+                                value={individualDiscounts[billboardId]?.value ?? ''}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Number(e.target.value) || 0);
+                                  const currentType = individualDiscounts[billboardId]?.type || 'amount';
+                                  onUpdateIndividualDiscount(billboardId, val, currentType);
+                                }}
+                                placeholder="0"
+                                className="h-7 w-20 text-center text-xs font-bold font-manrope"
+                                onClick={(e) => e.stopPropagation()}
+                              />
+                              <Select
+                                value={individualDiscounts[billboardId]?.type || 'amount'}
+                                onValueChange={(v: 'amount' | 'percent') => {
+                                  const currentVal = individualDiscounts[billboardId]?.value || 0;
+                                  onUpdateIndividualDiscount(billboardId, currentVal, v);
+                                }}
+                              >
+                                <SelectTrigger className="h-7 w-16 text-[10px] px-1.5 font-bold" onClick={(e) => e.stopPropagation()}>
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-popover z-[100]">
+                                  <SelectItem value="amount" className="text-xs font-bold">د.ل</SelectItem>
+                                  <SelectItem value="percent" className="text-xs font-bold">%</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
+
                         {/* الإجمالي النهائي - always show when there are extra costs or discount */}
-                        {(discountPerBillboard > 0 || extraInstallCost > 0 || extraPrintCost > 0) && (
+                        {(discountPerBillboard > 0 || individualDiscountAmt > 0 || extraInstallCost > 0 || extraPrintCost > 0) && (
                           <div className="flex justify-between items-center bg-primary/10 rounded-lg px-3 py-2.5 -mx-1 border border-primary/30 mt-1">
                             <span className="text-sm font-bold text-primary">الإجمالي النهائي</span>
                             <div className="text-left">

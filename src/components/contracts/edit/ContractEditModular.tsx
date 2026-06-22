@@ -1300,8 +1300,6 @@ export default function ContractEditModular() {
         description: `الدفعة ${newInstallments.length + 1}`,
         dueDate: paymentDate.toISOString().split('T')[0]
       });
-
-      runningTotal += amount;
     }
 
     // If no installments created, create single payment

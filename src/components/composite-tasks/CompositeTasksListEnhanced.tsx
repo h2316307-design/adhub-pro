@@ -1476,11 +1476,15 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
                           {group.tasks.length} مهام
                         </span>
                       )}
+                      <span className="inline-flex items-center gap-1.5 text-xs font-extrabold text-emerald-400 bg-emerald-500/10 border border-emerald-500/15 px-2.5 py-1 rounded-xl shadow-sm">
+                        <DollarSign className="h-3.5 w-3.5 text-emerald-400" />
+                        تكلفة الزبون: {group.groupTotal.toLocaleString('ar-LY')} د.ل
+                      </span>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0 flex-wrap" onClick={e => e.stopPropagation()}>
                       <div className="hidden sm:flex items-center gap-3 text-xs">
-                        <span className="text-emerald-400 font-black">{group.groupTotal.toLocaleString('ar-LY')} د.ل</span>
+                        <span className="text-emerald-400 font-black">إجمالي الزبون: {group.groupTotal.toLocaleString('ar-LY')} د.ل</span>
                         <span className={`font-black ${group.groupProfit >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                           ربح: {group.groupProfit.toLocaleString('ar-LY')}
                         </span>

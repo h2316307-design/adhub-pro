@@ -14,6 +14,8 @@ export interface BillboardPricingInput {
    *  distribution so that paused.consumed + replacement.allocated = original full price. */
   isReplacement?: boolean;
   replacementAllocation?: number;
+  individualDiscountValue?: number;
+  individualDiscountType?: 'percent' | 'amount';
 }
 
 export interface BillboardPricingOptions {
@@ -34,6 +36,7 @@ export interface BillboardPricingResult {
   netRentalBeforeDiscount: number;
   rawDiscountPerBillboard: number;
   discountPerBillboard: number;
+  individualDiscountAmt: number;   // calculated individual discount amount
   netRentalAfterDiscount: number;
   extraPrintCost: number;
   extraInstallCost: number;
@@ -62,7 +65,7 @@ export function calculateAllBillboardPrices(
 ): BillboardPricingResult[] {
   const { totalDiscount, printCostEnabled, includePrintInPrice, installationEnabled, includeInstallationInPrice } = options;
 
-  // Step 1: Adjust for single face and compute net rental before discount
+  // Step 1: Adjust for single face, apply individual discount, and compute net rental before discount
   const intermediate = inputs.map(inp => {
     const installPrice = inp.isSingleFace ? Math.round(inp.installationPrice / 2) : inp.installationPrice;
     const printPrice = inp.isSingleFace ? Math.round(inp.printCost / 2) : inp.printCost;
@@ -73,7 +76,19 @@ export function calculateAllBillboardPrices(
     // إذا كان "تضمين الطباعة/التركيب في السعر" مفعّلاً، فإن هذه التكاليف تُعتبر داخل المبلغ المخصص.
     const isReplacement = !!inp.isReplacement;
     const replacementAlloc = Number(inp.replacementAllocation || 0);
-    const effectiveBaseRental = isReplacement ? replacementAlloc : inp.baseRentalPrice;
+    const originalBaseRental = isReplacement ? replacementAlloc : inp.baseRentalPrice;
+
+    // Calculate individual discount amount
+    let individualDiscountAmt = 0;
+    if (!isReplacement && inp.individualDiscountValue && inp.individualDiscountValue > 0) {
+      if (inp.individualDiscountType === 'percent') {
+        individualDiscountAmt = Math.round(originalBaseRental * (inp.individualDiscountValue / 100));
+      } else {
+        individualDiscountAmt = inp.individualDiscountValue;
+      }
+    }
+
+    const effectiveBaseRental = Math.max(0, originalBaseRental - individualDiscountAmt);
     const netRentalBeforeDiscount = Math.max(
       0,
       effectiveBaseRental - includedPrint - includedInstall
@@ -84,7 +99,9 @@ export function calculateAllBillboardPrices(
 
     return {
       billboardId: inp.billboardId,
-      baseRentalPrice: effectiveBaseRental,
+      baseRentalPrice: originalBaseRental,
+      effectiveBaseRental,
+      individualDiscountAmt,
       installationPrice: installPrice,
       printCost: printPrice,
       includedPrintCost: includedPrint,
@@ -108,9 +125,9 @@ export function calculateAllBillboardPrices(
       : item.netRentalBeforeDiscount / totalNetRental;
     const rawDiscount = item.isReplacement ? 0 : totalDiscount * proportion;
     // ✅ Client price excludes print/installation if they are included in the price (free for customer)
-    const rawTotal = Math.max(0, item.baseRentalPrice - rawDiscount) + item.extraInstallCost + item.extraPrintCost;
+    const rawTotal = Math.max(0, item.effectiveBaseRental - rawDiscount) + item.extraInstallCost + item.extraPrintCost;
     // ✅ نقرّب فقط عندما يوجد خصم فعلي على العقد. بدون خصم، نُبقي القيمة الخام
-    // لتجنّب ظهور سطر "خصم" وهمي ناتج عن فرق التقريب (السطر 264).
+    // لتجنّب ظهور سطر "خصم" وهمي ناتج عن فرق التقريب.
     const roundedTotal = item.isReplacement || totalDiscount <= 0
       ? rawTotal
       : roundToClean(rawTotal);
@@ -120,13 +137,13 @@ export function calculateAllBillboardPrices(
 
   // Step 4: Try clean-number mode against the exact contract total first
   const roundMoney = (n: number) => Math.round((n + Number.EPSILON) * 100) / 100;
-  const totalBaseRental = intermediate
+  const totalEffectiveRental = intermediate
     .filter(i => !i.isReplacement)
-    .reduce((s, i) => s + i.baseRentalPrice, 0);
+    .reduce((s, i) => s + i.effectiveBaseRental, 0);
   const totalExtraServices = intermediate
     .filter(i => !i.isReplacement)
     .reduce((s, i) => s + i.extraInstallCost + i.extraPrintCost, 0);
-  const expectedContractTotal = roundMoney(Math.max(0, totalBaseRental - totalDiscount) + totalExtraServices);
+  const expectedContractTotal = roundMoney(Math.max(0, totalEffectiveRental - totalDiscount) + totalExtraServices);
 
   // ✅ نتجاهل البديلة في حساب الفجوة (مبلغها ثابت)
   const sumOfRounded = prelimResults
@@ -266,7 +283,7 @@ export function calculateAllBillboardPrices(
       ? 0
       : item.rawDiscount + (item.rawTotal - useTotal);
     const netAfterDiscount = Math.max(0, item.netRentalBeforeDiscount - adjustedDiscount);
-    const finalTotal = Math.max(0, item.baseRentalPrice - adjustedDiscount) + item.extraInstallCost + item.extraPrintCost;
+    const finalTotal = Math.max(0, item.effectiveBaseRental - adjustedDiscount) + item.extraInstallCost + item.extraPrintCost;
 
     return {
       billboardId: item.billboardId,
@@ -278,6 +295,7 @@ export function calculateAllBillboardPrices(
       netRentalBeforeDiscount: item.netRentalBeforeDiscount,
       rawDiscountPerBillboard: item.rawDiscount,
       discountPerBillboard: adjustedDiscount,
+      individualDiscountAmt: item.individualDiscountAmt,
       netRentalAfterDiscount: netAfterDiscount,
       extraPrintCost: item.extraPrintCost,
       extraInstallCost: item.extraInstallCost,

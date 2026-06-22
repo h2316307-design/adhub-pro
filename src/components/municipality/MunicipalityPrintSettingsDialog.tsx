@@ -135,6 +135,10 @@ const settingGroups: SettingGroup[] = [
         { value: 'monospace', label: 'Monospace (ثابت)' },
         { value: 'Arial', label: 'Arial (افتراضي)' },
       ]},
+      { key: 'calc_meters_by_faces', label: 'حساب إجمالي الأمتار بعدد الأوجه', type: 'select', options: [
+        { value: 'true', label: 'نعم (ضرب المساحة في عدد الأوجه)' },
+        { value: 'false', label: 'لا (حساب مساحة الوجه الواحد فقط)' },
+      ]},
     ],
   },
   {
@@ -144,6 +148,10 @@ const settingGroups: SettingGroup[] = [
       { key: 'faces_count_top', label: 'الموقع من الأعلى', type: 'mm', min: 0, max: 280, step: 0.5 },
       { key: 'faces_count_left', label: 'الموقع من اليسار', type: 'percent', min: 0, max: 100, step: 0.5 },
       { key: 'faces_count_font_size', label: 'حجم الخط', type: 'px', min: 8, max: 40, step: 1 },
+      { key: 'faces_count_show', label: 'إظهار عدد الأوجه في الطباعة', type: 'select', options: [
+        { value: 'true', label: 'مفعّل' },
+        { value: 'false', label: 'معطّل' },
+      ]},
     ],
   },
   {
@@ -154,6 +162,10 @@ const settingGroups: SettingGroup[] = [
       { key: 'main_image_left', label: 'الموقع من اليسار', type: 'percent', min: 0, max: 100, step: 0.5 },
       { key: 'main_image_width', label: 'عرض إطار الصورة', type: 'mm', min: 20, max: 200, step: 1 },
       { key: 'main_image_height', label: 'ارتفاع إطار الصورة', type: 'mm', min: 20, max: 200, step: 1 },
+      { key: 'main_image_object_fit', label: 'طريقة عرض الصورة', type: 'select', options: [
+        { value: 'cover', label: 'ملء الإطار (مع اقتصاص)' },
+        { value: 'contain', label: 'كامل الصورة (بدون اقتصاص)' },
+      ]},
     ],
   },
   {
@@ -360,8 +372,10 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
 
   const pinColor = (localSettings.pin_color || '').trim() || undefined;
   const pinTextColor = (localSettings.pin_text_color || '').trim() || undefined;
-  const pinData = createPinSvgUrl('4×12', 'متاحة', false, undefined, undefined, pinColor, pinTextColor);
+  const pinData = createPinSvgUrl('4×12', 'متاحة', false, undefined, undefined, pinColor, pinTextColor, undefined, undefined, undefined, undefined, true);
   const pinUrl = (localSettings.custom_pin_url || '').trim() || pinData.url;
+  const customPinUrl = (localSettings.custom_pin_url || '').trim();
+  const pinTipOffsetPercent = customPinUrl ? 100 : (pinData.anchorY / pinData.height) * 100;
 
   const sb = sampleBillboard || {
     name: '01', size: '12x4x3', faces: 2, municipality: 'طرابلس المركز',
@@ -442,21 +456,41 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
         </div>
  
         <!-- عدد الأوجه -->
+        ${s.faces_count_show !== 'false' ? `
         <div style="position:absolute;top:${s.faces_count_top};left:${s.faces_count_left};transform:translateX(-50%);width:80mm;text-align:center;font-size:${s.faces_count_font_size};color:${s.faces_count_color};z-index:5;">
           ${sb.faces === 1 ? 'وجه واحد' : 'وجهين'}
         </div>
+        ` : ''}
  
         <!-- الصورة / الخريطة -->
-        <div style="position:absolute;top:${s.main_image_top};left:${s.main_image_left};transform:translateX(-50%);width:${s.main_image_width};height:${s.main_image_height};border:2px solid #ccc;border-radius:8px;overflow:hidden;z-index:5;">
-          <div style="width:100%;height:calc(100% - ${s.coords_bar_height || '26px'});background:${previewMapUrl ? `url('${previewMapUrl}') center/cover no-repeat` : 'linear-gradient(135deg, #4a7c59, #2d5a3f)'};display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;position:relative;">
-            ${!previewMapUrl ? `<div style="font-size:12px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.8);background:rgba(0,0,0,0.4);padding:2px 8px;border-radius:4px;">${previewMapLoading ? 'جاري تحميل الخريطة...' : 'خريطة القمر الصناعي'}</div>` : ''}
-            <!-- Pin overlay -->
-            <div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;">
-              <img src="${pinUrl}" style="position:absolute;top:50%;left:50%;width:${pinSize}px;height:auto;transform:translate(-50%,-100%);" />
+        <div style="position:absolute;top:${s.main_image_top};left:${s.main_image_left};transform:translateX(-50%);width:${s.main_image_width};height:${s.main_image_height};border:2px solid #ccc;border-radius:8px;overflow:hidden;z-index:5;display:flex;flex-direction:column;">
+          ${sb.imageUrl ? `
+            <div style="flex:1 1 50%;min-height:0;overflow:hidden;border-bottom:1px solid #ddd;position:relative;">
+              <img src="${sb.imageUrl}" style="width:100%;height:100%;object-fit:${s.main_image_object_fit || 'cover'};display:block;" />
             </div>
-            <div style="position:absolute;bottom:6px;left:6px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);background:rgba(0,0,0,0.5);padding:1px 6px;border-radius:3px;z-index:11;">الزوم: ${s.map_zoom || '15'} | الدبوس: ${pinSize}px</div>
-          </div>
-          <div style="position:absolute;bottom:0;left:0;right:0;height:${s.coords_bar_height || '26px'};background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;border-top:1px solid #ddd;">
+            <div style="flex:1 1 50%;min-height:0;position:relative;overflow:hidden;">
+              <div style="width:100%;height:100%;background:${previewMapUrl ? `url('${previewMapUrl}') center/cover no-repeat` : 'linear-gradient(135deg, #4a7c59, #2d5a3f)'};display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;position:relative;">
+                ${!previewMapUrl ? `<div style="font-size:12px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.8);background:rgba(0,0,0,0.4);padding:2px 8px;border-radius:4px;">${previewMapLoading ? 'جاري تحميل الخريطة...' : 'خريطة القمر الصناعي'}</div>` : ''}
+                <!-- Pin overlay -->
+                <div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;">
+                  <img src="${pinUrl}" style="position:absolute;top:50%;left:50%;width:${pinSize}px;height:auto;transform:translate(-50%,-${pinTipOffsetPercent}%);" />
+                </div>
+                <div style="position:absolute;bottom:6px;left:6px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);background:rgba(0,0,0,0.5);padding:1px 6px;border-radius:3px;z-index:11;">الزوم: ${s.map_zoom || '15'} | الدبوس: ${pinSize}px</div>
+              </div>
+            </div>
+          ` : `
+            <div style="flex:1 1 auto;min-height:0;position:relative;overflow:hidden;">
+              <div style="width:100%;height:100%;background:${previewMapUrl ? `url('${previewMapUrl}') center/cover no-repeat` : 'linear-gradient(135deg, #4a7c59, #2d5a3f)'};display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;position:relative;">
+                ${!previewMapUrl ? `<div style="font-size:12px;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,0.8);background:rgba(0,0,0,0.4);padding:2px 8px;border-radius:4px;">${previewMapLoading ? 'جاري تحميل الخريطة...' : 'خريطة القمر الصناعي'}</div>` : ''}
+                <!-- Pin overlay -->
+                <div style="position:absolute;top:0;left:0;right:0;bottom:0;pointer-events:none;z-index:10;">
+                  <img src="${pinUrl}" style="position:absolute;top:50%;left:50%;width:${pinSize}px;height:auto;transform:translate(-50%,-${pinTipOffsetPercent}%);" />
+                </div>
+                <div style="position:absolute;bottom:6px;left:6px;font-size:10px;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,0.8);background:rgba(0,0,0,0.5);padding:1px 6px;border-radius:3px;z-index:11;">الزوم: ${s.map_zoom || '15'} | الدبوس: ${pinSize}px</div>
+              </div>
+            </div>
+          `}
+          <div style="height:${s.coords_bar_height || '26px'};background:rgba(255,255,255,0.95);display:flex;align-items:center;justify-content:center;border-top:1px solid #ddd;flex-shrink:0;z-index:12;">
             <span style="font-size:${s.coords_font_size || '11px'};font-weight:700;color:#222;direction:ltr;font-family:'${s.coords_font_family || 'Manrope'}',monospace;letter-spacing:0.5px;">${sb.coords}</span>
           </div>
         </div>

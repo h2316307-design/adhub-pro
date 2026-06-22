@@ -597,7 +597,7 @@ export function MobileTaskCard({
               )}
 
               {/* حالة الطباعة والمجسمات */}
-              {task.print_tasks && (
+              {task.print_tasks ? (
                 <Badge 
                   className={cn(
                     "cursor-pointer text-xs gap-1 px-2.5 py-1 rounded-full shadow-sm transition-transform hover:scale-105",
@@ -610,9 +610,17 @@ export function MobileTaskCard({
                   onClick={onNavigateToPrint}
                 >
                   <Printer className="h-3 w-3" />
-                  طباعة
+                  طباعة: {task.print_tasks.status === 'completed' ? 'مكتملة' : task.print_tasks.status === 'in_progress' ? 'قيد التنفيذ' : 'جديدة'}
+                </Badge>
+              ) : (
+                <Badge 
+                  className="text-xs gap-1 px-2.5 py-1 rounded-full shadow-sm bg-red-500/10 text-red-500 dark:text-red-400 border border-red-500/20"
+                >
+                  <Printer className="h-3 w-3" />
+                  لم يتم إنشاء مهمة طباعة
                 </Badge>
               )}
+
               
               {task.cutout_tasks && (
                 <Badge 

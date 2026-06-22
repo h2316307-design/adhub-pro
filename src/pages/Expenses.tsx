@@ -40,6 +40,7 @@ interface Contract {
   status: string;
   friendFeeFull?: number;
   partnershipFeeFull?: number;
+  friendCostsTotal?: number;
 }
 
 interface Withdrawal {
@@ -99,12 +100,7 @@ const normalizeContract = (record: any): Contract => {
   const feePercentInstallation = toNumber(record?.operating_fee_rate_installation || feePercent);
   const feePercentPrint = toNumber(record?.operating_fee_rate_print || feePercent);
   
-  // ✅ حساب القيمة الكاملة للنسبة بنسب مستقلة
-  let fullFeeAmount = Math.round(rentCost * (normalizedFeePercent / 100));
-  if (includeOperatingInInstallation) fullFeeAmount += Math.round(installationCost * (feePercentInstallation / 100));
-  if (includeOperatingInPrint) fullFeeAmount += Math.round(printCost * (feePercentPrint / 100));
-
-  // ✅ رسوم تشغيل اللوحات الصديقة
+  // ✅ رسوم تشغيل اللوحات الصديقة أولاً لمعرفة التكاليف وطرحها من النسبة العادية
   const friendOpEnabled = record?.friend_rental_operating_fee_enabled === true;
   const friendOpRate = toNumber(record?.friend_rental_operating_fee_rate);
   const friendCostsTotal = (() => {
@@ -124,6 +120,12 @@ const normalizeContract = (record: any): Contract => {
     ? Math.round(friendCostsTotal * (friendOpRate / 100))
     : 0;
 
+  // ✅ حساب القيمة الكاملة للنسبة بنسب مستقلة (مع طرح تكاليف الصديق من الوعاء لمنع التكرار)
+  const regularRentalBase = Math.max(0, rentCost - friendCostsTotal);
+  let fullFeeAmount = Math.round(regularRentalBase * (normalizedFeePercent / 100));
+  if (includeOperatingInInstallation) fullFeeAmount += Math.round(installationCost * (feePercentInstallation / 100));
+  if (includeOperatingInPrint) fullFeeAmount += Math.round(printCost * (feePercentPrint / 100));
+
   // ✅ رسوم تشغيل الشراكة
   const partnershipRaw = record?.partnership_operating_data;
   const partnershipData: any[] = (() => {
@@ -139,7 +141,7 @@ const normalizeContract = (record: any): Contract => {
 
   // ✅ حساب النسبة المتحصلة فعلياً (مع تحديد أقصى 100%)
   const paymentRatio = totalAmount > 0 ? Math.min(1, totalPaid / totalAmount) : 0;
-  let collectedFeeAmount = Math.round(rentCost * paymentRatio * (normalizedFeePercent / 100));
+  let collectedFeeAmount = Math.round(regularRentalBase * paymentRatio * (normalizedFeePercent / 100));
   if (includeOperatingInInstallation) collectedFeeAmount += Math.round(installationCost * paymentRatio * (feePercentInstallation / 100));
   if (includeOperatingInPrint) collectedFeeAmount += Math.round(printCost * paymentRatio * (feePercentPrint / 100));
   collectedFeeAmount += Math.round((friendFeeFull + partnershipFeeFull) * paymentRatio);
@@ -172,6 +174,7 @@ const normalizeContract = (record: any): Contract => {
     status: record?.status ?? 'active',
     friendFeeFull,
     partnershipFeeFull,
+    friendCostsTotal,
   };
 };
 
@@ -458,7 +461,8 @@ export default function OperatingExpenses() {
             const collectionPct = c.total_amount > 0 ? (paid / c.total_amount) * 100 : 0;
             // ✅ حساب النسبة مع نسب مستقلة للتركيب والطباعة
             const paymentRatio = c.total_amount > 0 ? Math.min(1, paid / c.total_amount) : 0;
-            let collectedFee = Math.round(c.rent_cost * paymentRatio * (c.feePercent / 100));
+            const regularRentalBase = Math.max(0, c.rent_cost - (c.friendCostsTotal || 0));
+            let collectedFee = Math.round(regularRentalBase * paymentRatio * (c.feePercent / 100));
             if (c.include_operating_in_installation) collectedFee += Math.round(c.installation_cost * paymentRatio * (c.feePercentInstallation / 100));
             if (c.include_operating_in_print) collectedFee += Math.round(c.print_cost * paymentRatio * (c.feePercentPrint / 100));
             collectedFee += Math.round(((c.friendFeeFull || 0) + (c.partnershipFeeFull || 0)) * paymentRatio);

@@ -108,6 +108,9 @@ export default function ContractEdit() {
   
   // ✅ NEW: Proportional distribution overrides
   const [billboardPriceOverrides, setBillboardPriceOverrides] = useState<Record<string, number>>({});
+
+  // ✅ NEW: State for individual billboard discounts (خصم محدد على لوحات معينة)
+  const [individualDiscounts, setIndividualDiscounts] = useState<Record<string, { value: number; type: 'amount' | 'percent' }>>({});
   
   // ✅ NEW: Factors pricing system state
   const [useFactorsPricing, setUseFactorsPricing] = useState<boolean>(false);
@@ -150,6 +153,18 @@ export default function ContractEdit() {
       const next = new Set(prev);
       if (next.has(billboardId)) next.delete(billboardId);
       else next.add(billboardId);
+      return next;
+    });
+  };
+
+  const handleUpdateIndividualDiscount = (billboardId: string, value: number, type: 'amount' | 'percent') => {
+    setIndividualDiscounts(prev => {
+      const next = { ...prev };
+      if (value === 0) {
+        delete next[billboardId];
+      } else {
+        next[billboardId] = { value, type };
+      }
       return next;
     });
   };
@@ -924,6 +939,32 @@ export default function ContractEdit() {
     })();
   }, [contractNumber]);
 
+  // ✅ Load individual discounts from stored contract billboard_prices
+  useEffect(() => {
+    if (!currentContract || !currentContract.billboard_prices) return;
+    try {
+      const parsedPrices = typeof currentContract.billboard_prices === 'string'
+        ? JSON.parse(currentContract.billboard_prices)
+        : currentContract.billboard_prices;
+      if (Array.isArray(parsedPrices)) {
+        const discounts: Record<string, { value: number; type: 'amount' | 'percent' }> = {};
+        parsedPrices.forEach((bp: any) => {
+          const bId = String(bp.billboardId || bp.billboard_id || '');
+          if (bId && bp.individualDiscountValue !== undefined && bp.individualDiscountValue !== null) {
+            discounts[bId] = {
+              value: Number(bp.individualDiscountValue) || 0,
+              type: bp.individualDiscountType === 'percent' ? 'percent' : 'amount'
+            };
+          }
+        });
+        setIndividualDiscounts(discounts);
+        console.log('✅ Loaded individual discounts from contract billboard_prices:', discounts);
+      }
+    } catch (e) {
+      console.warn('Failed to parse individual discounts from currentContract:', e);
+    }
+  }, [currentContract?.billboard_prices]);
+
   // 🔄 React to paused/replacement changes anywhere in the app:
   // re-read healed billboard_ids from DB so the new replacement billboard
   // appears immediately in "Selected Billboards" without waiting for save.
@@ -981,56 +1022,6 @@ export default function ContractEdit() {
       }
     })();
   }, [customerId, currentContract]);
-
-  // Auto-initialize friend billboard costs when selected billboards or customer change
-  useEffect(() => {
-    if (selected.length === 0) {
-      setFriendBillboardCosts([]);
-      return;
-    }
-
-    setFriendBillboardCosts(prev => {
-      // Keep only selected friend billboards
-      const updated = prev.filter(item => selected.includes(item.billboardId));
-      
-      // Add missing ones
-      selected.forEach(id => {
-        const billboard = billboards.find(b => String((b as any).ID) === id);
-        if (billboard && (billboard as any).friend_company_id) {
-          const isCustomerFriend = !customerLinkedFriendCompanyId || (billboard as any).friend_company_id === customerLinkedFriendCompanyId;
-          
-          if (isCustomerFriend) {
-            const exists = updated.some(item => item.billboardId === id);
-            if (!exists) {
-              const price = calculateBillboardPrice(billboard);
-              
-              updated.push({
-                billboardId: id,
-                friendCompanyId: (billboard as any).friend_company_id,
-                friendCompanyName: (billboard as any).friend_companies?.name || 'شركة صديقة',
-                friendRentalCost: price
-              });
-            }
-          }
-        }
-      });
-      return updated;
-    });
-  }, [selected, billboards, calculateBillboardPrice, customerLinkedFriendCompanyId]);
-
-  // Recalculate/apply pricing when customer category or duration changes
-  useEffect(() => {
-    setFriendBillboardCosts(prev => {
-      return prev.map(item => {
-        const billboard = billboards.find(b => String((b as any).ID) === item.billboardId);
-        if (billboard) {
-          const price = calculateBillboardPrice(billboard);
-          return { ...item, friendRentalCost: price };
-        }
-        return item;
-      });
-    });
-  }, [calculateBillboardPrice]);
 
   // Calculate installation_cost when selected billboards change
   useEffect(() => {
@@ -1470,6 +1461,56 @@ export default function ContractEdit() {
     return convertedPrice;
   }, [useStoredPrices, useFactorsPricing, pricingMode, durationMonths, durationDays, pricingCategory, pricingData, contractCurrency, exchangeRate, basePrices, municipalityFactors, categoryFactors, currentContract, billboardPriceOverrides]);
 
+  // Auto-initialize friend billboard costs when selected billboards or customer change
+  useEffect(() => {
+    if (selected.length === 0) {
+      setFriendBillboardCosts([]);
+      return;
+    }
+
+    setFriendBillboardCosts(prev => {
+      // Keep only selected friend billboards
+      const updated = prev.filter(item => selected.includes(item.billboardId));
+      
+      // Add missing ones
+      selected.forEach(id => {
+        const billboard = billboards.find(b => String((b as any).ID) === id);
+        if (billboard && (billboard as any).friend_company_id) {
+          const isCustomerFriend = !customerLinkedFriendCompanyId || (billboard as any).friend_company_id === customerLinkedFriendCompanyId;
+          
+          if (isCustomerFriend) {
+            const exists = updated.some(item => item.billboardId === id);
+            if (!exists) {
+              const price = calculateBillboardPrice(billboard);
+              
+              updated.push({
+                billboardId: id,
+                friendCompanyId: (billboard as any).friend_company_id,
+                friendCompanyName: (billboard as any).friend_companies?.name || 'شركة صديقة',
+                friendRentalCost: price
+              });
+            }
+          }
+        }
+      });
+      return updated;
+    });
+  }, [selected, billboards, calculateBillboardPrice, customerLinkedFriendCompanyId]);
+
+  // Recalculate/apply pricing when customer category or duration changes
+  useEffect(() => {
+    setFriendBillboardCosts(prev => {
+      return prev.map(item => {
+        const billboard = billboards.find(b => String((b as any).ID) === item.billboardId);
+        if (billboard) {
+          const price = calculateBillboardPrice(billboard);
+          return { ...item, friendRentalCost: price };
+        }
+        return item;
+      });
+    });
+  }, [calculateBillboardPrice]);
+
   // ✅ NEW: Refresh prices from current pricing system
   const refreshPricesFromSystem = async () => {
     try {
@@ -1891,6 +1932,7 @@ export default function ContractEdit() {
         const printRaw = mergedPrintCostDetails.find((d) => d.billboardId === id)?.printCost || 0;
         const isReplacement = replacementAllocationsMap.has(id);
         const replacementAllocation = isReplacement ? Number(replacementAllocationsMap.get(id) || 0) : 0;
+        const indDiscount = individualDiscounts[id];
         return {
           billboardId: id,
           baseRentalPrice: calculateBillboardPrice(bb),
@@ -1899,6 +1941,8 @@ export default function ContractEdit() {
           isSingleFace: singleFaceBillboards.has(id),
           isReplacement,
           replacementAllocation,
+          individualDiscountValue: indDiscount?.value,
+          individualDiscountType: indDiscount?.type,
         };
       })
       .filter(Boolean) as any[];
@@ -1907,12 +1951,15 @@ export default function ContractEdit() {
       const id = String(bb.ID);
       const installRaw = pausedInstallationDetails.find((d) => d.billboardId === id)?.installationPrice || 0;
       const printRaw = mergedPrintCostDetails.find((d) => d.billboardId === id)?.printCost || 0;
+      const indDiscount = individualDiscounts[id];
       return {
         billboardId: id,
         baseRentalPrice: calculateBillboardPrice(bb),
         installationPrice: installRaw,
         printCost: printRaw,
         isSingleFace: singleFaceBillboards.has(id),
+        individualDiscountValue: indDiscount?.value,
+        individualDiscountType: indDiscount?.type,
       };
     });
 
@@ -1939,6 +1986,7 @@ export default function ContractEdit() {
     installationEnabled,
     includeInstallationInPrice,
     replacementAllocationsMap,
+    individualDiscounts,
   ]);
 
   // ✅ Combined service totals (selected + paused) — derived from the unified pricing source.
@@ -2019,10 +2067,13 @@ export default function ContractEdit() {
           pricingCategory,
           pricingMode,
           duration: pricingMode === 'months' ? durationMonths : durationDays,
+          individualDiscountValue: individualDiscounts[r.billboardId]?.value || 0,
+          individualDiscountType: individualDiscounts[r.billboardId]?.type || 'amount',
+          individualDiscountAmt: r.individualDiscountAmt || 0,
         };
       })
       .filter(Boolean);
-  }, [selected, unifiedPricingByBillboard, pricingCategory, pricingMode, durationMonths, durationDays]);
+  }, [selected, unifiedPricingByBillboard, pricingCategory, pricingMode, durationMonths, durationDays, individualDiscounts]);
 
   const lastSyncedSelectedPricesRef = React.useRef<string>('');
   useEffect(() => {
@@ -2114,8 +2165,10 @@ export default function ContractEdit() {
   const rentalCostOnly = useMemo(() => {
     // includedInstallationCost / includedPrintCost already include paused billboards
     // via combinedServiceTotals — do NOT subtract pausedTotals.includedInstallSum/includedPrintSum again.
-    return customerRentalAfterPauseAndDiscount - includedInstallationCost - includedPrintCost - totalFriendCosts;
-  }, [customerRentalAfterPauseAndDiscount, includedInstallationCost, includedPrintCost, totalFriendCosts]);
+    // ✅ طرح تكاليف الشركات الصديقة كان يسبب خللاً في عمود سعر الإيجار (Total Rent)
+    // حيث أن سعر إيجار العقد للزبون يجب أن يشمل لوحات الصديق، ويتم طرحها ديناميكياً عند احتساب وعاء رسوم التشغيل للشركة فقط.
+    return customerRentalAfterPauseAndDiscount - includedInstallationCost - includedPrintCost;
+  }, [customerRentalAfterPauseAndDiscount, includedInstallationCost, includedPrintCost]);
 
   // ✅ NEW: Handle proportional distribution of new total across billboards
   const handleProportionalDistribution = React.useCallback((newTotal: number) => {
@@ -2552,7 +2605,13 @@ export default function ContractEdit() {
     }
     try {
       const links = await checkLinkedTasks(Number(contractNumber), [Number(id)]);
-      if (links.length > 0) {
+      const hasActiveTasks = links.some(link => 
+        link.linkedTasks.some(task => 
+          task.status !== 'completed' && task.itemStatus !== 'completed'
+        )
+      );
+
+      if (links.length > 0 && hasActiveTasks) {
         setSmartBillboardLinks(links);
         setPendingRemovalIds([id]);
         setPendingSaveCallback(() => async (types: TaskTypeSelection) => {
@@ -2567,6 +2626,15 @@ export default function ContractEdit() {
         });
         setSmartConfirmOpen(true);
       } else {
+        if (links.length > 0) {
+          await removeBillboardFromAllTasks(Number(contractNumber), Number(id), {
+            installation: false,
+            print: false,
+            cutout: false,
+            removal: false,
+          });
+        }
+        await removeBillboardFromContract(contractNumber, id);
         setSelected((prev) => prev.filter((x) => x !== id));
       }
     } catch {
@@ -2583,7 +2651,13 @@ export default function ContractEdit() {
     try {
       const allBillboardIds = ids.map(id => Number(id));
       const links = await checkLinkedTasks(Number(contractNumber), allBillboardIds);
-      if (links.length > 0) {
+      const hasActiveTasks = links.some(link => 
+        link.linkedTasks.some(task => 
+          task.status !== 'completed' && task.itemStatus !== 'completed'
+        )
+      );
+
+      if (links.length > 0 && hasActiveTasks) {
         setSmartBillboardLinks(links);
         setPendingRemovalIds(ids);
         setPendingSaveCallback(() => async (types: any) => {
@@ -2596,8 +2670,19 @@ export default function ContractEdit() {
         });
         setSmartConfirmOpen(true);
       } else {
+        for (const id of ids) {
+          if (links.length > 0) {
+            await removeBillboardFromAllTasks(Number(contractNumber), Number(id), {
+              installation: false,
+              print: false,
+              cutout: false,
+              removal: false,
+            });
+          }
+          await removeBillboardFromContract(contractNumber, id);
+        }
         setSelected((prev) => prev.filter((x) => !ids.includes(x)));
-        toast.success(`تم حذف ${ids.length} لوحة`);
+        toast.success(`تم حذف ${ids.length} لوحة من العقد`);
       }
     } catch {
       setSelected((prev) => prev.filter((x) => !ids.includes(x)));
@@ -3048,8 +3133,6 @@ export default function ContractEdit() {
         description: `الدفعة ${installmentNumber}`,
         dueDate: dueDateIso
       });
-      
-      runningTotal += amount;
     }
 
     setInstallments(newInstallments);
@@ -3138,7 +3221,13 @@ export default function ContractEdit() {
           Number(contractNumber),
           toRemove.map(Number)
         );
-        if (links.length > 0) {
+        const hasActiveTasks = links.some(link => 
+          link.linkedTasks.some(task => 
+            task.status !== 'completed' && task.itemStatus !== 'completed'
+          )
+        );
+
+        if (links.length > 0 && hasActiveTasks) {
           setSmartBillboardLinks(links);
           setPendingSaveCallback(() => (types: TaskTypeSelection) => executeSave(true, types));
           setSmartConfirmOpen(true);
@@ -3150,7 +3239,13 @@ export default function ContractEdit() {
       // حذف اللوحات من العقد ومن المهام المختارة - تتبع اللوحات المستبدلة
       const replacementMap: { itemId: string; size: string }[] = [];
       for (const id of toRemove) {
-        const result = await removeBillboardFromAllTasks(Number(contractNumber), Number(id), taskTypes);
+        const typesToUse = skipTaskCheck && taskTypes ? taskTypes : {
+          installation: false,
+          print: false,
+          cutout: false,
+          removal: false
+        };
+        const result = await removeBillboardFromAllTasks(Number(contractNumber), Number(id), typesToUse);
         if (result.replacedItemId && result.replacedItemSize) {
           replacementMap.push({ itemId: result.replacedItemId, size: result.replacedItemSize });
         }
@@ -3681,6 +3776,8 @@ export default function ContractEdit() {
               onToggleSingleFace={toggleSingleFace}
               pricingByBillboardOverride={unifiedPricingByBillboard}
               installDatesByBillboard={installDatesByBillboard}
+              individualDiscounts={individualDiscounts}
+              onUpdateIndividualDiscount={handleUpdateIndividualDiscount}
             />
 
             {/* ✅ NEW: إيجارات اللوحات الصديقة بالجملة */}

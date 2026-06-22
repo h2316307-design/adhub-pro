@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { VisuallyHidden } from '@radix-ui/react-visually-hidden';
 import { Button } from '@/components/ui/button';
@@ -99,6 +100,128 @@ export function UnifiedTaskInvoice({
   const allTasks = tasks && tasks.length > 1 ? tasks : [task];
   const isGroupInvoice = allTasks.length > 1;
   const printRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
+  const [reloadCounter, setReloadCounter] = useState(0);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+
+  const handleRecalculateCosts = async () => {
+    setIsRecalculating(true);
+    const tId = toast.loading('جاري إعادة حساب تكاليف المهمة...');
+    try {
+      for (const t of allTasks) {
+        // 1. Fetch current items of installation_task
+        let newCustomerInstall = 0;
+        let newCompanyInstall = 0;
+        if (t.installation_task_id) {
+          const { data: installItems } = await supabase
+            .from('installation_task_items')
+            .select('customer_installation_cost, company_installation_cost, additional_cost')
+            .eq('task_id', t.installation_task_id);
+          if (installItems) {
+            installItems.forEach(i => {
+              newCustomerInstall += Number(i.customer_installation_cost) || 0;
+              newCompanyInstall += (Number(i.company_installation_cost) || 0) + (Number(i.additional_cost) || 0);
+            });
+          }
+        }
+
+        // 2. Fetch current total of print_task
+        let newCustomerPrint = 0;
+        let newCompanyPrint = 0;
+        if (t.print_task_id) {
+          const { data: printTask } = await supabase
+            .from('print_tasks')
+            .select('customer_total_amount, total_cost')
+            .eq('id', t.print_task_id)
+            .single();
+          if (printTask) {
+            newCustomerPrint = Number(printTask.customer_total_amount) || 0;
+            newCompanyPrint = Number(printTask.total_cost) || 0;
+          }
+        }
+
+        // 3. Fetch current total of cutout_task
+        let newCustomerCutout = 0;
+        let newCompanyCutout = 0;
+        if (t.cutout_task_id) {
+          const { data: cutoutTask } = await supabase
+            .from('cutout_tasks')
+            .select('customer_total_amount, total_cost')
+            .eq('id', t.cutout_task_id)
+            .single();
+          if (cutoutTask) {
+            newCustomerCutout = Number(cutoutTask.customer_total_amount) || 0;
+            newCompanyCutout = Number(cutoutTask.total_cost) || 0;
+          }
+        }
+
+        // Calculate totals
+        const discountAmount = t.discount_amount || 0;
+        const customerSubtotal = newCustomerInstall + newCustomerPrint + newCustomerCutout;
+        const customerTotal = customerSubtotal - discountAmount;
+        const companyTotal = newCompanyInstall + newCompanyPrint + newCompanyCutout;
+        const netProfit = customerTotal - companyTotal;
+        const profitPercentage = customerTotal > 0 ? (netProfit / customerTotal) * 100 : 0;
+
+        // Update composite_tasks table
+        const { error } = await supabase
+          .from('composite_tasks')
+          .update({
+            customer_installation_cost: newCustomerInstall,
+            company_installation_cost: newCompanyInstall,
+            customer_print_cost: newCustomerPrint,
+            company_print_cost: newCompanyPrint,
+            customer_cutout_cost: newCustomerCutout,
+            company_cutout_cost: newCompanyCutout,
+            customer_total: customerTotal,
+            company_total: companyTotal,
+            net_profit: netProfit,
+            profit_percentage: profitPercentage,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', t.id);
+
+        if (error) throw error;
+
+        // Also update the combined invoice if it exists
+        if (t.combined_invoice_id) {
+          await supabase.from('printed_invoices').update({
+            print_cost: newCompanyPrint + newCompanyCutout,
+            total_amount: customerTotal,
+            notes: `فاتورة موحدة للمهمة المجمعة (معاد حسابها)\n` +
+                   `تركيب: ${newCustomerInstall.toLocaleString()} د.ل\n` +
+                   (newCustomerPrint > 0 ? `طباعة: ${newCustomerPrint.toLocaleString()} د.ل\n` : '') +
+                   (newCustomerCutout > 0 ? `قص: ${newCustomerCutout.toLocaleString()} د.ل\n` : '') +
+                   (discountAmount > 0 ? `خصم: ${discountAmount.toLocaleString()} د.ل\n` : '') +
+                   (t.notes ? `\nملاحظات: ${t.notes}` : ''),
+            updated_at: new Date().toISOString()
+          } as any).eq('id', t.combined_invoice_id);
+
+          // Sync customer payment entry
+          await supabase.from('customer_payments')
+            .update({
+              amount: -customerTotal,
+              notes: `مهمة مجمعة - عقد #${t.contract_id} (معاد حسابها)`
+            })
+            .eq('printed_invoice_id', t.combined_invoice_id)
+            .eq('entry_type', 'invoice');
+        }
+      }
+
+      toast.dismiss(tId);
+      toast.success('تم إعادة حساب وتحديث التكاليف بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+      setReloadCounter(c => c + 1);
+    } catch (e: any) {
+      toast.dismiss(tId);
+      console.error(e);
+      toast.error(e.message || 'حدث خطأ أثناء إعادة حساب التكاليف');
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
   const [isLoading, setIsLoading] = useState(true);
   const [shared, setShared] = useState<SharedInvoiceSettings>(DEFAULT_SHARED_SETTINGS);
   const [individual, setIndividual] = useState<IndividualInvoiceSettings>(DEFAULT_INDIVIDUAL_SETTINGS);
@@ -239,7 +362,7 @@ export function UnifiedTaskInvoice({
     if (open) {
       loadData();
     }
-  }, [open, invoiceType, task.id, task.installation_task_id, task.contract_id]);
+  }, [open, invoiceType, task.id, task.installation_task_id, task.contract_id, reloadCounter]);
 
   const loadInvoiceData = async () => {
     const items: InvoiceItem[] = [];
@@ -265,6 +388,20 @@ export function UnifiedTaskInvoice({
       const aggCompanyInstall = allTasks.reduce((s, t) => s + (t.company_installation_cost || 0), 0);
       const aggCompanyCutout = allTasks.reduce((s, t) => s + (t.company_cutout_cost || 0), 0);
       const aggCustomerTotal = allTasks.reduce((s, t) => s + (t.customer_total || 0), 0);
+
+      // Get printed billboard ids across all subtasks
+      const printedBillboardIds = new Set<number>();
+      if (allPrintIds.length > 0) {
+        const { data: printItems } = await supabase
+          .from('print_task_items')
+          .select('billboard_id')
+          .in('task_id', allPrintIds);
+        if (printItems) {
+          printItems.forEach((r: any) => {
+            if (r.billboard_id) printedBillboardIds.add(Number(r.billboard_id));
+          });
+        }
+      }
 
       // Load sizes map
       const { data: sizesData } = await supabase.from('sizes').select('name, width, height, installation_price, sort_order');
@@ -463,6 +600,10 @@ export function UnifiedTaskInvoice({
             // حساب المساحة الكلية
             totalArea = 0;
             installItems.forEach((item: any) => {
+              const billboardId = item.billboard?.ID || item.billboard_id;
+              const isPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));
+              if (invoiceType === 'print_vendor' && !isPrinted) return;
+
               const billboardSize = item.billboard?.Size;
               let sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0 };
 
@@ -526,6 +667,14 @@ export function UnifiedTaskInvoice({
 
             // إضافة كل عنصر
             installItems.forEach((item: any) => {
+              const billboardId = item.billboard?.ID || item.billboard_id;
+              
+              // Skip if print vendor invoice and not printed
+              if (invoiceType === 'print_vendor') {
+                const isPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));
+                if (!isPrinted) return;
+              }
+
               const billboardSize = item.billboard?.Size;
               let sizeInfo = sizesMap[billboardSize] || { width: 0, height: 0, installationPrice: 0 };
 
@@ -536,7 +685,6 @@ export function UnifiedTaskInvoice({
                 }
               }
 
-              const billboardId = item.billboard?.ID || item.billboard_id;
               const designs = designImages[billboardId] || {};
 
               const faceAImage = item.design_face_a || designs.face_a || item.billboard?.design_face_a;
@@ -561,7 +709,8 @@ export function UnifiedTaskInvoice({
               let cutoutCostPerFace = 0;
 
               if (invoiceType === 'print_vendor') {
-                printCostPerFace = areaPerFace * pricePerMeter;
+                const isBillboardPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));
+                printCostPerFace = isBillboardPrinted ? (areaPerFace * pricePerMeter) : 0;
               } else if (invoiceType === 'installation_team') {
                 // ✅ استخدام company_installation_cost المخزن في عنصر المهمة
                 let itemCompanyCost = item.company_installation_cost || 0;
@@ -694,6 +843,13 @@ export function UnifiedTaskInvoice({
             // فلترة العناصر بدون تكلفة (للقص مثلاً)
             if (invoiceType === 'cutout_vendor') {
               const filtered = items.filter(item => item.cutoutCost > 0);
+              items.length = 0;
+              items.push(...filtered);
+            }
+
+            // فلترة العناصر بدون تكلفة للطباعة
+            if (invoiceType === 'print_vendor') {
+              const filtered = items.filter(item => item.printCost > 0);
               items.length = 0;
               items.push(...filtered);
             }
@@ -871,7 +1027,7 @@ export function UnifiedTaskInvoice({
 
             // حساب المساحة الكلية أولاً مع استخراج الأبعاد من نص المقاس
             totalArea = 0;
-            // مساحة مخصصة لحساب سعر المتر — تستبعد العناصر التي تكلفتها صفر للزبون
+            // مساحة مخصصة لحساب سعر المتر — تستبعد العناصر التي تكلفتها صفر للزبون والمستثناة من الطباعة
             let totalAreaForPriceRate = 0;
             installItems.forEach((item: any) => {
               const billboardSize = item.billboard?.Size;
@@ -896,13 +1052,17 @@ export function UnifiedTaskInvoice({
               const itemTotalArea = areaForItem * facesCount;
               totalArea += itemTotalArea;
 
+              // تحقق من كون اللوحة مشمولة بالطباعة
+              const billboardId = item.billboard?.ID || item.billboard_id;
+              const isPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));
+
               // اعتبار العنصر "مجاني" إذا كانت كل تكاليفه على الزبون صفر
               const linkedTask = _taskByInstallIdEarly.get(item.task_id);
               const itemCustomerInstall = Number(item.customer_installation_cost) || 0;
               const itemCustomerReinstall = Number(item.customer_reinstall_cost) || 0;
               const taskCustomerPrint = Number(linkedTask?.customer_print_cost) || 0;
               const isFreeItem = itemCustomerInstall === 0 && itemCustomerReinstall === 0 && taskCustomerPrint === 0;
-              if (!isFreeItem) {
+              if (!isFreeItem && isPrinted) {
                 totalAreaForPriceRate += itemTotalArea;
               }
             });
@@ -921,6 +1081,7 @@ export function UnifiedTaskInvoice({
             type PerTaskAgg = {
               compositeTask: any;
               totalArea: number;
+              printedArea?: number;
               totalSizesInstallationPrice: number;
               cutoutBillboardIds: Set<number>;
               pricePerMeter: number;
@@ -954,6 +1115,7 @@ export function UnifiedTaskInvoice({
               const compTask = taskByInstallId.get(taskInstallId) || fallbackTask;
 
               let taskTotalArea = 0;
+              let taskPrintedArea = 0;
               let taskTotalSizesInstallationPrice = 0;
               const taskCutoutBillboardIds = new Set<number>();
 
@@ -971,7 +1133,15 @@ export function UnifiedTaskInvoice({
                   ? (item.billboard?.Faces_Count || 2)
                   : (item.faces_to_install || item.billboard?.Faces_Count || 1);
                 const areaForItem = (sizeInfo.width * sizeInfo.height) || 0;
-                taskTotalArea += areaForItem * facesCount;
+                const itemTotalArea = areaForItem * facesCount;
+                taskTotalArea += itemTotalArea;
+
+                const billboardId = item.billboard?.ID || item.billboard_id;
+                const isPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));
+                if (isPrinted) {
+                  taskPrintedArea += itemTotalArea;
+                }
+
                 taskTotalSizesInstallationPrice += sizeInfo.installationPrice || 0;
               });
 
@@ -1006,9 +1176,10 @@ export function UnifiedTaskInvoice({
               perTaskAggMap.set(taskInstallId, {
                 compositeTask: compTask,
                 totalArea: taskTotalArea,
+                printedArea: taskPrintedArea,
                 totalSizesInstallationPrice: taskTotalSizesInstallationPrice,
                 cutoutBillboardIds: taskCutoutBillboardIds,
-                pricePerMeter: taskCustomerPrint > 0 && taskTotalArea > 0 ? taskCustomerPrint / taskTotalArea : 0,
+                pricePerMeter: taskCustomerPrint > 0 && taskPrintedArea > 0 ? taskCustomerPrint / taskPrintedArea : 0,
                 installCostRatio: taskCustomerInstall > 0 && taskTotalSizesInstallationPrice > 0
                   ? taskCustomerInstall / taskTotalSizesInstallationPrice
                   : 0,
@@ -1063,7 +1234,8 @@ export function UnifiedTaskInvoice({
               const hasCutout = taskCutoutBillboardIds.has(Number(billboardId));
               const facesCountForBillboard = hasBackFace ? 2 : 1;
               const cutoutCostPerFaceForBillboard = hasCutout ? (taskCutoutCostPerBillboard / facesCountForBillboard) : 0;
-              const printCostPerFace = areaPerFace * taskPricePerMeter;
+              const isPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));
+              const printCostPerFace = isPrinted ? (areaPerFace * taskPricePerMeter) : 0;
 
               const billboardImage = item.billboard?.Image_URL || '';
               const nearestLandmark = item.billboard?.Nearest_Landmark || '';
@@ -2082,6 +2254,22 @@ export function UnifiedTaskInvoice({
                   </Label>
                 </div>
               )}
+              {/* زر إعادة حساب التكاليف */}
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1 text-xs sm:text-sm text-amber-600 hover:text-amber-700 border-amber-200/60 bg-amber-500/[0.02]"
+                onClick={handleRecalculateCosts}
+                disabled={isRecalculating}
+              >
+                {isRecalculating ? (
+                  <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-3 w-3 sm:h-4 sm:w-4" />
+                )}
+                <span className="hidden sm:inline">إعادة حساب التكاليف</span>
+                <span className="sm:hidden">إعادة الحساب</span>
+              </Button>
               {/* زر الخصم السريع */}
               {invoiceType === 'customer' && (
                 <Popover open={discountOpen} onOpenChange={setDiscountOpen}>
@@ -2366,7 +2554,7 @@ export function UnifiedTaskInvoice({
                     <div style={{ fontSize: '28px', fontWeight: 'bold', color: primaryColor }}>{recipient.name}</div>
                   </div>
                   <div style={{ display: 'flex', gap: '24px' }}>
-                    {invoiceType === 'print_vendor' && (
+                    {(invoiceType === 'print_vendor' || invoiceType === 'customer') && (data?.totalArea || 0) > 0 && (
                       <div style={{ textAlign: 'center' }}>
                         <div style={{ fontSize: '24px', fontWeight: 'bold', color: primaryColor, fontFamily: 'Manrope' }}>
                           {(data?.totalArea || 0).toFixed(2)}
@@ -2492,7 +2680,11 @@ export function UnifiedTaskInvoice({
                 const hasInstallCost = invoiceType === 'installation_team' ? true : (itemsInstallSum > 0 || (task.customer_installation_cost || 0) > 0);
                 const hasCutoutCost = invoiceType === 'installation_team' ? false : (itemsCutoutSum > 0 || (task.customer_cutout_cost || 0) > 0);
                 const totalArea = data?.items?.reduce((sum, item) => sum + (item.area || 0), 0) || 0;
-                const pricePerMeter = data?.pricePerMeter || (totalArea > 0 ? (isCustomerLike ? (task.customer_print_cost || 0) : (task.company_print_cost || 0)) / totalArea : 0);
+                const pricePerMeter = data?.pricePerMeter || (() => {
+                  const printItems = data?.items?.filter(item => (item.printCost || 0) > 0) || [];
+                  const printedArea = printItems.reduce((sum, item) => sum + (item.area || 0), 0) || 0;
+                  return printedArea > 0 ? (isCustomerLike ? (task.customer_print_cost || 0) : (task.company_print_cost || 0)) / printedArea : 0;
+                })();
                 // ✅ سعر وحدة التركيب (لكل وجه/قطعة) عند تفعيل تفاصيل السعر
                 const installUnitPrice = (() => {
                   const installItems = (data?.items || []).filter(it => (it.installationCost || 0) > 0);

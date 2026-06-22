@@ -368,9 +368,11 @@ export default function ContractCreate() {
     // When installation is disabled, calculate from finalTotal - printCost
     // When installation is enabled, calculate from rentalCostOnly
     const baseForFee = !installationEnabled ? calculations.finalTotal - printCostTotal : rentalCostOnly;
-    const baseFee = Math.round(baseForFee * (operatingFeeRate / 100) * 100) / 100;
+    // ✅ طرح تكاليف اللوحات الصديقة من وعاء النسبة العادية لمنع التكرار
+    const regularRentalBase = Math.max(0, baseForFee - totalFriendCosts);
+    const baseFee = Math.round(regularRentalBase * (operatingFeeRate / 100) * 100) / 100;
     return baseFee + friendOperatingFeeAmount;
-  }, [installationEnabled, calculations.finalTotal, printCostTotal, rentalCostOnly, operatingFeeRate, friendOperatingFeeAmount]);
+  }, [installationEnabled, calculations.finalTotal, printCostTotal, rentalCostOnly, operatingFeeRate, friendOperatingFeeAmount, totalFriendCosts]);
 
   // Installments management hook
   const installmentManager = useContractInstallments({
@@ -676,7 +678,8 @@ export default function ContractCreate() {
         print_price_per_meter: printPricePerMeter,
         contract_currency: contractCurrency,
         exchange_rate: exchangeRate,
-        fee: operatingFeeRate,
+        fee: String(operatingFee),
+        operating_fee_rate: operatingFeeRate,
         'Total Paid': 0,
         'Remaining': calculations.finalTotal,
         rent_cost: calculations.finalTotal,

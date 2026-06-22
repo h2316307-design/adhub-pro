@@ -66,6 +66,7 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
   const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
   const [printedInvoices, setPrintedInvoices] = useState<any[]>([]);
   const [printTasks, setPrintTasks] = useState<any[]>([]);
+  const [cutoutTasks, setCutoutTasks] = useState<any[]>([]);
   const [purchaseInvoices, setPurchaseInvoices] = useState<any[]>([]);
   const [discounts, setDiscounts] = useState<any[]>([]);
   const [compositeTasks, setCompositeTasks] = useState<any[]>([]);
@@ -94,6 +95,7 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
           discountsRes,
           compositeTasksRes,
           printTasksRes,
+          cutoutTasksRes,
           customerRes,
         ] = await Promise.all([
           // العقود
@@ -134,7 +136,11 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
             .eq('customer_id', customerId),
           supabase
             .from('print_tasks')
-            .select('id, invoice_id')
+            .select('id, invoice_id, is_composite, installation_task_id, composite_task_id')
+            .eq('customer_id', customerId),
+          supabase
+            .from('cutout_tasks')
+            .select('id, invoice_id, is_composite, installation_task_id')
             .eq('customer_id', customerId),
           // جلب معلومات العميل لمعرفة معرف الشركة الصديقة المرتبطة
           supabase
@@ -156,6 +162,7 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
         setDiscounts(discountsRes.data || []);
         setCompositeTasks(compositeTasksRes.data || []);
         setPrintTasks(printTasksRes.data || []);
+        setCutoutTasks(cutoutTasksRes.data || []);
 
         // حساب إيجارات الشركات الصديقة وجلب البيانات اللازمة
         let dbFriendRentals: any[] = [];
@@ -276,7 +283,7 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
   const financials = useMemo((): Omit<CustomerFinancialData, 'isLoading' | 'error'> => {
     // إجمالي الخصومات
     const totalDiscounts = discounts.reduce((sum, d) => sum + (Number(d.discount_value) || 0), 0);
-    const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(printedInvoices, compositeTasks, printTasks);
+    const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(printedInvoices, compositeTasks, printTasks, cutoutTasks);
 
     // حساب المتبقي باستخدام الدالة الموحدة
     const remainingDebt = calculateTotalRemainingDebt(

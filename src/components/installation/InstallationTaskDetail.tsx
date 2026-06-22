@@ -133,6 +133,62 @@ export const InstallationTaskDetail: React.FC<Props> = ({
   const designImage = taskDesigns[0]?.design_face_a_url || taskItems.find(i => i.design_face_a)?.design_face_a;
   const firstInstallDate = taskItems.find(i => i.installation_date)?.installation_date;
 
+  const [printBillboardIds, setPrintBillboardIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!task?.id) {
+      setPrintBillboardIds(new Set());
+      return;
+    }
+    const fetchPrintTaskItems = async () => {
+      try {
+        const [printTasksRes, compositeTasksRes] = await Promise.all([
+          supabase
+            .from('print_tasks')
+            .select('id')
+            .eq('installation_task_id', task.id),
+          supabase
+            .from('composite_tasks')
+            .select('print_task_id')
+            .eq('installation_task_id', task.id)
+        ]);
+
+        const printTaskIds = new Set<string>();
+        if (task.print_task_id) {
+          printTaskIds.add(task.print_task_id);
+        }
+        if (printTasksRes.data) {
+          printTasksRes.data.forEach((pt: any) => printTaskIds.add(pt.id));
+        }
+        if (compositeTasksRes.data) {
+          compositeTasksRes.data.forEach((ct: any) => {
+            if (ct.print_task_id) printTaskIds.add(ct.print_task_id);
+          });
+        }
+
+        if (printTaskIds.size === 0) {
+          setPrintBillboardIds(new Set());
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('print_task_items')
+          .select('billboard_id')
+          .in('task_id', Array.from(printTaskIds));
+        
+        if (!error && data) {
+          setPrintBillboardIds(new Set(data.map((r: any) => Number(r.billboard_id)).filter(Boolean)));
+        } else {
+          setPrintBillboardIds(new Set());
+        }
+      } catch (err) {
+        console.warn('Error fetching print task items:', err);
+        setPrintBillboardIds(new Set());
+      }
+    };
+    fetchPrintTaskItems();
+  }, [task?.id, task?.print_task_id, taskItems]);
+
   // ترتيب اللوحات حسب sort_order من sizes ثم البلدية ثم رقم اللوحة (ثابت)
   const sortBillboards = useCallback((list: typeof billboardsWithData) => {
     return [...list].sort((a, b) => {
@@ -575,6 +631,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
                     installationPrice={price}
                     isSelected={selectedItemsForCompletion.includes(item.id) || selectedItemsForDate.includes(item.id)}
                     isCompleted={false}
+                    isPrintActive={printBillboardIds.has(Number(item.billboard_id))}
                     taskDesigns={taskDesigns}
                     allItems={taskItems}
                     onDelete={() => onDeleteItem(item.id)}
@@ -609,6 +666,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
                     installationPrice={price}
                     isSelected={selectedItemsForCompletion.includes(item.id) || selectedItemsForDate.includes(item.id)}
                     isCompleted
+                    isPrintActive={printBillboardIds.has(Number(item.billboard_id))}
                     taskDesigns={taskDesigns}
                     allItems={taskItems}
                     onDelete={undefined}
@@ -642,6 +700,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
                     installationPrice={price}
                     isSelected={selectedItemsForCompletion.includes(item.id) || selectedItemsForDate.includes(item.id)}
                     isCompleted={item.status === 'completed'}
+                    isPrintActive={printBillboardIds.has(Number(item.billboard_id))}
                     taskDesigns={taskDesigns}
                     allItems={taskItems}
                     onDelete={undefined}

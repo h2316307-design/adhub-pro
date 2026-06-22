@@ -124,6 +124,20 @@ const STATUS_CONFIG = {
   },
 };
 
+const PRINT_STATUS_LABELS: Record<string, string> = {
+  pending: 'جديدة',
+  in_progress: 'قيد التنفيذ',
+  completed: 'مكتملة',
+  cancelled: 'ملغاة',
+};
+
+const PRINT_STATUS_COLORS: Record<string, string> = {
+  pending: 'bg-slate-500/10 text-slate-400 border-slate-500/20',
+  in_progress: 'bg-amber-500/10 text-amber-500 border-amber-500/20',
+  completed: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  cancelled: 'bg-red-500/10 text-red-400 border-red-500/20',
+};
+
 function getDisplayStatus(items: any[]): keyof typeof STATUS_CONFIG {
   if (items.length === 0) return 'pending';
   const completed = items.filter(i => i.status === 'completed').length;
@@ -426,6 +440,17 @@ const TaskCardRowInner = ({
               {task.isMerged && (
                 <Badge className="bg-orange-500/10 text-orange-500 border border-orange-500/20 font-extrabold text-[10px] h-5 px-2.5 py-0 rounded-full animate-pulse">
                   مدمجة
+                </Badge>
+              )}
+              {task.print_tasks ? (
+                <Badge className={`font-extrabold text-[10px] h-5 px-2.5 py-0 rounded-full border ${PRINT_STATUS_COLORS[task.print_tasks.status] || 'bg-slate-500/10 text-slate-400 border-slate-500/20'}`}>
+                  <Printer className="h-3 w-3 ml-1" />
+                  مهمة الطباعة: {PRINT_STATUS_LABELS[task.print_tasks.status] || task.print_tasks.status}
+                </Badge>
+              ) : (
+                <Badge className="bg-rose-500/15 text-rose-500 dark:text-rose-400 border border-rose-500/25 font-extrabold text-[10px] h-5 px-2.5 py-0 rounded-full">
+                  <Printer className="h-3 w-3 ml-1" />
+                  لم يتم إنشاء مهمة طباعة
                 </Badge>
               )}
             </div>
@@ -770,6 +795,21 @@ const TaskCardRowInner = ({
             <Palette className="h-2.5 w-2.5" />
             التصاميم: {task.itemsWithDesigns}/{task.totalItems}
           </span>
+          {task.print_tasks ? (
+            <span className={`inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border font-semibold ${
+              task.print_tasks.status === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'
+                : task.print_tasks.status === 'in_progress' ? 'bg-amber-500/10 text-amber-400 border-amber-500/25'
+                : 'bg-slate-500/10 text-slate-400 border-slate-500/25'
+            }`}>
+              <Printer className="h-2.5 w-2.5" />
+              الطباعة: {PRINT_STATUS_LABELS[task.print_tasks.status] || task.print_tasks.status}
+            </span>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border border-rose-500/25 bg-rose-500/10 text-rose-400 font-semibold">
+              <Printer className="h-2.5 w-2.5" />
+              لم يتم إنشاء مهمة طباعة
+            </span>
+          )}
         </div>
 
         {/* Progress row */}
@@ -918,6 +958,9 @@ export const InstallationTasksTable: React.FC<Props> = ({
       const cost = hasCost ? i.company_installation_cost : (installationPricingByBillboard[i.billboard_id] || 0);
       return s + cost;
     }, 0);
+    const totalCustomerCost = items.reduce((s, i) => {
+      return s + (Number(i.customer_installation_cost) || 0);
+    }, 0);
     const displayStatus = getDisplayStatus(items);
     const installDate = items.find(i => i.installation_date)?.installation_date;
     // مشاركة التصاميم بين جميع الفرق في نفس المجموعة (نفس العقد + نوع المهمة + رقم إعادة التركيب)
@@ -948,7 +991,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
 
     return {
       ...task, items, contract, team, completed,
-      totalItems: items.length, totalCost, displayStatus,
+      totalItems: items.length, totalCost, totalCustomerCost, displayStatus,
       installDate, designThumb, allDesignUrls, accent, completionPct: pct,
       customerName: contract?.['Customer Name'] || 'غير محدد',
       designName: adTypes || '—',
@@ -1411,6 +1454,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
                 const totalBillboards = groupTasks.reduce((s, t) => s + t.totalItems, 0);
                 const completedBillboards = groupTasks.reduce((s, t) => s + t.completed, 0);
                 const pct = totalBillboards > 0 ? Math.round((completedBillboards / totalBillboards) * 100) : 0;
+                const groupTotalCustomerCost = groupTasks.reduce((s, t) => s + (t.totalCustomerCost || 0), 0);
                 const uniqueTeams = [...new Set(groupTasks.map(t => t.team?.team_name).filter(Boolean))];
                 const isReinstallation = firstTask.task_type === 'reinstallation';
 
@@ -1505,6 +1549,10 @@ export const InstallationTasksTable: React.FC<Props> = ({
                             : 'bg-muted/40 text-muted-foreground border-border/25'
                           }`}>
                             {pct}%
+                          </span>
+                          <span className="inline-flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-xl text-[11px] text-emerald-400 font-extrabold shadow-sm">
+                            <Banknote className="h-3.5 w-3.5 text-emerald-400" />
+                            تكلفة الزبون: {groupTotalCustomerCost.toLocaleString('ar-LY')} د.ل
                           </span>
 
                           {uniqueTeams.length > 0 && (
@@ -1699,8 +1747,8 @@ export const InstallationTasksTable: React.FC<Props> = ({
         {/* ── Bulk Print Dialog ── */}
         {bulkPrintOpen && (() => {
           const selectedTasks = enriched.filter(t => selected.has(t.id));
-          const bulkItems: BillboardPrintItem[] = selectedTasks.flatMap(t =>
-            t.items.map((item: any) => ({
+          const bulkItems: BillboardPrintItem[] = selectedTasks.flatMap(t => {
+            return t.items.map((item: any) => ({
               id: item.id,
               billboard_id: item.billboard_id,
               design_face_a: item.design_face_a,
@@ -1712,8 +1760,8 @@ export const InstallationTasksTable: React.FC<Props> = ({
               has_cutout: item.has_cutout,
               contract_number: t.contract_id,
               ad_type: t.designName,
-            }))
-          );
+            }));
+          });
           const firstContract = selectedTasks[0];
           return (
             <UnifiedPrintAllDialog

@@ -6,7 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, ChevronDown, ChevronUp, BarChart3, Map as MapIcon } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronUp, BarChart3, Map as MapIcon, Zap, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { BillboardGridCard } from '@/components/BillboardGridCard';
 import { useAllActiveBillboardStatuses } from '@/hooks/useBillboardStatuses';
 import { BillboardFilters } from '@/components/BillboardFilters';
@@ -111,6 +114,12 @@ export default function Billboards() {
 
   // Maintenance dialog state
   const [isMaintenanceDialogOpen, setIsMaintenanceDialogOpen] = useState(false);
+
+  // Quick Add dialog state
+  const [isQuickAddDialogOpen, setIsQuickAddDialogOpen] = useState(false);
+  const [quickAddCoords, setQuickAddCoords] = useState<{ lat: number; lng: number } | null>(null);
+  const [quickAddLandmark, setQuickAddLandmark] = useState('');
+  const [quickAdding, setQuickAdding] = useState(false);
   const [selectedBillboard, setSelectedBillboard] = useState<any>(null);
   const [maintenanceForm, setMaintenanceForm] = useState({
     status: '',
@@ -160,6 +169,136 @@ export default function Billboards() {
   useEffect(() => { billboardsRef.current = billboards; }, [billboards]);
   useEffect(() => { updateBillboardLocalRef.current = updateBillboardLocal; }, [updateBillboardLocal]);
   useEffect(() => { updateBillboardVisibilityLocalRef.current = updateBillboardVisibilityLocal; }, [updateBillboardVisibilityLocal]);
+
+  const handleMapRightClick = async (lat: number, lng: number, mode?: 'quick' | 'full') => {
+    const coordsStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+    if (mode === 'quick') {
+      setQuickAddCoords({ lat, lng });
+      setQuickAddLandmark('');
+      setIsQuickAddDialogOpen(true);
+    } else {
+      // mode === 'full'
+      try {
+        const { data: lastBillboard } = await supabase
+          .from('billboards')
+          .select('Image_URL, image_name')
+          .order('ID', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (lastBillboard) {
+          billboardForm.initializeAddForm({ 
+            GPS_Coordinates: coordsStr,
+            Image_URL: lastBillboard.Image_URL || '',
+            image_name: lastBillboard.image_name || '',
+            hasCustomImage: !!lastBillboard.Image_URL
+          });
+        } else {
+          billboardForm.initializeAddForm({ GPS_Coordinates: coordsStr });
+        }
+      } catch (err) {
+        billboardForm.initializeAddForm({ GPS_Coordinates: coordsStr });
+      }
+      billboardForm.setAddOpen(true);
+    }
+  };
+
+  const handleQuickAddSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickAddCoords) return;
+
+    setQuickAdding(true);
+    const coordsStr = `${quickAddCoords.lat.toFixed(6)}, ${quickAddCoords.lng.toFixed(6)}`;
+
+    try {
+      const { data: lastBillboard, error: lastError } = await supabase
+        .from('billboards')
+        .select('*')
+        .order('ID', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastError) throw lastError;
+
+      if (!lastBillboard) {
+        toast.error('لا توجد لوحات سابقة في النظام لجلب البيانات منها. يرجى استخدام الإضافة الكاملة.');
+        setIsQuickAddDialogOpen(false);
+        return;
+      }
+
+      const munName = lastBillboard.Municipality;
+      if (!munName) {
+        toast.error('اللوحة الأخيرة المضافة لا تحتوي على بلدية صالحة.');
+        setIsQuickAddDialogOpen(false);
+        return;
+      }
+
+      // Get municipality code
+      const { data: municipalityData } = await supabase
+        .from('municipalities')
+        .select('code')
+        .eq('name', munName)
+        .maybeSingle();
+
+      const municipalityCode = municipalityData?.code || 'XX';
+
+      // Get highest billboard ID to generate next ID
+      const { data: billboardsData, error: billboardsError } = await supabase
+        .from('billboards')
+        .select('ID')
+        .order('ID', { ascending: false })
+        .limit(1);
+
+      let nextId = 1;
+      if (!billboardsError && billboardsData && billboardsData.length > 0) {
+        nextId = (billboardsData[0].ID || 0) + 1;
+      }
+
+      const paddedId = String(nextId).padStart(4, '0');
+      const billboardName = `${municipalityCode}${paddedId}`;
+      const imageName = `${billboardName}.jpg`;
+
+      const payload = {
+        ID: nextId,
+        Billboard_Name: billboardName,
+        City: lastBillboard.City || '',
+        Municipality: munName,
+        District: lastBillboard.District || '',
+        Nearest_Landmark: quickAddLandmark.trim(), // القيمة التي أدخلها المستخدم
+        GPS_Coordinates: coordsStr,
+        Faces_Count: lastBillboard.Faces_Count || 1,
+        Size: lastBillboard.Size || '',
+        size_id: lastBillboard.size_id || null,
+        Level: lastBillboard.Level || '',
+        Image_URL: lastBillboard.Image_URL || `/image/${imageName}`,
+        image_name: lastBillboard.image_name || imageName,
+        billboard_type: lastBillboard.billboard_type || '',
+        Status: 'متاح',
+        is_partnership: !!lastBillboard.is_partnership,
+        partner_companies: lastBillboard.partner_companies || [],
+        capital: Number(lastBillboard.capital) || 0,
+        capital_remaining: Number(lastBillboard.capital_remaining) || Number(lastBillboard.capital) || 0,
+        own_company_id: lastBillboard.own_company_id || null,
+        is_visible_in_available: lastBillboard.is_visible_in_available !== false
+      };
+
+      const { error: insertError } = await supabase
+        .from('billboards')
+        .insert(payload);
+
+      if (insertError) throw insertError;
+
+      toast.success(`تمت إضافة اللوحة الجديدة بنجاح! الاسم: ${billboardName}، البلدية: ${munName}، المقاس: ${lastBillboard.Size || 'غير محدد'}`);
+      await loadBillboards({ silent: true });
+      setIsQuickAddDialogOpen(false);
+    } catch (err: any) {
+      console.error('Error in Quick Add:', err);
+      toast.error(`فشلت الإضافة السريعة: ${err.message || err}`);
+    } finally {
+      setQuickAdding(false);
+    }
+  };
 
   // Listen for edit-billboard events from map popups (no page reload)
   useEffect(() => {
@@ -1306,6 +1445,8 @@ export default function Billboards() {
                 onImageView={() => {}}
                 externalShowSociet={showSociet}
                 onShowSocietChange={setShowSociet}
+                enableQuickAdd={true}
+                onMapRightClick={handleMapRightClick}
               />
             </Suspense>
           </CollapsibleContent>
@@ -1546,6 +1687,56 @@ export default function Billboards() {
         onSuccess={loadBillboards}
       />
       
+      {/* Quick Add Dialog */}
+      <Dialog open={isQuickAddDialogOpen} onOpenChange={setIsQuickAddDialogOpen}>
+        <DialogContent className="max-w-md bg-card border-border text-right animate-in fade-in duration-200" dir="rtl">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-bold text-foreground flex items-center gap-2 justify-start flex-row-reverse">
+              <div className="p-2 rounded-lg bg-primary/10">
+                <Zap className="h-5 w-5 text-primary" />
+              </div>
+              <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة سريعة للوحة</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+              سيتم جلب البلدية، المنطقة، المقاس، وبقية التفاصيل تلقائياً من آخر لوحة مضافة في النظام. يرجى كتابة أقرب نقطة دالة فقط.
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleQuickAddSubmit} className="space-y-4 pt-3">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold text-foreground" style={{ fontFamily: 'Tajawal, sans-serif' }}>أقرب معلم / نقطة دالة *</Label>
+              <Input
+                placeholder="مثال: بجانب مسجد التقوى / خلف المصرف"
+                value={quickAddLandmark}
+                onChange={(e) => setQuickAddLandmark(e.target.value)}
+                required
+                className="text-sm h-10 border-border bg-background focus-visible:ring-primary focus-visible:border-primary text-right"
+                autoFocus
+              />
+            </div>
+            <div className="flex gap-2 justify-end pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsQuickAddDialogOpen(false)}
+                className="h-10 text-sm cursor-pointer"
+                style={{ fontFamily: 'Tajawal, sans-serif' }}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="submit"
+                disabled={quickAdding}
+                className="h-10 text-sm bg-primary hover:bg-primary/80 text-white flex gap-1.5 cursor-pointer"
+                style={{ fontFamily: 'Tajawal, sans-serif' }}
+              >
+                {quickAdding && <Loader2 className="h-4 w-4 animate-spin" />}
+                <span>إضافة اللوحة</span>
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* شريط الاختيار العائم */}
       <BillboardSelectionBar
         selectedBillboards={selectedBillboards}

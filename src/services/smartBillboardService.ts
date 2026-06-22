@@ -41,6 +41,15 @@ export async function checkLinkedTasks(
   const nameMap = new Map<number, string>();
   (billboards || []).forEach(b => nameMap.set(b.ID, b.Billboard_Name || `لوحة ${b.ID}`));
 
+  // جلب سجل تاريخ اللوحات للتحقق من التركيب المسبق
+  const { data: historyItems } = await supabase
+    .from('billboard_history')
+    .select('billboard_id')
+    .eq('contract_number', contractNumber)
+    .in('billboard_id', billboardIds);
+  
+  const historySet = new Set((historyItems || []).map(h => Number(h.billboard_id)));
+
   // 1. مهام التركيب
   const { data: installTasks } = await supabase
     .from('installation_tasks')
@@ -112,6 +121,7 @@ export async function checkLinkedTasks(
   // بناء النتائج لكل لوحة
   for (const bbId of billboardIds) {
     const linkedTasks: LinkedTaskInfo[] = [];
+    const isAlreadyInstalled = historySet.has(bbId);
 
     const bbInstallItems = installItems.filter(i => i.billboard_id === bbId);
     if (bbInstallItems.length > 0) {
@@ -122,8 +132,18 @@ export async function checkLinkedTasks(
         label: 'مهمة تركيب',
         taskId: bbInstallItems[0].task_id,
         itemCount: bbInstallItems.length,
-        status: taskStatus,
-        itemStatus,
+        status: isAlreadyInstalled ? 'completed' : taskStatus,
+        itemStatus: isAlreadyInstalled ? 'completed' : itemStatus,
+      });
+    } else if (isAlreadyInstalled) {
+      // ✅ إذا تم تركيبها سابقاً، نقوم بإضافة مهمة تركيب مكتملة مصطنعة لضمان إعلام الواجهة وتاريخها
+      linkedTasks.push({
+        type: 'installation',
+        label: 'مهمة تركيب',
+        taskId: 'history',
+        itemCount: 1,
+        status: 'completed',
+        itemStatus: 'completed',
       });
     }
 
@@ -135,7 +155,7 @@ export async function checkLinkedTasks(
         label: 'مهمة طباعة',
         taskId: bbPrintItems[0].task_id,
         itemCount: bbPrintItems.length,
-        status: taskStatus,
+        status: isAlreadyInstalled ? 'completed' : taskStatus,
       });
     }
 
@@ -147,7 +167,7 @@ export async function checkLinkedTasks(
         label: 'مهمة قص مجسم',
         taskId: bbCutoutItems[0].task_id,
         itemCount: bbCutoutItems.length,
-        status: taskStatus,
+        status: isAlreadyInstalled ? 'completed' : taskStatus,
       });
     }
 
@@ -159,7 +179,7 @@ export async function checkLinkedTasks(
         label: 'مهمة إزالة',
         taskId: bbRemovalItems[0].task_id,
         itemCount: bbRemovalItems.length,
-        status: taskStatus,
+        status: isAlreadyInstalled ? 'completed' : taskStatus,
       });
     }
 
@@ -198,20 +218,24 @@ export async function removeBillboardFromAllTasks(
   if (types.installation) {
     const { data: installTasks } = await supabase
       .from('installation_tasks')
-      .select('id')
+      .select('id, status')
       .eq('contract_id', contractNumber);
     if (installTasks?.length) {
-      // تحقق إذا اللوحة مكتملة التركيب
-      const { data: completedItems } = await supabase
+      // ✅ جلب العناصر للتحقق إذا كانت اللوحة أو المهمة مكتملة
+      const { data: items } = await supabase
         .from('installation_task_items')
-        .select('id, status, billboard_id')
+        .select('id, status, task_id')
         .in('task_id', installTasks.map(t => t.id))
-        .eq('billboard_id', billboardId)
-        .eq('status', 'completed');
+        .eq('billboard_id', billboardId);
 
-      if (completedItems?.length) {
+      const isCompleted = (items || []).some(item => {
+        const parentTask = installTasks.find(t => t.id === item.task_id);
+        return item.status === 'completed' || parentTask?.status === 'completed';
+      });
+
+      if (isCompleted && items && items.length > 0) {
         // اللوحة مركبة فعلاً - نعلّمها كمستبدلة بدل الحذف
-        replacedItemId = completedItems[0].id;
+        replacedItemId = items[0].id;
         
         // جلب مقاس اللوحة للربط مع البديلة
         const { data: bb } = await supabase
@@ -243,42 +267,51 @@ export async function removeBillboardFromAllTasks(
   if (types.print) {
     const { data: printTasks } = await supabase
       .from('print_tasks')
-      .select('id')
+      .select('id, status')
       .eq('contract_id', contractNumber);
     if (printTasks?.length) {
-      await supabase
-        .from('print_task_items')
-        .delete()
-        .in('task_id', printTasks.map(t => t.id))
-        .eq('billboard_id', billboardId);
+      const activePrintTaskIds = printTasks.filter(t => t.status !== 'completed').map(t => t.id);
+      if (activePrintTaskIds.length > 0) {
+        await supabase
+          .from('print_task_items')
+          .delete()
+          .in('task_id', activePrintTaskIds)
+          .eq('billboard_id', billboardId);
+      }
     }
   }
 
   if (types.cutout) {
     const { data: cutoutTasks } = await supabase
       .from('cutout_tasks')
-      .select('id')
+      .select('id, status')
       .eq('contract_id', contractNumber);
     if (cutoutTasks?.length) {
-      await supabase
-        .from('cutout_task_items')
-        .delete()
-        .in('task_id', cutoutTasks.map(t => t.id))
-        .eq('billboard_id', billboardId);
+      const activeCutoutTaskIds = cutoutTasks.filter(t => t.status !== 'completed').map(t => t.id);
+      if (activeCutoutTaskIds.length > 0) {
+        await supabase
+          .from('cutout_task_items')
+          .delete()
+          .in('task_id', activeCutoutTaskIds)
+          .eq('billboard_id', billboardId);
+      }
     }
   }
 
   if (types.removal) {
     const { data: removalTasks } = await supabase
       .from('removal_tasks')
-      .select('id')
+      .select('id, status')
       .eq('contract_id', contractNumber);
     if (removalTasks?.length) {
-      await supabase
-        .from('removal_task_items')
-        .delete()
-        .in('task_id', removalTasks.map(t => t.id))
-        .eq('billboard_id', billboardId);
+      const activeRemovalTaskIds = removalTasks.filter(t => t.status !== 'completed').map(t => t.id);
+      if (activeRemovalTaskIds.length > 0) {
+        await supabase
+          .from('removal_task_items')
+          .delete()
+          .in('task_id', activeRemovalTaskIds)
+          .eq('billboard_id', billboardId);
+      }
     }
   }
 

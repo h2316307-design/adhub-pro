@@ -25,6 +25,7 @@ export interface PrintCustomizationSettings {
   main_image_left: string;
   main_image_width: string;
   main_image_height: string;
+  main_image_object_fit: string;
   
   // إعدادات صور التركيب (وجهين)
   installed_images_top: string;
@@ -65,6 +66,7 @@ export interface PrintCustomizationSettings {
   faces_count_color: string;
   faces_count_alignment: string;
   faces_count_offset_x: string;
+  faces_count_show: string;
   
   // رقم العقد
   contract_number_top: string;
@@ -169,6 +171,7 @@ export interface PrintCustomizationSettings {
   cover_municipality_align: string;
   cover_background_enabled: string;
   cover_background_url: string;
+  calc_meters_by_faces: string;
 
   // إعدادات مستقلة لكل حالة
   status_overrides?: StatusOverrides;
@@ -181,6 +184,7 @@ const defaultSettings: PrintCustomizationSettings = {
   main_image_left: '50%',
   main_image_width: '120mm',
   main_image_height: '140mm',
+  main_image_object_fit: 'cover',
   
   installed_images_top: '80mm',
   installed_images_left: '50%',
@@ -216,6 +220,7 @@ const defaultSettings: PrintCustomizationSettings = {
   faces_count_color: '#000000',
   faces_count_alignment: 'center',
   faces_count_offset_x: '0mm',
+  faces_count_show: 'true',
   
   contract_number_top: '39.869mm',
   contract_number_right: '22mm',
@@ -309,6 +314,7 @@ const defaultSettings: PrintCustomizationSettings = {
   cover_municipality_align: 'center',
   cover_background_enabled: 'true',
   cover_background_url: '',
+  calc_meters_by_faces: 'false',
 };
 
 export function usePrintCustomization(settingKey: string = 'default') {

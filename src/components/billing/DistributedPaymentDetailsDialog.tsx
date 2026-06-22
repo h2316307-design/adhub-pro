@@ -1454,7 +1454,7 @@ export function DistributedPaymentDetailsDialog({
                     const { calculateCustomerFinancials } = await import('@/hooks/useCustomerFinancials');
                     
                     // جلب كل البيانات الحالية (مطابق لـ useCustomerFinancials)
-                    const [contractsRes, paymentsRes, salesRes, printedRes, purchaseRes, discountsRes, compositeRes, printTasksRes] = await Promise.all([
+                    const [contractsRes, paymentsRes, salesRes, printedRes, purchaseRes, discountsRes, compositeRes, printTasksRes, cutoutTasksRes, customerRes] = await Promise.all([
                       supabase.from('Contract').select('*').eq('customer_id', customerData.id),
                       supabase.from('customer_payments').select('*').eq('customer_id', customerData.id),
                       supabase.from('sales_invoices').select('*').eq('customer_id', customerData.id),
@@ -1462,22 +1462,28 @@ export function DistributedPaymentDetailsDialog({
                       supabase.from('purchase_invoices').select('*').eq('customer_id', customerData.id),
                       supabase.from('customer_general_discounts').select('*').eq('customer_id', customerData.id).eq('status', 'active'),
                       supabase.from('composite_tasks').select('*').eq('customer_id', customerData.id),
-                      supabase.from('print_tasks').select('id, invoice_id').eq('customer_id', customerData.id)
+                      supabase.from('print_tasks').select('id, invoice_id, is_composite, installation_task_id, composite_task_id').eq('customer_id', customerData.id),
+                      supabase.from('cutout_tasks').select('id, invoice_id, is_composite, installation_task_id').eq('customer_id', customerData.id),
+                      supabase.from('customers').select('linked_friend_company_id').eq('id', customerData.id).maybeSingle()
                     ]);
                     
                     const contracts = contractsRes.data || [];
                     
-                    // حساب إيجارات الشركات الصديقة بنفس مفتاح useCustomerFinancials
+                    // حساب إيجارات الشركات الصديقة بنفس مفتاح useCustomerFinancials (فقط إذا كان العميل مرتبك بشركة صديقة)
                     let friendRentalTotal = 0;
-                    for (const contract of contracts) {
-                      const friendData = (contract as any).friend_rental_data;
-                      if (friendData && typeof friendData === 'object') {
-                        const entries = Array.isArray(friendData) ? friendData : Object.values(friendData);
-                        for (const entry of entries as any[]) {
-                          if (entry && typeof entry.rental_cost === 'number') {
-                            friendRentalTotal += entry.rental_cost;
-                          } else if (entry && typeof entry.friendRentalCost === 'number') {
-                            friendRentalTotal += entry.friendRentalCost;
+                    if (customerRes.data?.linked_friend_company_id) {
+                      for (const contract of contracts) {
+                        const friendData = (contract as any).friend_rental_data;
+                        if (friendData && typeof friendData === 'object') {
+                          const entries = Array.isArray(friendData) ? friendData : Object.values(friendData);
+                          for (const entry of entries as any[]) {
+                            if (entry && typeof entry.rental_cost === 'number') {
+                              friendRentalTotal += entry.rental_cost;
+                            } else if (entry && typeof entry.friendRentalCost === 'number') {
+                              friendRentalTotal += entry.friendRentalCost;
+                            } else if (entry && typeof entry.friend_rental_cost === 'number') {
+                              friendRentalTotal += entry.friend_rental_cost;
+                            }
                           }
                         }
                       }
@@ -1487,7 +1493,7 @@ export function DistributedPaymentDetailsDialog({
                       contracts,
                       paymentsRes.data || [],
                       salesRes.data || [],
-                      filterCompositeRelatedPrintedInvoices(printedRes.data || [], compositeRes.data || [], printTasksRes.data || []),
+                      filterCompositeRelatedPrintedInvoices(printedRes.data || [], compositeRes.data || [], printTasksRes.data || [], cutoutTasksRes?.data || []),
                       purchaseRes.data || [],
                       discountsRes.data || [],
                       compositeRes.data || [],

@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { CompositeTaskWithDetails } from '@/types/composite-task';
-import { Wrench, Printer, Scissors, FileText, Edit, Eye, TrendingUp, FileOutput, Loader2, Trash2, Users } from 'lucide-react';
+import { Wrench, Printer, Scissors, FileText, Edit, Eye, TrendingUp, FileOutput, Loader2, Trash2, Users, AlertTriangle, RefreshCw } from 'lucide-react';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { CompositeProfitCard } from './CompositeProfitCard';
@@ -40,6 +41,215 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   const [designImages, setDesignImages] = useState<Array<{ url: string; face: 'a' | 'b' }>>([]);
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [currentInvoiceType, setCurrentInvoiceType] = useState<InvoiceType>('customer');
+  const [calculatedInstallCost, setCalculatedInstallCost] = useState<number>(0);
+  const [needsRecalculation, setNeedsRecalculation] = useState(false);
+  const [recalculationReasons, setRecalculationReasons] = useState<string[]>([]);
+  const [isRecalculating, setIsRecalculating] = useState(false);
+  const queryClient = useQueryClient();
+
+  // التحقق من وجود فروقات في التكاليف
+  useEffect(() => {
+    const checkForMismatches = async () => {
+      try {
+        const reasons: string[] = [];
+        let mismatchDetected = false;
+
+        // التحقق من تكاليف التركيب
+        if (task.installation_task_id) {
+          const { data: installItems } = await supabase
+            .from('installation_task_items')
+            .select('customer_installation_cost')
+            .eq('task_id', task.installation_task_id);
+          
+          let actualCustomerInstall = 0;
+          if (installItems) {
+            installItems.forEach(item => {
+              actualCustomerInstall += Number(item.customer_installation_cost) || 0;
+            });
+          }
+          
+          const diff = Math.abs(actualCustomerInstall - (task.customer_installation_cost || 0));
+          if (diff > 1) {
+            mismatchDetected = true;
+            reasons.push(
+              `تكلفة التركيب الفعلية (${actualCustomerInstall.toLocaleString()} د.ل) لا تتطابق مع التكلفة المخزنة (${(task.customer_installation_cost || 0).toLocaleString()} د.ل)`
+            );
+          }
+        }
+
+        // التحقق من تكاليف الطباعة
+        if (task.print_task_id) {
+          const { data: printTask } = await supabase
+            .from('print_tasks')
+            .select('customer_total_amount')
+            .eq('id', task.print_task_id)
+            .maybeSingle();
+          
+          const actualCustomerPrint = printTask ? (Number(printTask.customer_total_amount) || 0) : 0;
+          const diff = Math.abs(actualCustomerPrint - (task.customer_print_cost || 0));
+          if (diff > 1) {
+            mismatchDetected = true;
+            reasons.push(
+              `تكلفة الطباعة الفعلية (${actualCustomerPrint.toLocaleString()} د.ل) لا تتطابق مع التكلفة المخزنة (${(task.customer_print_cost || 0).toLocaleString()} د.ل)`
+            );
+          }
+        }
+
+        // التحقق من تكاليف القص
+        if (task.cutout_task_id) {
+          const { data: cutoutTask } = await supabase
+            .from('cutout_tasks')
+            .select('customer_total_amount')
+            .eq('id', task.cutout_task_id)
+            .maybeSingle();
+          
+          const actualCustomerCutout = cutoutTask ? (Number(cutoutTask.customer_total_amount) || 0) : 0;
+          const diff = Math.abs(actualCustomerCutout - (task.customer_cutout_cost || 0));
+          if (diff > 1) {
+            mismatchDetected = true;
+            reasons.push(
+              `تكلفة القص الفعلية (${actualCustomerCutout.toLocaleString()} د.ل) لا تتطابق مع التكلفة المخزنة (${(task.customer_cutout_cost || 0).toLocaleString()} د.ل)`
+            );
+          }
+        }
+
+        setNeedsRecalculation(mismatchDetected);
+        setRecalculationReasons(reasons);
+      } catch (error) {
+        console.error('Error checking for mismatches:', error);
+      }
+    };
+
+    checkForMismatches();
+  }, [
+    task.id,
+    task.installation_task_id,
+    task.print_task_id,
+    task.cutout_task_id,
+    task.customer_installation_cost,
+    task.customer_print_cost,
+    task.customer_cutout_cost,
+    invoiceDialogOpen
+  ]);
+
+  const handleRecalculateCostsDirectly = async () => {
+    setIsRecalculating(true);
+    const tId = toast.loading('جاري إعادة حساب تكاليف المهمة...');
+    try {
+      // 1. Fetch current items of installation_task
+      let newCustomerInstall = 0;
+      let newCompanyInstall = 0;
+      if (task.installation_task_id) {
+        const { data: installItems } = await supabase
+          .from('installation_task_items')
+          .select('customer_installation_cost, company_installation_cost, additional_cost')
+          .eq('task_id', task.installation_task_id);
+        if (installItems) {
+          installItems.forEach(i => {
+            newCustomerInstall += Number(i.customer_installation_cost) || 0;
+            newCompanyInstall += (Number(i.company_installation_cost) || 0) + (Number(i.additional_cost) || 0);
+          });
+        }
+      }
+
+      // 2. Fetch current total of print_task
+      let newCustomerPrint = 0;
+      let newCompanyPrint = 0;
+      if (task.print_task_id) {
+        const { data: printTask } = await supabase
+          .from('print_tasks')
+          .select('customer_total_amount, total_cost')
+          .eq('id', task.print_task_id)
+          .maybeSingle();
+        if (printTask) {
+          newCustomerPrint = Number(printTask.customer_total_amount) || 0;
+          newCompanyPrint = Number(printTask.total_cost) || 0;
+        }
+      }
+
+      // 3. Fetch current total of cutout_task
+      let newCustomerCutout = 0;
+      let newCompanyCutout = 0;
+      if (task.cutout_task_id) {
+        const { data: cutoutTask } = await supabase
+          .from('cutout_tasks')
+          .select('customer_total_amount, total_cost')
+          .eq('id', task.cutout_task_id)
+          .maybeSingle();
+        if (cutoutTask) {
+          newCustomerCutout = Number(cutoutTask.customer_total_amount) || 0;
+          newCompanyCutout = Number(cutoutTask.total_cost) || 0;
+        }
+      }
+
+      // Calculate totals
+      const discountAmount = task.discount_amount || 0;
+      const customerSubtotal = newCustomerInstall + newCustomerPrint + newCustomerCutout;
+      const customerTotal = customerSubtotal - discountAmount;
+      const companyTotal = newCompanyInstall + newCompanyPrint + newCompanyCutout;
+      const netProfit = customerTotal - companyTotal;
+      const profitPercentage = customerTotal > 0 ? (netProfit / customerTotal) * 100 : 0;
+
+      // Update composite_tasks table
+      const { error } = await supabase
+        .from('composite_tasks')
+        .update({
+          customer_installation_cost: newCustomerInstall,
+          company_installation_cost: newCompanyInstall,
+          customer_print_cost: newCustomerPrint,
+          company_print_cost: newCompanyPrint,
+          customer_cutout_cost: newCustomerCutout,
+          company_cutout_cost: newCompanyCutout,
+          customer_total: customerTotal,
+          company_total: companyTotal,
+          net_profit: netProfit,
+          profit_percentage: profitPercentage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', task.id);
+
+      if (error) throw error;
+
+      // Also update the combined invoice if it exists
+      if (task.combined_invoice_id) {
+        await supabase.from('printed_invoices').update({
+          print_cost: newCompanyPrint + newCompanyCutout,
+          total_amount: customerTotal,
+          notes: `فاتورة موحدة للمهمة المجمعة (معاد حسابها)\n` +
+                 `تركيب: ${newCustomerInstall.toLocaleString()} د.ل\n` +
+                 (newCustomerPrint > 0 ? `طباعة: ${newCustomerPrint.toLocaleString()} د.ل\n` : '') +
+                 (newCustomerCutout > 0 ? `قص: ${newCustomerCutout.toLocaleString()} د.ل\n` : '') +
+                 (discountAmount > 0 ? `خصم: ${discountAmount.toLocaleString()} د.ل\n` : '') +
+                 (task.notes ? `\nملاحظات: ${task.notes}` : ''),
+          updated_at: new Date().toISOString()
+        } as any).eq('id', task.combined_invoice_id);
+
+        // Sync customer payment entry
+        await supabase.from('customer_payments')
+          .update({
+            amount: -customerTotal,
+            notes: `مهمة مجمعة - عقد #${task.contract_id} (معاد حسابها)`
+          })
+          .eq('printed_invoice_id', task.combined_invoice_id)
+          .eq('entry_type', 'invoice');
+      }
+
+      toast.dismiss(tId);
+      toast.success('تم إعادة حساب وتحديث التكاليف بنجاح');
+      queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
+      
+      setNeedsRecalculation(false);
+      setRecalculationReasons([]);
+    } catch (e: any) {
+      toast.dismiss(tId);
+      console.error(e);
+      toast.error(e.message || 'حدث خطأ أثناء إعادة حساب التكاليف');
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
   const [calculatedInstallCost, setCalculatedInstallCost] = useState<number>(0);
 
   const openInvoice = (type: InvoiceType) => {
@@ -484,6 +694,44 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
         )}
       </CardHeader>
       <CardContent className="space-y-4">
+        {/* تنبيه بعدم مطابقة التكاليف في حال وجود تغييرات متأخرة */}
+        {needsRecalculation && (
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 transition-all duration-200">
+            <div className="flex gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/20 text-amber-600 dark:text-amber-400 mt-0.5 md:mt-0">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="space-y-1">
+                <h5 className="font-bold text-sm">تنبيه: التكاليف المسجلة غير مطابقة للواقع</h5>
+                <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-400/90">
+                  تم الكشف عن تحديثات متأخرة في المهام المكونة (التركيب أو الطباعة أو القص) مما يجعل التكاليف المخزنة غير متطابقة.
+                </p>
+                {recalculationReasons.length > 0 && (
+                  <ul className="text-[11px] list-disc list-inside space-y-0.5 text-amber-600 dark:text-amber-400 mt-1.5 font-mono">
+                    {recalculationReasons.map((reason, idx) => (
+                      <li key={idx}>{reason}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRecalculateCostsDirectly}
+              disabled={isRecalculating}
+              className="w-full md:w-auto bg-amber-500/20 hover:bg-amber-500/30 text-amber-800 dark:text-amber-300 border-amber-500/30 text-xs font-semibold shrink-0 cursor-pointer flex items-center gap-1.5"
+            >
+              {isRecalculating ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              إعادة حساب وتحديث التكاليف
+            </Button>
+          </div>
+        )}
+
         {/* المهام المرتبطة - تكلفة الزبون */}
         <div className="space-y-3">
           <h4 className="text-sm font-semibold flex items-center gap-2 text-foreground">

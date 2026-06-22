@@ -1,7 +1,7 @@
 /// <reference types="google.maps" />
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Map as MapIcon, Globe, MapPin, Camera, X, ExternalLink, CheckSquare, Download, Route, ImageOff, Loader2, Calendar, User, Tag, MapPinned, FileText, Wallet, Trash2 } from 'lucide-react';
+import { Map as MapIcon, Globe, MapPin, Camera, X, ExternalLink, CheckSquare, Download, Route, ImageOff, Loader2, Calendar, User, Tag, MapPinned, FileText, Wallet, Trash2, Zap, Plus, PenTool, Pencil } from 'lucide-react';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -44,8 +44,14 @@ interface GoogleHomeMapProps {
   externalMunicipalityFilter?: string[];
   externalShowSociet?: boolean;
   onShowSocietChange?: (val: boolean) => void;
-  onMapRightClick?: (lat: number, lng: number) => void;
+  onMapRightClick?: (lat: number, lng: number, mode?: 'quick' | 'full') => void;
+  enableQuickAdd?: boolean;
   onRemoveFromList?: (billboard: Billboard) => void;
+  onSelectionChange?: (selectedIds: Set<number>) => void;
+  onDeleteSelected?: () => void;
+  showStatsOverlay?: boolean;
+  calcMetersByFaces?: boolean;
+  externalSelectedIds?: Set<number>;
 }
 
 import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
@@ -66,7 +72,13 @@ export default function GoogleHomeMap({
   externalShowSociet,
   onShowSocietChange,
   onMapRightClick,
-  onRemoveFromList
+  enableQuickAdd,
+  onRemoveFromList,
+  onSelectionChange,
+  onDeleteSelected,
+  showStatsOverlay = false,
+  calcMetersByFaces = false,
+  externalSelectedIds
 }: GoogleHomeMapProps) {
 
 
@@ -195,7 +207,202 @@ export default function GoogleHomeMap({
   const contractCacheRef = useRef<Map<string, any>>(new Map());
   // Card image loading state
   const [cardImageState, setCardImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
+
+  // Drawing selection (Pen Tool) states
+  const [isDrawingMode, setIsDrawingMode] = useState(false);
+  const [drawingPoints, setDrawingPoints] = useState<{ lat: number; lng: number }[]>([]);
+  const isDrawingModeRef = useRef(false);
+  useEffect(() => { isDrawingModeRef.current = isDrawingMode; }, [isDrawingMode]);
   
+  const googleDrawingPolygonRef = useRef<google.maps.Polygon | null>(null);
+  const leafletDrawingPolygonRef = useRef<L.Polygon | null>(null);
+  
+  // --- Bidirectional selection sync (loop-safe) ---
+  const suppressSelectionSync = useRef(false);
+
+  // Sync external → internal (parent table selection → map)
+  useEffect(() => {
+    if (!externalSelectedIds) return;
+    if (suppressSelectionSync.current) { suppressSelectionSync.current = false; return; }
+    const same = selectedBillboardIds.size === externalSelectedIds.size &&
+                 [...externalSelectedIds].every(id => selectedBillboardIds.has(id));
+    if (!same) {
+      setSelectedBillboardIds(new Set(externalSelectedIds));
+      if (externalSelectedIds.size > 0 && !isMultiSelectMode) setIsMultiSelectMode(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [externalSelectedIds]);
+
+  // Sync internal → external (map pin click / drawing → parent)
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    const same = externalSelectedIds &&
+                 selectedBillboardIds.size === externalSelectedIds.size &&
+                 [...selectedBillboardIds].every(id => externalSelectedIds.has(id));
+    if (!same) {
+      suppressSelectionSync.current = true;          // prevent the echo-back
+      onSelectionChange(new Set(selectedBillboardIds));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedBillboardIds]);
+
+  // Bind Google Maps click listener when drawing mode is active
+  useEffect(() => {
+    const googleMap = googleMapInstanceRef.current;
+    let googleListener: google.maps.MapsEventListener | null = null;
+    
+    if (isDrawingMode && googleMap) {
+      googleListener = googleMap.addListener('click', (e: google.maps.MapMouseEvent) => {
+        const latLng = e.latLng;
+        if (latLng) {
+          setDrawingPoints(prev => [...prev, { lat: latLng.lat(), lng: latLng.lng() }]);
+        }
+      });
+    }
+    
+    return () => {
+      if (googleListener) {
+        google.maps.event.removeListener(googleListener);
+      }
+    };
+  }, [isDrawingMode, googleMapInstanceRef.current]);
+
+  // Bind Leaflet click listener when drawing mode is active
+  useEffect(() => {
+    const leafletMap = leafletMapInstanceRef.current;
+    if (!leafletMap) return;
+    
+    const handleLeafletClick = (e: L.LeafletMouseEvent) => {
+      setDrawingPoints(prev => [...prev, { lat: e.latlng.lat, lng: e.latlng.lng }]);
+    };
+    
+    if (isDrawingMode) {
+      leafletMap.on('click', handleLeafletClick);
+    }
+    
+    return () => {
+      leafletMap.off('click', handleLeafletClick);
+    };
+  }, [isDrawingMode, leafletMapInstanceRef.current]);
+
+  // Sync Google Maps drawing polygon path
+  useEffect(() => {
+    const googleMap = googleMapInstanceRef.current;
+    if (!googleMap) return;
+    
+    if (drawingPoints.length === 0) {
+      if (googleDrawingPolygonRef.current) {
+        googleDrawingPolygonRef.current.setMap(null);
+        googleDrawingPolygonRef.current = null;
+      }
+      return;
+    }
+    
+    if (googleDrawingPolygonRef.current) {
+      googleDrawingPolygonRef.current.setPath(drawingPoints);
+    } else {
+      googleDrawingPolygonRef.current = new google.maps.Polygon({
+        paths: drawingPoints,
+        strokeColor: '#6366f1',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: '#6366f1',
+        fillOpacity: 0.15,
+        map: googleMap
+      });
+    }
+  }, [drawingPoints, mapProvider, googleMapInstanceRef.current]);
+
+  // Sync Leaflet drawing polygon path
+  useEffect(() => {
+    const leafletMap = leafletMapInstanceRef.current;
+    if (!leafletMap) return;
+    
+    if (leafletDrawingPolygonRef.current) {
+      leafletMap.removeLayer(leafletDrawingPolygonRef.current);
+      leafletDrawingPolygonRef.current = null;
+    }
+    
+    if (drawingPoints.length > 0) {
+      leafletDrawingPolygonRef.current = L.polygon(
+        drawingPoints.map(p => [p.lat, p.lng] as L.LatLngExpression),
+        {
+          color: '#6366f1',
+          weight: 2,
+          fillColor: '#6366f1',
+          fillOpacity: 0.15
+        }
+      ).addTo(leafletMap);
+    }
+  }, [drawingPoints, mapProvider, leafletMapInstanceRef.current]);
+
+  // Calculate selection stats for the overlay panel
+  const selectionStats = useMemo(() => {
+    const stats: Record<string, { count: number; totalMeters: number }> = {};
+    const selectedList = billboards.filter(b => selectedBillboardIds.has((b as any).ID || 0));
+    
+    selectedList.forEach(b => {
+      const sizeStr = b.Size || 'بدون مقاس';
+      if (!stats[sizeStr]) {
+        stats[sizeStr] = { count: 0, totalMeters: 0 };
+      }
+      stats[sizeStr].count += 1;
+      
+      const normalize = (str: string) => str.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x').replace(/\s+/g, '').trim().toLowerCase();
+      const nSize = normalize(sizeStr);
+      const parts = nSize.split('x').map(p => parseFloat(p));
+      let length = 0, width = 0;
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        length = parts[0];
+        width = parts[1];
+      }
+      const area = length * width;
+      const faces = b.Faces_Count ? Number(b.Faces_Count) : 2;
+      stats[sizeStr].totalMeters += calcMetersByFaces ? area * faces : area;
+    });
+    
+    const totalMeters = Object.values(stats).reduce((sum, s) => sum + s.totalMeters, 0);
+    
+    return {
+      totalMeters,
+      totalCount: selectedList.length,
+      sizeStats: Object.entries(stats).map(([size, d]) => ({ size, count: d.count, totalMeters: d.totalMeters }))
+    };
+  }, [billboards, selectedBillboardIds, calcMetersByFaces]);
+
+  // Calculate general stats for the overlay panel
+  const generalStats = useMemo(() => {
+    const stats: Record<string, { count: number; totalMeters: number }> = {};
+    
+    billboards.forEach(b => {
+      const sizeStr = b.Size || 'بدون مقاس';
+      if (!stats[sizeStr]) {
+        stats[sizeStr] = { count: 0, totalMeters: 0 };
+      }
+      stats[sizeStr].count += 1;
+      
+      const normalize = (str: string) => str.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x').replace(/\s+/g, '').trim().toLowerCase();
+      const nSize = normalize(sizeStr);
+      const parts = nSize.split('x').map(p => parseFloat(p));
+      let length = 0, width = 0;
+      if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+        length = parts[0];
+        width = parts[1];
+      }
+      const area = length * width;
+      const faces = b.Faces_Count ? Number(b.Faces_Count) : 2;
+      stats[sizeStr].totalMeters += calcMetersByFaces ? area * faces : area;
+    });
+    
+    const totalMeters = Object.values(stats).reduce((sum, s) => sum + s.totalMeters, 0);
+    
+    return {
+      totalMeters,
+      totalCount: billboards.length,
+      sizeStats: Object.entries(stats).map(([size, d]) => ({ size, count: d.count, totalMeters: d.totalMeters }))
+    };
+  }, [billboards, calcMetersByFaces]);
+
   // Smooth marker animation helper
   const smoothMoveGoogleMarker = useCallback((marker: google.maps.Marker, newPos: { lat: number; lng: number }) => {
     const oldPos = marker.getPosition();
@@ -1045,6 +1252,43 @@ export default function GoogleHomeMap({
     }
   }, [mapProvider, liveLocation, userLocation, requestUserLocation]);
 
+  // Fit all markers in view
+  const fitAllMarkers = useCallback(() => {
+    if (billboards.length === 0) return;
+    const validCoords: L.LatLngExpression[] = [];
+    billboards.forEach(b => {
+      let lat: number | null = null;
+      let lng: number | null = null;
+      if (b.lat && b.lng) {
+        lat = Number(b.lat);
+        lng = Number(b.lng);
+      } else if (b.GPS_Coordinates) {
+        const parts = b.GPS_Coordinates.split(',').map((c: string) => parseFloat(c.trim()));
+        if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+          lat = parts[0];
+          lng = parts[1];
+        }
+      }
+      if (lat !== null && lng !== null) {
+        validCoords.push([lat, lng]);
+      }
+    });
+
+    if (validCoords.length === 0) return;
+
+    if (mapProvider === 'openstreetmap' && leafletMapInstanceRef.current) {
+      const bounds = L.latLngBounds(validCoords);
+      leafletMapInstanceRef.current.fitBounds(bounds, { padding: [50, 50] });
+    } else if (mapProvider === 'google' && googleMapInstanceRef.current) {
+      const bounds = new google.maps.LatLngBounds();
+      validCoords.forEach(coord => {
+        const [lat, lng] = coord as [number, number];
+        bounds.extend({ lat, lng });
+      });
+      googleMapInstanceRef.current.fitBounds(bounds);
+    }
+  }, [billboards, mapProvider]);
+
   const handleToggleProvider = useCallback(() => {
     setMapProvider(prev => prev === 'google' ? 'openstreetmap' : 'google');
   }, []);
@@ -1119,7 +1363,10 @@ export default function GoogleHomeMap({
       }, 2000);
     };
     
-    map.on('dblclick', leafletCopyCoords);
+    map.on('dblclick', (e: L.LeafletMouseEvent) => {
+      if (isMultiSelectModeRef.current || selectedBillboardIdsRef.current.size > 0) return;
+      leafletCopyCoords(e);
+    });
     map.on('contextmenu', (e: L.LeafletMouseEvent) => {
       L.DomEvent.preventDefault(e);
       const rect = leafletMapRef.current?.getBoundingClientRect();
@@ -1270,12 +1517,14 @@ export default function GoogleHomeMap({
 
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
-        if (isMultiSelectModeRef.current) {
-          toggleBillboardSelection(billboardId);
-          return;
-        }
         setSelectedBillboardForCard(b);
         if (onBillboardClick) onBillboardClick(b);
+      });
+
+      marker.on('dblclick', (e) => {
+        L.DomEvent.stopPropagation(e);
+        if (!isMultiSelectModeRef.current) setIsMultiSelectMode(true);
+        toggleBillboardSelection(billboardId);
       });
 
       leafletClusterRef.current?.addLayer(marker);
@@ -1533,8 +1782,11 @@ export default function GoogleHomeMap({
           }
         };
         
-        // Double-click: copy coordinates
-        map.addListener('dblclick', copyCoordinates);
+        // Double-click: copy coordinates (disabled in selection mode)
+        map.addListener('dblclick', (e: google.maps.MapMouseEvent) => {
+          if (isMultiSelectModeRef.current || selectedBillboardIdsRef.current.size > 0) return;
+          copyCoordinates(e);
+        });
         
         // Right-click: open custom context menu
         map.addListener('rightclick', (e: google.maps.MapMouseEvent) => {
@@ -1697,24 +1949,23 @@ export default function GoogleHomeMap({
 
       marker.addListener('click', () => {
         const currentB = marker.get('billboardData') || b;
-        // Multi-select mode: toggle selection instead of opening info
-        if (isMultiSelectModeRef.current) {
-          toggleBillboardSelection(billboardId);
-          // Update pin appearance
-          const newSelected = !selectedBillboardIdsRef.current.has(billboardId);
-          const updatedPin = createPinWithLabel(currentB, newSelected, passedBillboardIds.has(billboardId));
-          marker.setIcon({
-            url: updatedPin.url,
-            scaledSize: new google.maps.Size(updatedPin.width, updatedPin.height),
-            anchor: new google.maps.Point(updatedPin.anchorX, updatedPin.anchorY)
-          });
-          return;
-        }
-        
         if (googleInfoWindowRef.current) googleInfoWindowRef.current.close();
-        
         setSelectedBillboardForCard(currentB);
         if (onBillboardClick) onBillboardClick(currentB);
+      });
+
+      marker.addListener('dblclick', () => {
+        const currentB = marker.get('billboardData') || b;
+        if (!isMultiSelectModeRef.current) setIsMultiSelectMode(true);
+        toggleBillboardSelection(billboardId);
+        // Update pin appearance
+        const newSelected = !selectedBillboardIdsRef.current.has(billboardId);
+        const updatedPin = createPinWithLabel(currentB, newSelected, passedBillboardIds.has(billboardId));
+        marker.setIcon({
+          url: updatedPin.url,
+          scaledSize: new google.maps.Size(updatedPin.width, updatedPin.height),
+          anchor: new google.maps.Point(updatedPin.anchorX, updatedPin.anchorY)
+        });
       });
 
       googleMarkerMapRef.current.set(id, marker);
@@ -2477,8 +2728,11 @@ export default function GoogleHomeMap({
           {!isMobile && (
             <div className="flex items-center gap-2 pointer-events-auto">
               {!isMultiSelectMode && (
-                <div className="bg-slate-950/80 backdrop-blur-md border border-amber-500/10 rounded-xl px-3.5 py-2 shadow-md">
-                  <p className="text-[11px] text-slate-300 font-extrabold" style={{ fontFamily: 'Tajawal, sans-serif' }}>نقرة = تفاصيل اللوحة</p>
+                <div className="bg-slate-950/85 backdrop-blur-xl border border-amber-500/25 rounded-2xl px-4 py-2.5 shadow-xl flex items-center gap-3 text-[11px] text-slate-300 font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                  <span className="text-amber-500 font-extrabold">طريقة الاستخدام:</span>
+                  <span className="bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">نقرة: تفاصيل</span>
+                  <span className="bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">نقرتين: تحديد</span>
+                  <span className="bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">نقرتين على الخريطة: إضافة</span>
                 </div>
               )}
             </div>
@@ -2490,7 +2744,11 @@ export default function GoogleHomeMap({
             <button
               onClick={() => {
                 setIsMultiSelectMode(!isMultiSelectMode);
-                if (isMultiSelectMode) setSelectedBillboardIds(new Set());
+                if (isMultiSelectMode) {
+                  setSelectedBillboardIds(new Set());
+                  setIsDrawingMode(false);
+                  setDrawingPoints([]);
+                }
               }}
               className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border ${
                 isMobile ? 'w-10 h-10' : 'px-3.5 py-2.5 text-xs font-extrabold'
@@ -2504,6 +2762,32 @@ export default function GoogleHomeMap({
             >
               <CheckSquare className={isMobile ? 'w-4.5 h-4.5' : 'w-4 h-4'} />
               {!isMobile && (isMultiSelectMode ? 'إلغاء التحديد' : 'تحديد متعدد')}
+            </button>
+
+            {/* Pen selection drawing tool button */}
+            <button
+              onClick={() => {
+                if (isDrawingMode) {
+                  setIsDrawingMode(false);
+                  setDrawingPoints([]);
+                } else {
+                  setIsDrawingMode(true);
+                  setDrawingPoints([]);
+                  setIsMultiSelectMode(true); // Auto-enable multi-select mode so user can see selection highlights
+                }
+              }}
+              className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border ${
+                isMobile ? 'w-10 h-10' : 'px-3.5 py-2.5 text-xs font-extrabold'
+              } ${
+                isDrawingMode
+                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
+                  : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-500'
+              }`}
+              style={{ fontFamily: 'Tajawal, sans-serif' }}
+              title={isDrawingMode ? 'إلغاء أداة الرسم والتحديد' : 'تحديد اللوحات بالرسم (بن تول)'}
+            >
+              <PenTool className={isMobile ? 'w-4.5 h-4.5' : 'w-4 h-4'} />
+              {!isMobile && (isDrawingMode ? 'إلغاء الرسم' : 'تحديد بالرسم')}
             </button>
 
             {/* Billboard Count / Header */}
@@ -2525,8 +2809,78 @@ export default function GoogleHomeMap({
         </div>
       )}
 
+      {/* Drawing instruction (Pen selection) */}
+      {isDrawingMode && (
+        <div className={`absolute z-[2000] pointer-events-auto ${
+          isMobile ? 'top-[68px] left-2.5 right-2.5' : 'top-20 left-4'
+        }`}>
+          <div className="flex items-center justify-between gap-3 bg-slate-950/95 backdrop-blur-md border border-indigo-500/30 rounded-xl px-4 py-2.5 shadow-lg">
+            <span className="text-white font-bold text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+              رسم منطقة التحديد: {drawingPoints.length} نقاط
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => {
+                  if (drawingPoints.length < 3) {
+                    toast.error('يرجى تحديد 3 نقاط على الأقل للرسم');
+                    return;
+                  }
+                  
+                  const closedPoints = [...drawingPoints];
+                  const selectedIds = new Set<number>();
+                  
+                  billboards.forEach(b => {
+                    let lat: number | null = null;
+                    let lng: number | null = null;
+                    
+                    if (b.latitude && b.longitude) {
+                      lat = Number(b.latitude);
+                      lng = Number(b.longitude);
+                    } else if (b.lat && b.lng) {
+                      lat = Number(b.lat);
+                      lng = Number(b.lng);
+                    } else if (b.GPS_Coordinates) {
+                      const parts = b.GPS_Coordinates.split(',').map((c: string) => parseFloat(c.trim()));
+                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+                        lat = parts[0];
+                        lng = parts[1];
+                      }
+                    }
+                    
+                    if (lat !== null && lng !== null) {
+                      if (isPointInPolygon({ lat, lng }, closedPoints)) {
+                        selectedIds.add((b as any).ID || (b as any).id);
+                      }
+                    }
+                  });
+                  
+                  setSelectedBillboardIds(selectedIds);
+                  setIsDrawingMode(false);
+                  setDrawingPoints([]);
+                  toast.success(`تم تحديد ${selectedIds.size} لوحة داخل المنطقة المرسومة`);
+                }}
+                disabled={drawingPoints.length < 3}
+                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
+                style={{ fontFamily: 'Tajawal, sans-serif' }}
+              >
+                تأكيد التحديد
+              </button>
+              <button
+                onClick={() => {
+                  setDrawingPoints([]);
+                }}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
+                style={{ fontFamily: 'Tajawal, sans-serif' }}
+              >
+                مسح النقاط
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Multi-select instruction */}
-      {isMultiSelectMode && (
+      {isMultiSelectMode && !isDrawingMode && (
         <div className={`absolute z-[1000] pointer-events-none ${
           isMobile ? 'top-[68px] left-2.5 right-2.5' : 'top-20 left-4'
         }`}>
@@ -2535,6 +2889,59 @@ export default function GoogleHomeMap({
               اضغط على الدبابيس لتحديدها • {selectedBillboardIds.size} لوحة محددة حالياً
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Stats Overlay Panel inside Map */}
+      {showStatsOverlay && (
+        <div className={`absolute z-[1000] pointer-events-auto bg-slate-950/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl max-h-[200px] overflow-y-auto max-w-[260px] text-right ${
+          isMobile ? 'bottom-24 left-2.5 right-2.5 max-w-none' : (selectedBillboardIds.size > 0 ? 'bottom-[80px] left-4' : 'bottom-4 left-4')
+        }`} style={{ fontFamily: 'Tajawal, sans-serif' }}>
+          {selectedBillboardIds.size > 0 ? (
+            <div>
+              <h4 className="text-amber-500 font-extrabold text-xs mb-2 border-b border-white/10 pb-1.5 flex items-center justify-between">
+                <button 
+                  onClick={() => setSelectedBillboardIds(new Set())}
+                  className="text-[10px] text-red-400 hover:text-red-300 font-normal bg-red-500/10 px-2 py-0.5 rounded-lg border border-red-500/20"
+                >
+                  إلغاء التحديد
+                </button>
+                <span>إحصائيات التحديد ({selectedBillboardIds.size} لوحة)</span>
+              </h4>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-slate-300 font-bold bg-white/5 p-1.5 rounded-lg">
+                  <span className="text-amber-400">{selectionStats.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²</span>
+                  <span>إجمالي أمتار المحددة:</span>
+                </div>
+                <div className="space-y-1 mt-2">
+                  {selectionStats.sizeStats.map(stat => (
+                    <div key={stat.size} className="flex items-center justify-between text-slate-400 text-[11px] border-b border-white/5 pb-1">
+                      <span>{stat.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م² ({stat.count})</span>
+                      <span className="font-medium text-slate-300">{stat.size}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h4 className="text-slate-300 font-extrabold text-xs mb-2 border-b border-white/10 pb-1.5">إحصائيات اللوحات العامة ({generalStats.totalCount} لوحة)</h4>
+              <div className="space-y-1.5 text-xs">
+                <div className="flex items-center justify-between text-slate-300 font-bold bg-white/5 p-1.5 rounded-lg">
+                  <span className="text-emerald-400">{generalStats.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²</span>
+                  <span>إجمالي الأمتار:</span>
+                </div>
+                <div className="space-y-1 mt-2">
+                  {generalStats.sizeStats.map(stat => (
+                    <div key={stat.size} className="flex items-center justify-between text-slate-400 text-[11px] border-b border-white/5 pb-1">
+                      <span>{stat.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م² ({stat.count})</span>
+                      <span className="font-medium text-slate-300">{stat.size}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2565,6 +2972,16 @@ export default function GoogleHomeMap({
                 <Route className="w-4 h-4" />
                 رسم المسار
               </button>
+              {onDeleteSelected && (
+                <button
+                  onClick={() => { onDeleteSelected(); setSelectedBillboardIds(new Set()); }}
+                  className="flex items-center gap-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-xl px-3 py-2 text-xs font-bold transition-all"
+                  style={{ fontFamily: 'Tajawal, sans-serif' }}
+                >
+                  <X className="w-4 h-4" />
+                  حذف المحدد
+                </button>
+              )}
             </div>
             <button
               onClick={() => { setSelectedBillboardIds(new Set()); }}
@@ -2591,6 +3008,7 @@ export default function GoogleHomeMap({
             onZoomIn={handleZoomIn}
             onZoomOut={handleZoomOut}
             onToggleLayers={() => setShowLayers(!showLayers)}
+            onFitAll={fitAllMarkers}
             onCenterOnUser={handleCenterOnUser}
             isSimpleTracking={isSimpleTracking}
             onToggleSimpleTracking={toggleSimpleTracking}
@@ -2824,7 +3242,18 @@ export default function GoogleHomeMap({
         <div className={`absolute z-[1000] pointer-events-auto ${
           isMobile ? 'bottom-2.5 right-2.5' : 'bottom-4 right-4'
         }`}>
-          <MapLegend billboards={billboards} collapsed={isMobile} />
+          <MapLegend 
+            billboards={billboards} 
+            collapsed={isMobile} 
+            activeStatuses={localStatusFilter}
+            onToggleStatus={(statusKey) => {
+              setLocalStatusFilter(prev => 
+                prev.includes(statusKey)
+                  ? prev.filter(k => k !== statusKey)
+                  : [...prev, statusKey]
+              );
+            }}
+          />
         </div>
       )}
 
@@ -3243,16 +3672,39 @@ export default function GoogleHomeMap({
               const actionsSection = (
                 <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-white/5">
                   {onRemoveFromList ? (
-                    <button
-                      onClick={() => {
-                        onRemoveFromList(selectedBillboardForCard);
-                        setSelectedBillboardForCard(null);
-                      }}
-                      className="col-span-5 py-2.5 rounded-lg text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                      <span>إزالة اللوحة من القائمة</span>
-                    </button>
+                    <>
+                      <button
+                        onClick={() => {
+                          const action = () => {
+                            if (onBillboardClick) onBillboardClick(selectedBillboardForCard);
+                            window.dispatchEvent(new CustomEvent('edit-billboard', { detail: bb.ID || bb.id }));
+                          };
+                          if (document.fullscreenElement) {
+                            document.exitFullscreen().then(() => {
+                              setTimeout(action, 100);
+                            }).catch(() => {
+                              action();
+                            });
+                          } else {
+                            action();
+                          }
+                        }}
+                        className="col-span-2 py-2 rounded-lg text-xs font-bold border border-white/10 hover:bg-white/5 text-slate-200 hover:text-white transition-all cursor-pointer flex items-center justify-center gap-1"
+                      >
+                        <Pencil className="w-3.5 h-3.5 text-[#d6ac40]" />
+                        <span>تعديل</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          onRemoveFromList(selectedBillboardForCard);
+                          setSelectedBillboardForCard(null);
+                        }}
+                        className="col-span-3 py-2.5 rounded-lg text-xs font-bold bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>إزالة من القائمة</span>
+                      </button>
+                    </>
                   ) : (
                     <>
                       <button
@@ -3346,18 +3798,22 @@ export default function GoogleHomeMap({
               const infoSection = (
                 <>
                   {/* Quick facts row */}
-                  <div className="grid grid-cols-3 gap-2 text-[11px]">
-                    <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
+                  <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-center">
                       <div className="text-[9px] text-slate-400 font-bold mb-0.5">المقاس</div>
                       <div className="text-white font-extrabold" style={{ fontFamily: 'Manrope, sans-serif' }}>{bb.Size || bb.size || '—'}</div>
                     </div>
-                    <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
-                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">نوع الإعلان</div>
-                      <div className="text-[#f4c25a] font-extrabold truncate">{adType || '—'}</div>
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-center">
+                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">البلدية</div>
+                      <div className="text-[#f4c25a] font-extrabold truncate">{bb.Municipality || '—'}</div>
                     </div>
-                    <div className="bg-white/5 border border-white/10 rounded-xl px-2.5 py-2 text-center">
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-center">
                       <div className="text-[9px] text-slate-400 font-bold mb-0.5">المدينة</div>
                       <div className="text-white font-extrabold truncate">{bb.City || '—'}</div>
+                    </div>
+                    <div className="bg-white/5 border border-white/10 rounded-xl px-2 py-2 text-center">
+                      <div className="text-[9px] text-slate-400 font-bold mb-0.5">نوع الإعلان</div>
+                      <div className="text-white font-extrabold truncate">{adType || '—'}</div>
                     </div>
                   </div>
 
@@ -3659,32 +4115,85 @@ export default function GoogleHomeMap({
       {/* Custom Context Menu */}
       {contextMenu && (
         <div
-          className="absolute z-[9999] bg-slate-950/95 backdrop-blur-md border border-amber-500/20 rounded-xl shadow-2xl p-1 min-w-[160px] animate-in fade-in zoom-in-95 duration-100"
+          className="absolute z-[9999] bg-slate-950/95 backdrop-blur-md border border-amber-500/20 rounded-xl shadow-2xl p-1.5 min-w-[180px] animate-in fade-in zoom-in-95 duration-100 flex flex-col gap-1 text-right"
           style={{
             top: contextMenu.y,
             left: contextMenu.x,
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button
-            onClick={() => {
-              if (onMapRightClick) {
-                onMapRightClick(contextMenu.lat, contextMenu.lng);
-              } else {
-                const coordsText = `${contextMenu.lat.toFixed(6)}, ${contextMenu.lng.toFixed(6)}`;
-                navigator.clipboard.writeText(coordsText).then(() => {
-                  toast.success(`تم نسخ الإحداثيات: ${coordsText}`);
-                });
-              }
-              setContextMenu(null);
-            }}
-            className="flex items-center justify-end gap-2 w-full px-3 py-2 text-xs font-bold text-slate-200 hover:bg-amber-500/10 hover:text-amber-500 rounded-lg transition-colors cursor-pointer text-right"
-          >
-            <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة لوحة هنا</span>
-            <MapPin className="h-3.5 w-3.5 text-amber-500" />
-          </button>
+          {enableQuickAdd ? (
+            <>
+              <div className="px-3 py-1.5 text-[10px] font-bold text-amber-500/60 border-b border-amber-500/10 mb-1 select-none flex items-center justify-end gap-1.5">
+                <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة لوحة بهذا الإحداثي</span>
+                <MapPin className="h-3 w-3 text-amber-500" />
+              </div>
+              <button
+                onClick={() => {
+                  if (onMapRightClick) {
+                    onMapRightClick(contextMenu.lat, contextMenu.lng, 'quick');
+                  }
+                  setContextMenu(null);
+                }}
+                className="flex items-center justify-end gap-2 w-full px-3 py-2 text-xs font-bold text-slate-200 hover:bg-amber-500/10 hover:text-amber-500 rounded-lg transition-colors cursor-pointer text-right group animate-in slide-in-from-right-2 duration-200"
+              >
+                <div className="flex flex-col items-end">
+                  <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة سريعة</span>
+                  <span className="text-[9px] text-slate-400 font-normal group-hover:text-amber-500/80" style={{ fontFamily: 'Tajawal, sans-serif' }}>من آخر لوحة مضافة</span>
+                </div>
+                <Zap className="h-4 w-4 text-amber-500" />
+              </button>
+              <button
+                onClick={() => {
+                  if (onMapRightClick) {
+                    onMapRightClick(contextMenu.lat, contextMenu.lng, 'full');
+                  }
+                  setContextMenu(null);
+                }}
+                className="flex items-center justify-end gap-2 w-full px-3 py-2 text-xs font-bold text-slate-200 hover:bg-amber-500/10 hover:text-amber-500 rounded-lg transition-colors cursor-pointer text-right group animate-in slide-in-from-right-2 duration-300"
+              >
+                <div className="flex flex-col items-end">
+                  <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة كاملة</span>
+                  <span className="text-[9px] text-slate-400 font-normal group-hover:text-amber-500/80" style={{ fontFamily: 'Tajawal, sans-serif' }}>تعبئة البيانات يدوياً</span>
+                </div>
+                <Plus className="h-4 w-4 text-amber-500" />
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => {
+                if (onMapRightClick) {
+                  onMapRightClick(contextMenu.lat, contextMenu.lng);
+                } else {
+                  const coordsText = `${contextMenu.lat.toFixed(6)}, ${contextMenu.lng.toFixed(6)}`;
+                  navigator.clipboard.writeText(coordsText).then(() => {
+                    toast.success(`تم نسخ الإحداثيات: ${coordsText}`);
+                  });
+                }
+                setContextMenu(null);
+              }}
+              className="flex items-center justify-end gap-2 w-full px-3 py-2 text-xs font-bold text-slate-200 hover:bg-amber-500/10 hover:text-amber-500 rounded-lg transition-colors cursor-pointer text-right"
+            >
+              <span style={{ fontFamily: 'Tajawal, sans-serif' }}>إضافة لوحة هنا</span>
+              <MapPin className="h-3.5 w-3.5 text-amber-500" />
+            </button>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+function isPointInPolygon(point: { lat: number; lng: number }, polygon: { lat: number; lng: number }[]) {
+  const x = point.lng, y = point.lat;
+  let inside = false;
+  for (let i = 0, j = polygon.length - 1; i < polygon.length; j = i++) {
+    const xi = polygon[i].lng, yi = polygon[i].lat;
+    const xj = polygon[j].lng, yj = polygon[j].lat;
+    
+    const intersect = ((yi > y) !== (yj > y))
+        && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+    if (intersect) inside = !inside;
+  }
+  return inside;
 }

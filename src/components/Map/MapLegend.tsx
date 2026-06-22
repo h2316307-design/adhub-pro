@@ -7,17 +7,25 @@ interface MapLegendProps {
   billboards: Billboard[];
   className?: string;
   collapsed?: boolean;
+  activeStatuses?: string[];
+  onToggleStatus?: (statusKey: string) => void;
 }
 
 // الحالات الثابتة المحسنة مع تأثيرات التوهج المتطابقة مع نظام التصميم
 const STATUS_ITEMS = [
-  { label: 'متاح', color: '#22c55e', glow: 'rgba(34,197,94,0.4)' },
-  { label: 'مؤجر / محجوز', color: '#ef4444', glow: 'rgba(239,68,68,0.4)' },
-  { label: 'صيانة', color: '#f59e0b', glow: 'rgba(245,158,11,0.4)' },
-  { label: 'مخفي', color: '#94a3b8', glow: 'rgba(148,163,184,0.4)' },
+  { label: 'متاح', color: '#22c55e', glow: 'rgba(34,197,94,0.4)', key: 'available' },
+  { label: 'مؤجر', color: '#3b82f6', glow: 'rgba(59,130,246,0.4)', key: 'rented' },
+  { label: 'محجوز', color: '#f59e0b', glow: 'rgba(245,158,11,0.4)', key: 'reserved' },
+  { label: 'صيانة', color: '#ef4444', glow: 'rgba(239,68,68,0.4)', key: 'maintenance' },
 ];
 
-const MapLegend = memo(function MapLegend({ billboards, className = '', collapsed: initialCollapsed = false }: MapLegendProps) {
+const MapLegend = memo(function MapLegend({ 
+  billboards, 
+  className = '', 
+  collapsed: initialCollapsed = false,
+  activeStatuses,
+  onToggleStatus
+}: MapLegendProps) {
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
 
   useEffect(() => {
@@ -66,6 +74,8 @@ const MapLegend = memo(function MapLegend({ billboards, className = '', collapse
     );
   }
 
+  const isFiltered = activeStatuses && activeStatuses.length > 0;
+
   return (
     <div className={`bg-slate-950/85 backdrop-blur-xl border border-amber-500/20 rounded-[1.25rem] shadow-2xl p-3 min-w-[125px] max-w-[145px] animate-in fade-in slide-in-from-bottom-2 duration-300 ${className}`}>
       {/* Header with collapse button */}
@@ -82,20 +92,30 @@ const MapLegend = memo(function MapLegend({ billboards, className = '', collapse
       {/* حالة اللوحة */}
       <div className="mb-2.5">
         <div className="space-y-1.5">
-          {STATUS_ITEMS.map((item) => (
-            <div key={item.label} className="flex items-center justify-end gap-2">
-              <span className="text-[9px] text-slate-300 font-bold">{item.label}</span>
-              <div 
-                className="w-2 h-2 rounded-full relative" 
-                style={{ 
-                  background: item.color,
-                  boxShadow: `0 0 8px ${item.glow}`
-                }} 
+          {STATUS_ITEMS.map((item) => {
+            const isActive = isFiltered ? activeStatuses.includes(item.key) : true;
+            return (
+              <button
+                key={item.label}
+                onClick={() => onToggleStatus?.(item.key)}
+                className={`w-full flex items-center justify-end gap-2 text-right transition-all duration-200 cursor-pointer ${
+                  isActive ? 'opacity-100' : 'opacity-30 hover:opacity-60'
+                }`}
+                title={isActive ? `تصفية حسب ${item.label}` : `إلغاء تصفية ${item.label}`}
               >
-                <span className="absolute inset-0 rounded-full animate-ping opacity-30" style={{ background: item.color }} />
-              </div>
-            </div>
-          ))}
+                <span className="text-[9px] text-slate-300 font-bold">{item.label}</span>
+                <div 
+                  className="w-2 h-2 rounded-full relative flex-shrink-0" 
+                  style={{ 
+                    background: item.color,
+                    boxShadow: isActive ? `0 0 8px ${item.glow}` : 'none'
+                  }} 
+                >
+                  {isActive && <span className="absolute inset-0 rounded-full animate-ping opacity-30" style={{ background: item.color }} />}
+                </div>
+              </button>
+            );
+          })}
         </div>
       </div>
 

@@ -248,12 +248,43 @@ export function SendAccountStatementDialog({
       if (includePrintInvoices && customerId) {
         const { data, error } = await supabase
           .from('printed_invoices')
-          .select('invoice_number, total_amount, created_at, invoice_type, paid, paid_amount')
+          .select('id, invoice_number, total_amount, created_at, invoice_type, paid, paid_amount')
           .eq('customer_id', customerId)
           .order('created_at', { ascending: false });
 
         if (!error && data) {
-          setPrintInvoices(data);
+          let printedInvoicesData = data;
+          try {
+            const excludedInvoiceIds = new Set<string>();
+            const { data: printTasks } = await supabase
+              .from('print_tasks')
+              .select('invoice_id')
+              .eq('customer_id', customerId)
+              .or('is_composite.eq.true,installation_task_id.not.is.null,composite_task_id.not.is.null');
+
+            (printTasks || [])
+              .map((t: any) => t.invoice_id)
+              .filter(Boolean)
+              .forEach((id: string) => excludedInvoiceIds.add(id));
+
+            const { data: cutoutTasks } = await supabase
+              .from('cutout_tasks')
+              .select('invoice_id')
+              .eq('customer_id', customerId)
+              .or('is_composite.eq.true,installation_task_id.not.is.null');
+
+            (cutoutTasks || [])
+              .map((t: any) => t.invoice_id)
+              .filter(Boolean)
+              .forEach((id: string) => excludedInvoiceIds.add(id));
+
+            printedInvoicesData = (printedInvoicesData || [])
+              .filter((inv: any) => inv?.invoice_type !== 'composite_task')
+              .filter((inv: any) => !excludedInvoiceIds.has(inv.id));
+          } catch (e) {
+            console.warn('Error filtering composite invoices in SendAccountStatementDialog:', e);
+          }
+          setPrintInvoices(printedInvoicesData);
         }
       }
 
@@ -691,11 +722,11 @@ export function SendAccountStatementDialog({
 
         transactions.push({
           date: latestPauseDate,
-          description: `خصم إيقاف لوحات عقد رقم ${contract.Contract_Number}${latestBoardName ? ` - ${latestBoardName}` : ''}`,
+          description: `آخر تسكير حساب الإيقاف لعقد رقم ${contract.Contract_Number}`,
           debit: 0,
           credit: totalSuspensionDiscount,
           reference: `عقد-${contract.Contract_Number}`,
-          notes: cleanStatementNote(`خصم إيقاف اللوحات حسب آخر إيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
+          notes: cleanStatementNote(`تسكير حساب الإيقاف بتاريخ ${latestPauseDate ? new Date(latestPauseDate).toLocaleDateString('ar-LY') : '—'}`),
         });
       }
     });
