@@ -423,8 +423,7 @@ export async function createContract(contractData: ContractData) {
               Rent_End_Date: contractData.end_date,
               Customer_Name: contractData.customer_name,
               Ad_Type: contractData.ad_type || '',
-              Status: 'محجوز',
-              is_visible_in_available: false
+              Status: 'محجوز'
             })
             .eq('ID', Number(billboard_id));
 
@@ -1021,8 +1020,7 @@ async function syncBillboardDaysWithContract(
     .update({
       Days_Count: daysCountStr,
       Rent_Start_Date: startDate,
-      Rent_End_Date: endDate,
-      is_visible_in_available: false
+      Rent_End_Date: endDate
     })
     .eq('Contract_Number', Number(contractNumber));
 
@@ -1174,7 +1172,7 @@ export async function addBillboardsToContract(
       Customer_Name: meta.customer_name,
       Rent_Start_Date: meta.start_date,
       Rent_End_Date: meta.end_date,
-      is_visible_in_available: false,
+      is_visible_in_available: null,
     };
 
     // Update Days_Count based on contract duration
