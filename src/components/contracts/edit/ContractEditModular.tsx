@@ -1816,6 +1816,14 @@ export default function ContractEditModular() {
                 onDistributeEvenly={distributeEvenly}
                 onDistributeWithInterval={distributeWithInterval}
                 onDistributeByDurationPeriods={distributeByDurationPeriods}
+                onApplyUnequalDistribution={(payments) => {
+                  setInstallments(payments.map(p => ({
+                    amount: p.amount,
+                    paymentType: p.paymentType,
+                    description: p.description,
+                    dueDate: p.dueDate
+                  })));
+                }}
                 onAddInstallment={addInstallment}
                 onRemoveInstallment={removeInstallment}
                 onUpdateInstallment={updateInstallment}

@@ -134,7 +134,7 @@ export function InstallmentsManager({
   const [useCustomFirstDate, setUseCustomFirstDate] = React.useState(false);
 
   const [paymentMode, setPaymentMode] = React.useState<'single' | 'multiple' | 'periods'>(savedDistributionType ?? 'multiple');
-  const [periodsCount, setPeriodsCount] = React.useState<number>(3);
+  const [periodsCount, setPeriodsCount] = React.useState<string>('3');
   const [interval, setInterval] = React.useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>(savedInterval ?? 'month');
   const [numPayments, setNumPayments] = React.useState<number>(savedCount ?? 2);
   const [useCustomLastDate, setUseCustomLastDate] = React.useState(false);
@@ -375,6 +375,151 @@ export function InstallmentsManager({
     });
   };
 
+  const applyTemplate403030 = () => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+
+    const start = startDate ? new Date(startDate) : new Date();
+    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 60 * 24 * 60 * 60 * 1000);
+    const totalDuration = end.getTime() - start.getTime();
+
+    // 40% - 30% - 30%
+    const p1Amount = Math.round(finalTotal * 0.40 * 100) / 100;
+    const p2Amount = Math.round(finalTotal * 0.30 * 100) / 100;
+    const p3Amount = Math.round((finalTotal - p1Amount - p2Amount) * 100) / 100;
+
+    const p1DateStr = start.toISOString().split('T')[0];
+    const p2DateStr = new Date(start.getTime() + totalDuration * 0.40).toISOString().split('T')[0];
+    const p3DateStr = new Date(start.getTime() + totalDuration * 0.70).toISOString().split('T')[0];
+
+    const payments = [
+      {
+        amount: p1Amount,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة أولى عند التوقيع (40%)',
+        dueDate: p1DateStr
+      },
+      {
+        amount: p2Amount,
+        paymentType: 'شهري',
+        description: 'دفعة ثانية (30%)',
+        dueDate: p2DateStr
+      },
+      {
+        amount: p3Amount,
+        paymentType: 'شهري',
+        description: 'دفعة ثالثة (30%)',
+        dueDate: p3DateStr
+      }
+    ];
+
+    if (onApplyUnequalDistribution) {
+      onApplyUnequalDistribution(payments);
+    } else {
+      toast.error('ميزة التوزيع غير متوفرة في هذه الصفحة حالياً');
+    }
+  };
+
+  const applyTemplate5050 = () => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+
+    const start = startDate ? new Date(startDate) : new Date();
+    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const totalDuration = end.getTime() - start.getTime();
+    
+    const p1Amount = Math.round(finalTotal * 0.50 * 100) / 100;
+    const p2Amount = Math.round((finalTotal - p1Amount) * 100) / 100;
+
+    const p1DateStr = start.toISOString().split('T')[0];
+    const p2DateStr = new Date(start.getTime() + totalDuration * 0.50).toISOString().split('T')[0];
+
+    const payments = [
+      {
+        amount: p1Amount,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة أولى عند التوقيع (50%)',
+        dueDate: p1DateStr
+      },
+      {
+        amount: p2Amount,
+        paymentType: 'نهاية العقد',
+        description: 'دفعة ثانية (50%)',
+        dueDate: p2DateStr
+      }
+    ];
+
+    if (onApplyUnequalDistribution) {
+      onApplyUnequalDistribution(payments);
+    } else {
+      toast.error('ميزة التوزيع غير متوفرة في هذه الصفحة حالياً');
+    }
+  };
+
+  const applyTemplate333333 = () => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+
+    const start = startDate ? new Date(startDate) : new Date();
+    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+    const totalDuration = end.getTime() - start.getTime();
+
+    // 33.33% - 33.33% - 33.34%
+    const p1Amount = Math.round(finalTotal * 0.3333 * 100) / 100;
+    const p2Amount = Math.round(finalTotal * 0.3333 * 100) / 100;
+    const p3Amount = Math.round((finalTotal - p1Amount - p2Amount) * 100) / 100;
+
+    const p1DateStr = start.toISOString().split('T')[0];
+    const p2DateStr = new Date(start.getTime() + totalDuration * 0.3333).toISOString().split('T')[0];
+    const p3DateStr = new Date(start.getTime() + totalDuration * 0.6666).toISOString().split('T')[0];
+
+    const payments = [
+      {
+        amount: p1Amount,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة أولى (33.33%)',
+        dueDate: p1DateStr
+      },
+      {
+        amount: p2Amount,
+        paymentType: 'شهري',
+        description: 'دفعة ثانية (33.33%)',
+        dueDate: p2DateStr
+      },
+      {
+        amount: p3Amount,
+        paymentType: 'شهري',
+        description: 'دفعة ثالثة (33.34%)',
+        dueDate: p3DateStr
+      }
+    ];
+
+    if (onApplyUnequalDistribution) {
+      onApplyUnequalDistribution(payments);
+    } else {
+      toast.error('ميزة التوزيع غير متوفرة في هذه الصفحة حالياً');
+    }
+  };
+
+  const handleApplyPeriods = () => {
+    if (periodsCount === '40-30-30') {
+      applyTemplate403030();
+    } else if (periodsCount === '50-50') {
+      applyTemplate5050();
+    } else if (periodsCount === '33-33-33') {
+      applyTemplate333333();
+    } else {
+      onDistributeByDurationPeriods?.(Number(periodsCount) || 3);
+    }
+  };
+
+
   return (
     <Card className="bg-card border-border shadow-xl overflow-hidden">
       <CardHeader className="bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-border pb-4">
@@ -435,6 +580,39 @@ export function InstallmentsManager({
                   <div className="text-[11px] font-bold">تقسيم مدة العقد</div>
                 </button>
               </div>
+            </div>
+
+            {/* قوالب التوزيع الجاهزة */}
+            <div className="space-y-2 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5">
+              <Label className="text-xs font-bold text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+                <Sparkles className="h-3.5 w-3.5 text-amber-500 animate-pulse" />
+                قوالب التوزيع الخاصة (دفعة أولى وتوزيع المدد)
+              </Label>
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={applyTemplate403030}
+                  className="text-xs font-bold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer h-9 bg-background/50"
+                  disabled={!startDate}
+                >
+                  40% / 30% / 30% (3 أقساط)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={applyTemplate5050}
+                  className="text-xs font-bold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer h-9 bg-background/50"
+                  disabled={!startDate}
+                >
+                  50% / 50% (قسطين)
+                </Button>
+              </div>
+              <p className="text-[10px] text-amber-600/80 leading-normal text-right">
+                * يتم توزيع النسب على قيمة العقد، وتقسيم فترات الدفعات بالتساوي على مدار مدة العقد.
+              </p>
             </div>
 
             {/* إعدادات وطرق السداد بناءً على الاختيار */}
@@ -643,16 +821,19 @@ export function InstallmentsManager({
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">عدد فترات التقسيم</Label>
                   <Select 
-                    value={String(periodsCount)} 
-                    onValueChange={(v) => setPeriodsCount(Number(v) || 3)}
+                    value={periodsCount} 
+                    onValueChange={(v) => setPeriodsCount(v)}
                   >
                     <SelectTrigger className="h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="z-[10000]">
-                      <SelectItem value="2">فترتين (50% عند التوقيع و 50% بمنتصف العقد)</SelectItem>
-                      <SelectItem value="3">3 فترات (33% عند التوقيع، 33% بثلث العقد، 33% بثلثي العقد)</SelectItem>
-                      <SelectItem value="4">4 فترات (كل ربع من مدة العقد)</SelectItem>
+                      <SelectItem value="40-30-30">نظام 40% - 30% - 30% (3 أقساط)</SelectItem>
+                      <SelectItem value="50-50">نظام 50% - 50% (قسطين)</SelectItem>
+                      <SelectItem value="33-33-33">نظام 33.33% لكل الفترات (3 أقساط)</SelectItem>
+                      <SelectItem value="2">فترتين متساويتين (50% عند التوقيع و 50% بمنتصف العقد)</SelectItem>
+                      <SelectItem value="3">3 فترات متساوية (33.33% لكل فترة)</SelectItem>
+                      <SelectItem value="4">4 فترات متساوية (كل ربع من مدة العقد)</SelectItem>
                       <SelectItem value="5">5 فترات من مدة العقد</SelectItem>
                       <SelectItem value="6">6 فترات من مدة العقد</SelectItem>
                       <SelectItem value="7">7 فترات من مدة العقد</SelectItem>
@@ -667,7 +848,7 @@ export function InstallmentsManager({
 
                 <Button
                   type="button"
-                  onClick={() => onDistributeByDurationPeriods?.(periodsCount)}
+                  onClick={handleApplyPeriods}
                   className="w-full h-11 text-sm font-bold bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-transform hover:scale-[1.01]"
                   disabled={!startDate || !endDate}
                 >

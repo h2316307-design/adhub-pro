@@ -2114,6 +2114,7 @@ export default function OffersPage() {
                     installments={installments}
                     finalTotal={grandTotal}
                     startDate={startDate}
+                    endDate={endDate}
                     onDistributeEvenly={handleDistributeInstallments}
                     onDistributeWithInterval={handleDistributeWithInterval}
                     onApplyUnequalDistribution={(payments) => {

@@ -1214,6 +1214,14 @@ export default function ContractCreate() {
           onDistributeWithInterval={installmentManager.distributeWithInterval}
           onDistributeByDurationPeriods={installmentManager.distributeByDurationPeriods}
           onCreateManualInstallments={installmentManager.createManualInstallments}
+          onApplyUnequalDistribution={(payments) => {
+            setInstallments(payments.map(p => ({
+              amount: p.amount,
+              paymentType: p.paymentType,
+              description: p.description,
+              dueDate: p.dueDate
+            })));
+          }}
           addInstallment={installmentManager.addInstallment}
           removeInstallment={installmentManager.removeInstallment}
           clearAllInstallments={installmentManager.clearAllInstallments}

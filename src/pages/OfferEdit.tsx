@@ -1714,8 +1714,17 @@ export default function OfferEdit() {
               installments={installments}
               finalTotal={finalTotal}
               startDate={startDate}
+              endDate={endDate}
               onDistributeEvenly={distributeEvenly}
               onDistributeWithInterval={distributeWithInterval}
+              onApplyUnequalDistribution={(payments) => {
+                setInstallments(payments.map(p => ({
+                  amount: p.amount,
+                  paymentType: p.paymentType,
+                  description: p.description,
+                  dueDate: p.dueDate
+                })));
+              }}
               onAddInstallment={addInstallment}
               onRemoveInstallment={removeInstallment}
               onUpdateInstallment={updateInstallment}
