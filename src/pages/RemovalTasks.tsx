@@ -451,6 +451,7 @@ export default function RemovalTasks() {
       try {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
+        const todayStr = today.toISOString().split('T')[0];
         
         // جلب جميع عناصر الإزالة المعلقة مع معلومات المهمة
         const { data: pendingItems } = await supabase
@@ -1025,6 +1026,7 @@ export default function RemovalTasks() {
     mutationFn: async () => {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
+      const todayStr = today.toISOString().split('T')[0];
       
       // جلب جميع عناصر الإزالة المعلقة
       const { data: pendingItems } = await supabase

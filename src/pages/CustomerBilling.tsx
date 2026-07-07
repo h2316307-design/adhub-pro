@@ -51,7 +51,8 @@ import {
 import {
   calculateRemainingBalanceAfterPayment,
   getContractDetails,
-  calculateTotalRemainingDebt
+  calculateTotalRemainingDebt,
+  filterCompositeRelatedPrintedInvoices
 } from '@/components/billing/BillingUtils';
 
 import { CompositeTasksList } from '@/components/composite-tasks/CompositeTasksList';
@@ -359,6 +360,13 @@ export default function CustomerBilling() {
             .eq('customer_id', customerId)
             .order('created_at', { ascending: false });
           if (!error && data) compositeTasksData = data;
+        } else if (customerName) {
+          const { data, error } = await supabase
+            .from('composite_tasks')
+            .select('*')
+            .eq('customer_name', customerName)
+            .order('created_at', { ascending: false });
+          if (!error && data) compositeTasksData = data;
         }
       } catch (e) {
         console.warn('Error loading composite_tasks:', e);
@@ -366,85 +374,23 @@ export default function CustomerBilling() {
       }
       setCompositeTasks(compositeTasksData || []);
 
-      // ✅ FIX: منع تكرار احتساب الطباعة عند وجود مهمة مجمعة
-      // 1) استبعاد فواتير invoice_type=composite_task من قسم فواتير الطباعة
-      // 2) استبعاد أي فاتورة طباعة/قص مرتبطة بمهام مجمعة (سواء كانت نشطة أو قديمة/معدلة)
+      // ✅ توحيد ومنع تكرار احتساب الطباعة عند وجود مهمة مجمعة
       try {
-        const excludedInvoiceIds = new Set<string>();
-
-        // فواتير المهام المجمعة الموحدة
-        (compositeTasksData || [])
-          .map((t: any) => t.combined_invoice_id)
-          .filter(Boolean)
-          .forEach((id: string) => excludedInvoiceIds.add(id));
-
-        // جلب جميع فواتير مهام الطباعة المجمعة للزبون
-        if (customerId) {
-          const compositePrintTaskIds = new Set(
-            (compositeTasksData || []).map((task: any) => String(task?.print_task_id || '')).filter(Boolean)
-          );
-          const compositeCutoutTaskIds = new Set(
-            (compositeTasksData || []).map((task: any) => String(task?.cutout_task_id || '')).filter(Boolean)
-          );
-
-          const { data: printTasks } = await supabase
-            .from('print_tasks')
-            .select('id, invoice_id, composite_task_id')
-            .eq('customer_id', customerId);
-
-          (printTasks || [])
-            .filter((t: any) => compositePrintTaskIds.has(String(t.id)) || t.composite_task_id)
-            .map((t: any) => t.invoice_id)
-            .filter(Boolean)
-            .forEach((id: string) => excludedInvoiceIds.add(id));
-
-          // جلب جميع فواتير مهام القص المجمعة للزبون
-          const { data: cutoutTasks } = await supabase
-            .from('cutout_tasks')
-            .select('id, invoice_id')
-            .eq('customer_id', customerId);
-
-          (cutoutTasks || [])
-            .filter((t: any) => compositeCutoutTaskIds.has(String(t.id)))
-            .map((t: any) => t.invoice_id)
-            .filter(Boolean)
-            .forEach((id: string) => excludedInvoiceIds.add(id));
-        } else if (customerName) {
-          const compositePrintTaskIds = new Set(
-            (compositeTasksData || []).map((task: any) => String(task?.print_task_id || '')).filter(Boolean)
-          );
-          const compositeCutoutTaskIds = new Set(
-            (compositeTasksData || []).map((task: any) => String(task?.cutout_task_id || '')).filter(Boolean)
-          );
-
-          const { data: printTasks } = await supabase
-            .from('print_tasks')
-            .select('id, invoice_id, composite_task_id')
-            .eq('customer_name', customerName);
-
-          (printTasks || [])
-            .filter((t: any) => compositePrintTaskIds.has(String(t.id)) || t.composite_task_id)
-            .map((t: any) => t.invoice_id)
-            .filter(Boolean)
-            .forEach((id: string) => excludedInvoiceIds.add(id));
-
-          const { data: cutoutTasks } = await supabase
-            .from('cutout_tasks')
-            .select('id, invoice_id')
-            .eq('customer_name', customerName);
-
-          (cutoutTasks || [])
-            .filter((t: any) => compositeCutoutTaskIds.has(String(t.id)))
-            .map((t: any) => t.invoice_id)
-            .filter(Boolean)
-            .forEach((id: string) => excludedInvoiceIds.add(id));
-        }
-
-        // تطبيق الاستبعاد فقط في صفحة الزبون (وليس صفحة المورد/المطبعة)
         if (!(customerType.supplierType === 'printer' && customerType.printerName)) {
-          printedInvoicesData = (printedInvoicesData || [])
-            .filter((inv: any) => inv?.invoice_type !== 'composite_task')
-            .filter((inv: any) => !excludedInvoiceIds.has(inv.id));
+          const printTasksRes = customerId 
+            ? await supabase.from('print_tasks').select('id, invoice_id, composite_task_id').eq('customer_id', customerId)
+            : await supabase.from('print_tasks').select('id, invoice_id, composite_task_id').eq('customer_name', customerName);
+            
+          const cutoutTasksRes = customerId 
+            ? await supabase.from('cutout_tasks').select('id, invoice_id').eq('customer_id', customerId)
+            : await supabase.from('cutout_tasks').select('id, invoice_id').eq('customer_name', customerName);
+
+          printedInvoicesData = filterCompositeRelatedPrintedInvoices(
+            printedInvoicesData,
+            compositeTasksData,
+            printTasksRes.data || [],
+            cutoutTasksRes.data || []
+          );
         } else {
           // حتى لدى المطبعة: لا نعرض فواتير composite_task لأنها ليست فاتورة مطبعة فعلية
           printedInvoicesData = (printedInvoicesData || []).filter((inv: any) => inv?.invoice_type !== 'composite_task');
@@ -1184,12 +1130,93 @@ export default function CustomerBilling() {
       // إرجاع قيمة إيجار اللوحات الصديقة إذا كانت مقايضة
       const { data: payment } = await supabase
         .from('customer_payments')
-        .select('amount, notes')
+        .select('amount, notes, sales_invoice_id, printed_invoice_id, purchase_invoice_id, composite_task_id')
         .eq('id', id)
         .single();
       
       if (payment) {
         await refundRentalPayment(Number(payment.amount) || 0, payment.notes || '');
+
+        // 1. تحديث فاتورة المشتريات المرتبطة
+        if (payment.purchase_invoice_id) {
+          const { data: invoice } = await supabase
+            .from('purchase_invoices')
+            .select('used_as_payment')
+            .eq('id', payment.purchase_invoice_id)
+            .single();
+
+          if (invoice) {
+            await supabase
+              .from('purchase_invoices')
+              .update({
+                used_as_payment: Math.max(0, (invoice.used_as_payment || 0) - (Number(payment.amount) || 0))
+              })
+              .eq('id', payment.purchase_invoice_id);
+          }
+        }
+
+        // 2. تحديث فاتورة الطباعة المرتبطة
+        if (payment.printed_invoice_id) {
+          // حذف سجلات print_invoice_payments المرتبطة
+          await supabase
+            .from('print_invoice_payments')
+            .delete()
+            .eq('payment_id', id);
+
+          const { data: printedInvoice } = await supabase
+            .from('printed_invoices')
+            .select('paid_amount, total_amount')
+            .eq('id', payment.printed_invoice_id)
+            .single();
+
+          if (printedInvoice) {
+            const newPaidAmount = Math.max(0, (printedInvoice.paid_amount || 0) - (Number(payment.amount) || 0));
+            await supabase
+              .from('printed_invoices')
+              .update({
+                paid_amount: newPaidAmount,
+                paid: newPaidAmount >= (printedInvoice.total_amount || 0) && (printedInvoice.total_amount || 0) > 0
+              })
+              .eq('id', payment.printed_invoice_id);
+          }
+        }
+
+        // 3. تحديث فاتورة المبيعات المرتبطة
+        if (payment.sales_invoice_id) {
+          const { data: salesInvoice } = await supabase
+            .from('sales_invoices')
+            .select('paid_amount, total_amount')
+            .eq('id', payment.sales_invoice_id)
+            .single();
+
+          if (salesInvoice) {
+            const newPaidAmount = Math.max(0, (salesInvoice.paid_amount || 0) - (Number(payment.amount) || 0));
+            await supabase
+              .from('sales_invoices')
+              .update({
+                paid_amount: newPaidAmount,
+                paid: newPaidAmount >= (salesInvoice.total_amount || 0)
+              })
+              .eq('id', payment.sales_invoice_id);
+          }
+        }
+
+        // 4. تحديث المهمة المجمعة المرتبطة
+        if (payment.composite_task_id) {
+          const { data: task } = await supabase
+            .from('composite_tasks')
+            .select('paid_amount')
+            .eq('id', payment.composite_task_id)
+            .single();
+
+          if (task) {
+            const newPaidAmount = Math.max(0, (task.paid_amount || 0) - (Number(payment.amount) || 0));
+            await supabase
+              .from('composite_tasks')
+              .update({ paid_amount: newPaidAmount })
+              .eq('id', payment.composite_task_id);
+          }
+        }
       }
 
       const { error } = await supabase.from('customer_payments').delete().eq('id', id);
@@ -1410,7 +1437,7 @@ export default function CustomerBilling() {
               .from('sales_invoices')
               .update({
                 paid_amount: newPaidAmount,
-                status: newPaidAmount >= (salesInvoice.total_amount || 0) ? 'paid' : 'pending'
+                paid: newPaidAmount >= (salesInvoice.total_amount || 0)
               })
               .eq('id', invoiceId);
           }
@@ -1647,7 +1674,7 @@ export default function CustomerBilling() {
     <div className="min-h-screen bg-gradient-to-br from-background via-accent/5 to-background">
       {/* Modern Header with Glassmorphism */}
       <div className="sticky top-0 z-40 backdrop-blur-xl bg-card/80 border-b border-border/50 shadow-lg">
-        <div className="container mx-auto px-6 py-5">
+        <div className="max-w-[96%] mx-auto px-6 py-5">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
             {/* معلومات العميل */}
             <div className="flex items-center gap-4">
@@ -1920,6 +1947,7 @@ export default function CustomerBilling() {
         onEditDistributedPayment={openEditDistributedPayment}
         showCollectionDetails={showCollectionDetails}
         totalRemainingDebt={balance}
+        customerId={customerId}
       />
 
       {/* General Discounts Section */}
@@ -1971,24 +1999,33 @@ export default function CustomerBilling() {
       </Card>
 
       {/* ✅ قسم إيجارات اللوحات من الشركات الصديقة — مجمعة حسب العقد */}
-      <FriendRentalsGroupedSection
-        friendBillboardRentals={friendBillboardRentals}
-        customerName={customerName}
-        contracts={contracts}
-        onUpdate={loadData}
-        onUseAsPayment={(rentals) => {
-          if (!rentals || rentals.length === 0) return;
-          const totalCost = rentals.reduce((s: number, r: any) => s + (Number(r.friend_rental_cost) || 0), 0);
-          const totalUsed = rentals.reduce((s: number, r: any) => s + (Number(r.used_as_payment) || 0), 0);
-          setSelectedRentalForPayment({
-            ...rentals[0],
-            friend_rental_cost: totalCost,
-            used_as_payment: totalUsed,
-            _groupRentals: rentals,
-          });
-          setUseRentalAsPaymentOpen(true);
-        }}
-      />
+      <div className="max-w-[96%] mx-auto px-6 mb-6">
+        <FriendRentalsGroupedSection
+          friendBillboardRentals={friendBillboardRentals}
+          customerName={customerName}
+          contracts={contracts}
+          onUpdate={loadData}
+          customerId={customerId}
+          onUseAsPayment={(rentals) => {
+            if (!rentals || rentals.length === 0) return;
+            const totalCost = rentals.reduce((s: number, r: any) => s + (Number(r.friend_rental_cost) || 0), 0);
+            const totalUsed = rentals.reduce((s: number, r: any) => s + (Number(r.used_as_payment) || 0), 0);
+            
+            // ابحث عن نوع الإعلان من قائمة العقود
+            const linkedContract = contracts.find((c: any) => c.Contract_Number === rentals[0].contract_number);
+            const adType = linkedContract?.["Ad Type"] || linkedContract?.ad_type || "";
+
+            setSelectedRentalForPayment({
+              ...rentals[0],
+              friend_rental_cost: totalCost,
+              used_as_payment: totalUsed,
+              _groupRentals: rentals,
+              _contractAdType: adType, // ✅ نوع الإعلان للعقد المصدر
+            });
+            setUseRentalAsPaymentOpen(true);
+          }}
+        />
+      </div>
 
       {/* ✅ قسم فواتير المبيعات */}
       <SalesSection

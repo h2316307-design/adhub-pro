@@ -354,7 +354,7 @@ export function ContractSection({
   }).length;
 
   return (
-    <div className="container mx-auto px-6 mb-6">
+    <div className="max-w-[96%] mx-auto px-6 mb-6">
       <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl">
         <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">

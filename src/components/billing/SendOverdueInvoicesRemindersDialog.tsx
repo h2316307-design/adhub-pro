@@ -501,7 +501,8 @@ export function SendOverdueInvoicesRemindersDialog({
     // detailed
     let details = '*فواتير متأخرة:*\n';
     let idx = 1;
-    for (const inv of customer.invoices) {
+    const sortedInvoices = [...customer.invoices].sort((a, b) => b.daysOverdue - a.daysOverdue);
+    for (const inv of sortedInvoices) {
       const typeBadge = getTypeLabel(inv.type);
       const nameLabel = inv.invoiceName ? ` - ${inv.invoiceName}` : '';
       if (inv.type === 'composite') {

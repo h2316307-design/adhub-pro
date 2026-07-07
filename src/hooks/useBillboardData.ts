@@ -55,9 +55,33 @@ export const useBillboardData = () => {
     }
   }, []);
 
+  // ✅ NEW: Memoize getMunicipalityOrderFromDB to prevent recreation
+  const getMunicipalityOrderFromDB = useCallback(async (): Promise<{ [key: string]: number }> => {
+    try {
+      const { data, error } = await supabase
+        .from('municipalities')
+        .select('name, sort_order')
+        .order('sort_order', { ascending: true });
+
+      if (error) throw error;
+
+      const municipalityOrderMap: { [key: string]: number } = {};
+      data?.forEach((m) => {
+        municipalityOrderMap[m.name] = m.sort_order || 999;
+      });
+
+      console.log('✅ Municipality order map from database:', municipalityOrderMap);
+      return municipalityOrderMap;
+    } catch (error) {
+      console.error('Error loading municipality order from database:', error);
+      return {};
+    }
+  }, []);
+
   // ✅ FIXED: Memoize sortBillboardsBySize to prevent recreation
   const sortBillboardsBySize = useCallback(async (billboards: any[]): Promise<any[]> => {
     const sizeOrderMap = await getSizeOrderFromDB();
+    const municipalityOrderMap = await getMunicipalityOrderFromDB();
 
     return [...billboards].sort((a, b) => {
       const sizeA = a.Size || a.size || '';
@@ -70,12 +94,22 @@ export const useBillboardData = () => {
         return orderA - orderB;
       }
 
+      const munA = a.Municipality || a.municipality || '';
+      const munB = b.Municipality || b.municipality || '';
+
+      const munOrderA = municipalityOrderMap[munA] || 999;
+      const munOrderB = municipalityOrderMap[munB] || 999;
+
+      if (munOrderA !== munOrderB) {
+        return munOrderA - munOrderB;
+      }
+
       // If same size order, sort by billboard ID
       const idA = a.ID || a.id || 0;
       const idB = b.ID || b.id || 0;
       return idA - idB;
     });
-  }, [getSizeOrderFromDB]);
+  }, [getSizeOrderFromDB, getMunicipalityOrderFromDB]);
 
   // ✅ ENHANCED: Load contracts data with better field mapping
   const loadContractsData = useCallback(async () => {
@@ -540,6 +574,7 @@ export const useBillboardData = () => {
       const { data, error } = await supabase
         .from('municipalities')
         .select('*')
+        .order('sort_order', { ascending: true })
         .order('name', { ascending: true });
 
       if (error) throw error;

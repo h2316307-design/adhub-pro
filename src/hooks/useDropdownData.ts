@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { generateMunicipalityCode } from '@/utils/contractUtils';
 
 export const useDropdownData = () => {
   const [municipalities, setMunicipalities] = useState<any[]>([]);
@@ -125,7 +126,7 @@ export const useDropdownData = () => {
     const exists = municipalities.find(m => m.name === name);
     if (!exists) {
       try {
-        const newCode = `AUTO-${String(municipalities.length + 1).padStart(3, '0')}`;
+        const newCode = generateMunicipalityCode(name);
         const { data, error } = await supabase
           .from('municipalities')
           .insert({ name: name.trim(), code: newCode })

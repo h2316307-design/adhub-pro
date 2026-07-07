@@ -810,6 +810,28 @@ export default function Billboards() {
     return 9999;
   };
 
+  // ✅ Build municipality rank map from DB municipalities (sort_order)
+  const municipalityRankMap = useMemo(() => {
+    const map = new Map<string, number>();
+    (municipalities || []).forEach((m: any, idx: number) => {
+      const name = String(m?.name ?? '').trim();
+      if (!name) return;
+      const rank = typeof m?.sort_order === 'number' ? m.sort_order : idx + 1;
+      map.set(name, rank);
+      map.set(name.toLowerCase(), rank);
+    });
+    return map;
+  }, [municipalities]);
+
+  const getMunicipalityRank = (raw: string): number => {
+    const m = String(raw || '').trim();
+    if (!m) return 9999;
+    if (municipalityRankMap.has(m)) return municipalityRankMap.get(m)!;
+    const lower = m.toLowerCase();
+    if (municipalityRankMap.has(lower)) return municipalityRankMap.get(lower)!;
+    return 9999;
+  };
+
   // ✅ FIXED: Use useMemo for sorted filtered billboards
   const sortedFilteredBillboards = useMemo(() => {
     if (filteredBillboards.length === 0) return [];
@@ -825,11 +847,21 @@ export default function Billboards() {
         return orderA - orderB;
       }
 
+      const munA = (a as any).Municipality || a.municipality || '';
+      const munB = (b as any).Municipality || b.municipality || '';
+
+      const munOrderA = getMunicipalityRank(munA);
+      const munOrderB = getMunicipalityRank(munB);
+
+      if (munOrderA !== munOrderB) {
+        return munOrderA - munOrderB;
+      }
+
       const idA = (a as any).ID || a.id || 0;
       const idB = (b as any).ID || b.id || 0;
       return idA - idB;
     });
-  }, [filteredBillboards, sizeRankMap]);
+  }, [filteredBillboards, sizeRankMap, municipalityRankMap]);
 
   // ✅ NEW: Map billboards memo - shows maintenance and removal by default unless filtered
   const mapBillboards = useMemo(() => {
@@ -951,11 +983,22 @@ export default function Billboards() {
       const orderA = getSizeRank(sizeA);
       const orderB = getSizeRank(sizeB);
       if (orderA !== orderB) return orderA - orderB;
+
+      const munA = (a as any).Municipality || a.municipality || '';
+      const munB = (b as any).Municipality || b.municipality || '';
+
+      const munOrderA = getMunicipalityRank(munA);
+      const munOrderB = getMunicipalityRank(munB);
+
+      if (munOrderA !== munOrderB) {
+        return munOrderA - munOrderB;
+      }
+
       const idA = (a as any).ID || a.id || 0;
       const idB = (b as any).ID || b.id || 0;
       return idA - idB;
     });
-  }, [mapBillboards, sizeRankMap]);
+  }, [mapBillboards, sizeRankMap, municipalityRankMap]);
 
 
   const totalPages = Math.max(1, Math.ceil(sortedFilteredBillboards.length / PAGE_SIZE));

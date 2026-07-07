@@ -1,5 +1,6 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { TrendingUp, TrendingDown, DollarSign, Wallet, Calendar, Receipt, Printer, Building2, CreditCard, Percent, Layers, Calculator } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface SummaryCardsProps {
   totalRent: number;
@@ -37,11 +38,15 @@ export function SummaryCards({
   // حساب نسبة السداد
   const paymentPercentage = totalRent > 0 ? Math.min(100, Math.round((totalCredits / totalRent) * 100)) : 0;
   
+  // حساب تفاصيل الديون والمدفوعات للـ Tooltips
+  const otherDebts = Math.max(0, totalDebits - totalRent - totalSales - totalPrintedInvoices - totalCompositeTasks);
+  const contractPaymentsVal = Math.max(0, totalCredits - accountPayments);
+  
   // حساب نسبة السداد الإجمالية
   const overallPaymentPercentage = totalDebits > 0 ? Math.min(100, Math.round((totalCredits / totalDebits) * 100)) : 0;
   
   return (
-    <div className="container mx-auto px-6 py-6 space-y-6">
+    <div className="max-w-[96%] mx-auto px-6 py-6 space-y-6">
       {/* كرت الملخص المالي الشامل المطور */}
       <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl">
         <div className="absolute -top-40 -right-40 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl group-hover:bg-amber-500/10 transition-all duration-500 pointer-events-none" />
@@ -164,106 +169,156 @@ export function SummaryCards({
           </div>
         </CardContent>
       </Card>
-
       {/* البطاقات الرئيسية الملونة */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {/* إجمالي العقود */}
-        <Card className="group relative overflow-hidden border border-sky-500/10 bg-gradient-to-br from-sky-500/5 via-transparent to-background shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
-          <CardContent className="pt-6 pb-6 relative">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-muted-foreground mb-2">إجمالي العقود</p>
-                <p className="text-3xl font-bold text-sky-600 dark:text-sky-400">{totalRent.toLocaleString('en-US')}</p>
-                <p className="text-xs text-muted-foreground mt-1">دينار ليبي</p>
+      <TooltipProvider delayDuration={150}>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* إجمالي الديون */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="group relative overflow-hidden border border-sky-500/10 bg-gradient-to-br from-sky-500/5 via-transparent to-background shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+                <CardContent className="pt-6 pb-6 relative">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground mb-2">إجمالي الديون</p>
+                      <p className="text-3xl font-bold text-sky-600 dark:text-sky-400">{totalDebits.toLocaleString('en-US')}</p>
+                      <p className="text-xs text-muted-foreground mt-1.5">منها عقود بقيمة: {totalRent.toLocaleString('en-US')} د.ل</p>
+                    </div>
+                    <div className="w-14 h-14 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center justify-center shadow-inner">
+                      <TrendingUp className="h-7 w-7 text-sky-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-xl shadow-xl max-w-xs text-right">
+              <div className="space-y-1.5 font-sans" dir="rtl">
+                <p className="font-bold text-sky-400 border-b border-white/10 pb-1 mb-1 text-sm">تفاصيل الديون:</p>
+                <div className="text-xs space-y-1 text-slate-300">
+                  {totalRent > 0 && <p className="flex justify-between gap-4"><span>عقود اللوحات:</span> <span className="font-semibold text-white">{totalRent.toLocaleString('en-US')} د.ل</span></p>}
+                  {totalSales > 0 && <p className="flex justify-between gap-4"><span>فواتير مبيعات:</span> <span className="font-semibold text-white">{totalSales.toLocaleString('en-US')} د.ل</span></p>}
+                  {totalPrintedInvoices > 0 && <p className="flex justify-between gap-4"><span>فواتير طباعة:</span> <span className="font-semibold text-white">{totalPrintedInvoices.toLocaleString('en-US')} د.ل</span></p>}
+                  {totalCompositeTasks > 0 && <p className="flex justify-between gap-4"><span>فواتير مجمعة:</span> <span className="font-semibold text-white">{totalCompositeTasks.toLocaleString('en-US')} د.ل</span></p>}
+                  {otherDebts > 0 && <p className="flex justify-between gap-4"><span>ديون أخرى:</span> <span className="font-semibold text-white">{otherDebts.toLocaleString('en-US')} د.ل</span></p>}
+                </div>
               </div>
-              <div className="w-14 h-14 bg-sky-500/10 border border-sky-500/20 rounded-2xl flex items-center justify-center shadow-inner">
-                <TrendingUp className="h-7 w-7 text-sky-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </TooltipContent>
+          </Tooltip>
 
-        {/* إجمالي المدفوع */}
-        <Card className="group relative overflow-hidden border border-emerald-500/10 bg-gradient-to-br from-emerald-500/5 via-transparent to-background shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
-          <CardContent className="pt-6 pb-6 relative">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-muted-foreground mb-2">إجمالي المدفوع</p>
-                <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{totalCredits.toLocaleString('en-US')}</p>
-                <p className="text-xs text-muted-foreground mt-1">دينار ليبي</p>
+          {/* إجمالي المدفوع */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className="group relative overflow-hidden border border-emerald-500/10 bg-gradient-to-br from-emerald-500/5 via-transparent to-background shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-emerald-500/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+                <CardContent className="pt-6 pb-6 relative">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground mb-2">إجمالي المدفوع</p>
+                      <p className="text-3xl font-bold text-emerald-600 dark:text-emerald-400">{totalCredits.toLocaleString('en-US')}</p>
+                      <p className="text-xs text-muted-foreground mt-1.5">دينار ليبي</p>
+                    </div>
+                    <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner">
+                      <CreditCard className="h-7 w-7 text-emerald-500" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-xl shadow-xl max-w-xs text-right">
+              <div className="space-y-1.5 font-sans" dir="rtl">
+                <p className="font-bold text-emerald-400 border-b border-white/10 pb-1 mb-1 text-sm">تفاصيل المدفوعات:</p>
+                <div className="text-xs space-y-1 text-slate-300">
+                  {contractPaymentsVal > 0 && <p className="flex justify-between gap-4"><span>دفعات على العقود:</span> <span className="font-semibold text-white">{contractPaymentsVal.toLocaleString('en-US')} د.ل</span></p>}
+                  {accountPayments > 0 && <p className="flex justify-between gap-4"><span>دفعات على الحساب:</span> <span className="font-semibold text-white">{accountPayments.toLocaleString('en-US')} د.ل</span></p>}
+                </div>
               </div>
-              <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center shadow-inner">
-                <CreditCard className="h-7 w-7 text-emerald-500" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </TooltipContent>
+          </Tooltip>
 
-        {/* المتبقي */}
-        <Card className={`group relative overflow-hidden border shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl ${
-          balance > 0 
-            ? 'border-rose-500/10 bg-gradient-to-br from-rose-500/5 via-transparent to-background' 
-            : 'border-emerald-500/10 bg-gradient-to-br from-emerald-500/5 via-transparent to-background'
-        }`}>
-          <div className={`absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none ${
-            balance > 0 ? 'bg-rose-500/5' : 'bg-emerald-500/5'
-          }`} />
-          <CardContent className="pt-6 pb-6 relative">
-            <div className="flex items-start justify-between">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-muted-foreground mb-2">
-                  {balance < 0 ? 'فائض لصالح العميل' : 'المتبقي'}
-                </p>
-                <p className={`text-3xl font-bold ${balance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                  {balance >= 0 ? balance.toLocaleString('en-US') : Math.abs(balance).toLocaleString('en-US')}
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {balance < 0 ? 'رصيد دائن للعميل' : 'مستحق على العميل'}
-                </p>
-              </div>
-              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${
+          {/* المتبقي */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Card className={`group relative overflow-hidden border shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl ${
                 balance > 0 
-                  ? 'bg-rose-500/10 border border-rose-500/20' 
-                  : 'bg-emerald-500/10 border border-emerald-500/20'
+                  ? 'border-rose-500/10 bg-gradient-to-br from-rose-500/5 via-transparent to-background' 
+                  : 'border-emerald-500/10 bg-gradient-to-br from-emerald-500/5 via-transparent to-background'
               }`}>
-                <DollarSign className={`h-7 w-7 ${balance > 0 ? 'text-rose-500' : 'text-emerald-500'}`} />
+                <div className={`absolute top-0 right-0 w-32 h-32 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none ${
+                  balance > 0 ? 'bg-rose-500/5' : 'bg-emerald-500/5'
+                }`} />
+                <CardContent className="pt-6 pb-6 relative">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-muted-foreground mb-2">
+                        {balance < 0 ? 'فائض لصالح العميل' : 'المتبقي'}
+                      </p>
+                      <p className={`text-3xl font-bold ${balance > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {balance >= 0 ? balance.toLocaleString('en-US') : Math.abs(balance).toLocaleString('en-US')}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-1.5">
+                        {balance < 0 ? 'رصيد دائن للعميل' : 'مستحق على العميل'}
+                      </p>
+                    </div>
+                    <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-inner ${
+                      balance > 0 
+                        ? 'bg-rose-500/10 border border-rose-500/20' 
+                        : 'bg-emerald-500/10 border border-emerald-500/20'
+                    }`}>
+                      <DollarSign className={`h-7 w-7 ${balance > 0 ? 'text-rose-500' : 'text-emerald-500'}`} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </TooltipTrigger>
+            <TooltipContent className="bg-slate-900 border border-slate-700 text-slate-100 p-4 rounded-xl shadow-xl max-w-xs text-right">
+              <div className="space-y-1.5 font-sans" dir="rtl">
+                <p className="font-bold text-rose-400 border-b border-white/10 pb-1 mb-1 text-sm">طريقة احتساب المتبقي:</p>
+                <div className="text-xs space-y-1 text-slate-300">
+                  <p className="flex justify-between gap-4"><span>إجمالي الديون:</span> <span className="font-semibold text-white">+{totalDebits.toLocaleString('en-US')} د.ل</span></p>
+                  <p className="flex justify-between gap-4"><span>إجمالي المدفوعات:</span> <span className="font-semibold text-white">-{totalCredits.toLocaleString('en-US')} د.ل</span></p>
+                  {totalDiscounts > 0 && <p className="flex justify-between gap-4"><span>الخصومات العامة:</span> <span className="font-semibold text-white">-{totalDiscounts.toLocaleString('en-US')} د.ل</span></p>}
+                  {(totalPurchases - totalFriendRentals) > 0 && <p className="flex justify-between gap-4"><span>فواتير مشتريات:</span> <span className="font-semibold text-white">-{ (totalPurchases - totalFriendRentals).toLocaleString('en-US') } د.ل</span></p>}
+                  {totalFriendRentals > 0 && <p className="flex justify-between gap-4"><span>إيجارات صديقة:</span> <span className="font-semibold text-white">-{totalFriendRentals.toLocaleString('en-US')} د.ل</span></p>}
+                  <div className="border-t border-white/10 pt-1 mt-1 flex justify-between gap-4 font-bold text-white">
+                    <span>المتبقي النهائي:</span>
+                    <span>{balance >= 0 ? balance.toLocaleString('en-US') : `(${Math.abs(balance).toLocaleString('en-US')})`} د.ل</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </CardContent>
-        </Card>
+            </TooltipContent>
+          </Tooltip>
 
-        {/* نسبة السداد */}
-        <Card className="group relative overflow-hidden border border-violet-500/10 bg-gradient-to-br from-violet-500/5 via-transparent to-background shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
-          <CardContent className="pt-6 pb-6 relative">
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex-1">
-                <p className="text-sm font-medium text-muted-foreground mb-2">نسبة السداد</p>
-                <p className={`text-3xl font-bold ${
-                  paymentPercentage >= 100 ? 'text-emerald-600 dark:text-emerald-400' :
-                  paymentPercentage >= 50 ? 'text-amber-600 dark:text-amber-400' :
-                  'text-rose-600 dark:text-rose-400'
-                }`}>{paymentPercentage}%</p>
+          {/* نسبة السداد */}
+          <Card className="group relative overflow-hidden border border-violet-500/10 bg-gradient-to-br from-violet-500/5 via-transparent to-background shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer hover:-translate-y-1 rounded-2xl">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-violet-500/5 rounded-full -translate-y-12 translate-x-12 group-hover:scale-125 transition-transform duration-500 pointer-events-none" />
+            <CardContent className="pt-6 pb-6 relative">
+              <div className="flex items-start justify-between mb-3">
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-muted-foreground mb-2">نسبة السداد</p>
+                  <p className={`text-3xl font-bold ${
+                    paymentPercentage >= 100 ? 'text-emerald-600 dark:text-emerald-400' :
+                    paymentPercentage >= 50 ? 'text-amber-600 dark:text-amber-400' :
+                    'text-rose-600 dark:text-rose-400'
+                  }`}>{paymentPercentage}%</p>
+                </div>
+                <div className="w-14 h-14 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center justify-center shadow-inner">
+                  <Percent className="h-7 w-7 text-violet-500" />
+                </div>
               </div>
-              <div className="w-14 h-14 bg-violet-500/10 border border-violet-500/20 rounded-2xl flex items-center justify-center shadow-inner">
-                <Percent className="h-7 w-7 text-violet-500" />
+              <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all duration-700 ${
+                    paymentPercentage >= 100 ? 'bg-emerald-500' :
+                    paymentPercentage >= 50 ? 'bg-amber-500' :
+                    'bg-rose-500'
+                  }`}
+                  style={{ width: `${Math.min(100, paymentPercentage)}%` }}
+                />
               </div>
-            </div>
-            <div className="h-2 w-full bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-              <div 
-                className={`h-full rounded-full transition-all duration-700 ${
-                  paymentPercentage >= 100 ? 'bg-emerald-500' :
-                  paymentPercentage >= 50 ? 'bg-amber-500' :
-                  'bg-rose-500'
-                }`}
-                style={{ width: `${Math.min(100, paymentPercentage)}%` }}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
+        </div>
+      </TooltipProvider>
 
       {/* البطاقات الثانوية المفتوحة للتفاعل */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

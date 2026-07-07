@@ -30,6 +30,8 @@ import { SendDebtReportDialog } from '@/components/customers/SendDebtReportDialo
 import { Mail, FileSpreadsheet, AlertTriangle, DollarSign, Send, Receipt } from 'lucide-react';
 import { getMergedInvoiceStylesAsync } from '@/hooks/useInvoiceSettingsSync';
 import { calculateCustomerFinancials } from '@/hooks/useCustomerFinancials';
+import { filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
+
 
 interface PaymentRow {
   id: string;
@@ -333,7 +335,9 @@ export default function Customers() {
   const [discounts, setDiscounts] = useState<any[]>([]);
   const [compositeTasks, setCompositeTasks] = useState<any[]>([]);
   const [printTasks, setPrintTasks] = useState<any[]>([]);
+  const [cutoutTasks, setCutoutTasks] = useState<any[]>([]);
   const [friendBillboardRentals, setFriendBillboardRentals] = useState<any[]>([]);
+
   const [friendCompanies, setFriendCompanies] = useState<any[]>([]);
   
   const [search, setSearch] = useState('');
@@ -437,7 +441,8 @@ export default function Customers() {
         ctRes, 
         ptRes,
         fbrRes,
-        fcRes
+        fcRes,
+        cutRes
       ] = await Promise.all([
         supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes, method, reference').order('paid_at', { ascending: false }).range(0, 9999),
         supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 9999),
@@ -450,6 +455,7 @@ export default function Customers() {
         supabase.from('print_tasks').select('id, invoice_id').range(0, 9999),
         supabase.from('friend_billboard_rentals').select('id, friend_company_id, friend_rental_cost, customer_rental_price, used_as_payment, contract_number, start_date, billboard_id').range(0, 9999),
         supabase.from('friend_companies').select('id, name'),
+        supabase.from('cutout_tasks').select('id, invoice_id').range(0, 9999),
       ]);
 
       if (pRes.error) {
@@ -477,8 +483,10 @@ export default function Customers() {
       setDiscounts(dRes.data || []);
       setCompositeTasks(ctRes.data || []);
       setPrintTasks(ptRes.data || []);
+      setCutoutTasks(cutRes.data || []);
       setFriendBillboardRentals(fbrRes.data || []);
       setFriendCompanies(fcRes.data || []);
+
       
     } catch (error) {
       console.error('Error loading data:', error);
@@ -744,33 +752,14 @@ export default function Customers() {
       const customerDiscounts = discountsByCustomerId.get(customerId) || [];
       const customerCompositeTasks = compositeTasksByCustomerId.get(customerId) || [];
 
-      // ✅ توحيد منطق فواتير الطباعة مع صفحة CustomerBilling
-      // استبعاد فواتير composite_task وأي فاتورة مرتبطة بمهام مجمعة
-      const compositeTaskInvoiceIds = new Set(
-        customerCompositeTasks
-          .map((t: any) => String(t?.combined_invoice_id || ''))
-          .filter(Boolean)
+      // ✅ توحيد منطق فواتير الطباعة مع صفحة CustomerBilling باستخدام الدالة الموحدة
+      const customerPrintedInvoices = filterCompositeRelatedPrintedInvoices(
+        printedInvoicesByCustomerId.get(customerId) || [],
+        customerCompositeTasks,
+        printTasks,
+        cutoutTasks
       );
 
-      const compositePrintTaskIds = new Set(
-        customerCompositeTasks
-          .map((t: any) => String(t?.print_task_id || ''))
-          .filter(Boolean)
-      );
-
-      const compositePrintInvoiceIds = new Set(
-        printTasks
-          .filter((pt: any) => compositePrintTaskIds.has(String(pt?.id || '')))
-          .map((pt: any) => String(pt?.invoice_id || ''))
-          .filter(Boolean)
-      );
-
-      const customerPrintedInvoices = (printedInvoicesByCustomerId.get(customerId) || []).filter((inv: any) => {
-        if (inv.invoice_type === 'composite_task') return false;
-        if (compositeTaskInvoiceIds.has(String(inv.id || ''))) return false;
-        if (compositePrintInvoiceIds.has(String(inv.id || ''))) return false;
-        return true;
-      });
       
       // حساب إيجارات الشركات الصديقة
       let friendRentals = 0;

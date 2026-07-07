@@ -245,6 +245,12 @@ const TaskCardRow = ({
   const discountAmt = task.discount_amount || 0;
   const showInstallExcluded = isNewInstallation && companyInstall > 0;
 
+  const remainingDue = Math.max(0, (task.customer_total || 0) - (task._totalPaid || 0));
+  const isFullyPaid = remainingDue <= 0.01 && (task.customer_total || 0) > 0;
+  const containerBg = (task.customer_total || 0) > 0 
+    ? (isFullyPaid ? 'bg-emerald-500/5' : 'bg-rose-500/5') 
+    : 'bg-muted/10';
+
   const cardBg = dominantColor
     ? `linear-gradient(to left, rgba(${dominantColor}, 0.22) 0%, rgba(${dominantColor}, 0.10) 35%, rgba(${dominantColor}, 0.03) 70%, hsl(var(--card)) 100%)`
     : `linear-gradient(to left, color-mix(in srgb, ${task.accent || '#6366f1'} 12%, transparent) 0%, color-mix(in srgb, ${task.accent || '#6366f1'} 4%, transparent) 35%, hsl(var(--card)) 100%)`;
@@ -350,14 +356,24 @@ const TaskCardRow = ({
           </div>
 
           {/* Customer Due */}
-          <div className={`w-[170px] lg:w-[200px] shrink-0 px-5 lg:px-6 py-5 lg:py-6 flex flex-col justify-between gap-3 border-r border-border/20 ${(task.customer_total || 0) > 0 ? 'bg-emerald-500/5' : 'bg-muted/10'}`} onClick={e => e.stopPropagation()}>
+          <div className={`w-[170px] lg:w-[200px] shrink-0 px-5 lg:px-6 py-5 lg:py-6 flex flex-col justify-between gap-3 border-r border-border/20 ${containerBg}`} onClick={e => e.stopPropagation()}>
             <div>
-              <div className={`text-[10px] font-bold ${(task.customer_total || 0) > 0 ? 'text-emerald-500/70' : 'text-muted-foreground/50'} leading-none mb-1.5 text-right`}>المستحق على الزبون</div>
+              <div className={`text-[10px] font-bold ${
+                (task.customer_total || 0) > 0 
+                  ? (isFullyPaid ? 'text-emerald-500/70' : 'text-rose-500/70') 
+                  : 'text-muted-foreground/50'
+              } leading-none mb-1.5 text-right`}>المستحق على الزبون</div>
               {(task.customer_total || 0) > 0 ? (
-                <div className="text-lg font-black text-emerald-400 flex items-baseline justify-end gap-1 font-mono">
-                  <span>{(task.customer_total || 0).toLocaleString('ar-LY')}</span>
-                  <span className="text-[10px] font-medium text-emerald-400/60 ">د.ل</span>
-                </div>
+                isFullyPaid ? (
+                  <div className="text-xs font-extrabold text-emerald-500 dark:text-emerald-400 text-right bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 inline-block">
+                    تم السداد
+                  </div>
+                ) : (
+                  <div className="text-lg font-black text-rose-500 dark:text-rose-400 flex items-baseline justify-end gap-1 font-mono">
+                    <span>{remainingDue.toLocaleString('ar-LY')}</span>
+                    <span className="text-[10px] font-medium text-rose-500/60 ">د.ل</span>
+                  </div>
+                )
               ) : (
                 <div className="text-xs font-bold text-muted-foreground/45 text-right">—</div>
               )}
@@ -540,14 +556,20 @@ const TaskCardRow = ({
 
         <div className="bg-background/40 p-3 rounded-xl border border-border/20 grid grid-cols-3 gap-2 text-center text-xs">
           <div>
-            <div className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">الزبون</div>
+            <div className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">المستحق</div>
             {(task.customer_total || 0) > 0 ? (
-              <>
-                <div className="text-xs font-black text-emerald-400">{(task.customer_total || 0).toLocaleString('ar-LY')}</div>
-                <div className="text-[8px] text-muted-foreground/70 mt-1">
-                  سداد {task._paymentPercentage}%
+              isFullyPaid ? (
+                <div className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 inline-block">
+                  تم السداد
                 </div>
-              </>
+              ) : (
+                <>
+                  <div className="text-xs font-black text-rose-500">{remainingDue.toLocaleString('ar-LY')}</div>
+                  <div className="text-[8px] text-muted-foreground/75 mt-1">
+                    سداد {task._paymentPercentage}%
+                  </div>
+                </>
+              )
             ) : (
               <div className="text-[10px] font-bold text-muted-foreground/40">—</div>
             )}

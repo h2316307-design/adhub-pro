@@ -724,8 +724,12 @@ export function SendOverdueRemindersDialog({
     }
 
     let details = '';
+    
+    // Sort all installments of the customer by daysOverdue descending (most delayed first)
+    const sortedInstallments = [...customer.installments].sort((a, b) => b.daysOverdue - a.daysOverdue);
+
     const contractGroups = new Map<number, OverdueInstallment[]>();
-    customer.installments.forEach(inst => {
+    sortedInstallments.forEach(inst => {
       if (!contractGroups.has(inst.contractNumber)) contractGroups.set(inst.contractNumber, []);
       contractGroups.get(inst.contractNumber)!.push(inst);
     });
@@ -748,7 +752,8 @@ export function SendOverdueRemindersDialog({
 
     if (customer.unpaidInvoices.length > 0) {
       details += `\n*فواتير إضافية غير مسددة:*\n`;
-      customer.unpaidInvoices.forEach((inv, idx) => {
+      const sortedUnpaidInvoices = [...customer.unpaidInvoices].sort((a, b) => b.daysOverdue - a.daysOverdue);
+      sortedUnpaidInvoices.forEach((inv, idx) => {
         details += `${idx + 1}. عقد #${inv.contractNumber}\n`;
         details += `   المبلغ: ${formatAmount(inv.amount)} د.ل\n`;
         details += `   مدة التأخير: ${inv.daysOverdue} يوم\n`;

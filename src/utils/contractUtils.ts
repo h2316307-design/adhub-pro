@@ -125,3 +125,84 @@ export const isBillboardAvailable = (billboard: any, ignoreVisibility = false): 
   // متاحة إذا لا يوجد عقد ولا حالة صريحة
   return true;
 };
+
+/**
+ * Generates a clean 2-3 letter uppercase code from an Arabic or English municipality name
+ */
+export const generateMunicipalityCode = (name: string): string => {
+  const cleanName = name.trim().toLowerCase();
+  
+  const charMap: { [key: string]: string } = {
+    'أ': 'a', 'ا': 'a', 'إ': 'a', 'آ': 'a',
+    'ب': 'b',
+    'ت': 't',
+    'ث': 'th',
+    'ج': 'j',
+    'ح': 'h',
+    'خ': 'kh',
+    'د': 'd',
+    'ذ': 'dh',
+    'ر': 'r',
+    'ز': 'z',
+    'س': 's',
+    'ش': 'sh',
+    'ص': 's',
+    'ض': 'd',
+    'ط': 't',
+    'ظ': 'z',
+    'ع': 'a',
+    'غ': 'gh',
+    'ف': 'f',
+    'ق': 'q',
+    'ك': 'k',
+    'ل': 'l',
+    'م': 'm',
+    'ن': 'n',
+    'ه': 'h',
+    'و': 'w',
+    'ي': 'y', 'ى': 'y', 'ئ': 'y', 'ء': 'a'
+  };
+
+  const words = cleanName.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) {
+    let code = '';
+    for (let i = 0; i < Math.min(words.length, 3); i++) {
+      const w = words[i];
+      let cleanWord = w;
+      if (cleanWord.startsWith('ال') && cleanWord.length > 2) {
+        cleanWord = cleanWord.slice(2);
+      }
+      const firstChar = cleanWord[0];
+      if (charMap[firstChar]) {
+        code += charMap[firstChar];
+      } else if (/[a-z]/i.test(firstChar)) {
+        code += firstChar;
+      }
+    }
+    if (code.length >= 2) {
+      return code.slice(0, 3).toUpperCase();
+    }
+  }
+
+  let cleanNameSingle = cleanName;
+  if (cleanNameSingle.startsWith('ال') && cleanNameSingle.length > 2) {
+    cleanNameSingle = cleanNameSingle.slice(2);
+  }
+
+  let code = '';
+  for (let i = 0; i < cleanNameSingle.length; i++) {
+    const char = cleanNameSingle[i];
+    if (charMap[char]) {
+      code += charMap[char];
+    } else if (/[a-z]/i.test(char)) {
+      code += char;
+    }
+    if (code.length >= 3) break;
+  }
+
+  if (code.length >= 2) {
+    return code.slice(0, 3).toUpperCase();
+  }
+
+  return 'MU';
+};

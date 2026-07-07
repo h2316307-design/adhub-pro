@@ -187,6 +187,11 @@ export function PurchaseInvoicesSection({
                       مستعملة كدفعة: {formatAmount(usedAsPayment)} د.ل
                     </Badge>
                   )}
+                  {usedAsPayment > 0 && availableCredit > 0.01 && (
+                    <Badge variant="outline" className="border-amber-500/40 bg-amber-500/10 text-amber-500 font-bold animate-pulse">
+                      يوجد فائض يحتاج توزيع: {formatAmount(availableCredit)} د.ل
+                    </Badge>
+                  )}
                 </div>
                 
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm pt-1">

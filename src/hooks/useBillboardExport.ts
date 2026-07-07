@@ -119,16 +119,39 @@ export const useBillboardExport = () => {
         '13*5': 1, '13x5': 1, '13×5': 1, '5*13': 1, '5x13': 1, '5×13': 1,
         '12*4': 2, '12x4': 2, '12×4': 2, '4*12': 2, '4x12': 2, '4×12': 2,
         '10*4': 3, '10x4': 3, '10×4': 3, '4*10': 3, '4x10': 3, '4×10': 3,
-        '3*8': 4, '3x8': 4, '3×8': 4, '8*3': 4, '8x3': 4, '8×3': 4,
-        '3*6': 5, '3x6': 5, '3×6': 5, '6*3': 5, '6x3': 5, '6×3': 5,
-        '3*4': 6, '3x4': 6, '3×4': 6, '4*3': 6, '4x3': 6, '4×3': 6
+        '8*3': 4, '8x3': 4, '8×3': 4, '3*8': 4, '3x8': 4, '3×8': 4,
+        '6*3': 5, '6x3': 5, '6×3': 5, '3*6': 5, '3x6': 5, '3×6': 5,
+        '4*3': 6, '4x3': 6, '4×3': 6, '3*4': 6, '3x4': 6, '3×4': 6
       };
     }
   };
 
-  // ✅ UPDATED: Sort billboards by database size order
+  // ✅ NEW: Get municipality order from database
+  const getMunicipalityOrderFromDB = async (): Promise<{ [key: string]: number }> => {
+    try {
+      const { data, error } = await supabase
+        .from('municipalities')
+        .select('name, sort_order')
+        .order('sort_order', { ascending: true });
+      
+      if (error) throw error;
+      
+      const municipalityOrderMap: { [key: string]: number } = {};
+      data?.forEach((m, index) => {
+        municipalityOrderMap[m.name] = m.sort_order || (index + 1);
+      });
+      
+      return municipalityOrderMap;
+    } catch (error) {
+      console.error('Error loading municipality order from database:', error);
+      return {};
+    }
+  };
+
+  // ✅ UPDATED: Sort billboards by database municipality AND size order
   const sortBillboardsBySize = async (billboards: any[]): Promise<any[]> => {
     const sizeOrderMap = await getSizeOrderFromDB();
+    const municipalityOrderMap = await getMunicipalityOrderFromDB();
     
     return [...billboards].sort((a, b) => {
       const sizeA = a.Size || a.size || '';
@@ -139,6 +162,16 @@ export const useBillboardExport = () => {
       
       if (orderA !== orderB) {
         return orderA - orderB;
+      }
+
+      const munA = a.Municipality || a.municipality || '';
+      const munB = b.Municipality || b.municipality || '';
+      
+      const munOrderA = municipalityOrderMap[munA] || 999;
+      const munOrderB = municipalityOrderMap[munB] || 999;
+      
+      if (munOrderA !== munOrderB) {
+        return munOrderA - munOrderB;
       }
       
       // If same size order, sort by billboard ID

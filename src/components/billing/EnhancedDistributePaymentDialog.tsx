@@ -135,6 +135,45 @@ export function EnhancedDistributePaymentDialog({
   // ✅ تفعيل التوزيعات الإضافية (سلف/عهد/مصاريف)
   const [enableAdditionalDistributions, setEnableAdditionalDistributions] = useState(false);
 
+  // ✅ فاتورة المشتريات المرتبطة النشطة (تُحمل ديناميكياً في التعديل)
+  const [activePurchaseInvoice, setActivePurchaseInvoice] = useState<{
+    id: string;
+    invoice_number: string;
+    total_amount: number;
+    used_as_payment: number;
+  } | null>(null);
+
+  // ✅ تحميل بيانات فاتورة المشتريات المرتبطة النشطة في وضع الإضافة أو التعديل
+  useEffect(() => {
+    if (!open) {
+      setActivePurchaseInvoice(null);
+      return;
+    }
+
+    if (purchaseInvoice) {
+      setActivePurchaseInvoice(purchaseInvoice);
+    } else if (editMode && editingPayments && editingPayments.length > 0) {
+      const linkedInvoiceId = editingPayments.find(p => p.purchase_invoice_id)?.purchase_invoice_id;
+      if (linkedInvoiceId) {
+        const fetchPurchaseInvoice = async () => {
+          const { data, error } = await supabase
+            .from('purchase_invoices')
+            .select('id, invoice_number, total_amount, used_as_payment')
+            .eq('id', linkedInvoiceId)
+            .single();
+          if (!error && data) {
+            setActivePurchaseInvoice(data);
+          }
+        };
+        fetchPurchaseInvoice();
+      } else {
+        setActivePurchaseInvoice(null);
+      }
+    } else {
+      setActivePurchaseInvoice(null);
+    }
+  }, [open, purchaseInvoice, editMode, editingPayments]);
+
   // ✅ Fix: useRef to avoid infinite loop from editingPayments reference changes
   const editingPaymentsRef = useRef(editingPayments);
   editingPaymentsRef.current = editingPayments;
@@ -150,14 +189,25 @@ export function EnhancedDistributePaymentDialog({
   const rentalUsedAsPayment = rentalGrouped.reduce((s, r) => s + (Number(r.used_as_payment) || 0), 0);
   const rentalAvailableCredit = rentalTotalCost - rentalUsedAsPayment;
   
+  const contractNum = friendRental?.contract_number;
+  const adType = (friendRental as any)?._contractAdType || '';
+  const adTypeSuffix = adType ? ` - ${adType}` : '';
+
   const billboardName = friendRental
     ? (isRentalGrouped
-      ? `عقد ${friendRental.contract_number || ''} (${rentalGrouped.length} لوحات)`
-      : (friendRental.billboards?.Billboard_Name || `لوحة ${friendRental.billboard_id}`))
+      ? `عقد ${contractNum || ''}${adTypeSuffix} (${rentalGrouped.length} لوحات)`
+      : `عقد ${contractNum || ''}${adTypeSuffix} - ${friendRental.billboards?.Billboard_Name || friendRental.billboards?.name || `لوحة ${friendRental.billboard_id}`}`)
     : '';
 
-  const availableCredit = purchaseInvoice 
-    ? purchaseInvoice.total_amount - purchaseInvoice.used_as_payment 
+  const currentDistributionTotalForPurchase = useMemo(() => {
+    if (!editMode || !editingPayments || !activePurchaseInvoice) return 0;
+    return editingPayments
+      .filter(p => p.purchase_invoice_id === activePurchaseInvoice.id)
+      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  }, [editMode, editingPayments, activePurchaseInvoice]);
+
+  const availableCredit = activePurchaseInvoice 
+    ? activePurchaseInvoice.total_amount - (activePurchaseInvoice.used_as_payment - currentDistributionTotalForPurchase)
     : (friendRental ? rentalAvailableCredit : 0);
 
   // تحميل بيانات الموظفين المرتبطة بالدفعة عند التعديل
@@ -1139,6 +1189,12 @@ export function EnhancedDistributePaymentDialog({
       return;
     }
 
+    // التحقق من الحد الأقصى للمقايضة مع فاتورة مشتريات
+    if (activePurchaseInvoice && inputAmountNum > availableCredit + 0.01) {
+      toast.error(`لا يمكن توزيع مبلغ أكبر من الرصيد المتاح في فاتورة المشتريات المرتبطة (${availableCredit.toLocaleString('ar-LY')} د.ل). يرجى تعديل فاتورة المشتريات أولاً.`);
+      return;
+    }
+
     // ✅ التحقق على عناصر العميل فقط (الأقسام الأخرى مستقلة)
     if (hasCustomerItems) {
       if (inputAmountNum <= 0) {
@@ -1535,13 +1591,14 @@ export function EnhancedDistributePaymentDialog({
       }
       
       // تحديث فاتورة المشتريات في حالة المقايضة
-      if (purchaseInvoice) {
+      if (activePurchaseInvoice) {
+        const newUsedAsPayment = activePurchaseInvoice.used_as_payment - currentDistributionTotalForPurchase + totalAllocated;
         const { error: purchaseUpdateError } = await supabase
           .from('purchase_invoices')
           .update({
-            used_as_payment: purchaseInvoice.used_as_payment + totalAllocated
+            used_as_payment: Math.max(0, newUsedAsPayment)
           })
-          .eq('id', purchaseInvoice.id);
+          .eq('id', activePurchaseInvoice.id);
 
         if (purchaseUpdateError) {
           console.error('Error updating purchase invoice:', purchaseUpdateError);
@@ -1901,6 +1958,27 @@ export function EnhancedDistributePaymentDialog({
                         <Wallet className="h-4 w-4 text-primary" />
                         بيانات وتوزيع دفعة العميل
                       </h3>
+
+                      {activePurchaseInvoice && (
+                        <div className="flex flex-col gap-1.5 p-3.5 bg-purple-500/10 border border-purple-500/30 rounded-xl mb-3">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-purple-600 dark:text-purple-400">
+                            <ShoppingCart className="h-4 w-4 shrink-0" />
+                            مربوطة بفاتورة مشتريات (مقايضة)
+                          </div>
+                          <div className="text-[11px] text-muted-foreground space-y-1 mt-1 font-medium text-right" dir="rtl">
+                            <div>رقم الفاتورة: <span className="font-bold text-foreground">#{activePurchaseInvoice.invoice_number}</span></div>
+                            <div>إجمالي قيمة المشتريات: <span className="font-bold text-foreground">{(activePurchaseInvoice.total_amount || 0).toLocaleString('ar-LY')} د.ل</span></div>
+                            {editMode ? (
+                              <>
+                                <div>المستعمل سابقاً في هذا التوزيع: <span className="font-bold text-foreground">{currentDistributionTotalForPurchase.toLocaleString('ar-LY')} د.ل</span></div>
+                                <div>الحد الأقصى المتاح للتوزيع: <span className="font-bold text-emerald-400">{availableCredit.toLocaleString('ar-LY')} د.ل</span></div>
+                              </>
+                            ) : (
+                              <div>الرصيد المتاح للاستعمال: <span className="font-bold text-emerald-400">{availableCredit.toLocaleString('ar-LY')} د.ل</span></div>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                       <PaymentInputSection
                         totalAmount={totalAmount}

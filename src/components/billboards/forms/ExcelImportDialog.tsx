@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import * as XLSX from 'xlsx';
+import { generateMunicipalityCode } from '@/utils/contractUtils';
 import { 
   FileSpreadsheet, 
   Download, 
@@ -191,7 +192,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
 
       // Add missing municipalities
       for (const name of missingValues.municipalities) {
-        const code = name.replace(/\s+/g, '_').toLowerCase();
+        const code = generateMunicipalityCode(name);
         const { error } = await supabase.from('municipalities').insert({ name, code });
         if (!error) {
           setCurrentMunicipalities(prev => [...prev, { name, id: Date.now() }]);

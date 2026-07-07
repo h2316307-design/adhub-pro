@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, Building2, ChevronDown, ChevronUp, Printer, ZoomIn, Calendar, Edit2, Loader2 } from 'lucide-react';
+import { ArrowRightLeft, Building2, ChevronDown, ChevronUp, Printer, ZoomIn, Calendar, Edit2, Loader2, ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 interface FriendRentalItem {
   id: string;
@@ -41,6 +42,7 @@ interface FriendRentalsGroupedSectionProps {
   onUseAsPayment: (rentals: FriendRentalItem[]) => void;
   contracts?: any[];
   onUpdate?: () => void;
+  customerId?: string; // ✅ أضفنا معرف العميل
 }
 
 function generateFriendInvoiceSerial(contractNumber: number): string {
@@ -73,6 +75,7 @@ export function FriendRentalsGroupedSection({
   onUseAsPayment,
   contracts,
   onUpdate,
+  customerId, // ✅
 }: FriendRentalsGroupedSectionProps) {
   const [openGroups, setOpenGroups] = useState<Set<number>>(new Set());
   const [zoomedImage, setZoomedImage] = useState<{ url: string; title: string } | null>(null);
@@ -91,6 +94,38 @@ export function FriendRentalsGroupedSection({
   const [editingRental, setEditingRental] = useState<FriendRentalItem | null>(null);
   const [newStartDate, setNewStartDate] = useState<string>('');
   const [savingDate, setSavingDate] = useState<boolean>(false);
+
+  // سجل دفعات وإيصالات المقايضة
+  const [barterPayments, setBarterPayments] = useState<any[]>([]);
+  const [loadingPayments, setLoadingPayments] = useState(false);
+
+  useEffect(() => {
+    if (!customerId) return;
+    const fetchBarterPayments = async () => {
+      setLoadingPayments(true);
+      try {
+        const { data, error } = await supabase
+          .from('customer_payments')
+          .select(`
+            *,
+            composite_tasks(task_number),
+            sales_invoices(invoice_number),
+            printed_invoices(invoice_number)
+          `)
+          .eq('customer_id', customerId)
+          .eq('method', 'مقايضة')
+          .order('paid_at', { ascending: false });
+        if (!error && data) {
+          setBarterPayments(data);
+        }
+      } catch (err) {
+        console.error('Error fetching barter payments:', err);
+      } finally {
+        setLoadingPayments(false);
+      }
+    };
+    fetchBarterPayments();
+  }, [customerId, friendBillboardRentals]);
 
   // دالة تحليل التاريخ بشكل مستقل عن المنطقة الزمنية لتفادي أخطاء إزاحة الأيام
   const parseDateString = (str: string) => {
@@ -433,6 +468,9 @@ export function FriendRentalsGroupedSection({
       <CardContent className="space-y-4 pt-6">
         {contractGroups.map((group) => {
           const isOpen = openGroups.has(group.contractNumber);
+          const firstStart = group.rentals.reduce((min, r) => !r.start_date ? min : (!min || r.start_date < min ? r.start_date : min), '');
+          const lastEnd = group.rentals.reduce((max, r) => !r.end_date ? max : (!max || r.end_date > max ? r.end_date : max), '');
+
           return (
             <div key={group.contractNumber} className="rounded-xl border border-white/10 bg-slate-900/40 overflow-hidden hover:border-amber-500/20 transition-colors duration-200">
               <div className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center xl:justify-between">
@@ -450,6 +488,11 @@ export function FriendRentalsGroupedSection({
                       {group.contractAdType && (
                         <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-400 font-medium">
                           نوع الإعلان: {group.contractAdType}
+                        </Badge>
+                      )}
+                      {firstStart && lastEnd && (
+                        <Badge variant="outline" className="border-slate-500/30 bg-slate-500/5 text-slate-300 font-normal">
+                          الفترة: من {new Date(firstStart).toLocaleDateString('ar-LY')} إلى {new Date(lastEnd).toLocaleDateString('ar-LY')}
                         </Badge>
                       )}
                     </div>
@@ -832,6 +875,97 @@ export function FriendRentalsGroupedSection({
           </DialogContent>
         </Dialog>
       )}
+
+      {/* سجل المقايضات والدفعات */}
+      <div className="border-t border-white/10 pt-6 mt-6 space-y-4 px-6 pb-6">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            <ArrowRightLeft className="h-5 w-5" />
+          </div>
+          <div>
+            <h3 className="text-lg font-bold text-white">سجل المقايضات والدفعات (الشركات الصديقة)</h3>
+            <p className="text-white/60 text-xs mt-0.5">الدفعات والإيصالات التي تمت عن طريق المقايضة بإيجارات اللوحات</p>
+          </div>
+        </div>
+
+        {loadingPayments ? (
+          <div className="flex justify-center items-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+          </div>
+        ) : barterPayments.length > 0 ? (
+          <div className="overflow-x-auto rounded-xl border border-white/10 bg-slate-900/40">
+            <Table>
+              <TableHeader className="bg-slate-950">
+                <TableRow className="hover:bg-slate-950 border-white/10">
+                  <TableHead className="text-right text-white/80 font-bold">تاريخ الدفعة</TableHead>
+                  <TableHead className="text-right text-white/80 font-bold">المبلغ</TableHead>
+                  <TableHead className="text-right text-white/80 font-bold">بيان الدفعة / اللوحة المستعملة</TableHead>
+                  <TableHead className="text-right text-white/80 font-bold">الارتباط (العقد/الفاتورة المرتبطة)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {barterPayments.map((payment) => {
+                  let linkText = 'رصيد في الحساب العام للزبون';
+                  let linkType = 'credit';
+
+                  if (payment.contract_number) {
+                    linkText = `عقد رقم #${payment.contract_number}`;
+                    linkType = 'contract';
+                  } else if (payment.composite_task_id) {
+                    const taskNum = payment.composite_tasks?.task_number;
+                    linkText = `مهمة مجمعة #${taskNum || '—'}`;
+                    linkType = 'task';
+                  } else if (payment.sales_invoice_id) {
+                    const invNum = payment.sales_invoices?.invoice_number;
+                    linkText = `فاتورة مبيعات #${invNum || '—'}`;
+                    linkType = 'sales';
+                  } else if (payment.printed_invoice_id) {
+                    const invNum = payment.printed_invoices?.invoice_number;
+                    linkText = `فاتورة طباعة #${invNum || '—'}`;
+                    linkType = 'printed';
+                  }
+
+                  return (
+                    <TableRow key={payment.id} className="hover:bg-white/5 border-white/5 text-sm">
+                      <TableCell className="text-white/70">
+                        {payment.paid_at ? new Date(payment.paid_at).toLocaleDateString('ar-LY') : '—'}
+                      </TableCell>
+                      <TableCell className="font-extrabold text-white font-mono">
+                        {payment.amount.toLocaleString('ar-LY')} د.ل
+                      </TableCell>
+                      <TableCell className="text-white/80">
+                        {payment.notes || 'مقايضة إيجار لوحة'}
+                      </TableCell>
+                      <TableCell>
+                        <Badge 
+                          variant="outline" 
+                          className={
+                            linkType === 'contract' 
+                              ? 'border-blue-500/30 bg-blue-500/5 text-blue-400 font-bold'
+                              : linkType === 'task'
+                              ? 'border-amber-500/30 bg-amber-500/5 text-amber-400 font-bold'
+                              : linkType === 'sales'
+                              ? 'border-purple-500/30 bg-purple-500/5 text-purple-400 font-bold'
+                              : linkType === 'printed'
+                              ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400 font-bold'
+                              : 'border-slate-500/30 bg-slate-500/5 text-slate-400 font-normal'
+                          }
+                        >
+                          {linkText}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-white/40 border border-dashed border-white/10 rounded-xl bg-slate-900/10">
+            لا توجد دفعات أو إيصالات مقايضة مسجلة لهذا العميل
+          </div>
+        )}
+      </div>
     </Card>
   );
 }

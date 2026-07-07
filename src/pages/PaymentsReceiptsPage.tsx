@@ -826,6 +826,55 @@ export default function PaymentsReceiptsPage() {
                                   >
                                     {group.customerName}
                                   </Button>
+                                  {group.method === 'مقايضة' && (() => {
+                                     const firstDist = group.distributions[0];
+                                     const hasPurchaseInvoice = group.distributions.some(d => d.purchase_invoice_id || d.notes?.includes('مشتريات') || d.notes?.includes('PUR-'));
+                                     
+                                     let friendContractNum: number | null = null;
+                                     let friendAdType: string | null = null;
+
+                                     const notesText = firstDist?.notes || '';
+                                     const barterMatch = notesText.match(/عقد\s*(\d+)/);
+                                     if (barterMatch) {
+                                       friendContractNum = Number(barterMatch[1]);
+                                     } else {
+                                       const billboardMatch = notesText.match(/إيجار لوحة[:\s]+([^\n،,•]+)/);
+                                       const billboardNameInNotes = billboardMatch ? billboardMatch[1].trim() : '';
+                                       if (billboardNameInNotes) {
+                                         const matchedRental = friendRentals.find(r => 
+                                           r.billboards?.Billboard_Name?.trim() === billboardNameInNotes ||
+                                           r.billboard_id === billboardNameInNotes
+                                         );
+                                         if (matchedRental) {
+                                           friendContractNum = matchedRental.contract_number;
+                                         }
+                                       }
+                                     }
+                                     if (friendContractNum) {
+                                       friendAdType = friendContractsMap[friendContractNum] || null;
+                                     }
+
+                                     let purchaseNotes = '';
+                                     if (hasPurchaseInvoice) {
+                                       const linkedPurId = group.distributions.find(d => d.purchase_invoice_id)?.purchase_invoice_id;
+                                       const purMatch = notesText.match(/PUR-\d+/);
+                                       const purCode = purMatch ? purMatch[0] : null;
+                                       purchaseNotes = (linkedPurId ? purchaseInvoiceNotes[linkedPurId] : null) || (purCode ? purchaseInvoiceNotes[purCode] : null) || '';
+                                     }
+
+                                     const adTypeSuffix = friendAdType ? ` - ${friendAdType}` : '';
+                                     
+                                     const barterLabel = hasPurchaseInvoice 
+                                       ? `مقايضة - ${purchaseNotes || 'فاتورة مشتريات'}`
+                                       : (friendContractNum 
+                                         ? `مقايضة - إيجار عقد #${friendContractNum}${adTypeSuffix}` 
+                                         : 'مقايضة - إيجار لوحة');
+                                     return (
+                                       <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300 text-[10px] gap-1 px-1.5 py-0 font-bold">
+                                         {barterLabel}
+                                       </Badge>
+                                     );
+                                   })()}
                                   {hasCustody && (
                                     <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] gap-1 px-1.5 py-0 font-bold">
                                       <Wallet className="h-3 w-3" /> عهدة
@@ -932,15 +981,68 @@ export default function PaymentsReceiptsPage() {
                           </td>
                           <td className="px-4 py-3.5">
                             <div className="flex flex-col">
-                              <Button 
-                                variant="link" 
-                                className="p-0 h-auto font-bold text-sm text-foreground hover:text-primary justify-start" 
-                                onClick={() => handleViewCustomer(payment.customer_id, payment.customer_name)}
-                              >
-                                {payment.customer_name}
-                              </Button>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Button 
+                                  variant="link" 
+                                  className="p-0 h-auto font-bold text-sm text-foreground hover:text-primary justify-start" 
+                                  onClick={() => handleViewCustomer(payment.customer_id, payment.customer_name)}
+                                >
+                                  {payment.customer_name}
+                                </Button>
+                                {payment.method === 'مقايضة' && (() => {
+                                  const hasPurchaseInvoice = !!payment.purchase_invoice_id || payment.notes?.includes('مشتريات') || payment.notes?.includes('PUR-');
+                                  
+                                  let friendContractNum: number | null = null;
+                                  let friendAdType: string | null = null;
+
+                                  const notesText = payment.notes || '';
+                                  const barterMatch = notesText.match(/عقد\s*(\d+)/);
+                                  if (barterMatch) {
+                                    friendContractNum = Number(barterMatch[1]);
+                                  } else {
+                                    const billboardMatch = notesText.match(/إيجار لوحة[:\s]+([^\n،,•]+)/);
+                                    const billboardNameInNotes = billboardMatch ? billboardMatch[1].trim() : '';
+                                    if (billboardNameInNotes) {
+                                      const matchedRental = friendRentals.find(r => 
+                                        r.billboards?.Billboard_Name?.trim() === billboardNameInNotes ||
+                                        r.billboard_id === billboardNameInNotes
+                                      );
+                                      if (matchedRental) {
+                                        friendContractNum = matchedRental.contract_number;
+                                      }
+                                    }
+                                  }
+                                  if (friendContractNum) {
+                                    friendAdType = friendContractsMap[friendContractNum] || null;
+                                  }
+
+                                  let purchaseNotes = '';
+                                  if (hasPurchaseInvoice) {
+                                    const linkedPurId = payment.purchase_invoice_id;
+                                    const purMatch = notesText.match(/PUR-\d+/);
+                                    const purCode = purMatch ? purMatch[0] : null;
+                                    purchaseNotes = (linkedPurId ? purchaseInvoiceNotes[linkedPurId] : null) || (purCode ? purchaseInvoiceNotes[purCode] : null) || '';
+                                  }
+
+                                  const adTypeSuffix = friendAdType ? ` - ${friendAdType}` : '';
+                                  
+                                  const barterLabel = hasPurchaseInvoice 
+                                    ? `مقايضة - ${purchaseNotes || 'فاتورة مشتريات'}`
+                                    : (friendContractNum 
+                                      ? `مقايضة - إيجار عقد #${friendContractNum}${adTypeSuffix}` 
+                                      : 'مقايضة - إيجار لوحة');
+                                  return (
+                                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300 text-[10px] gap-1 px-1.5 py-0 font-bold">
+                                      {barterLabel}
+                                    </Badge>
+                                  );
+                                })()}
+                              </div>
                               {payment.company_name && (
                                 <span className="text-[11px] text-muted-foreground mt-0.5">{payment.company_name}</span>
+                              )}
+                              {payment.notes && (
+                                <span className="text-[11px] text-muted-foreground/80 mt-0.5 font-medium">{payment.notes}</span>
                               )}
                             </div>
                           </td>

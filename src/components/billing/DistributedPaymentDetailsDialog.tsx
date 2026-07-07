@@ -78,6 +78,11 @@ export function DistributedPaymentDetailsDialog({
   const [intermediaryPrintOpen, setIntermediaryPrintOpen] = useState(false);
   const [custodyDialogOpen, setCustodyDialogOpen] = useState(false);
   const [custodyInfo, setCustodyInfo] = useState<CustodyInfo[]>([]);
+
+  const remainderPayment = groupedPayments.find(
+    p => p.entry_type === 'payment' && !p.contract_number && !p.sales_invoice_id && !p.printed_invoice_id && !p.composite_task_id
+  );
+  const surplusAmount = remainderPayment ? Number(remainderPayment.amount) || 0 : 0;
   const [employeeAdvances, setEmployeeAdvances] = useState<EmployeeAdvanceInfo[]>([]);
   const [withdrawals, setWithdrawals] = useState<WithdrawalInfo[]>([]);
   const [loadingCustody, setLoadingCustody] = useState(false);
@@ -331,6 +336,18 @@ export function DistributedPaymentDetailsDialog({
                 {totalAmount.toLocaleString('ar-LY')} د.ل
               </div>
             </div>
+
+            {surplusAmount > 0 && (
+              <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 flex items-start gap-3">
+                <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+                <div className="space-y-1 text-right" dir="rtl">
+                  <h5 className="font-bold text-sm">تنبيه: يوجد فائض متبقي للزبون يحتاج إلى توزيع</h5>
+                  <p className="text-xs leading-relaxed text-amber-700/90 dark:text-amber-400/90">
+                    هناك مبلغ قدره <span className="font-bold">{surplusAmount.toLocaleString('ar-LY')} د.ل</span> لم يتم توزيعه بعد على أي عقد أو فاتورة، وهو مسجل حالياً كـ "رصيد في الحساب العام". يمكنك تعديل الدفعة الموزعة لتوزيعه.
+                  </p>
+                </div>
+              </div>
+            )}
             
             {/* عرض العمولات إذا كانت موجودة */}
             {firstPayment.collected_via_intermediary && (
@@ -1127,6 +1144,13 @@ export function DistributedPaymentDetailsDialog({
                         reference: 'فاتورة طباعة',
                         description: payment.notes || 'طباعة',
                         icon: '🖨️'
+                      };
+                    }
+                    if (payment.entry_type === 'payment' && !payment.contract_number) {
+                      return {
+                        reference: 'رصيد فائض (غير موزع)',
+                        description: payment.notes || 'رصيد في الحساب العام للزبون',
+                        icon: '💰'
                       };
                     }
                     // Default: عقد

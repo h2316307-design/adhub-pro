@@ -27,6 +27,7 @@ interface PaymentSectionProps {
   totalRemainingDebt?: number; // ✅ المتبقي من إجمالي الديون (اختياري للتوافق مع المكونات القديمة)
   contracts?: Array<{ Contract_Number: number | string; 'Ad Type'?: string; ad_type?: string }>;
   onRefresh?: () => void | Promise<void>;
+  customerId?: string; // ✅
 }
 
 const getPaymentTypeStyle = (entryType: string): string => {
@@ -153,6 +154,7 @@ export function PaymentSection({
   totalRemainingDebt = 0,
   contracts = [],
   onRefresh,
+  customerId, // ✅
 }: PaymentSectionProps) {
   const [expandedDistributions, setExpandedDistributions] = useState<Set<string>>(new Set());
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -162,6 +164,81 @@ export function PaymentSection({
   const [paymentsWithWithdrawal, setPaymentsWithWithdrawal] = useState<Set<string>>(new Set());
   const [withdrawalEmployeeNames, setWithdrawalEmployeeNames] = useState<Record<string, string>>({});
   const [compositeTaskNumbers, setCompositeTaskNumbers] = useState<Record<string, number>>({});
+  
+  // ✅ حالة إيجارات لوحات الأصدقاء وفواتير المشتريات لتعبئة شارات المقايضة بالبيانات الصحيحة
+  const [friendRentals, setFriendRentals] = useState<any[]>([]);
+  const [friendContractsMap, setFriendContractsMap] = useState<Record<number, string>>({});
+  const [purchaseInvoiceNotes, setPurchaseInvoiceNotes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    if (!customerId) return;
+    const loadFriendRentalsAndContracts = async () => {
+      try {
+        // 1. جلب الشركة الصديقة المرتبطة بالزبون أولاً
+        const { data: customerData } = await supabase
+          .from('customers')
+          .select('linked_friend_company_id')
+          .eq('id', customerId)
+          .maybeSingle();
+
+        const friendCompanyId = customerData?.linked_friend_company_id;
+        if (friendCompanyId) {
+          // 2. جلب إيجارات اللوحات لهذه الشركة
+          const { data: rentals } = await supabase
+            .from('friend_billboard_rentals')
+            .select(`
+              contract_number,
+              billboard_id,
+              billboards (
+                Billboard_Name
+              )
+            `)
+            .eq('friend_company_id', friendCompanyId);
+          
+          if (rentals) {
+            setFriendRentals(rentals);
+            const contractNums = [...new Set(rentals.map(r => r.contract_number).filter(Boolean))];
+            if (contractNums.length > 0) {
+              const { data: contractsData } = await supabase
+                .from('Contract')
+                .select('Contract_Number, ad_type, "Ad Type"')
+                .in('Contract_Number', contractNums);
+              if (contractsData) {
+                const map: Record<number, string> = {};
+                contractsData.forEach((c: any) => {
+                  const type = c["Ad Type"] || c.ad_type || "";
+                  if (type) map[c.Contract_Number] = type;
+                });
+                setFriendContractsMap(map);
+              }
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error loading friend rentals and contracts:', error);
+      }
+
+      try {
+        // جلب فواتير المشتريات وملاحظاتها للزبون الحالي
+        const { data: purchaseData } = await supabase
+          .from('purchase_invoices')
+          .select('id, invoice_number, notes')
+          .eq('customer_id', customerId);
+        if (purchaseData) {
+          const map: Record<string, string> = {};
+          purchaseData.forEach((inv: any) => {
+            const label = inv.notes || inv.invoice_number || "";
+            if (inv.id) map[inv.id] = label;
+            if (inv.invoice_number) map[inv.invoice_number] = label;
+          });
+          setPurchaseInvoiceNotes(map);
+        }
+      } catch (error) {
+        console.error('Error loading purchase invoices notes:', error);
+      }
+    };
+    loadFriendRentalsAndContracts();
+  }, [customerId]);
   // ربط دفعة غير مرتبطة برقم عقد
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkPaymentId, setLinkPaymentId] = useState<string | null>(null);
@@ -430,7 +507,7 @@ export function PaymentSection({
     <>
       {/* قسم الديون السابقة */}
       {previousDebts.length > 0 && (
-        <div className="container mx-auto px-6 mb-6">
+        <div className="max-w-[96%] mx-auto px-6 mb-6">
           <Card className="border-0 shadow-lg overflow-hidden border-r-4 border-r-rose-500">
             <CardHeader className="bg-gradient-to-r from-rose-500/10 to-transparent py-4">
               <CardTitle className="flex items-center justify-between">
@@ -512,7 +589,7 @@ export function PaymentSection({
         </div>
       )}
 
-      <div className="container mx-auto px-6 mb-6">
+      <div className="max-w-[96%] mx-auto px-6 mb-6">
         <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl">
           <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
             <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
@@ -582,6 +659,52 @@ export function PaymentSection({
                     const isInCustody = paymentsInCustody.has(distributionId);
                     const hasWithdrawal = paymentsWithWithdrawal.has(distributionId);
 
+                    const hasPurchaseInvoice = distributionPayments.some(p => p.purchase_invoice_id || p.notes?.includes('مشتريات') || p.notes?.includes('PUR-'));
+                    const isBarter = distributionPayments.some(p => p.method === 'مقايضة');
+                    
+                    let friendContractNum: number | null = null;
+                    let friendAdType: string | null = null;
+
+                    const notesText = firstPayment?.notes || '';
+                    const barterMatch = notesText.match(/عقد\s*(\d+)/);
+                    if (barterMatch) {
+                      friendContractNum = Number(barterMatch[1]);
+                    } else {
+                      const billboardMatch = notesText.match(/إيجار لوحة[:\s]+([^\n،,•]+)/);
+                      const billboardNameInNotes = billboardMatch ? billboardMatch[1].trim() : '';
+                      if (billboardNameInNotes) {
+                        const matchedRental = friendRentals.find(r => 
+                          r.billboards?.Billboard_Name?.trim() === billboardNameInNotes ||
+                          r.billboard_id === billboardNameInNotes
+                        );
+                        if (matchedRental) {
+                          friendContractNum = matchedRental.contract_number;
+                        }
+                      }
+                    }
+                    if (friendContractNum) {
+                      const linkedContract = contracts.find(c => Number(c.Contract_Number) === friendContractNum);
+                      friendAdType = linkedContract 
+                        ? (linkedContract['Ad Type'] || linkedContract.ad_type || null)
+                        : (friendContractsMap[friendContractNum] || null);
+                    }
+
+                    let purchaseNotes = '';
+                    if (hasPurchaseInvoice) {
+                      const linkedPurId = distributionPayments.find(p => p.purchase_invoice_id)?.purchase_invoice_id;
+                      const purMatch = notesText.match(/PUR-\d+/);
+                      const purCode = purMatch ? purMatch[0] : null;
+                      purchaseNotes = (linkedPurId ? purchaseInvoiceNotes[linkedPurId] : null) || (purCode ? purchaseInvoiceNotes[purCode] : null) || '';
+                    }
+
+                    const adTypeSuffix = friendAdType ? ` - ${friendAdType}` : '';
+                    
+                    const barterLabel = hasPurchaseInvoice 
+                      ? `مقايضة - ${purchaseNotes || 'فاتورة مشتريات'}`
+                      : (friendContractNum 
+                        ? `مقايضة - إيجار لوحة عقد #${friendContractNum}${adTypeSuffix}` 
+                        : 'مقايضة - إيجار لوحة');
+
                     return (
                       <React.Fragment key={distributionId}>
                         <TableRow
@@ -614,6 +737,12 @@ export function PaymentSection({
                                   );
                                 })}
                               </div>
+                              {isBarter && (
+                                <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-400 dark:bg-purple-950/40 dark:text-purple-400 gap-1 font-semibold text-xs">
+                                  <Link2 className="h-3 w-3" />
+                                  {barterLabel}
+                                </Badge>
+                              )}
                               {isInCustody && (
                                 <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-400 gap-1">
                                   <Wallet className="h-3 w-3" />
@@ -675,7 +804,7 @@ export function PaymentSection({
                           <TableCell>
                             {firstPayment.paid_at ? new Date(firstPayment.paid_at).toLocaleDateString('ar-LY') : '—'}
                           </TableCell>
-                          <TableCell>دفعة على عقود متعددة</TableCell>
+                          <TableCell>{firstPayment.notes || 'دفعة على عقود متعددة'}</TableCell>
                           <TableCell>
                             <div className="expenses-actions-cell">
                               <Button
