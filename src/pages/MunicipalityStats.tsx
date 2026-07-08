@@ -69,7 +69,7 @@ const MunicipalityStats = () => {
       setLoading(true);
       try {
         const [bbRes, contractRes, muniRes, historyRes] = await Promise.all([
-          supabase.from('billboards').select('ID, Billboard_Name, Municipality, Contract_Number, Status, Size, Level, maintenance_status, maintenance_type, Image_URL, Nearest_Landmark, Ad_Type, Customer_Name, design_face_a, design_face_b, Faces_Count'),
+          supabase.from('billboards').select('ID, Billboard_Name, Municipality, Contract_Number, Status, Size, Level, maintenance_status, maintenance_type, Image_URL, Nearest_Landmark, Ad_Type, Customer_Name, design_face_a, design_face_b, Faces_Count, friend_company_id, is_visible_in_available'),
           supabase.from('Contract').select('Contract_Number, "Contract Date", "End Date", "Total Rent", Total, Discount, installation_cost, print_cost, billboard_prices, "Customer Name", "Ad Type", include_installation_in_price, include_print_in_billboard_price'),
           supabase.from('municipalities').select('name, sort_order').order('sort_order'),
           supabase.from('billboard_history').select('billboard_id, contract_number, design_face_a_url, design_face_b_url, installed_image_face_a_url, installed_image_face_b_url'),
@@ -133,13 +133,24 @@ const MunicipalityStats = () => {
     return map;
   }, [filteredContracts]);
 
-  // Non-removed billboards
+  // Non-removed, visible, own, and non-debus/societ billboards
   const activeBillboards = useMemo(() => {
     return billboards.filter((b: any) => {
+      // Exclude friendly
+      if (b.friend_company_id) return false;
+      // Exclude hidden
+      if (b.is_visible_in_available === false) return false;
+      // Exclude debus/societ size
+      const size = String(b.Size || '').trim().toLowerCase();
+      const isSociet = size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+      if (isSociet) return false;
+      
+      // Exclude removed
       const s = String(b.Status ?? '').trim();
       const ms = String(b.maintenance_status ?? '').trim();
       const mt = String(b.maintenance_type ?? '').trim();
-      return !(s === 'إزالة' || s === 'ازالة' || s.toLowerCase() === 'removed' || ms === 'removed' || mt === 'تمت الإزالة');
+      const isRemoved = s === 'إزالة' || s === 'ازالة' || s.toLowerCase() === 'removed' || ms === 'removed' || mt === 'تمت الإزالة' || ms === 'تمت الإزالة' || ms === 'تحتاج ازالة لغرض التطوير' || ms === 'لم يتم التركيب' || mt === 'تحتاج إزالة' || mt === 'لم يتم التركيب';
+      return !isRemoved;
     });
   }, [billboards]);
 

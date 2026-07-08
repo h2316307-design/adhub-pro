@@ -152,15 +152,19 @@
     font-size: 80%;
     height: 100%;
     overflow: hidden;
+    direction: rtl !important;
+    text-align: right;
   }
 
   html {
     font-size: 80%;
     height: 100%;
+    direction: rtl !important;
   }
 
   #root {
     height: 100%;
+    direction: rtl !important;
   }
 
   /* ✅ استخدام خط Manrope للأرقام والمقاسات */
@@ -796,4 +800,15 @@ input[type="number"] {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: thin;
   scrollbar-color: hsl(var(--border)) transparent;
+}
+
+/* Force RTL direction globally on all major layouts */
+#root, 
+.h-screen, 
+.bg-background, 
+main, 
+.min-h-screen,
+.space-y-6,
+.space-y-8 {
+  direction: rtl !important;
 }

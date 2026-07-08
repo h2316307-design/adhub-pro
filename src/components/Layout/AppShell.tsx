@@ -19,7 +19,7 @@ export function AppShell({ children }: AppShellProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="h-screen overflow-hidden bg-background flex relative" dir="rtl">
+    <div className="h-screen overflow-hidden bg-background flex flex-row relative" dir="rtl">
       {/* Ambient luxury backdrop */}
       <div className="pointer-events-none fixed inset-0 z-0 bg-[image:var(--gradient-radial-glow)]" />
       <div

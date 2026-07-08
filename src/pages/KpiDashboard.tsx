@@ -57,16 +57,44 @@ const KpiDashboard = () => {
 
       // Parallel queries
       const [billboardsRes, contractsRes, paymentsRes, costCentersRes] = await Promise.all([
-        supabase.from('billboards').select('ID, Status, Size, Level, Price, City'),
-        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Total Rent", Discount, installation_cost, "Contract Date", "End Date", customer_id, billboards_count').gte('End Date', startDate),
+        supabase.from('billboards').select('ID, Status, Size, Level, Price, City, friend_company_id, maintenance_status, maintenance_type, is_visible_in_available, Contract_Number, Rent_End_Date'),
+        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Total Rent", Discount, installation_cost, "Contract Date", "End Date", customer_id, billboards_count, billboard_prices').gte('End Date', startDate),
         supabase.from('customer_payments').select('amount, entry_type, paid_at, customer_name').gte('paid_at', startDate).lte('paid_at', endDate),
         supabase.from('billboard_cost_centers').select('billboard_id, cost_type, amount, frequency'),
       ]);
 
-      const billboards = billboardsRes.data || [];
+      const rawBillboards = billboardsRes.data || [];
       const contracts = contractsRes.data || [];
       const payments = paymentsRes.data || [];
       const costCenters = costCentersRes.data || [];
+
+      // Helpers to exclude friendly, removed, hidden, and societ/debus size
+      const isDeBusSociet = (b: any): boolean => {
+        const size = String(b.Size || '').trim().toLowerCase();
+        return size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+      };
+
+      const isBillboardRemoved = (b: any): boolean => {
+        const status = (b.Status || '').toString().trim().toLowerCase();
+        const maintenanceStatus = String(b.maintenance_status || '').trim().toLowerCase();
+        const maintenanceType = String(b.maintenance_type || '').trim();
+        
+        return (
+          status === 'إزالة' || status === 'ازالة' || status === 'removed' ||
+          maintenanceStatus === 'removed' || maintenanceStatus === 'تمت الإزالة' ||
+          maintenanceStatus === 'تحتاج ازالة لغرض التطوير' || maintenanceStatus === 'لم يتم التركيب' ||
+          maintenanceType === 'تمت الإزالة' || maintenanceType === 'تحتاج إزالة' || maintenanceType === 'لم يتم التركيب'
+        );
+      };
+
+      // Filtered billboards for stats
+      const billboards = rawBillboards.filter(b => {
+        if (b.friend_company_id) return false;
+        if (isBillboardRemoved(b)) return false;
+        if (b.is_visible_in_available === false) return false;
+        if (isDeBusSociet(b)) return false;
+        return true;
+      });
 
       // Billboard stats
       const totalBillboards = billboards.length;
@@ -74,12 +102,67 @@ const KpiDashboard = () => {
       const availableBillboards = billboards.filter(b => b.Status === 'متاح').length;
       const maintenanceBillboards = billboards.filter(b => b.Status === 'صيانة').length;
 
+      // Map of billboard ID -> billboard object for easy lookup
+      const billboardMap: Record<number, any> = {};
+      rawBillboards.forEach(b => { billboardMap[Number(b.ID)] = b; });
+
+      // Helper to calculate contract revenue adjusted for exclusions
+      const getAdjustedContractRevenue = (c: any) => {
+        let contractRevenue = 0;
+        let distributed = false;
+
+        if (c.billboard_prices) {
+          try {
+            const prices = typeof c.billboard_prices === 'string' ? JSON.parse(c.billboard_prices) : c.billboard_prices;
+            if (Array.isArray(prices) && prices.length > 0) {
+              prices.forEach((p: any) => {
+                const bbId = Number(p.billboardId);
+                const bbPrice = Number(p.contractPrice || p.priceAfterDiscount || p.totalBillboardPrice || 0);
+                const bb = billboardMap[bbId];
+                if (bb) {
+                  const size = String(bb.Size || '').trim().toLowerCase();
+                  const isSociet = size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+                  const isRemoved = isBillboardRemoved(bb);
+                  const isHidden = bb.is_visible_in_available === false;
+                  
+                  if (!isRemoved && !isHidden && !isSociet && !bb.friend_company_id) {
+                    contractRevenue += bbPrice;
+                    distributed = true;
+                  }
+                }
+              });
+            }
+          } catch (e) {}
+        }
+
+        if (!distributed) {
+          const associatedBillboards = rawBillboards.filter(b => Number(b.Contract_Number) === Number(c.Contract_Number));
+          if (associatedBillboards.length > 0) {
+            const share = (Number(c.Total) || Number(c['Total Rent']) || 0) / associatedBillboards.length;
+            associatedBillboards.forEach(bb => {
+              const size = String(bb.Size || '').trim().toLowerCase();
+              const isSociet = size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+              const isRemoved = isBillboardRemoved(bb);
+              const isHidden = bb.is_visible_in_available === false;
+
+              if (!isRemoved && !isHidden && !isSociet && !bb.friend_company_id) {
+                contractRevenue += share;
+              }
+            });
+          } else {
+            contractRevenue = Number(c.Total) || Number(c['Total Rent']) || 0;
+          }
+        }
+        return contractRevenue;
+      };
+
       // Revenue
-      const grossRevenue = contracts.reduce((sum, c) => sum + (c.Total || c['Total Rent'] || 0), 0);
+      const grossRevenue = contracts.reduce((sum, c) => sum + getAdjustedContractRevenue(c), 0);
 
       // Costs from cost centers
-      const totalCostCenterCosts = costCenters.reduce((sum, cc) => {
-        const multiplier = cc.frequency === 'yearly' ? 1 : cc.frequency === 'quarterly' ? 4 : cc.frequency === 'monthly' ? 12 : 1;
+      const activeBillboardIds = new Set(billboards.map(b => b.ID));
+      const filteredCostCenters = costCenters.filter(cc => activeBillboardIds.has(cc.billboard_id));
+      const totalCostCenterCosts = filteredCostCenters.reduce((sum, cc) => {
         return sum + (cc.amount || 0);
       }, 0);
 
@@ -110,7 +193,7 @@ const KpiDashboard = () => {
           const contractDate = c['Contract Date'];
           return contractDate && contractDate.startsWith(monthStr);
         });
-        const monthRevenue = monthContracts.reduce((s, c) => s + (c.Total || 0), 0);
+        const monthRevenue = monthContracts.reduce((s, c) => s + getAdjustedContractRevenue(c), 0);
         const monthCost = monthContracts.reduce((s, c) => s + (c.installation_cost || 0), 0);
         
         revenueByMonth.push({

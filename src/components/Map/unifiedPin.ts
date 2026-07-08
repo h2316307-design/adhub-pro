@@ -102,6 +102,8 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
 
   const uid = `u${Math.abs((Number(billboard?.ID || billboard?.id || 0) * 31 + label.length) | 0)}`;
 
+  const isFaded = billboard?.isFaded || billboard?.faded;
+
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}">
     <defs>
       <linearGradient id="b${uid}" x1="0" y1="0" x2="0" y2="1">
@@ -116,27 +118,29 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
         <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="rgba(0,0,0,0.45)"/>
       </filter>
     </defs>
-    <ellipse cx="${cx}" cy="${tipY + 0.5}" rx="${r * 0.55}" ry="2.2" fill="rgba(0,0,0,0.3)"/>
-    ${showTopBadge ? `
-      <g>
-        <rect x="${cx - 28}" y="0" width="56" height="14" rx="7" fill="#0a0a14" stroke="#d6ac40" stroke-width="1"/>
-        <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="8.5" font-weight="900" fill="#f4c25a">${displayTopBadge}</text>
-      </g>` : ''}
-    <g filter="url(#s${uid})" opacity="${isHidden ? '0.7' : '1'}">
-      <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#f4c25a' : 'white'}" stroke-width="${isSelected ? 2.2 : 1.6}"/>
-      <path d="${path}" fill="url(#g${uid})"/>
-      <!-- Inner core (white fill with thick status-colored stroke border ring) -->
-      <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${statusColor}" stroke-width="2.8"/>
-      <text x="${cx}" y="${headCy + 3.4}" text-anchor="middle" font-family="'Manrope','Tajawal',sans-serif" font-size="${innerR > 11 ? 9.5 : 8.5}" font-weight="900" fill="#0f172a" letter-spacing="0.1">${label}</text>
+    <g opacity="${isFaded ? '0.35' : '1'}">
+      <ellipse cx="${cx}" cy="${tipY + 0.5}" rx="${r * 0.55}" ry="2.2" fill="rgba(0,0,0,0.3)"/>
+      ${showTopBadge ? `
+        <g>
+          <rect x="${cx - 28}" y="0" width="56" height="14" rx="7" fill="#0a0a14" stroke="#d6ac40" stroke-width="1"/>
+          <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="8.5" font-weight="900" fill="#f4c25a">${displayTopBadge}</text>
+        </g>` : ''}
+      <g filter="url(#s${uid})" opacity="${isHidden ? '0.7' : '1'}">
+        <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#f4c25a' : 'white'}" stroke-width="${isSelected ? 2.2 : 1.6}"/>
+        <path d="${path}" fill="url(#g${uid})"/>
+        <!-- Inner core (white fill with thick status-colored stroke border ring) -->
+        <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${statusColor}" stroke-width="2.8"/>
+        <text x="${cx}" y="${headCy + 3.4}" text-anchor="middle" font-family="'Manrope','Tajawal',sans-serif" font-size="${innerR > 11 ? 9.5 : 8.5}" font-weight="900" fill="#0f172a" letter-spacing="0.1">${label}</text>
+      </g>
+      ${status.label === 'متاحة' || status.label === 'متاح' ? `
+        <circle cx="${cx}" cy="${headCy}" r="${r}" fill="none" stroke="rgba(${glow},0.5)" stroke-width="1.5">
+          <animate attributeName="r" values="${r};${r + 6};${r}" dur="2s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
+        </circle>` : ''}
+      ${isSelected ? `
+        <circle cx="${cx + r - 4}" cy="${topPad + 4}" r="6" fill="#10b981" stroke="#fff" stroke-width="1.2"/>
+        <path d="M ${cx + r - 7} ${topPad + 4} l 2 2 l 4 -4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
     </g>
-    ${status.label === 'متاحة' || status.label === 'متاح' ? `
-      <circle cx="${cx}" cy="${headCy}" r="${r}" fill="none" stroke="rgba(${glow},0.5)" stroke-width="1.5">
-        <animate attributeName="r" values="${r};${r + 6};${r}" dur="2s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
-      </circle>` : ''}
-    ${isSelected ? `
-      <circle cx="${cx + r - 4}" cy="${topPad + 4}" r="6" fill="#10b981" stroke="#fff" stroke-width="1.2"/>
-      <path d="M ${cx + r - 7} ${topPad + 4} l 2 2 l 4 -4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
   </svg>`;
 
   return {

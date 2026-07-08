@@ -10,6 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { MapPin, FileSpreadsheet } from 'lucide-react';
 
 export interface ColumnMapping {
+  billboard_id: string;
   size: string;
   faces_count: string;
   location_text: string;
@@ -31,6 +32,7 @@ interface ExcelColumnMappingDialogProps {
 }
 
 const FIELD_LABELS: Record<string, string> = {
+  billboard_id: 'معرف اللوحة / الكود',
   size: 'المقاس',
   faces_count: 'عدد الأوجه',
   location_text: 'موقع اللوحة',
@@ -53,6 +55,7 @@ function autoDetect(headers: string[]): Partial<ColumnMapping> {
     return '';
   };
 
+  mapping.billboard_id = find(['id', 'معرف', 'معرّف', 'كود', 'code', 'رقم اللوحة']);
   mapping.size = find(['مقاس', 'المقاس', 'size']);
   mapping.faces_count = find(['أوجه', 'الاوجه', 'وجه', 'faces']);
   mapping.location_text = find(['موقع اللوحة', 'الموقع', 'موقع', 'location']);
@@ -89,6 +92,7 @@ export const ExcelColumnMappingDialog: React.FC<ExcelColumnMappingDialogProps> =
   const detected = useMemo(() => autoDetect(headers), [headers]);
 
   const [mapping, setMapping] = useState<ColumnMapping>({
+    billboard_id: detected.billboard_id || '',
     size: detected.size || '',
     faces_count: detected.faces_count || '',
     location_text: detected.location_text || '',
@@ -104,6 +108,7 @@ export const ExcelColumnMappingDialog: React.FC<ExcelColumnMappingDialogProps> =
   useMemo(() => {
     const d = autoDetect(headers);
     setMapping({
+      billboard_id: d.billboard_id || '',
       size: d.size || '',
       faces_count: d.faces_count || '',
       location_text: d.location_text || '',
@@ -187,6 +192,7 @@ export const ExcelColumnMappingDialog: React.FC<ExcelColumnMappingDialogProps> =
           {/* Field mapping */}
           <div className="space-y-3 border rounded-lg p-4 bg-muted/30">
             <Label className="text-sm font-semibold">ربط الأعمدة بالحقول</Label>
+            {renderSelect('billboard_id', 'معرف اللوحة / الكود (للمطابقة مع النظام)')}
             {renderSelect('billboard_name', 'اسم اللوحة')}
             {renderSelect('size', 'المقاس')}
             {renderSelect('faces_count', 'عدد الأوجه')}

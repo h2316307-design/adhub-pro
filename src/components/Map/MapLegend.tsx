@@ -49,6 +49,10 @@ const MapLegend = memo(function MapLegend({
     });
   }, [billboards]);
 
+  const hasComparison = useMemo(() => {
+    return billboards.some(b => (b as any).isComparison || (b as any).isFaded);
+  }, [billboards]);
+
   // النسخة المطوية - أنيقة للغاية وبشكل دائري زجاجي للهواتف
   if (isCollapsed) {
     return (
@@ -68,6 +72,12 @@ const MapLegend = memo(function MapLegend({
               }}
             />
           ))}
+          {hasComparison && (
+            <div 
+              className="w-2 h-2 rounded-full bg-slate-400 opacity-40 animate-pulse" 
+              title="لوحات المقارنة متوفرة"
+            />
+          )}
         </div>
         <ChevronUp className="w-3.5 h-3.5 text-amber-500" />
       </button>
@@ -116,6 +126,15 @@ const MapLegend = memo(function MapLegend({
               </button>
             );
           })}
+          {hasComparison && (
+            <div className="w-full flex items-center justify-end gap-2 text-right opacity-60 pt-1 border-t border-white/5">
+              <span className="text-[8.5px] text-slate-300 font-bold">لوحة مقارنة</span>
+              <div 
+                className="w-2 h-2 rounded-full relative flex-shrink-0 bg-slate-400 border border-slate-300 opacity-40" 
+                title="لوحة مقارنة خارج القائمة المنظمة"
+              />
+            </div>
+          )}
         </div>
       </div>
 

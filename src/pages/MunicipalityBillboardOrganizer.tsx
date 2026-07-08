@@ -35,6 +35,7 @@ import { ExcelColumnMappingDialog, ColumnMapping } from '@/components/municipali
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
 import { X as XIcon } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
+import { calculateDistance } from '@/hooks/useMapNavigation';
 // Google Maps is loaded live in the print window - no static generator needed
 
 interface CollectionItem {
@@ -216,6 +217,7 @@ export default function MunicipalityBillboardOrganizer() {
   const [printLoading, setPrintLoading] = useState(false);
   const { settings: customSettings, updateStatusOverride, saveSettings, refetch } = usePrintCustomization('municipality');
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
+  const [comparisonMunicipality, setComparisonMunicipality] = useState<string>('none');
 
   const totalAreaMeters = useMemo(() => {
     const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
@@ -800,6 +802,16 @@ export default function MunicipalityBillboardOrganizer() {
     toast.success(`تمت إضافة "${item.billboard_name}"`);
   };
 
+  const handleAddComparisonToList = (bb: any) => {
+    const realId = bb.ID > 1000000 ? bb.ID - 1000000 : bb.ID;
+    const original = allBillboards.find(ob => ob.ID === realId);
+    if (original) {
+      quickAddBillboard(original);
+    } else {
+      toast.error('لم يتم العثور على بيانات اللوحة الأصلية');
+    }
+  };
+
 
   // Import existing billboards
   const importSelectedBillboards = () => {
@@ -1138,52 +1150,117 @@ export default function MunicipalityBillboardOrganizer() {
     const startSeq = currentCollection.items.length + 1;
 
     const newItems: CollectionItem[] = rows.map((row, idx) => {
-      let lat: number | null = null;
-      let lng: number | null = null;
-
-      if (mapping.coordsMode === 'combined' && mapping.coords_combined) {
-        const coordsStr = String(row[mapping.coords_combined] || '');
-        const parts = coordsStr.split(',').map((c: string) => parseFloat(c.trim()));
-        if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-          lat = parts[0];
-          lng = parts[1];
-        }
-      } else if (mapping.coordsMode === 'separate') {
-        if (mapping.coords_lat) {
-          const v = parseFloat(String(row[mapping.coords_lat]));
-          if (!isNaN(v)) lat = v;
-        }
-        if (mapping.coords_lng) {
-          const v = parseFloat(String(row[mapping.coords_lng]));
-          if (!isNaN(v)) lng = v;
-        }
+      // 1. Try to find if billboard exists in the database
+      let matchedBillboard: any = null;
+      
+      if (mapping.billboard_id && row[mapping.billboard_id]) {
+        const rawIdOrCode = String(row[mapping.billboard_id]).trim().toLowerCase();
+        
+        // Find matching billboard in database list (match by ID or Name/Code)
+        matchedBillboard = allBillboards.find(b => {
+          const dbIdStr = String(b.ID).toLowerCase();
+          const dbCodeStr = String(b.Code || '').toLowerCase();
+          const dbNameStr = String(b.Billboard_Name || '').toLowerCase();
+          return dbIdStr === rawIdOrCode || dbCodeStr === rawIdOrCode || dbNameStr === rawIdOrCode;
+        });
       }
 
-      const facesRaw = mapping.faces_count ? String(row[mapping.faces_count] || 'وجهين') : 'وجهين';
-      const faces = facesRaw.includes('وجه') && !facesRaw.includes('وجهين') ? 'وجه' : 'وجهين';
+      // If matched, we reuse coordinates, size, faces, image, design from DB
+      let lat: number | null = null;
+      let lng: number | null = null;
+      let size = '';
+      let faces: 'وجه' | 'وجهين' = 'وجهين';
+      let locationText = '';
+      let nearestLandmark = '';
+      let billboardName = '';
+      let designFaceA: string | null = null;
+      let designFaceB: string | null = null;
+      let imageUrl: string | null = null;
+      let dbMunicipality = '';
+      let itemType: 'existing' | 'new' = 'new';
+      let billboardId: number | null = null;
 
-      const locationText = mapping.location_text ? String(row[mapping.location_text] || '') : '';
-      const billboardName = mapping.billboard_name 
-        ? String(row[mapping.billboard_name] || locationText || `لوحة ${startSeq + idx}`)
-        : (locationText || `لوحة ${startSeq + idx}`);
+      if (matchedBillboard) {
+        itemType = 'existing';
+        billboardId = matchedBillboard.ID;
+        size = matchedBillboard.Size || '';
+        faces = matchedBillboard.Faces_Count === 1 ? 'وجه' : 'وجهين';
+        locationText = formatLocationText(matchedBillboard, cityName, matchedBillboard.Municipality);
+        nearestLandmark = matchedBillboard.Nearest_Landmark || '';
+        billboardName = matchedBillboard.Billboard_Name || `لوحة ${matchedBillboard.ID}`;
+        designFaceA = matchedBillboard.design_face_a || null;
+        designFaceB = matchedBillboard.design_face_b || null;
+        imageUrl = matchedBillboard.Image_URL || null;
+        dbMunicipality = matchedBillboard.Municipality || '';
+        
+        if (matchedBillboard.GPS_Coordinates) {
+          const parts = matchedBillboard.GPS_Coordinates.split(',').map((c: string) => parseFloat(c.trim()));
+          if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            lat = parts[0];
+            lng = parts[1];
+          }
+        }
+      } else {
+        // Fallback to row fields if not matched
+        if (mapping.coordsMode === 'combined' && mapping.coords_combined) {
+          const coordsStr = String(row[mapping.coords_combined] || '');
+          const parts = coordsStr.split(',').map((c: string) => parseFloat(c.trim()));
+          if (parts.length >= 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
+            lat = parts[0];
+            lng = parts[1];
+          }
+        } else if (mapping.coordsMode === 'separate') {
+          if (mapping.coords_lat) {
+            const v = parseFloat(String(row[mapping.coords_lat]));
+            if (!isNaN(v)) lat = v;
+          }
+          if (mapping.coords_lng) {
+            const v = parseFloat(String(row[mapping.coords_lng]));
+            if (!isNaN(v)) lng = v;
+          }
+        }
+
+        const facesRaw = mapping.faces_count ? String(row[mapping.faces_count] || 'وجهين') : 'وجهين';
+        faces = facesRaw.includes('وجه') && !facesRaw.includes('وجهين') ? 'وجه' : 'وجهين';
+        size = mapping.size ? String(row[mapping.size] || '') : '';
+        locationText = mapping.location_text ? String(row[mapping.location_text] || '') : '';
+        nearestLandmark = mapping.nearest_landmark ? String(row[mapping.nearest_landmark] || '') : '';
+        billboardName = mapping.billboard_name 
+          ? String(row[mapping.billboard_name] || locationText || `لوحة ${startSeq + idx}`)
+          : (locationText || `لوحة ${startSeq + idx}`);
+      }
 
       return {
         sequence_number: startSeq + idx,
-        size: mapping.size ? String(row[mapping.size] || '') : '',
+        billboard_id: billboardId,
+        size,
         faces_count: faces,
         location_text: locationText,
-        nearest_landmark: mapping.nearest_landmark ? String(row[mapping.nearest_landmark] || '') : '',
+        nearest_landmark: nearestLandmark,
         latitude: lat,
         longitude: lng,
-        item_type: 'new' as const,
+        item_type: itemType,
         billboard_name: billboardName,
+        design_face_a: designFaceA,
+        design_face_b: designFaceB,
+        image_url: imageUrl,
+        municipality: dbMunicipality,
+        status: matchedBillboard ? ((matchedBillboard.Status === 'إزالة' || matchedBillboard.Status === 'ازالة') ? 'إزالة' : 'تم التركيب') : 'تم التركيب'
       };
     });
 
-    setExcelPendingItems(newItems);
-    setExcelMunicipalityName('');
-    setShowColumnMappingDialog(false);
-    setShowExcelMunicipalityDialog(true);
+    const activeMunicipality = municipalityName || currentCollection.municipality_name;
+    if (activeMunicipality) {
+      setCurrentCollection(prev => ({ ...prev, items: [...prev.items, ...newItems] }));
+      setShowColumnMappingDialog(false);
+      setExcelPendingItems([]);
+      toast.success(`تم استيراد ${newItems.length} لوحة وإضافتها للبلدية الحالية "${activeMunicipality}"`);
+    } else {
+      setExcelPendingItems(newItems);
+      setExcelMunicipalityName('');
+      setShowColumnMappingDialog(false);
+      setShowExcelMunicipalityDialog(true);
+    }
   };
 
   const confirmExcelImport = () => {
@@ -1314,22 +1391,70 @@ export default function MunicipalityBillboardOrganizer() {
   const mapBillboards: Billboard[] = useMemo(() => {
     const list = currentCollection.items
       .filter(item => item.latitude && item.longitude)
-      .map(item => ({
-        ID: item.sequence_number,
-        Billboard_Name: `${item.sequence_number}`,
-        Size: item.size,
-        Faces_Count: item.faces_count === 'وجه' ? 1 : 2,
-        GPS_Coordinates: `${item.latitude},${item.longitude}`,
-        Status: item.item_type === 'existing' ? 'محجوز' : 'متاح',
-        City: item.location_text,
-        Municipality: currentCollection.municipality_name || '',
-        District: '',
-        Nearest_Landmark: item.nearest_landmark,
-        Image_URL: item.image_url || '',
-        design_face_a: item.design_face_a || '',
-        design_face_b: item.design_face_b || '',
-        sequence_number: item.sequence_number,
-      } as any));
+      .map(item => {
+        // Find matching database billboard by ID or spatially within 30m
+        let dbB = allBillboards.find(ob => ob.ID === item.billboard_id);
+        
+        if (!dbB && item.latitude && item.longitude) {
+          // Look for nearest database billboard in the same municipality (if selected) or generally within 30m
+          const municipalityFilter = comparisonMunicipality && comparisonMunicipality !== 'none' ? comparisonMunicipality : null;
+          let candidates = allBillboards;
+          if (municipalityFilter) {
+            candidates = candidates.filter(ob => ob.Municipality === municipalityFilter);
+          }
+          
+          let nearest: any = null;
+          let minDist = Infinity;
+          
+          candidates.forEach(ob => {
+            if (!ob.GPS_Coordinates) return;
+            const obCoords = ob.GPS_Coordinates.split(',').map((c: string) => parseFloat(c.trim()));
+            if (obCoords.length < 2 || isNaN(obCoords[0]) || isNaN(obCoords[1])) return;
+            
+            const dist = calculateDistance(item.latitude!, item.longitude!, obCoords[0], obCoords[1]);
+            if (dist < minDist) {
+              minDist = dist;
+              nearest = ob;
+            }
+          });
+          
+          if (minDist <= 30) {
+            dbB = nearest;
+          }
+        }
+
+        return {
+          ID: item.sequence_number,
+          Billboard_Name: item.billboard_name || `${item.sequence_number}`,
+          Size: item.size,
+          Faces_Count: item.faces_count === 'وجه' ? 1 : 2,
+          GPS_Coordinates: `${item.latitude},${item.longitude}`,
+          Status: item.item_type === 'existing' ? 'محجوز' : 'متاح',
+          City: item.location_text,
+          Municipality: currentCollection.municipality_name || '',
+          District: '',
+          Nearest_Landmark: item.nearest_landmark,
+          Image_URL: item.image_url || '',
+          design_face_a: item.design_face_a || '',
+          design_face_b: item.design_face_b || '',
+          sequence_number: item.sequence_number,
+          comparisonMatch: dbB ? {
+            ID: dbB.ID,
+            Billboard_Name: dbB.Billboard_Name,
+            Size: dbB.Size,
+            Faces_Count: dbB.Faces_Count,
+            GPS_Coordinates: dbB.GPS_Coordinates,
+            Status: dbB.Status,
+            City: dbB.City,
+            Municipality: dbB.Municipality,
+            District: dbB.District,
+            Nearest_Landmark: dbB.Nearest_Landmark,
+            Image_URL: dbB.Image_URL,
+            design_face_a: dbB.design_face_a,
+            design_face_b: dbB.design_face_b,
+          } : null
+        } as any;
+      });
 
     if (showAddDialog && newItem.latitude && newItem.longitude) {
       list.push({
@@ -1349,8 +1474,57 @@ export default function MunicipalityBillboardOrganizer() {
       } as any);
     }
 
+    // Add comparison billboards if selected
+    if (comparisonMunicipality && comparisonMunicipality !== 'none') {
+      const compList = allBillboards.filter(b => b.Municipality === comparisonMunicipality);
+      const existingIds = new Set(currentCollection.items.map(it => it.billboard_id).filter(Boolean));
+      
+      compList.forEach(b => {
+        if (!b.GPS_Coordinates) return;
+        const coords = b.GPS_Coordinates.split(',').map((c: string) => parseFloat(c.trim()));
+        if (coords.length < 2 || isNaN(coords[0]) || isNaN(coords[1])) return;
+        
+        // 1. Skip if already in collection by ID
+        if (existingIds.has(b.ID)) return;
+        
+        // 2. Skip if spatially matched within 30 meters of any collection item
+        const latB = coords[0];
+        const lngB = coords[1];
+        const hasSpatialMatch = currentCollection.items.some(item => {
+          if (item.latitude === null || item.longitude === null) return false;
+          const dist = calculateDistance(latB, lngB, item.latitude, item.longitude);
+          return dist <= 30; // 30 meters threshold
+        });
+
+        if (hasSpatialMatch) return;
+        
+        list.push({
+          ID: b.ID + 1000000, // Safe offset to prevent ID collisions on map
+          Billboard_Name: b.Billboard_Name || `لوحة ${b.ID}`,
+          Size: b.Size || '',
+          Faces_Count: b.Faces_Count || 2,
+          GPS_Coordinates: b.GPS_Coordinates,
+          Status: b.Status || 'متاح',
+          City: b.City || '',
+          Municipality: b.Municipality || '',
+          District: b.District || '',
+          Nearest_Landmark: b.Nearest_Landmark || '',
+          Image_URL: b.Image_URL || '',
+          design_face_a: b.design_face_a || '',
+          design_face_b: b.design_face_b || '',
+          isFaded: true,
+          isComparison: true
+        } as any);
+      });
+    }
+
     return list;
-  }, [currentCollection.items, showAddDialog, newItem]);
+  }, [currentCollection.items, showAddDialog, newItem, allBillboards, comparisonMunicipality]);
+
+  const comparisonDifferenceCount = useMemo(() => {
+    if (!comparisonMunicipality || comparisonMunicipality === 'none') return 0;
+    return mapBillboards.filter(b => (b as any).isComparison).length;
+  }, [mapBillboards, comparisonMunicipality]);
 
   // إشعار توجيهي في حال كانت الخريطة فارغة
   useEffect(() => {
@@ -2757,13 +2931,39 @@ export default function MunicipalityBillboardOrganizer() {
         {/* Map */}
         <Card className="border border-border/15 bg-gradient-to-br from-card/50 to-card/25 backdrop-blur-md rounded-2xl shadow-sm overflow-hidden relative">
           <CardHeader className="pb-3 pt-5 border-b border-border/10">
-            <CardTitle className="text-base font-bold flex items-center gap-2">
-              <MapPin className="h-4.5 w-4.5 text-indigo-500" />
-              <span>خريطة توزع اللوحات</span>
-              <span className="text-xs text-muted-foreground font-normal bg-muted px-2 py-0.5 rounded-md">
-                {mapBillboards.length} معرّفة الإحداثيات
-              </span>
-            </CardTitle>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <MapPin className="h-4.5 w-4.5 text-indigo-500" />
+                <span>خريطة توزع اللوحات</span>
+                <span className="text-xs text-muted-foreground font-normal bg-muted px-2 py-0.5 rounded-md">
+                  {mapBillboards.length} معرّفة الإحداثيات
+                </span>
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                {comparisonMunicipality && comparisonMunicipality !== 'none' && (
+                  <Badge variant="outline" className="bg-rose-500/10 text-rose-400 border-rose-500/30 animate-pulse text-[10px] font-bold px-2 py-0.5 whitespace-nowrap">
+                    فروقات غير متوفرة: {comparisonDifferenceCount} لوحة
+                  </Badge>
+                )}
+                <Label htmlFor="compare-municipality" className="text-xs font-bold text-muted-foreground whitespace-nowrap">
+                  مقارنة مع بلدية:
+                </Label>
+                <Select
+                  value={comparisonMunicipality}
+                  onValueChange={setComparisonMunicipality}
+                >
+                  <SelectTrigger id="compare-municipality" className="h-8 rounded-lg border-border/20 bg-background/50 text-xs w-48 font-bold">
+                    <SelectValue placeholder="اختر بلدية للمقارنة" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
+                    <SelectItem value="none" className="font-bold text-xs">بدون مقارنة</SelectItem>
+                    {municipalities.map(m => (
+                      <SelectItem key={m} value={m} className="font-bold text-xs">{m}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="p-0">
             <div style={{ height: '600px' }} className="rounded-b-[20px] overflow-hidden relative">
@@ -2784,6 +2984,7 @@ export default function MunicipalityBillboardOrganizer() {
                 onRemoveFromList={(b) => {
                   removeItem(b.ID);
                 }}
+                onAddToList={handleAddComparisonToList}
                 onSelectionChange={setSelectedItems}
                 externalSelectedIds={selectedItems}
                 showStatsOverlay={true}

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { 
-  Calendar, FileText, Receipt, Monitor, Clock, Plus, Eye, Package, ChevronDown, ChevronUp, 
+  Calendar, FileText, Receipt, Monitor, Clock, Plus, Eye, Package, ChevronDown, ChevronUp, Maximize2, 
   TrendingUp, Users, BarChart3, MapPin, Image as ImageIcon, AlertTriangle, Layers, Building2, 
   RefreshCw, ArrowUpRight, Wallet, Target, Sparkles, Zap, Bell, Activity, TrendingDown,
   CircleDollarSign, ArrowRight, CheckCircle2, XCircle, Timer, CalendarDays,
@@ -28,7 +28,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { PageHero } from '@/components/shared/PageHero';
 import { StatBadge } from '@/components/shared/StatBadge';
-import { isBillboardAvailable } from '@/utils/contractUtils';
+import { isBillboardAvailable, isBillboardBlockedFromAvailability } from '@/utils/contractUtils';
 import { useSendWhatsApp } from '@/hooks/useSendWhatsApp';
 
 // Tabs UI component
@@ -275,7 +275,7 @@ export default function Dashboard() {
 
       const { data: allBillboardsData } = await supabase
         .from('billboards')
-        .select('ID, Size, Municipality, Status, friend_company_id');
+        .select('ID, Size, Municipality, Status, friend_company_id, Contract_Number, Rent_End_Date, maintenance_status, maintenance_type, is_visible_in_available');
 
       if (allBillboardsData) {
         setAllBillboards(allBillboardsData);
@@ -522,6 +522,7 @@ export default function Dashboard() {
               dueDate: inst.dueDate || inst.due_date,
               daysLeft: differenceInDays(dueDate, today),
               installmentIndex: inst.originalIdx + 1,
+              adType: contract['Ad Type'] || 'غير محدد',
             });
           }
         });
@@ -586,6 +587,37 @@ export default function Dashboard() {
   const friendBillboards = useMemo(() => {
     return allBillboards.filter(b => !!b.friend_company_id);
   }, [allBillboards]);
+
+  const isDeBusSociet = useCallback((b: any): boolean => {
+    const size = String(b.Size || '').trim().toLowerCase();
+    return size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+  }, []);
+
+  const isBillboardRemoved = useCallback((b: any): boolean => {
+    const status = (b.Status || '').toString().trim().toLowerCase();
+    const maintenanceStatus = String(b.maintenance_status || '').trim().toLowerCase();
+    const maintenanceType = String(b.maintenance_type || '').trim();
+    
+    return (
+      status === 'إزالة' || status === 'ازالة' || status === 'removed' ||
+      maintenanceStatus === 'removed' || maintenanceStatus === 'تمت الإزالة' ||
+      maintenanceStatus === 'تحتاج ازالة لغرض التطوير' || maintenanceStatus === 'لم يتم التركيب' ||
+      maintenanceType === 'تمت الإزالة' || maintenanceType === 'تحتاج إزالة' || maintenanceType === 'لم يتم التركيب'
+    );
+  }, []);
+
+  // Filtered own billboards for statistics (excludes friendly, removed, hidden, and societ/debus size)
+  const statsBillboards = useMemo(() => {
+    return ownBillboards.filter(b => {
+      // Exclude removed
+      if (isBillboardRemoved(b)) return false;
+      // Exclude hidden
+      if (b.is_visible_in_available === false) return false;
+      // Exclude debus/societ size
+      if (isDeBusSociet(b)) return false;
+      return true;
+    });
+  }, [ownBillboards, isBillboardRemoved, isDeBusSociet]);
 
   const getDaysLeft = (endDate: string) => {
     try {
@@ -839,13 +871,13 @@ export default function Dashboard() {
   }, [chartPeriod]);
 
   const availabilityStats = useMemo(() => {
-    const total = ownBillboards.length;
-    const available = ownBillboards.filter(b => isBillboardAvailable(b)).length;
+    const total = statsBillboards.length;
+    const available = statsBillboards.filter(b => isBillboardAvailable(b)).length;
     const rented = total - available;
     const occupancyRate = total > 0 ? Math.round((rented / total) * 100) : 0;
     const availabilityRate = total > 0 ? Math.round((available / total) * 100) : 0;
     return { total, available, rented, occupancyRate, availabilityRate };
-  }, [ownBillboards]);
+  }, [statsBillboards]);
 
   const financeMetrics = useMemo(() => {
     const expectedRevenue = legacyContracts.reduce((acc, c) => acc + (Number(c['Total']) || 0), 0);
@@ -887,17 +919,17 @@ export default function Dashboard() {
   }, [installationTasks, removalTasks, overdueTasks]);
 
   const billboardOccupancyData = useMemo(() => {
-    const available = ownBillboards.filter(b => isBillboardAvailable(b)).length;
-    const rented = ownBillboards.length - available;
+    const available = statsBillboards.filter(b => isBillboardAvailable(b)).length;
+    const rented = statsBillboards.length - available;
     return [
       { name: 'لوحات متاحة', value: available, color: '#22c55e' },
-      { name: 'لوحات مؤجرة', value: rented, color: '#ef4444' }
+      { name: 'لوحات مؤجرة', value: rented, color: '#2D6BFF' }
     ];
-  }, [ownBillboards]);
+  }, [statsBillboards]);
 
   const municipalityDistributionData = useMemo(() => {
     const muniCounts: { [key: string]: number } = {};
-    ownBillboards.forEach(b => {
+    statsBillboards.forEach(b => {
       if (b.Municipality) {
         muniCounts[b.Municipality] = (muniCounts[b.Municipality] || 0) + 1;
       }
@@ -906,7 +938,7 @@ export default function Dashboard() {
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 5);
-  }, [ownBillboards]);
+  }, [statsBillboards]);
 
   // --- 📉 Sparklines Mock data calculations for KPI Cards ---
   const salesSparklineData = useMemo(() => {
@@ -926,10 +958,146 @@ export default function Dashboard() {
   }, [payments]);
 
   const billboardsSparklineData = useMemo(() => {
-    const total = allBillboards.length;
+    const total = statsBillboards.length;
     const data = [total - 15, total - 8, total - 3, total];
     return data.map((val, idx) => ({ id: idx, value: val }));
-  }, [allBillboards]);
+  }, [statsBillboards]);
+
+  const advancedStats = useMemo(() => {
+    const municipalityRevenue: Record<string, number> = {};
+    const sizeRevenue: Record<string, number> = {};
+    
+    const municipalityCounts: Record<string, { total: number; rented: number; available: number }> = {};
+    const sizeCounts: Record<string, { total: number; rented: number; available: number }> = {};
+    const customerRevenue: Record<string, { revenue: number; totalContracts: number; activeContracts: number }> = {};
+
+    // 1. Initialize counts from statsBillboards (excludes friendly, removed, hidden, and societ/debus size)
+    statsBillboards.forEach(b => {
+      const muni = b.Municipality || 'غير محدد';
+      const size = b.Size || 'غير محدد';
+      const isAvailable = isBillboardAvailable(b);
+
+      if (!municipalityCounts[muni]) {
+        municipalityCounts[muni] = { total: 0, rented: 0, available: 0 };
+      }
+      municipalityCounts[muni].total += 1;
+      if (isAvailable) {
+        municipalityCounts[muni].available += 1;
+      } else {
+        municipalityCounts[muni].rented += 1;
+      }
+
+      if (!sizeCounts[size]) {
+        sizeCounts[size] = { total: 0, rented: 0, available: 0 };
+      }
+      sizeCounts[size].total += 1;
+      if (isAvailable) {
+        sizeCounts[size].available += 1;
+      } else {
+        sizeCounts[size].rented += 1;
+      }
+    });
+
+    // 2. Map of billboard ID -> billboard object for easy lookup
+    const billboardMap: Record<number, any> = {};
+    allBillboards.forEach(b => { billboardMap[Number(b.ID)] = b; });
+
+    // Helper to check if contract is active
+    const isContractActiveLocal = (endDateStr: string | null) => {
+      if (!endDateStr) return true; // Assume active if no end date
+      try {
+        const end = new Date(endDateStr);
+        const today = new Date();
+        end.setHours(23, 59, 59, 999);
+        today.setHours(0, 0, 0, 0);
+        return end >= today;
+      } catch {
+        return false;
+      }
+    };
+
+    // 3. Process contracts to distribute revenue and count customers
+    legacyContracts.forEach(c => {
+      const totalRevenue = Number(c.Total) || 0;
+      const totalRent = Number(c['Total Rent']) || 0;
+      const customerName = c['Customer Name'] || 'عميل غير معروف';
+      const isActive = isContractActiveLocal(c['End Date']);
+
+      // Customer stats
+      if (!customerRevenue[customerName]) {
+        customerRevenue[customerName] = { revenue: 0, totalContracts: 0, activeContracts: 0 };
+      }
+      customerRevenue[customerName].revenue += totalRevenue;
+      customerRevenue[customerName].totalContracts += 1;
+      if (isActive) {
+        customerRevenue[customerName].activeContracts += 1;
+      }
+
+      // Distribute revenue to municipalities and sizes
+      let distributed = false;
+      if (c.billboard_prices) {
+        try {
+          const prices = typeof c.billboard_prices === 'string' ? JSON.parse(c.billboard_prices) : c.billboard_prices;
+          if (Array.isArray(prices) && prices.length > 0) {
+            prices.forEach((p: any) => {
+              const bbId = Number(p.billboardId);
+              const bbPrice = Number(p.contractPrice || p.priceAfterDiscount || p.totalBillboardPrice || 0);
+              const bb = billboardMap[bbId];
+              
+              if (bb) {
+                // Check if bb is a stats billboard
+                const size = String(bb.Size || '').trim().toLowerCase();
+                const isSociet = size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+                const isRemoved = isBillboardRemoved(bb);
+                const isHidden = bb.is_visible_in_available === false;
+                
+                if (!isRemoved && !isHidden && !isSociet && !bb.friend_company_id) {
+                  const muni = bb.Municipality || 'غير محدد';
+                  const bbSize = bb.Size || 'غير محدد';
+
+                  municipalityRevenue[muni] = (municipalityRevenue[muni] || 0) + bbPrice;
+                  sizeRevenue[bbSize] = (sizeRevenue[bbSize] || 0) + bbPrice;
+                  distributed = true;
+                }
+              }
+            });
+          }
+        } catch (e) {
+          console.warn('Error parsing billboard prices in advancedStats:', e);
+        }
+      }
+
+      // Fallback: split contract's Total Rent equally
+      if (!distributed && c.Contract_Number) {
+        const associatedBillboards = allBillboards.filter(b => Number(b.Contract_Number) === Number(c.Contract_Number));
+        if (associatedBillboards.length > 0) {
+          const share = totalRent / associatedBillboards.length;
+          associatedBillboards.forEach(bb => {
+            const size = String(bb.Size || '').trim().toLowerCase();
+            const isSociet = size === 'سوسيت' || size === '2.5x4' || size === '2.5x4 ' || size.includes('سوسيت') || size.includes('دي باس') || size.includes('دي باص') || size.includes('debus') || size.includes('de-bus');
+            const isRemoved = isBillboardRemoved(bb);
+            const isHidden = bb.is_visible_in_available === false;
+
+            if (!isRemoved && !isHidden && !isSociet && !bb.friend_company_id) {
+              const muni = bb.Municipality || 'غير محدد';
+              const bbSize = bb.Size || 'غير محدد';
+
+              municipalityRevenue[muni] = (municipalityRevenue[muni] || 0) + share;
+              sizeRevenue[bbSize] = (sizeRevenue[bbSize] || 0) + share;
+            }
+          });
+        }
+      }
+    });
+
+    return {
+      municipalityRevenue,
+      sizeRevenue,
+      municipalityCounts,
+      sizeCounts,
+      customerRevenue
+    };
+  }, [statsBillboards, allBillboards, legacyContracts, isBillboardRemoved, isDeBusSociet]);
 
   // --- 🔍 Tasks Tab search filtering ---
   const filteredInstallTasks = useMemo(() => {
@@ -1041,7 +1209,7 @@ return removalTasks.filter(t => {
           <StatBadge label="العقود" value={legacyContracts.length} variant="primary" icon={<FileText className="h-3.5 w-3.5" />} />
           <StatBadge label="نشط" value={activeContracts} variant="success" />
           <StatBadge label="منتهية" value={recentlyEndedContracts.length} variant="danger" />
-          <StatBadge label="اللوحات" value={allBillboards.length} variant="default" icon={<Layers className="h-3.5 w-3.5" />} />
+          <StatBadge label="اللوحات" value={statsBillboards.length} variant="default" icon={<Layers className="h-3.5 w-3.5" />} />
           <StatBadge label="التحصيلات" value={`${totalPaymentsAmount.toLocaleString('ar-LY')} د.ل`} variant="success" icon={<CircleDollarSign className="h-3.5 w-3.5" />} />
         </div>
       </motion.div>
@@ -1078,6 +1246,13 @@ return removalTasks.filter(t => {
           >
             <Monitor className="h-4 w-4 shrink-0" />
             <span>تحليلات اللوحات</span>
+          </TabsTrigger>
+          <TabsTrigger 
+            value="advanced-stats" 
+            className="gap-2 px-6 py-3 rounded-xl text-xs md:text-sm font-bold transition-all data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-[0_4px_20px_rgba(218,165,32,0.35)]"
+          >
+            <BarChart3 className="h-4 w-4 shrink-0" />
+            <span>إحصائيات تفصيلية</span>
           </TabsTrigger>
         </TabsList>
 
@@ -1121,8 +1296,8 @@ return removalTasks.filter(t => {
               />
               <StatCard
                 title="إجمالي شبكة اللوحات"
-                value={allBillboards.length}
-                subtitle={`${ownBillboards.length} لوحة مخصصة مملوكة للشركة`}
+                value={statsBillboards.length}
+                subtitle={`${statsBillboards.length} لوحة نشطة (بدون الصديقة، المزالة، المخفية، والسوسيت)`}
                 icon={<Layers className="h-5 w-5" />}
                 color="purple"
                 sparklineData={billboardsSparklineData}
@@ -1495,7 +1670,7 @@ return removalTasks.filter(t => {
                         >
                           <div className="flex items-center justify-between min-w-0">
                             <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/admin/contracts/view/${contract.contract_number}`)}>
-                              <Badge variant="outline" className="font-mono font-numbers text-[9.5px] shrink-0 border-rose-500/20 text-rose-600 bg-rose-500/5 rounded-full font-bold px-2 py-0.5">#{contract.contract_number}</Badge>
+                              <Badge variant="outline" className="font-mono font-numbers text-[9.5px] shrink-0 border-rose-500/20 text-rose-600 bg-rose-500/5 rounded-full font-bold px-2 py-0.5">#{contract.contract_number} - {contract.ad_type}</Badge>
                               <div className="min-w-0 space-y-0.5">
                                 <p className="text-xs font-bold truncate text-foreground">{contract.customer_name}</p>
                                 <p className="text-[10px] text-muted-foreground truncate">{contract.ad_type}</p>
@@ -1589,7 +1764,7 @@ return removalTasks.filter(t => {
                           >
                             <div className="flex items-center justify-between min-w-0">
                               <div className="flex items-center gap-3 min-w-0 flex-1 cursor-pointer" onClick={() => navigate(`/admin/contracts/view/${contract.contract_number}`)}>
-                                <Badge variant="outline" className="font-mono font-numbers text-[9.5px] shrink-0 border-amber-500/20 text-amber-600 bg-amber-500/5 rounded-full font-bold px-2 py-0.5">#{contract.contract_number}</Badge>
+                                <Badge variant="outline" className="font-mono font-numbers text-[9.5px] shrink-0 border-amber-500/20 text-amber-600 bg-amber-500/5 rounded-full font-bold px-2 py-0.5">#{contract.contract_number} - {contract.ad_type}</Badge>
                                 <div className="min-w-0 space-y-0.5">
                                   <p className="text-xs font-bold truncate text-foreground">{contract.customer_name}</p>
                                   <p className="text-[10px] text-muted-foreground truncate">{contract.ad_type}</p>
@@ -1683,7 +1858,7 @@ return removalTasks.filter(t => {
                           <div className="min-w-0 space-y-0.5">
                             <div className="flex items-center gap-1.5 flex-wrap">
                               <p className="font-bold text-xs text-foreground truncate">{inst.customerName}</p>
-                              <Badge variant="outline" className="font-numbers text-[8px] py-0 border-emerald-500/20 text-emerald-600 bg-emerald-500/5">عقد #{inst.contractNumber}</Badge>
+                              <Badge variant="outline" className="font-numbers text-[8px] py-0 border-emerald-500/20 text-emerald-600 bg-emerald-500/5">عقد #{inst.contractNumber} - {inst.adType}</Badge>
                             </div>
                             <p className="text-[10px] text-muted-foreground font-numbers">قسط رقم {inst.installmentIndex} | مستحق: {formatDateSafe(inst.dueDate)}</p>
                           </div>
@@ -1764,7 +1939,7 @@ return removalTasks.filter(t => {
                           <div className="min-w-0 space-y-0.5">
                             <div className="flex items-center gap-2">
                               <p className="font-bold text-xs truncate text-foreground">{contract.customer_name}</p>
-                              <Badge className="font-mono font-numbers text-[8px] bg-primary/5 text-primary border border-primary/20 px-1 py-0 rounded">#{contract.contract_number}</Badge>
+                              <Badge className="font-mono font-numbers text-[8px] bg-primary/5 text-primary border border-primary/20 px-1 py-0 rounded">#{contract.contract_number} - {contract.ad_type}</Badge>
                             </div>
                             <p className="text-[10px] text-muted-foreground font-numbers">{formatDateSafe(contract.created_at)} | {contract.ad_type}</p>
                           </div>
@@ -2011,7 +2186,7 @@ return removalTasks.filter(t => {
                               </div>
                               <div className="min-w-0 space-y-0.5">
                                 <p className="font-bold text-xs truncate text-foreground">{task.customer_name}</p>
-                                <p className="text-[10px] text-muted-foreground font-numbers">عقد رقم #{task.contract_id}</p>
+                                <p className="text-[10px] text-muted-foreground font-numbers">عقد رقم #{task.contract_id} {task.ad_type && ` - ${task.ad_type}`}</p>
                               </div>
                             </div>
                             <Badge className={cn("text-[9px] font-bold shrink-0 py-0.5 px-2 rounded-full",
@@ -2080,7 +2255,7 @@ return removalTasks.filter(t => {
                               </div>
                               <div className="min-w-0 space-y-0.5">
                                 <p className="font-bold text-xs truncate text-foreground">{task.customer_name}</p>
-                                <p className="text-[10px] text-muted-foreground font-numbers">عقد رقم #{task.contract_id}</p>
+                                <p className="text-[10px] text-muted-foreground font-numbers">عقد رقم #{task.contract_id} {task.ad_type && ` - ${task.ad_type}`}</p>
                               </div>
                             </div>
                             <Badge className={cn("text-[9px] font-bold shrink-0 py-0.5 px-2 rounded-full",
@@ -2328,7 +2503,7 @@ return removalTasks.filter(t => {
                               </h4>
                               {bb.Nearest_Landmark && (
                                 <p className="text-[10px] text-muted-foreground truncate flex items-center gap-1.5 font-semibold">
-                                  <span>📍</span> {bb.Nearest_Landmark}
+                                  <MapPin className="h-3 w-3 text-muted-foreground shrink-0" /> {bb.Nearest_Landmark}
                                 </p>
                               )}
                             </div>
@@ -2356,6 +2531,189 @@ return removalTasks.filter(t => {
                 </CardContent>
               </Card>
             )}
+
+          </motion.div>
+        </TabsContent>
+
+        {/* ---------------- 5. Advanced Stats Tab Content ---------------- */}
+        <TabsContent value="advanced-stats" className="outline-none focus:outline-none space-y-6">
+          <motion.div
+            initial={{ opacity: 0, y: 15 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4 }}
+            className="space-y-6"
+          >
+            {/* Header info */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/20 pb-4">
+              <div>
+                <h2 className="text-base font-bold text-foreground">التحليلات التفصيلية لدخل البلديات والمقاسات والعملاء</h2>
+                <p className="text-xs text-muted-foreground">عرض مالي وتشغيلي مفصل بناءً على اللوحات النشطة وعقود العملاء الجارية (مستثنى منها اللوحات الصديقة، المزالة، المخفية، والسوسيت/دي باص)</p>
+              </div>
+            </div>
+
+            {/* Sizes & Municipalities Side-by-side Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              
+              {/* Municipalities stats card */}
+              <Card className="border-border/40 bg-card/30 backdrop-blur-xl rounded-2xl shadow-md overflow-hidden flex flex-col">
+                <CardHeader className="py-4 px-5 border-b border-border/20">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-primary" />
+                    <span>تحليل البلديات والدخل</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 flex-1 overflow-auto max-h-[400px]">
+                  <div className="space-y-4">
+                    {Object.keys(advancedStats.municipalityCounts).length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">لا تتوفر بيانات للبلديات</p>
+                    ) : (
+                      <div className="divide-y divide-border/20">
+                        {Object.entries(advancedStats.municipalityCounts)
+                          .sort((a, b) => (advancedStats.municipalityRevenue[b[0]] || 0) - (advancedStats.municipalityRevenue[a[0]] || 0))
+                          .map(([muni, counts]) => {
+                            const rev = advancedStats.municipalityRevenue[muni] || 0;
+                            const occupancy = counts.total > 0 ? Math.round((counts.rented / counts.total) * 100) : 0;
+                            return (
+                              <div key={muni} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 first:pt-0 last:pb-0">
+                                <div className="space-y-1">
+                                  <span className="text-xs font-bold text-foreground">{muni}</span>
+                                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-numbers">
+                                    <span>إجمالي: {counts.total}</span>
+                                    <span>•</span>
+                                    <span className="text-emerald-500">شاغر: {counts.available}</span>
+                                    <span>•</span>
+                                    <span className="text-blue-500">مؤجر: {counts.rented}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-6 justify-between md:justify-end">
+                                  <div className="w-24 space-y-1">
+                                    <div className="flex justify-between text-[9px] font-bold font-numbers">
+                                      <span>الإشغال</span>
+                                      <span>{occupancy}%</span>
+                                    </div>
+                                    <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                                      <div className="bg-primary h-full transition-all duration-500" style={{ width: `${occupancy}%` }} />
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-xs font-black text-primary font-numbers">
+                                      {rev.toLocaleString('ar-LY')} <span className="text-[9px] font-bold text-muted-foreground">د.ل</span>
+                                    </p>
+                                    <p className="text-[8px] text-muted-foreground font-bold">الدخل الكلي</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Sizes stats card */}
+              <Card className="border-border/40 bg-card/30 backdrop-blur-xl rounded-2xl shadow-md overflow-hidden flex flex-col">
+                <CardHeader className="py-4 px-5 border-b border-border/20">
+                  <CardTitle className="text-sm font-bold flex items-center gap-2">
+                    <Maximize2 className="h-4 w-4 text-primary" />
+                    <span>تحليل المقاسات والدخل</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="p-5 flex-1 overflow-auto max-h-[400px]">
+                  <div className="space-y-4">
+                    {Object.keys(advancedStats.sizeCounts).length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-8">لا تتوفر بيانات للمقاسات</p>
+                    ) : (
+                      <div className="divide-y divide-border/20">
+                        {Object.entries(advancedStats.sizeCounts)
+                          .sort((a, b) => (advancedStats.sizeRevenue[b[0]] || 0) - (advancedStats.sizeRevenue[a[0]] || 0))
+                          .map(([size, counts]) => {
+                            const rev = advancedStats.sizeRevenue[size] || 0;
+                            const occupancy = counts.total > 0 ? Math.round((counts.rented / counts.total) * 100) : 0;
+                            return (
+                              <div key={size} className="py-3 flex flex-col md:flex-row md:items-center justify-between gap-3 first:pt-0 last:pb-0">
+                                <div className="space-y-1">
+                                  <span className="text-xs font-bold text-foreground font-numbers">{size}</span>
+                                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground font-numbers">
+                                    <span>إجمالي: {counts.total}</span>
+                                    <span>•</span>
+                                    <span className="text-emerald-500">شاغر: {counts.available}</span>
+                                    <span>•</span>
+                                    <span className="text-blue-500">مؤجر: {counts.rented}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-6 justify-between md:justify-end">
+                                  <div className="w-24 space-y-1">
+                                    <div className="flex justify-between text-[9px] font-bold font-numbers">
+                                      <span>الإشغال</span>
+                                      <span>{occupancy}%</span>
+                                    </div>
+                                    <div className="w-full h-1.5 rounded-full bg-muted overflow-hidden">
+                                      <div className="bg-primary h-full transition-all duration-500" style={{ width: `${occupancy}%` }} />
+                                    </div>
+                                  </div>
+                                  <div className="text-right">
+                                    <p className="text-xs font-black text-primary font-numbers">
+                                      {rev.toLocaleString('ar-LY')} <span className="text-[9px] font-bold text-muted-foreground">د.ل</span>
+                                    </p>
+                                    <p className="text-[8px] text-muted-foreground font-bold">الدخل الكلي</p>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+            </div>
+
+            {/* Customers table card */}
+            <Card className="border-border/40 bg-card/30 backdrop-blur-xl rounded-2xl shadow-md overflow-hidden">
+              <CardHeader className="py-4 px-5 border-b border-border/20">
+                <CardTitle className="text-sm font-bold flex items-center gap-2">
+                  <Users className="h-4 w-4 text-primary" />
+                  <span>تحليل مساهمة ودخل العملاء (أعلى 10)</span>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 overflow-auto">
+                {Object.keys(advancedStats.customerRevenue).length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-8">لا توجد بيانات عقود سارية للعملاء</p>
+                ) : (
+                  <table className="w-full text-right text-xs">
+                    <thead>
+                      <tr className="bg-muted/30 border-b border-border/20 text-muted-foreground font-bold">
+                        <th className="py-3 px-5">اسم العميل</th>
+                        <th className="py-3 px-5 text-center">العقود الكلية</th>
+                        <th className="py-3 px-5 text-center">العقود النشطة</th>
+                        <th className="py-3 px-5 text-left">إجمالي الدخل المساهم</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/10">
+                      {Object.entries(advancedStats.customerRevenue)
+                        .sort((a, b) => b[1].revenue - a[1].revenue)
+                        .slice(0, 10)
+                        .map(([name, stats]) => (
+                          <tr key={name} className="hover:bg-muted/10 transition-colors">
+                            <td className="py-3.5 px-5 font-bold text-foreground">{name}</td>
+                            <td className="py-3.5 px-5 text-center font-numbers text-muted-foreground">{stats.totalContracts}</td>
+                            <td className="py-3.5 px-5 text-center">
+                              <Badge variant={stats.activeContracts > 0 ? 'success' : 'outline'} className="text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                {stats.activeContracts > 0 ? `${stats.activeContracts} نشط` : 'منتهي'}
+                              </Badge>
+                            </td>
+                            <td className="py-3.5 px-5 text-left font-black text-primary font-numbers">
+                              {stats.revenue.toLocaleString('ar-LY')} د.ل
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                )}
+              </CardContent>
+            </Card>
 
           </motion.div>
         </TabsContent>

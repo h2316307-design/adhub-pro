@@ -22,6 +22,7 @@ import MapSearchBar from './MapSearchBar';
 import LiveTrackingMode from './LiveTrackingMode';
 import { Button } from '@/components/ui/button';
 import ImageLightbox from './ImageLightbox';
+import { Badge } from '@/components/ui/badge';
 import { loadGoogleMapsKeyless } from '@/lib/loadExternalScript';
 import { useFieldPhotos, useUpdateAllOrbitRadius, type FieldPhoto } from '@/hooks/useFieldPhotos';
 import { createCircularPhotoIcon, buildPhotoInfoCard, computeDestination, CAMERA_ICON_HTML, ARROW_ICON_SVG } from './FieldPhotoMarkers';
@@ -47,6 +48,7 @@ interface GoogleHomeMapProps {
   onMapRightClick?: (lat: number, lng: number, mode?: 'quick' | 'full') => void;
   enableQuickAdd?: boolean;
   onRemoveFromList?: (billboard: Billboard) => void;
+  onAddToList?: (billboard: Billboard) => void;
   onSelectionChange?: (selectedIds: Set<number>) => void;
   onDeleteSelected?: () => void;
   showStatsOverlay?: boolean;
@@ -74,6 +76,7 @@ export default function GoogleHomeMap({
   onMapRightClick,
   enableQuickAdd,
   onRemoveFromList,
+  onAddToList,
   onSelectionChange,
   onDeleteSelected,
   showStatsOverlay = false,
@@ -904,8 +907,8 @@ export default function GoogleHomeMap({
   const filteredBillboards = useMemo(() => {
     const combinedSearchQuery = externalSearchQuery;
     return billboards.filter((b) => {
-      // Special temporary adding pin should always bypass filters and be shown!
-      if ((b as any).Status === 'temp_adding' || (b as any).status === 'temp_adding') {
+      // Special temporary adding pin or comparison pin should always bypass filters and be shown!
+      if ((b as any).Status === 'temp_adding' || (b as any).status === 'temp_adding' || (b as any).isComparison || (b as any).isFaded) {
         return true;
       }
 
@@ -2629,6 +2632,11 @@ export default function GoogleHomeMap({
     return () => { cancelled = true; };
   }, [selectedBillboardForCard]);
 
+  const outerBB: any = selectedBillboardForCard;
+  const isCompareMode = outerBB ? (!!outerBB.comparisonMatch || outerBB.isComparison) : false;
+  const cardWidth = isCompareMode ? 940 : 740;
+  const halfWidth = cardWidth / 2;
+
   return (
     <div 
       ref={containerRef}
@@ -2652,17 +2660,17 @@ export default function GoogleHomeMap({
       `}</style>
 
       {/* Top Controller Bar - Unified for Mobile, Elegant for Desktop */}
-      {!isTracking && (
+      {!isTracking && (!isMobile || !selectedBillboardForCard) && (
         <div className={`absolute z-[1000] pointer-events-auto ${
           isMobile 
-            ? 'top-2.5 left-2.5 right-2.5 flex items-center gap-2 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 rounded-2xl p-1.5 shadow-xl' 
+            ? 'top-2.5 left-2.5 right-2.5 flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 rounded-2xl p-2 shadow-xl' 
             : 'top-4 left-4 right-4 flex items-center justify-between pointer-events-none'
         }`}>
           {/* Search bar wrapper */}
           {!externalSearchQuery && (
             <div className={`flex flex-col gap-1.5 ${
               isMobile 
-                ? 'flex-1 pointer-events-auto' 
+                ? 'w-full pointer-events-auto' 
                 : 'absolute left-1/2 transform -translate-x-1/2 w-[340px] max-w-[50vw] pointer-events-auto'
             }`}>
               <MapSearchBar 
@@ -2676,9 +2684,9 @@ export default function GoogleHomeMap({
               />
               
               {/* Status Filter Chips */}
-              <div className="flex items-center justify-center gap-1.5 overflow-x-auto py-1 no-scrollbar">
+              <div className="flex items-center justify-start md:justify-center gap-1.5 overflow-x-auto py-1 no-scrollbar w-full px-1">
                 {nearbyCount > 0 && (
-                  <span className="px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-green-500/10 border border-green-500/20 text-green-400 animate-pulse flex items-center gap-1">
+                  <span className="px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-green-500/10 border border-green-500/20 text-green-400 animate-pulse flex items-center gap-1 shrink-0">
                     <span className="w-1 h-1 rounded-full bg-green-400" />
                     {nearbyCount} قريبة
                   </span>
@@ -2700,7 +2708,7 @@ export default function GoogleHomeMap({
                             : [...prev, chip.key]
                         );
                       }}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all duration-200 cursor-pointer ${
+                      className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all duration-200 cursor-pointer shrink-0 ${
                         isActive
                           ? 'bg-amber-600 border-amber-500 text-white shadow-md'
                           : `${chip.color} hover:bg-white/5`
@@ -2714,7 +2722,7 @@ export default function GoogleHomeMap({
                 {localStatusFilter.length > 0 && (
                   <button
                     onClick={() => setLocalStatusFilter([])}
-                    className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white transition-colors cursor-pointer"
+                    className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white transition-colors cursor-pointer shrink-0"
                     style={{ fontFamily: 'Tajawal, sans-serif' }}
                   >
                     إلغاء
@@ -2723,7 +2731,7 @@ export default function GoogleHomeMap({
               </div>
             </div>
           )}
-
+ 
           {/* Left / Center Actions (Desktop only) */}
           {!isMobile && (
             <div className="flex items-center gap-2 pointer-events-auto">
@@ -2737,62 +2745,60 @@ export default function GoogleHomeMap({
               )}
             </div>
           )}
-
-          {/* Right Side Controls (Header & Multi-select) */}
-          <div className={`flex items-center gap-2 pointer-events-auto ${isMobile ? 'flex-shrink-0' : 'mr-auto'}`}>
-            {/* Multi-select toggle button */}
-            <button
-              onClick={() => {
-                setIsMultiSelectMode(!isMultiSelectMode);
-                if (isMultiSelectMode) {
-                  setSelectedBillboardIds(new Set());
-                  setIsDrawingMode(false);
-                  setDrawingPoints([]);
-                }
-              }}
-              className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border ${
-                isMobile ? 'w-10 h-10' : 'px-3.5 py-2.5 text-xs font-extrabold'
-              } ${
-                isMultiSelectMode
-                  ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
-                  : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-500'
-              }`}
-              style={{ fontFamily: 'Tajawal, sans-serif' }}
-              title={isMultiSelectMode ? 'إلغاء تحديد متعدد' : 'تحديد متعدد للوحات'}
-            >
-              <CheckSquare className={isMobile ? 'w-4.5 h-4.5' : 'w-4 h-4'} />
-              {!isMobile && (isMultiSelectMode ? 'إلغاء التحديد' : 'تحديد متعدد')}
-            </button>
-
-            {/* Pen selection drawing tool button */}
-            <button
-              onClick={() => {
-                if (isDrawingMode) {
-                  setIsDrawingMode(false);
-                  setDrawingPoints([]);
-                } else {
-                  setIsDrawingMode(true);
-                  setDrawingPoints([]);
-                  setIsMultiSelectMode(true); // Auto-enable multi-select mode so user can see selection highlights
-                }
-              }}
-              className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border ${
-                isMobile ? 'w-10 h-10' : 'px-3.5 py-2.5 text-xs font-extrabold'
-              } ${
-                isDrawingMode
-                  ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
-                  : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-500'
-              }`}
-              style={{ fontFamily: 'Tajawal, sans-serif' }}
-              title={isDrawingMode ? 'إلغاء أداة الرسم والتحديد' : 'تحديد اللوحات بالرسم (بن تول)'}
-            >
-              <PenTool className={isMobile ? 'w-4.5 h-4.5' : 'w-4 h-4'} />
-              {!isMobile && (isDrawingMode ? 'إلغاء الرسم' : 'تحديد بالرسم')}
-            </button>
-
-            {/* Billboard Count / Header */}
-            <MapHeader billboardCount={filteredBillboards.length} compact={isMobile} />
-          </div>
+ 
+          {/* Right Side Controls (Desktop only) */}
+          {!isMobile && (
+            <div className="flex items-center gap-2 pointer-events-auto mr-auto">
+              {/* Multi-select toggle button */}
+              <button
+                onClick={() => {
+                  setIsMultiSelectMode(!isMultiSelectMode);
+                  if (isMultiSelectMode) {
+                    setSelectedBillboardIds(new Set());
+                    setIsDrawingMode(false);
+                    setDrawingPoints([]);
+                  }
+                }}
+                className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold ${
+                  isMultiSelectMode
+                    ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                    : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-500'
+                }`}
+                style={{ fontFamily: 'Tajawal, sans-serif' }}
+                title="تحديد متعدد للوحات"
+              >
+                <CheckSquare className="w-4 h-4" />
+                تحديد متعدد
+              </button>
+ 
+              {/* Pen selection drawing tool button */}
+              <button
+                onClick={() => {
+                  if (isDrawingMode) {
+                    setIsDrawingMode(false);
+                    setDrawingPoints([]);
+                  } else {
+                    setIsDrawingMode(true);
+                    setDrawingPoints([]);
+                    setIsMultiSelectMode(true);
+                  }
+                }}
+                className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold ${
+                  isDrawingMode
+                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
+                    : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-500'
+                }`}
+                style={{ fontFamily: 'Tajawal, sans-serif' }}
+                title="تحديد اللوحات بالرسم (بن تول)"
+              >
+                <PenTool className="w-4 h-4" />
+                تحديد بالرسم
+              </button>
+ 
+              {/* Billboard Count / Header */}
+              <MapHeader billboardCount={filteredBillboards.length} compact={false} />
+            </div>
+          )}
         </div>
       )}
 
@@ -2994,28 +3000,75 @@ export default function GoogleHomeMap({
       )}
 
       {/* Right Control Buttons */}
-      <div className={`absolute z-[1000] pointer-events-auto ${
-        isMobile 
-          ? 'bottom-20 right-2.5' 
-          : isFullscreen ? 'top-20 right-5' : 'top-20 right-4'
-      }`}>
-        <div className={`flex flex-col gap-1 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 shadow-2xl ${
-          isMobile ? 'rounded-2xl p-1' : 'rounded-2xl p-1.5'
+      {(!isMobile || !selectedBillboardForCard) && (
+        <div className={`absolute z-[1000] pointer-events-auto ${
+          isMobile 
+            ? 'bottom-20 right-2.5' 
+            : isFullscreen ? 'top-20 right-5' : 'top-20 right-4'
         }`}>
-          <MapControlButtons
-            isFullscreen={isFullscreen}
-            onToggleFullscreen={toggleFullscreen}
-            onZoomIn={handleZoomIn}
-            onZoomOut={handleZoomOut}
-            onToggleLayers={() => setShowLayers(!showLayers)}
-            onFitAll={fitAllMarkers}
-            onCenterOnUser={handleCenterOnUser}
-            isSimpleTracking={isSimpleTracking}
-            onToggleSimpleTracking={toggleSimpleTracking}
-            isMobile={isMobile}
-          />
+          <div className={`flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 shadow-2xl ${
+            isMobile ? 'rounded-2xl p-1.5' : 'rounded-2xl p-1.5'
+          }`}>
+            {isMobile && (
+              <>
+                {/* Multi-select Toggle */}
+                <button
+                  onClick={() => {
+                    setIsMultiSelectMode(!isMultiSelectMode);
+                    if (isMultiSelectMode) {
+                      setSelectedBillboardIds(new Set());
+                      setIsDrawingMode(false);
+                      setDrawingPoints([]);
+                    }
+                  }}
+                  className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all border cursor-pointer ${
+                    isMultiSelectMode
+                      ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                      : 'bg-slate-950/40 text-slate-300 border-transparent hover:text-amber-500'
+                  }`}
+                  title="تحديد متعدد"
+                >
+                  <CheckSquare className="w-5 h-5" />
+                </button>
+                {/* Pen Selection */}
+                <button
+                  onClick={() => {
+                    if (isDrawingMode) {
+                      setIsDrawingMode(false);
+                      setDrawingPoints([]);
+                    } else {
+                      setIsDrawingMode(true);
+                      setDrawingPoints([]);
+                      setIsMultiSelectMode(true);
+                    }
+                  }}
+                  className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all border cursor-pointer ${
+                    isDrawingMode
+                      ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
+                      : 'bg-slate-950/40 text-slate-300 border-transparent hover:text-indigo-500'
+                  }`}
+                  title="تحديد بالرسم"
+                >
+                  <PenTool className="w-5 h-5" />
+                </button>
+                <div className="h-px bg-white/10 my-0.5" />
+              </>
+            )}
+            <MapControlButtons
+              isFullscreen={isFullscreen}
+              onToggleFullscreen={toggleFullscreen}
+              onZoomIn={handleZoomIn}
+              onZoomOut={handleZoomOut}
+              onToggleLayers={() => setShowLayers(!showLayers)}
+              onFitAll={fitAllMarkers}
+              onCenterOnUser={handleCenterOnUser}
+              isSimpleTracking={isSimpleTracking}
+              onToggleSimpleTracking={toggleSimpleTracking}
+              isMobile={isMobile}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Layers Panel */}
       {showLayers && (
@@ -3238,7 +3291,7 @@ export default function GoogleHomeMap({
       )}
 
       {/* Legend */}
-      {!isTracking && (
+      {!isTracking && (!isMobile || !selectedBillboardForCard) && (
         <div className={`absolute z-[1000] pointer-events-auto ${
           isMobile ? 'bottom-2.5 right-2.5' : 'bottom-4 right-4'
         }`}>
@@ -3580,13 +3633,13 @@ export default function GoogleHomeMap({
             isMobile
               ? 'bottom-2 left-2 right-2 max-h-[60vh]'
               : !cardScreenPos
-                ? 'bottom-6 right-6 w-[740px]'
-                : 'w-[740px]'
+                ? (isCompareMode ? 'bottom-6 right-6 w-[940px]' : 'bottom-6 right-6 w-[740px]')
+                : (isCompareMode ? 'w-[940px]' : 'w-[740px]')
           }`}
           style={
             !isMobile && cardScreenPos
               ? {
-                  left: Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - 752, cardScreenPos.x - 370)),
+                  left: Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - (cardWidth + 12), cardScreenPos.x - halfWidth)),
                   top: Math.max(12, cardScreenPos.y - 20),
                   transform: 'translateY(-100%)',
                 }
@@ -3599,7 +3652,7 @@ export default function GoogleHomeMap({
               <div
                 className="absolute z-20"
                 style={{
-                  left: Math.max(18, Math.min(722, cardScreenPos.x - (Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - 752, cardScreenPos.x - 370))) )) - 7,
+                  left: Math.max(18, Math.min(cardWidth - 18, cardScreenPos.x - (Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - (cardWidth + 12), cardScreenPos.x - halfWidth))) )) - 7,
                   bottom: -7,
                   width: 14,
                   height: 14,
@@ -3615,8 +3668,9 @@ export default function GoogleHomeMap({
               const code = bb.code || bb.Code || 'TR-' + String(bb.ID || bb.id || '').padStart(4, '0');
               const status = getBillboardStatus(selectedBillboardForCard);
               const isHidden = bb.is_visible_in_available === false;
-              const statusLabel = isHidden ? 'مخفية' : status.label;
+              const statusLabel = bb.isComparison ? 'لوحة مقارنة (خارج التنظيم)' : (isHidden ? 'مخفية' : status.label);
               const statusTone =
+                bb.isComparison ? { dot: 'bg-slate-400', text: 'text-slate-300 animate-pulse', bg: 'bg-slate-500/25', bd: 'border-slate-400/30' } :
                 isHidden ? { dot: 'bg-slate-400', text: 'text-slate-300', bg: 'bg-slate-500/15', bd: 'border-slate-400/30' } :
                 statusLabel === 'متاحة' || statusLabel === 'متاح' ? { dot: 'bg-emerald-400', text: 'text-emerald-300', bg: 'bg-emerald-500/15', bd: 'border-emerald-400/30' } :
                 statusLabel === 'مؤجرة' || statusLabel === 'مؤجر' || statusLabel === 'محجوزة' || statusLabel === 'محجوز' ? { dot: 'bg-rose-400', text: 'text-rose-300', bg: 'bg-rose-500/15', bd: 'border-rose-400/30' } :
@@ -3689,7 +3743,20 @@ export default function GoogleHomeMap({
 
               const actionsSection = (
                 <div className="grid grid-cols-5 gap-1.5 pt-2 border-t border-white/5">
-                  {onRemoveFromList ? (
+                  {bb.isComparison ? (
+                    <button
+                      onClick={() => {
+                        if (onAddToList) {
+                          onAddToList(selectedBillboardForCard);
+                        }
+                        setSelectedBillboardForCard(null);
+                      }}
+                      className="col-span-5 py-2.5 rounded-lg text-xs font-bold bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-400 flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>إضافة إلى قائمة التنظيم</span>
+                    </button>
+                  ) : onRemoveFromList ? (
                     <>
                       <button
                         onClick={() => {
@@ -3936,194 +4003,388 @@ export default function GoogleHomeMap({
                 </>
               );
 
-              if (isMobile) {
-                return (
-                  <>
-                    {/* Header: hero image with overlays */}
-                    <div className="relative h-28 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
-                      {/* Loading skeleton */}
-                      {cardImageState === 'loading' && heroSrc && (
-                        <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
-                      )}
-                      {heroSrc ? (
-                        <img
-                          src={heroSrc}
-                          alt={code}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          onLoad={() => setCardImageState('loaded')}
-                          onError={() => setCardImageState('error')}
-                          onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
-                          className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
-                        />
-                      ) : null}
-                      {(cardImageState === 'error' || !heroSrc) && (
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
-                          <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
-                          <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
-                        </div>
-                      )}
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
-
-                      {/* Close */}
-                      <button
-                        onClick={() => setSelectedBillboardForCard(null)}
-                        className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
-                        aria-label="إغلاق"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-
-                      {/* Status pill */}
-                      <div className={`absolute top-3 right-3 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-lg`}>
-                        <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
-                        {statusLabel}
+              if (isCompareMode) {
+                if (isMobile) {
+                  const dbB = bb.isComparison ? bb : bb.comparisonMatch;
+                  return (
+                    <div className="p-4 space-y-4 max-h-[60vh] overflow-y-auto" dir="rtl" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                      <div className="flex items-center justify-between border-b border-white/5 pb-2">
+                        <h4 className="text-sm font-extrabold text-white flex items-center gap-1.5">
+                          <span>مقارنة بيانات اللوحة</span>
+                          <Badge variant="outline" className="bg-[#d6ac40]/10 text-[#f4c25a] border-[#d6ac40]/30 text-[9px] font-black">
+                            {bb.isComparison ? 'غير مضافة' : 'مطابقة مكانية'}
+                          </Badge>
+                        </h4>
+                        <button onClick={() => setSelectedBillboardForCard(null)} className="w-6 h-6 rounded-full bg-white/5 flex items-center justify-center text-slate-400 hover:text-white cursor-pointer"><X className="w-3.5 h-3.5" /></button>
                       </div>
 
-                      {/* Title at bottom of hero */}
-                      <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-6 z-10">
-                        <div className="flex items-end justify-between gap-2">
-                          <div className="min-w-0">
-                            <h3 className="text-base font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
-                            <p className="text-[10px] text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
-                          </div>
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
-                            className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
-                            title="نسخ الرمز"
-                          >
-                            <CheckSquare className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Body */}
-                    <div className="p-3 space-y-2">
-                      {infoSection}
-
-                      {/* Front face design preview */}
-                      {bb.design_face_a && (
-                        <div className="pt-1">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
-                            <Camera className="w-3 h-3 text-[#d6ac40]" />
-                          </div>
-                          <div
-                            className="relative h-20 rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group"
-                            onClick={() => setLightboxImage(bb.design_face_a)}
-                          >
-                            <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
-                            <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
-                              <span className="text-[10px] text-white font-bold">اضغط للتكبير</span>
+                      {/* Right: In List */}
+                      <div className="border border-white/5 bg-white/[0.02] rounded-xl p-3.5 space-y-2.5">
+                        <div className="text-[10px] font-black text-[#f4c25a]">يمين: في قائمة التنظيم</div>
+                        {bb.isComparison ? (
+                          <div className="text-xs text-slate-400 font-bold py-1">غير مضافة للتنظيم الحالي</div>
+                        ) : (
+                          <div className="space-y-2">
+                            {/* Image */}
+                            <div className="relative h-24 rounded-lg border border-white/10 bg-slate-900 overflow-hidden cursor-zoom-in" onClick={() => heroSrc && setLightboxImage(heroSrc)}>
+                              {heroSrc ? (
+                                <img src={heroSrc} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-slate-500">
+                                  <ImageOff className="w-5 h-5 opacity-40" />
+                                  <span className="text-[8px]">لا توجد صورة</span>
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {actionsSection}
-                    </div>
-                  </>
-                );
-              } else {
-                return (
-                  <div className="flex flex-row items-stretch min-h-[380px] w-[740px]">
-                    {/* Right Column (Info / details) */}
-                    <div className="flex-1 p-4 space-y-3 flex flex-col justify-between order-2 md:order-1">
-                      <div className="space-y-3">
-                        {/* Title and Code */}
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="min-w-0">
-                            <h3 className="text-base md:text-lg font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
-                            <p className="text-[10px] md:text-xs text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
-                          </div>
-                          <button
-                            onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
-                            className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
-                            title="نسخ الرمز"
-                          >
-                            <CheckSquare className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-
-                        {infoSection}
-                      </div>
-                    </div>
-
-                    {/* Vertical divider */}
-                    <div className="w-px bg-white/10 self-stretch my-4 order-2" />
-
-                    {/* Left Column (Visuals & Actions) */}
-                    <div className="w-[340px] p-4 flex flex-col justify-between space-y-3 order-1 md:order-3">
-                      <div className="flex-1 flex flex-col space-y-3">
-                        {/* Hero Image Section */}
-                        <div className="relative flex-1 min-h-[200px] rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
-                          {/* Loading skeleton */}
-                          {cardImageState === 'loading' && heroSrc && (
-                            <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
-                          )}
-                          {heroSrc ? (
-                            <img
-                              src={heroSrc}
-                              alt={code}
-                              loading="lazy"
-                              referrerPolicy="no-referrer"
-                              onLoad={() => setCardImageState('loaded')}
-                              onError={() => setCardImageState('error')}
-                              onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
-                              className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
-                            />
-                          ) : null}
-                          {(cardImageState === 'error' || !heroSrc) && (
-                            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
-                              <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
-                              <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
-
-                          {/* Close button */}
-                          <button
-                            onClick={() => setSelectedBillboardForCard(null)}
-                            className="absolute top-2 left-2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
-                            aria-label="إغلاق"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Status pill */}
-                          <div className={`absolute top-2 right-2 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 shadow-lg`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
-                            {statusLabel}
-                          </div>
-                        </div>
-
-                        {/* Front face design preview */}
-                        {bb.design_face_a && (
-                          <div className="pt-0.5">
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
-                              <Camera className="w-3 h-3 text-[#d6ac40]" />
-                            </div>
-                            <div
-                              className="relative h-36 rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group"
-                              onClick={() => setLightboxImage(bb.design_face_a)}
-                            >
-                              <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
-                              <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
-                                <span className="text-[9px] text-white font-bold">اضغط للتكبير</span>
-                              </div>
+                            <div className="space-y-1.5 text-xs text-slate-300">
+                              <div>الاسم/التسلسل: <strong className="text-white">لوحة #{bb.ID || bb.sequence_number}</strong></div>
+                              <div>المقاس: <strong className="text-white">{bb.Size || '—'}</strong></div>
+                              <div>الموقع: <strong className="text-white">{bb.City || '—'}</strong></div>
                             </div>
                           </div>
                         )}
                       </div>
 
-                      {actionsSection}
+                      {/* Left: Original DB */}
+                      {dbB && (
+                        <div className="border border-white/5 bg-white/[0.02] rounded-xl p-3.5 space-y-2.5">
+                          <div className="text-[10px] font-black text-indigo-400">يسار: اللوحة الأصلية في البلدية</div>
+                          <div className="space-y-2">
+                            {/* Image */}
+                            <div className="relative h-24 rounded-lg border border-white/10 bg-slate-900 overflow-hidden cursor-zoom-in" onClick={() => dbB.Image_URL && setLightboxImage(dbB.Image_URL)}>
+                              {dbB.Image_URL ? (
+                                <img src={dbB.Image_URL} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                              ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5 text-slate-500">
+                                  <ImageOff className="w-5 h-5 opacity-40" />
+                                  <span className="text-[8px]">لا توجد صورة</span>
+                                </div>
+                              )}
+                            </div>
+                            <div className="space-y-1.5 text-xs text-slate-300">
+                              <div>رقم لوحة البلدية (ID): <strong className="text-white">{dbB.ID}</strong></div>
+                              <div>المقاس الأصلي: <strong className="text-white">{dbB.Size || '—'}</strong></div>
+                              <div>المعلم الأصلي: <strong className="text-white">{dbB.Nearest_Landmark || '—'}</strong></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="pt-2 border-t border-white/5">
+                        {actionsSection}
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
+                } else {
+                  const dbB = bb.isComparison ? bb : bb.comparisonMatch;
+                  return (
+                    <div className="flex flex-col min-h-[420px] w-[940px]" dir="rtl" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                      {/* Title / Main Header */}
+                      <div className="flex items-center justify-between px-4 pt-4 pb-2 border-b border-white/5">
+                        <div>
+                          <h3 className="text-base font-extrabold text-white flex items-center gap-2">
+                            <span>مقارنة بيانات اللوحة</span>
+                            <Badge variant="outline" className="bg-[#d6ac40]/10 text-[#f4c25a] border-[#d6ac40]/30 text-[10px] font-black">
+                              {bb.isComparison ? 'مقارنة: غير مضافة للتنظيم' : 'مقارنة مكانية مطابقة'}
+                            </Badge>
+                          </h3>
+                        </div>
+                        <button
+                          onClick={() => setSelectedBillboardForCard(null)}
+                          className="w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 border border-white/15 flex items-center justify-center text-white/90 transition-colors cursor-pointer"
+                          aria-label="إغلاق"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Grid: 2 Columns */}
+                      <div className="grid grid-cols-2 gap-4 p-4 flex-1">
+                        {/* Right Column: في قائمة التنظيم */}
+                        <div className="border border-white/5 bg-white/[0.01] rounded-2xl p-3.5 flex flex-col justify-between space-y-3">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-black text-[#f4c25a] bg-[#f4c25a]/10 px-2.5 py-0.5 rounded-full">
+                                يمين: في قائمة التنظيم
+                              </span>
+                              {!bb.isComparison && (
+                                <span className="text-xs font-bold text-slate-300">تسلسل #{bb.ID || bb.sequence_number}</span>
+                              )}
+                            </div>
+
+                            {bb.isComparison ? (
+                              <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-xl p-8 text-center min-h-[180px]">
+                                <Plus className="w-8 h-8 text-slate-500 mb-2" />
+                                <p className="text-xs text-slate-400 font-bold">هذه اللوحة من البلدية غير مضافة للتنظيم الحالي</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5">
+                                {/* Image */}
+                                <div className="relative h-32 rounded-xl border border-white/10 bg-slate-900 overflow-hidden cursor-zoom-in" onClick={() => heroSrc && setLightboxImage(heroSrc)}>
+                                  {heroSrc ? (
+                                    <img src={heroSrc} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-500">
+                                      <ImageOff className="w-6 h-6 opacity-40" />
+                                      <span className="text-[9px]">لا توجد صورة للتنظيم</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info List */}
+                                <div className="space-y-1.5 text-xs">
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">المقاس:</span><span className="text-white font-bold">{bb.Size || bb.size || '—'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">الأوجه:</span><span className="text-white font-bold">{bb.Faces_Count === 1 ? 'وجه واحد' : 'وجهين'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">الموقع:</span><span className="text-white font-bold truncate max-w-[200px]">{bb.City || '—'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">المعلم الدال:</span><span className="text-white font-bold truncate max-w-[200px]">{bb.Nearest_Landmark || '—'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">الحالة:</span><span className="text-emerald-400 font-bold">مضافة للتنظيم</span></div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Left Column: اللوحة الأصلية في البلدية */}
+                        <div className="border border-white/5 bg-white/[0.01] rounded-2xl p-3.5 flex flex-col justify-between space-y-3">
+                          <div className="space-y-3">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-black text-indigo-400 bg-indigo-500/10 px-2.5 py-0.5 rounded-full">
+                                يسار: اللوحة الأصلية في البلدية
+                              </span>
+                              {dbB && (
+                                <span className="text-xs font-bold text-slate-300">ID: {dbB.ID}</span>
+                              )}
+                            </div>
+
+                            {!dbB ? (
+                              <div className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/10 rounded-xl p-8 text-center min-h-[180px]">
+                                <p className="text-xs text-slate-400 font-bold">لا توجد لوحة مطابقة مسجلة في قاعدة بيانات البلدية</p>
+                              </div>
+                            ) : (
+                              <div className="space-y-2.5">
+                                {/* Image */}
+                                <div className="relative h-32 rounded-xl border border-white/10 bg-slate-900 overflow-hidden cursor-zoom-in" onClick={() => dbB.Image_URL && setLightboxImage(dbB.Image_URL)}>
+                                  {dbB.Image_URL ? (
+                                    <img src={dbB.Image_URL} alt="" className="absolute inset-0 w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-slate-500">
+                                      <ImageOff className="w-6 h-6 opacity-40" />
+                                      <span className="text-[9px]">لا توجد صورة للبلدية</span>
+                                    </div>
+                                  )}
+                                </div>
+
+                                {/* Info List */}
+                                <div className="space-y-1.5 text-xs">
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">المقاس الأصلي:</span><span className="text-white font-bold">{dbB.Size || '—'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">الأوجه الأصلية:</span><span className="text-white font-bold">{dbB.Faces_Count === 1 ? 'وجه واحد' : 'وجهين'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">البلدية:</span><span className="text-[#f4c25a] font-bold">{dbB.Municipality || '—'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">المعلم الأصلي:</span><span className="text-white font-bold truncate max-w-[200px]">{dbB.Nearest_Landmark || '—'}</span></div>
+                                  <div className="flex justify-between py-1 border-b border-white/5"><span className="text-slate-400">حالة قاعدة البيانات:</span><span className="text-indigo-400 font-bold">{dbB.Status || 'متاح'}</span></div>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Action Row */}
+                      <div className="p-4 border-t border-white/5 bg-black/25 rounded-b-[24px]">
+                        {actionsSection}
+                      </div>
+                    </div>
+                  );
+                }
+              } else {
+                if (isMobile) {
+                  return (
+                    <>
+                      {/* Header: hero image with overlays */}
+                      <div className="relative h-28 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
+                        {/* Loading skeleton */}
+                        {cardImageState === 'loading' && heroSrc && (
+                          <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
+                        )}
+                        {heroSrc ? (
+                          <img
+                            src={heroSrc}
+                            alt={code}
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                            onLoad={() => setCardImageState('loaded')}
+                            onError={() => setCardImageState('error')}
+                            onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
+                            className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
+                          />
+                        ) : null}
+                        {(cardImageState === 'error' || !heroSrc) && (
+                          <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
+                            <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
+                            <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
+                          </div>
+                        )}
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
+
+                        {/* Close */}
+                        <button
+                          onClick={() => setSelectedBillboardForCard(null)}
+                          className="absolute top-3 left-3 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
+                          aria-label="إغلاق"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+
+                        {/* Status pill */}
+                        <div className={`absolute top-3 right-3 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-3 py-1.5 rounded-full text-[11px] font-extrabold flex items-center gap-1.5 shadow-lg`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
+                          {statusLabel}
+                        </div>
+
+                        {/* Title at bottom of hero */}
+                        <div className="absolute bottom-0 left-0 right-0 px-4 pb-3 pt-6 z-10">
+                          <div className="flex items-end justify-between gap-2">
+                            <div className="min-w-0">
+                              <h3 className="text-base font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
+                              <p className="text-[10px] text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
+                            </div>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
+                              className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
+                              title="نسخ الرمز"
+                            >
+                              <CheckSquare className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Body */}
+                      <div className="p-3 space-y-2">
+                        {infoSection}
+
+                        {/* Front face design preview */}
+                        {bb.design_face_a && (
+                          <div className="pt-1">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
+                              <Camera className="w-3 h-3 text-[#d6ac40]" />
+                            </div>
+                            <div
+                              className="relative h-20 rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group"
+                              onClick={() => setLightboxImage(bb.design_face_a)}
+                            >
+                              <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
+                              <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-2">
+                                <span className="text-[10px] text-white font-bold">اضغط للتكبير</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {actionsSection}
+                      </div>
+                    </>
+                  );
+                } else {
+                  return (
+                    <div className="flex flex-row items-stretch min-h-[380px] w-[740px]">
+                      {/* Right Column (Info / details) */}
+                      <div className="flex-1 p-4 space-y-3 flex flex-col justify-between order-2 md:order-1">
+                        <div className="space-y-3">
+                          {/* Title and Code */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <h3 className="text-base md:text-lg font-extrabold text-white truncate">{bb.Billboard_Name || 'لوحة إعلانية'}</h3>
+                              <p className="text-[10px] md:text-xs text-[#f4c25a] font-mono font-bold mt-0.5">{code}</p>
+                            </div>
+                            <button
+                              onClick={() => { navigator.clipboard.writeText(code); toast.success('تم نسخ رمز اللوحة'); }}
+                              className="flex-shrink-0 w-8 h-8 rounded-lg bg-white/10 hover:bg-white/20 border border-white/10 flex items-center justify-center text-white/80 hover:text-white transition-colors cursor-pointer"
+                              title="نسخ الرمز"
+                            >
+                              <CheckSquare className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+
+                          {infoSection}
+                        </div>
+                      </div>
+
+                      {/* Vertical divider */}
+                      <div className="w-px bg-white/10 self-stretch my-4 order-2" />
+
+                      {/* Left Column (Visuals & Actions) */}
+                      <div className="w-[340px] p-4 flex flex-col justify-between space-y-3 order-1 md:order-3">
+                        <div className="flex-1 flex flex-col space-y-3">
+                          {/* Hero Image Section */}
+                          <div className="relative flex-1 min-h-[200px] rounded-xl border border-white/10 bg-gradient-to-br from-slate-900 to-slate-800 overflow-hidden">
+                            {/* Loading skeleton */}
+                            {cardImageState === 'loading' && heroSrc && (
+                              <div className="absolute inset-0 bg-[linear-gradient(110deg,rgba(255,255,255,0.04)_30%,rgba(214,172,64,0.08)_50%,rgba(255,255,255,0.04)_70%)] bg-[length:200%_100%] animate-[shimmer_1.6s_linear_infinite]" />
+                            )}
+                            {heroSrc ? (
+                              <img
+                                src={heroSrc}
+                                alt={code}
+                                loading="lazy"
+                                referrerPolicy="no-referrer"
+                                onLoad={() => setCardImageState('loaded')}
+                                onError={() => setCardImageState('error')}
+                                onClick={() => cardImageState === 'loaded' && setLightboxImage(heroSrc)}
+                                className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-500 ${cardImageState === 'loaded' ? 'opacity-100 cursor-zoom-in' : 'opacity-0'}`}
+                              />
+                            ) : null}
+                            {(cardImageState === 'error' || !heroSrc) && (
+                              <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-slate-500">
+                                <ImageOff className="w-10 h-10 opacity-50" strokeWidth={1.5} />
+                                <span className="text-[11px] font-bold">لا توجد صورة للوحة</span>
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-gradient-to-t from-[#0b0b16] via-[#0b0b16]/40 to-transparent pointer-events-none" />
+
+                            {/* Close button */}
+                            <button
+                              onClick={() => setSelectedBillboardForCard(null)}
+                              className="absolute top-2 left-2 z-10 w-7 h-7 rounded-full bg-black/50 hover:bg-black/70 backdrop-blur-md text-white/90 border border-white/15 flex items-center justify-center transition-colors cursor-pointer"
+                              aria-label="إغلاق"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Status pill */}
+                            <div className={`absolute top-2 right-2 ${statusTone.bg} ${statusTone.text} border ${statusTone.bd} backdrop-blur-md px-2.5 py-1 rounded-full text-[10px] font-extrabold flex items-center gap-1 shadow-lg`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${statusTone.dot} animate-pulse`} />
+                              {statusLabel}
+                            </div>
+                          </div>
+
+                          {/* Front face design preview */}
+                          {bb.design_face_a && (
+                            <div className="pt-0.5">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[10px] text-slate-400 font-extrabold">التصميم الحالي (الوجه الأمامي)</span>
+                                <Camera className="w-3 h-3 text-[#d6ac40]" />
+                              </div>
+                              <div
+                                className="relative h-36 rounded-xl overflow-hidden border border-[#d6ac40]/25 bg-slate-950 cursor-zoom-in group"
+                                onClick={() => setLightboxImage(bb.design_face_a)}
+                              >
+                                <img src={bb.design_face_a} alt="" aria-hidden="true" className="absolute inset-0 w-full h-full object-cover scale-110 blur-md opacity-50" referrerPolicy="no-referrer" />
+                                <img src={bb.design_face_a} alt="التصميم الحالي" className="relative w-full h-full object-contain" referrerPolicy="no-referrer" />
+                                <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-center pb-1">
+                                  <span className="text-[9px] text-white font-bold">اضغط للتكبير</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {actionsSection}
+                      </div>
+                    </div>
+                  );
+                }
               }
             })()}
           </div>

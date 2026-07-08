@@ -104,6 +104,46 @@ function applyColorsToDocument(data: Record<string, string>) {
 
 export function AppThemeLoader() {
   useEffect(() => {
+    // ✅ Force RTL globally on document elements (bulletproof fix)
+    const forceRtl = () => {
+      const root = document.documentElement;
+      const body = document.body;
+      if (root) {
+        if (root.getAttribute('dir') !== 'rtl') {
+          root.setAttribute('dir', 'rtl');
+        }
+        if (root.style.direction !== 'rtl') {
+          root.style.direction = 'rtl';
+        }
+      }
+      if (body) {
+        if (body.getAttribute('dir') !== 'rtl') {
+          body.setAttribute('dir', 'rtl');
+        }
+        if (body.style.direction !== 'rtl') {
+          body.style.direction = 'rtl';
+        }
+      }
+    };
+
+    forceRtl();
+
+    const dirObserver = new MutationObserver(() => {
+      forceRtl();
+    });
+
+    dirObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['dir', 'style'] });
+    if (document.body) {
+      dirObserver.observe(document.body, { attributes: true, attributeFilter: ['dir', 'style'] });
+    } else {
+      window.addEventListener('DOMContentLoaded', () => {
+        if (document.body) {
+          dirObserver.observe(document.body, { attributes: true, attributeFilter: ['dir', 'style'] });
+        }
+        forceRtl();
+      });
+    }
+
     const loadTheme = async () => {
       try {
         const { data, error } = await supabase
@@ -165,7 +205,10 @@ export function AppThemeLoader() {
 
     observer.observe(document.documentElement, { attributes: true });
 
-    return () => observer.disconnect();
+    return () => {
+      dirObserver.disconnect();
+      observer.disconnect();
+    };
   }, []);
 
   // هذا المكون لا يُصيِّر أي شيء في DOM

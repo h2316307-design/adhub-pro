@@ -15,7 +15,7 @@ export function MainLayout({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
   return (
-    <div className="h-screen overflow-hidden bg-background flex" dir="rtl">
+    <div className="h-screen overflow-hidden bg-background flex flex-row" dir="rtl">
       {/* Sidebar - Desktop only */}
       <aside
         className={cn(
