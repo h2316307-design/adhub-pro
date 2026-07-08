@@ -99,6 +99,10 @@ export default function PaymentsReceiptsPage() {
   // ✅ حالة تعديل الدفعة الموزعة
   const [editingDistributedPaymentId, setEditingDistributedPaymentId] = useState<string | null>(null);
   const [editingDistributedPayments, setEditingDistributedPayments] = useState<Payment[]>([]);
+  
+  const [friendRentals, setFriendRentals] = useState<any[]>([]);
+  const [friendContractsMap, setFriendContractsMap] = useState<Record<number, string>>({});
+  const [purchaseInvoiceNotes, setPurchaseInvoiceNotes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     loadPayments();
@@ -218,6 +222,29 @@ export default function PaymentsReceiptsPage() {
 
       if (paymentsError) throw paymentsError;
 
+      // Load friend rentals and purchase invoices
+      const [rentalsRes, purchaseInvoicesRes] = await Promise.all([
+        supabase.from('friend_billboard_rentals').select('contract_number, billboard_id, billboards(Billboard_Name)'),
+        supabase.from('purchase_invoices').select('id, invoice_code, notes')
+      ]);
+
+      if (rentalsRes.data) {
+        setFriendRentals(rentalsRes.data);
+      }
+
+      if (purchaseInvoicesRes.data) {
+        const pNotes: Record<string, string> = {};
+        purchaseInvoicesRes.data.forEach((p: any) => {
+          if (p.notes) {
+            pNotes[p.id] = p.notes;
+            if (p.invoice_code) {
+              pNotes[p.invoice_code] = p.notes;
+            }
+          }
+        });
+        setPurchaseInvoiceNotes(pNotes);
+      }
+
       const { data: contractsAdTypes } = await supabase
         .from('Contract')
         .select('Contract_Number, "Ad Type"');
@@ -228,6 +255,7 @@ export default function PaymentsReceiptsPage() {
           adTypeMap[c.Contract_Number] = c['Ad Type'];
         }
       });
+      setFriendContractsMap(adTypeMap);
 
       const { data: customersData } = await supabase
         .from('customers')
@@ -626,7 +654,7 @@ export default function PaymentsReceiptsPage() {
   );
 
   return (
-    <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto" dir="rtl">
+    <div className="space-y-6 p-4 md:p-8 max-w-full mx-auto" dir="rtl">
       {/* Premium Glassmorphic Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/15 p-6 md:p-8 backdrop-blur-sm shadow-sm">
         <div className="absolute right-0 top-0 -z-10 h-32 w-32 rounded-full bg-primary/5 blur-3xl"></div>

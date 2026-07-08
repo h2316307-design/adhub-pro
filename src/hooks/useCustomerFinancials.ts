@@ -24,6 +24,8 @@ export interface CustomerFinancialData {
   totalDiscounts: number;
   // إجمالي المشتريات من العميل
   totalPurchases: number;
+  // إجمالي إيجارات الأصدقاء المتاحة
+  totalFriendRentals: number;
   // حالة التحميل
   isLoading: boolean;
   // خطأ
@@ -355,6 +357,7 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
       repaymentPercentage: Math.min(100, Math.max(0, repaymentPercentage)),
       totalDiscounts,
       totalPurchases,
+      totalFriendRentals: friendRentals,
       debtBreakdown: {
         contracts: totalContracts,
         salesInvoices: totalSalesInvoices,
@@ -462,6 +465,7 @@ export function calculateCustomerFinancials(
     repaymentPercentage: Math.min(100, Math.max(0, repaymentPercentage)),
     totalDiscounts,
     totalPurchases,
+    totalFriendRentals: friendRentals,
     debtBreakdown: {
       contracts: totalContracts,
       salesInvoices: totalSalesInvoices,

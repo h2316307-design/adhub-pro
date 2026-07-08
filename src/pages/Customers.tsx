@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Edit, Trash2, Printer, Plus, AlertCircle, TrendingUp, Users, Wallet, CreditCard, Clock, Building2, Phone as PhoneIcon, Merge } from 'lucide-react';
 import { Progress } from '@/components/ui/progress';
 import { useNavigate } from 'react-router-dom';
@@ -69,6 +70,7 @@ interface CustomerSummary {
   remainingDebt: number;   // ✅ المتبقي من الدين باستخدام المنطق الصحيح
   repaymentPercentage: number; // ✅ نسبة السداد الصحيحة
   friendRentals?: number;  // ✅ الإيجارات الصديقة غير المستعملة
+  totalPurchases?: number; // ✅ المشتريات والإيجارات غير المستعملة
   isSupplier?: boolean;
   isCustomer?: boolean;
   supplierType?: string | null;
@@ -113,7 +115,8 @@ function CustomerRow({
     ? "group hover:bg-destructive/10 transition-all duration-300 bg-destructive/5 border-r-4 border-r-destructive" 
     : "group hover:bg-accent/10 transition-all duration-300";
 
-  const netRemaining = remaining + (customer.friendRentals || 0);
+  const netRemaining = remaining;
+  const basicRemaining = remaining + (customer.totalPurchases || 0);
 
   const customerData = {
     ...customer,
@@ -217,8 +220,8 @@ function CustomerRow({
       {/* المتبقي */}
       <TableCell className="py-4">
         <div className="flex flex-col items-end">
-          <span className={`font-bold font-manrope ${remaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
-            {remaining < 0 ? `(${Math.abs(remaining).toLocaleString('ar-LY')})` : remaining.toLocaleString('ar-LY')}
+          <span className={`font-bold font-manrope ${basicRemaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {basicRemaining < 0 ? `(${Math.abs(basicRemaining).toLocaleString('ar-LY')})` : basicRemaining.toLocaleString('ar-LY')}
           </span>
           <span className="text-[10px] text-muted-foreground">د.ل</span>
         </div>
@@ -230,7 +233,10 @@ function CustomerRow({
           <span className={`font-bold font-manrope ${netRemaining > 0 ? 'text-destructive' : 'text-emerald-600 dark:text-emerald-400'}`}>
             {netRemaining < 0 ? `(${Math.abs(netRemaining).toLocaleString('ar-LY')})` : netRemaining.toLocaleString('ar-LY')}
           </span>
-          <span className="text-[10px] text-muted-foreground">د.ل</span>
+          <div className="flex items-center gap-1 mt-0.5">
+            <span className="text-[10px] text-muted-foreground">د.ل</span>
+            <span className="text-[9px] text-muted-foreground/75 font-bold">(شامل المقاصة)</span>
+          </div>
         </div>
       </TableCell>
 
@@ -862,7 +868,8 @@ export default function Customers() {
       customerData.totalPaid = financials.totalPaid;
       customerData.remainingDebt = financials.remainingDebt;
       customerData.repaymentPercentage = financials.repaymentPercentage;
-      customerData.friendRentals = friendRentals;
+      customerData.friendRentals = financials.totalFriendRentals;
+      customerData.totalPurchases = financials.totalPurchases;
       customerData.overdueInfo = overdueMap.get(customerId) || {
         hasOverdue: false,
         oldestDueDate: null,
@@ -2014,7 +2021,19 @@ export default function Customers() {
                   <TableHead className="font-bold text-foreground text-left">المدفوع</TableHead>
                   <TableHead className="font-bold text-foreground text-left">الرصيد</TableHead>
                   <TableHead className="font-bold text-foreground text-left">المتبقي</TableHead>
-                  <TableHead className="font-bold text-foreground text-left">صافي المتبقي</TableHead>
+                  <TableHead className="font-bold text-foreground text-left">
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger className="flex items-center gap-1 font-bold text-foreground">
+                          <span>صافي المتبقي</span>
+                          <span className="text-muted-foreground text-[10px] font-normal cursor-help">(؟)</span>
+                        </TooltipTrigger>
+                        <TooltipContent className="bg-slate-900 border border-slate-700 text-slate-100 p-2.5 rounded-lg shadow-xl text-right">
+                          <p dir="rtl" className="text-xs">الرصيد المتبقي النهائي بعد خصم فواتير المشتريات وإيجارات الصديقة (عمليات المقاصة)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </TableHead>
                   <TableHead className="font-bold text-foreground">السداد</TableHead>
                   <TableHead className="font-bold text-foreground">الحالة</TableHead>
                   <TableHead className="font-bold text-foreground">الإجراءات</TableHead>

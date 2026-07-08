@@ -495,23 +495,13 @@ export default function CustomerBilling() {
   const totalCredits = customerFinancials.totalPaid;
   const totalDiscounts = customerFinancials.totalDiscounts;
   const balance = customerFinancials.remainingDebt;
-  const totalFriendRentals = customerFinancials.totalPurchases;
+  const totalFriendRentals = customerFinancials.totalFriendRentals;
+  const totalPurchases = customerFinancials.totalPurchases;
 
   // ✅ إصلاح حساب رصيد الحساب العام - فقط المدفوعات العامة
   const accountPayments = useMemo(() => 
     payments.filter(p => p.entry_type === 'account_payment')
       .reduce((s, p) => s + (Number(p.amount) || 0), 0), [payments]);
-
-  // ✅ حساب إجمالي المشتريات من الزبون (فواتير الشراء)
-  const totalPurchases = useMemo(() => {
-    return payments.reduce((s, p) => {
-      const amount = Number(p.amount) || 0;
-      if (p.entry_type === 'purchase_invoice') {
-        return s + amount;
-      }
-      return s;
-    }, 0);
-  }, [payments]);
 
   // ✅ حساب إجمالي مبيعات الزبون (فواتير المبيعات)
   const totalSales = useMemo(() => {

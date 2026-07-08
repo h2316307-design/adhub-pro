@@ -70,6 +70,7 @@ const sidebarSections: SidebarSection[] = [
       { id: 'overdue_payments', label: 'دفعات العقود المتأخرة', icon: AlertCircle, path: '/admin/overdue-payments' },
       { id: 'account_overdue_payments', label: 'متأخرات الحسابات والفواتير', icon: Receipt, path: '/admin/account-overdue-payments' },
       { id: 'payments', label: 'الدفعات والإيصالات', icon: CreditCard, path: '/admin/payments-receipts-page' },
+      { id: 'contract_closure_simulator', label: 'محاكي تسوية العقود', icon: Calculator, path: '/admin/contract-closure-simulator', permission: 'contracts' },
       { id: 'revenue', label: 'الإيرادات', icon: TrendingUp, path: '/admin/revenue' },
       { id: 'expenses', label: 'المصروفات', icon: TrendingDown, path: '/admin/expense-management' },
       { id: 'salaries', label: 'الرواتب', icon: Users, path: '/admin/salaries' },

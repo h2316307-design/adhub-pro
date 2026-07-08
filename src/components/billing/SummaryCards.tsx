@@ -82,9 +82,9 @@ export function SummaryCards({
               <p className="text-xs text-slate-500 mt-1">جميع الدفعات المستلمة</p>
             </div>
             
-            {/* المتبقي الإجمالي (بدون إيجارات الصديقة) */}
+            {/* المتبقي الإجمالي (بدون المشتريات وإيجارات الصديقة) */}
             {(() => {
-              const netBalance = balance + totalFriendRentals;
+              const netBalance = balance + totalPurchases;
               const isCredit = netBalance < 0;
               return (
                 <div className={`p-6 text-center bg-gradient-to-b ${isCredit ? 'from-emerald-500/10 to-transparent border-2 border-emerald-500/20' : 'from-rose-500/10 to-transparent border-2 border-rose-500/20'} rounded-xl mx-2 my-2 transition-all duration-200 hover:scale-[1.02]`}>
@@ -100,7 +100,7 @@ export function SummaryCards({
                   <p className={`text-xs mt-2 font-medium ${isCredit ? 'text-emerald-300' : 'text-rose-300'}`}>
                     {isCredit ? '⬆ رصيد دائن للعميل' : 'مستحق على العميل'}
                   </p>
-                  <p className="text-slate-500 text-[10px] mt-1 mb-1.5">بدون إيجارات الصديقة</p>
+                  <p className="text-slate-500 text-[10px] mt-1 mb-1.5">بدون المشتريات وإيجارات الصديقة</p>
                   {isCredit && accountPayments > 0 && (
                     <div className="mt-1">
                       <span className="text-[10px] text-emerald-400 font-semibold bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full inline-block">
@@ -133,6 +133,13 @@ export function SummaryCards({
                 <div className="mt-2">
                   <span className="text-[10px] text-amber-400 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full inline-block">
                     إيجارات غير مستعملة: {totalFriendRentals.toLocaleString('en-US')} د.ل
+                  </span>
+                </div>
+              )}
+              {totalPurchases - totalFriendRentals > 0 && (
+                <div className="mt-2">
+                  <span className="text-[10px] text-purple-400 font-semibold bg-purple-500/10 border border-purple-500/20 px-2 py-0.5 rounded-full inline-block">
+                    مشتريات غير مستعملة: {(totalPurchases - totalFriendRentals).toLocaleString('en-US')} د.ل
                   </span>
                 </div>
               )}

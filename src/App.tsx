@@ -125,6 +125,7 @@ const CompanyManagement = lazyRetry(() => import("./pages/CompanyManagement"));
 const LogoManagement = lazyRetry(() => import("./pages/LogoManagement"));
 const ExportContentSettings = lazyRetry(() => import("./pages/ExportContentSettings"));
 const ExportPricingList = lazyRetry(() => import("./pages/ExportPricingList"));
+const ContractClosureSimulator = lazyRetry(() => import("./pages/ContractClosureSimulator"));
 
 // ---- Loading fallback ----
 const PageLoader = () => (
@@ -220,6 +221,7 @@ const adminRoutes: { path: string; Component: React.LazyExoticComponent<any>; pe
   { path: "offline-setup", Component: OfflineSetup, permission: "database_setup" },
   { path: "export-content-settings", Component: ExportContentSettings, permission: "settings" },
   { path: "export-pricing", Component: ExportPricingList, permission: "pricing" },
+  { path: "contract-closure-simulator", Component: ContractClosureSimulator, permission: "contracts" },
 ];
 
 // ---- QueryClient with caching ----
