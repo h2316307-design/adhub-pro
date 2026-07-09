@@ -155,7 +155,8 @@ export function formatArabicContractDate(dateStr: string): string {
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = String(d.getFullYear());
-    return `${day}/${month}/${year}`;
+    // تنسيق التاريخ بمعكوس الترتيب داخل عزل LTR ليظهر لليبيين بالترتيب الصحيح (اليوم أولاً من اليمين)
+    return `\u202A${year}/${month}/${day}\u202C`;
   } catch {
     return dateStr;
   }
@@ -202,7 +203,7 @@ export function generatePaymentsClauseText(
     const amount = Number(one.amount).toLocaleString('en-US');
     const date = formatArabicContractDate(one.dueDate);
     const type = one.paymentType ? ` ${one.paymentType}` : '';
-    return `دفعة واحدة ${amount} ${currencySymbol}${type}${date ? ` بتاريخ ${date}` : ''}`.trim();
+    return `يتم السداد دفعة واحدة بقيمة ${amount} ${currencySymbol}${type}${date ? ` بتاريخ ${date}` : ''}.`.trim();
   }
 
   const totalInstallments = normalized.length;
@@ -240,7 +241,7 @@ export function generatePaymentsClauseText(
   const restAmounts = rest.map(i => Number(i.amount));
   const allRestEqual = restAmounts.every(a => Math.abs(a - restAmounts[0]) < 0.01);
 
-  let text = `دفعة أولى: (${firstAmount}) ${currencySymbol}`;
+  let text = `يتم السداد على ${totalInstallments} دفعات وفقاً للجدول التالي: دفعة أولى: (${firstAmount}) ${currencySymbol}`;
   if (firstDate) {
     text += ` بتاريخ ${firstDate}`;
   }

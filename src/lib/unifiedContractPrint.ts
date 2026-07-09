@@ -405,7 +405,10 @@ function replaceVariables(
     .replace(/{inclusionText}/g, inclusionText) // ✅ استبدال متغير شامل/غير شامل
     // NOTE: paymentsHtml may contain <br> etc. We keep it as-is for wrapping,
     // but it MUST be escaped at render time inside SVG text.
-    .replace(/{payments}/g, paymentsHtml);
+    .replace(/{payments}/g, paymentsHtml)
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\.\s*\./g, '.')
+    .trim();
 }
 
 // ===== BUILD FIRST PAGE SVG (Contract Terms) - متطابق تماماً مع المعاينة في ContractTermsSettings =====
@@ -418,13 +421,10 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
   const lineHeight = settings.termsLineHeight || 65; // نفس المعاينة
   const goldLineSettings = settings.termsGoldLine || { visible: true, heightPercent: 30, color: '#D4AF37' };
   
-  // المعاينة تستخدم textAnchor="end" للبنود بشكل ثابت - يجب التطابق معها
-  const termsTextAnchor = 'end';
-
   let termsSvg = '';
   let currentY = settings.termsStartY;
   const activeTerms = terms.filter(t => t.is_active);
-  
+
   activeTerms.forEach((term) => {
     const termY = currentY;
     const fontSize = term.font_size || 42;
@@ -436,47 +436,35 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
     
     // حساب موقع Y التالي بعد هذا البند مع التباعد - نفس المعاينة
     currentY = termY + termHeight + (settings.termsSpacing || 40);
-    
-    contentLines.forEach((line, lineIndex) => {
-      const y = termY + (lineIndex * lineHeight);
-      
-      // السطر الأول يحتوي على العنوان
-      if (lineIndex === 0) {
-        const colonIndex = line.indexOf(':');
-        if (colonIndex !== -1) {
-          const titlePartRaw = line.substring(0, colonIndex + 1);
-          const contentPartRaw = line.substring(colonIndex + 1);
-          const titleWeight = settings.termsTitleWeight || 'bold';
-          const titleWidth = Math.round(measureTextWidthPx(titlePartRaw, fontSize, 'Doran, sans-serif', titleWeight));
 
-          const titlePart = escapeSvgText(titlePartRaw);
-          const contentPart = escapeSvgText(contentPartRaw);
+    const goldColor = goldLineSettings.color || '#D4AF37';
+    const titleWeight = settings.termsTitleWeight || 'bold';
+    const contentWeight = settings.termsContentWeight || 'normal';
 
-          // الخط الذهبي خلف العنوان فقط - نفس المعاينة بالضبط (rectX = termsX - titleWidth)
-          if (goldLineSettings.visible !== false) {
-            // ارتفاع الخط مشتق من fontSize (وليس lineHeight) ليكون مناسباً لارتفاع المحارف نفسها
-            const goldLineHeight = Math.max(2, fontSize * (goldLineSettings.heightPercent / 100));
-            // المعاينة تستخدم: x={termsX - titleWidth}
-            const rectX = termsX - titleWidth;
-            // ضبط بصري للنص العربي: الخط كان يطلع أعلى الكلمة في نافذة الطباعة الفعلية،
-            // لذلك ننزل المستطيل الذهبي حتى يمر في منتصف عنوان البند نفسه.
-            const arabicCenterOffset = fontSize * 0.20;
-            const rectY = y - (goldLineHeight / 2) + arabicCenterOffset;
-            termsSvg += `<rect x="${rectX}" y="${rectY}" width="${titleWidth}" height="${goldLineHeight}" fill="${goldLineSettings.color}" rx="2" />`;
-          }
+    const foX = termsX - termsWidth;
 
-           termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle" style="unicode-bidi: plaintext;">`;
-           // ALM first to stabilize RTL when line begins with numbers/dates
-           termsSvg += `<tspan>${ALM}</tspan>`;
-           termsSvg += `<tspan font-weight="${settings.termsTitleWeight || 'bold'}">${escapeSvgText(titlePartRaw)}</tspan>`;
-           termsSvg += `<tspan font-weight="${settings.termsContentWeight || 'normal'}">${escapeSvgText(contentPartRaw)}</tspan>`;
-           termsSvg += `</text>`;
-           return;
-         }
-       }
+    // الخط الذهبي خلف العنوان فقط - نفس المعاينة بالضبط (بنسبة ارتفاع ديناميكية)
+    const heightPercent = goldLineSettings.heightPercent || 30;
+    const insetPercent = (100 - heightPercent) / 2;
+    const goldHighlight = goldLineSettings.visible !== false 
+      ? `<span style="position: absolute; inset: ${insetPercent}% 0 ${insetPercent}% 0; background-color: ${goldColor}; z-index: -1; border-radius: 2px; width: 100%;"></span>`
+      : '';
 
-       termsSvg += `<text x="${termsX}" y="${y}" font-family="Doran, sans-serif" font-weight="${settings.termsContentWeight || 'normal'}" font-size="${fontSize}" fill="#000" text-anchor="${termsTextAnchor}" dominant-baseline="middle" style="unicode-bidi: plaintext;">${escapeSvgText(rtlSafe(line))}</text>`;
-    });
+    const titleSpan = `<span style="position: relative; display: inline-block; z-index: 1; margin-left: 6px;">
+      ${goldHighlight}
+      <span style="position: relative; z-index: 2; font-weight: ${titleWeight === 'bold' || titleWeight === '800' ? 800 : 700}; padding: 0 4px;">${escapeHtmlText(titleText)}</span>
+    </span>`;
+
+    // استخدام text-align: justify لضبط نهايات الأسطر وعلاج قفز علامات التنصيص والفواصل في الاتجاه الصحيح
+    const htmlContent = `
+      <div xmlns="http://www.w3.org/1999/xhtml" style="direction: rtl; text-align: justify; text-justify: inter-word; font-family: Doran, 'Noto Sans Arabic', sans-serif; font-size: ${fontSize}px; line-height: ${lineHeight}px; color: #000; font-weight: ${contentWeight === 'bold' ? 'bold' : 'normal'};">
+        ${titleSpan}${escapeHtmlText(contentText)}
+      </div>
+    `;
+
+    termsSvg += `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}">
+      ${htmlContent}
+    </foreignObject>`;
   });
   
   // ✅ استخدام ارتفاع ثابت = DESIGN_H مثل المعاينة في ContractTermsSettings

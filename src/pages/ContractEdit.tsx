@@ -2874,19 +2874,22 @@ export default function ContractEdit() {
     }
   };
 
-  // Helper to round installment values down to clean/closed numbers (nearest 500 for >=10k, nearest 100 for >=1k, etc.) to ensure the first payment is always the largest.
+  // تقريب للأسفل لأقرب رقم مغلق (مستخدم في distributeWithInterval حيث الدفعة الأولى أكبر)
   const roundToCleanValue = (value: number): number => {
     if (value <= 0) return 0;
-    if (value < 100) {
-      return Math.floor(value);
-    }
-    if (value < 1000) {
-      return Math.floor(value / 10) * 10;
-    }
-    if (value < 10000) {
-      return Math.floor(value / 100) * 100;
-    }
+    if (value < 100) return Math.floor(value);
+    if (value < 1000) return Math.floor(value / 10) * 10;
+    if (value < 10000) return Math.floor(value / 100) * 100;
     return Math.floor(value / 500) * 500;
+  };
+
+  // تقريب للأعلى لأقرب رقم مغلق (لالتوزيع بالفترات والنماذج)
+  const roundUpToCleanValue = (value: number): number => {
+    if (value <= 0) return 0;
+    if (value < 100) return Math.ceil(value);
+    if (value < 1000) return Math.ceil(value / 10) * 10;
+    if (value < 10000) return Math.ceil(value / 100) * 100;
+    return Math.ceil(value / 500) * 500;
   };
 
   const distributeEvenly = (count: number) => {
@@ -2901,38 +2904,21 @@ export default function ContractEdit() {
         dueDate: calculateDueDate('عند التوقيع', 0)
       }];
     } else {
-      const cleanAmount = roundToCleanValue(finalTotal / count);
-      const firstAmount = Math.round((finalTotal - cleanAmount * (count - 1)) * 100) / 100;
-      
-      let finalFirst = firstAmount;
-      
-      if (roundToCleanValue(firstAmount) !== firstAmount) {
-        let cleanFirst = roundToCleanValue(firstAmount);
-        const lastPayment = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
-        
-        if (cleanFirst < lastPayment) {
-          let step = 500;
-          if (cleanFirst < 100) step = 1;
-          else if (cleanFirst < 1000) step = 10;
-          else if (cleanFirst < 10000) step = 100;
-          
-          cleanFirst += step;
-        }
-        finalFirst = cleanFirst;
-      }
-      
-      let runningTotal = 0;
+      // ✅ خوارزمية ذكية: تقريب للأعلى وترحيل الفرق للدفعة التالية
+      let remainingTotal = finalTotal;
       list = Array.from({ length: count }).map((_, i) => {
         const isLast = i === count - 1;
-        let amount = cleanAmount;
-        if (i === 0) amount = finalFirst;
-        
+        let amount: number;
+
         if (isLast) {
-          amount = Math.round((finalTotal - runningTotal) * 100) / 100;
+          amount = Math.round(remainingTotal * 100) / 100;
         } else {
-          runningTotal += amount;
+          const periodsLeft = count - i;
+          const exactShare = remainingTotal / periodsLeft;
+          amount = roundUpToCleanValue(exactShare);
+          remainingTotal -= amount;
         }
-        
+
         return {
           amount,
           paymentType: i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'),
@@ -3001,42 +2987,28 @@ export default function ContractEdit() {
     }
 
     const intervalDuration = totalDuration / count;
-    const cleanAmount = roundToCleanValue(finalTotal / count);
-    const firstAmount = Math.round((finalTotal - cleanAmount * (count - 1)) * 100) / 100;
-    
-    let finalFirst = firstAmount;
-    
-    if (roundToCleanValue(firstAmount) !== firstAmount) {
-      let cleanFirst = roundToCleanValue(firstAmount);
-      const lastPayment = Math.round((finalTotal - cleanFirst - cleanAmount * (count - 2)) * 100) / 100;
-      
-      if (cleanFirst < lastPayment) {
-        let step = 500;
-        if (cleanFirst < 100) step = 1;
-        else if (cleanFirst < 1000) step = 10;
-        else if (cleanFirst < 10000) step = 100;
-        
-        cleanFirst += step;
-      }
-      finalFirst = cleanFirst;
-    }
-    
-    let runningTotal = 0;
+    // ✅ خوارزمية ذكية: كل دفعة تُقرّب للأسفل لأقرب رقم مغلق،
+    // والفرق ينتقل للدفعة التالية، والدفعة الأخيرة تستوعب المتبقي.
+    let remainingTotal = finalTotal;
     const newInstallments = Array.from({ length: count }).map((_, i) => {
       const offset = i * intervalDuration;
       const targetDate = new Date(start.getTime() + offset);
       const dueDateStr = targetDate.toISOString().split('T')[0];
-      
+
       const isLast = i === count - 1;
-      let amount = cleanAmount;
-      if (i === 0) amount = finalFirst;
-      
+      let amount: number;
+
       if (isLast) {
-        amount = Math.round((finalTotal - runningTotal) * 100) / 100;
+        // الدفعة الأخيرة تأخذ المتبقي بالضبط
+        amount = Math.round(remainingTotal * 100) / 100;
       } else {
-        runningTotal += amount;
+        // حساب حصة هذه الفترة من المتبقي، ثم تقريب للأعلى لأقرب رقم مغلق
+        const periodsLeft = count - i;
+        const exactShare = remainingTotal / periodsLeft;
+        amount = roundUpToCleanValue(exactShare);
+        remainingTotal -= amount;
       }
-      
+
       let percentageLabel = '';
       if (i === 0) {
         percentageLabel = 'عند التوقيع';
@@ -3048,14 +3020,14 @@ export default function ContractEdit() {
       return {
         amount,
         paymentType: percentageLabel,
-        description: `الدفعة ${i + 1} (${Math.round(100 / count)}%)`,
+        description: `الدفعة ${i + 1} (${(100 / count).toFixed(2)}%)`,
         dueDate: dueDateStr
       };
     });
 
     setInstallments(newInstallments);
     setInstallmentsLoaded(false);
-    toast.success(`تم توزيع الدفعات بالتساوي على ${count} فترات من مدة العقد بقيم مغلقة`);
+    toast.success(`تم توزيع الدفعات على ${count} فترات متساوية بأرقام مغلقة`);
   }, [finalTotal, startDate, endDate]);
 
   // ✅ NEW: Create manual/uneven installments

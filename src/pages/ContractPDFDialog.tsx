@@ -42,7 +42,8 @@ const formatDateForDisplay = (dateStr: string): string => {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    // تنسيق التاريخ بمعكوس الترتيب داخل عزل LTR ليظهر بالترتيب الصحيح (اليوم أولاً من اليمين)
+    return `\u202A${year}/${month}/${day}\u202C`;
   } catch {
     return dateStr;
   }
@@ -2310,7 +2311,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
                <text x="${templateSettings.firstParty.x}" y="${templateSettings.firstParty.y + (templateSettings.firstParty.lineSpacing || 50)}" font-family="Doran, sans-serif" font-size="${templateSettings.firstParty.fontSize}" fill="#000" text-anchor="${templateSettings.firstParty.textAlign || 'end'}" dominant-baseline="middle">${templateSettings.firstPartyData.representative}</text>
                ` : ''}
               
-              <!-- البنود من قاعدة البيانات -->
               ${contractTerms.length > 0 ? (() => {
           let currentY = templateSettings.termsStartY;
           const termsX = templateSettings.termsStartX;
@@ -2319,13 +2319,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           const lineHeight = 55;
           const goldLineSettings = templateSettings.termsGoldLine || { visible: true, heightPercent: 30, color: '#D4AF37' };
 
-          // ✅ IMPORTANT: لمطابقة صفحة الإعدادات (ContractTermsSettings) البنود دائماً text-anchor="end"
-          // حتى لو تم تغيير termsTextAlign بالخطأ في الإعدادات.
-          const textAnchor: 'end' = 'end';
-
-          const calcRectX = (x: number, width: number) => x - width;
-
-          // دالة لتقسيم النص إلى أسطر (نفس منطق المعاينة)
+          // دالة لتقسيم النص إلى أسطر لتقدير الارتفاع الكلي للبند
           const wrapText = (text: string, maxChars: number): string[] => {
             const words = text.split(' ');
             const lines: string[] = [];
@@ -2349,7 +2343,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           const discountText = discountInfo ? `بعد خصم ${discountInfo.display} ${currencyInfo.writtenName}` : '';
 
           const replaceVariables = (text: string): string => {
-            // ✅ بناء نص شامل الطباعة والتركيب
             const installationEnabled = contract?.installation_enabled !== false && contract?.installation_enabled !== 0;
             const printCostEnabled = Boolean(
               contract?.print_cost_enabled === true ||
@@ -2375,7 +2368,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
               .replace(/{inclusionText}/g, inclusionText)
               .replace(/{payments}/g, paymentsHtml);
 
-            // تنظيف المسافات الزائدة إذا كان التخفيض فارغاً
             result = result.replace(/\s{2,}/g, ' ').replace(/\.\s*\./g, '.').trim();
             return result;
           };
@@ -2387,51 +2379,42 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
             const titleText = term.term_title + ':';
             const contentText = replaceVariables(term.term_content);
             const fullText = titleText + ' ' + contentText;
+            
+            // تقدير الارتفاع بناء على عدد الأسطر
             const contentLines = wrapText(fullText, charsPerLine);
             const termHeight = contentLines.length * lineHeight;
 
             // تحديث موقع البند التالي
             currentY = termY + termHeight + (templateSettings.termsSpacing || 40);
 
-            let svgContent = '';
+            const goldColor = goldLineSettings.color || '#D4AF37';
+            const titleWeight = templateSettings.termsTitleWeight || 'bold';
+            const contentWeight = templateSettings.termsContentWeight || 'normal';
 
-            contentLines.forEach((line, lineIndex) => {
-              const y = termY + (lineIndex * lineHeight);
+            const foX = termsX - termsWidth;
 
-              // أول سطر: عنوان + محتوى بنفس عنصر text (tspan) مثل المعاينة
-              if (lineIndex === 0) {
-                const colonIndex = line.indexOf(':');
-                if (colonIndex !== -1) {
-                  const titlePart = line.substring(0, colonIndex + 1);
-                  const contentPart = line.substring(colonIndex + 1);
+            // بناء خلفية الخط الذهبي خلف العنوان فقط (بنسبة ارتفاع ديناميكية)
+            const heightPercent = goldLineSettings.heightPercent || 30;
+            const insetPercent = (100 - heightPercent) / 2;
+            const goldHighlight = goldLineSettings.visible 
+              ? `<span style="position: absolute; inset: ${insetPercent}% 0 ${insetPercent}% 0; background-color: ${goldColor}; z-index: -1; border-radius: 2px; width: 100%;"></span>`
+              : '';
 
-                  const titleWeight = templateSettings.termsTitleWeight || 'bold';
-                  const titleWidth = Math.round(
-                    measureTextWidthPx(titlePart, fontSize, 'Doran, sans-serif', titleWeight)
-                  );
+            const titleSpan = `<span style="position: relative; display: inline-block; z-index: 1; margin-left: 6px;">
+              ${goldHighlight}
+              <span style="position: relative; z-index: 2; font-weight: ${titleWeight === 'bold' || titleWeight === '800' ? 800 : 700}; padding: 0 4px;">${titleText}</span>
+            </span>`;
 
-                  if (goldLineSettings.visible) {
-                    const goldLineHeight = lineHeight * (goldLineSettings.heightPercent / 100);
-                    // ✅ إزاحة بصرية لأسفل لمحاذاة الخط الذهبي مع المنتصف البصري للحروف العربية
-                    const opticalOffset = fontSize * 0.20;
-                    const rectX = calcRectX(termsX, titleWidth);
-                    const rectY = y - goldLineHeight / 2 + opticalOffset;
-                    svgContent += '<rect x="' + rectX + '" y="' + rectY + '" width="' + titleWidth + '" height="' + goldLineHeight + '" fill="' + goldLineSettings.color + '" rx="2" />';
-                  }
+            // استخدام text-align: justify لجعل نهايات السطور متوازنة وعلى نفس المستوى
+            const htmlContent = `
+              <div xmlns="http://www.w3.org/1999/xhtml" style="direction: rtl; text-align: justify; text-justify: inter-word; font-family: Doran, 'Noto Sans Arabic', sans-serif; font-size: ${fontSize}px; line-height: ${lineHeight}px; color: #000; font-weight: ${contentWeight === 'bold' ? 'bold' : 'normal'};">
+                ${titleSpan}${contentText}
+              </div>
+            `;
 
-                  svgContent += '<text x="' + termsX + '" y="' + y + '" font-family="Doran, sans-serif" font-size="' + fontSize + '" fill="#000" text-anchor="' + textAnchor + '" dominant-baseline="middle" style="unicode-bidi: plaintext;">';
-                  svgContent += '<tspan>' + '\u061C' + '</tspan>'; // ALM to stabilize RTL when line begins with numbers
-                  svgContent += '<tspan font-weight="' + (templateSettings.termsTitleWeight || 'bold') + '">' + titlePart + '</tspan>';
-                  svgContent += '<tspan font-weight="' + (templateSettings.termsContentWeight || 'normal') + '">' + contentPart + '</tspan>';
-                  return;
-                }
-              }
-
-              // بقية الأسطر
-              svgContent += '<text x="' + termsX + '" y="' + y + '" font-family="Doran, sans-serif" font-weight="' + (templateSettings.termsContentWeight || 'normal') + '" font-size="' + fontSize + '" fill="#000" text-anchor="' + textAnchor + '" dominant-baseline="middle" style="unicode-bidi: plaintext;">' + line + '</text>';
-            });
-
-            return svgContent;
+            return `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}">
+              ${htmlContent}
+            </foreignObject>`;
           }).join('');
         })() : ''}
 

@@ -170,7 +170,8 @@ const formatDateForDisplay = (dateStr: string): string => {
     const day = date.getDate().toString().padStart(2, '0');
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const year = date.getFullYear();
-    return `${day}/${month}/${year}`;
+    // تنسيق التاريخ بمعكوس الترتيب داخل عزل LTR ليظهر بالترتيب الصحيح (اليوم أولاً من اليمين)
+    return `\u202A${year}/${month}/${day}\u202C`;
   } catch {
     return dateStr;
   }
@@ -1804,6 +1805,14 @@ export default function ContractTermsSettings() {
                           // Find where title ends in the first line
                           const titleLength = titleText.length;
                           
+                          const foX = termsX - sectionSettings.termsWidth;
+                          const goldColor = sectionSettings.termsGoldLine?.color || '#D4AF37';
+                          const titleWeight = sectionSettings.termsTitleWeight || 'bold';
+                          const contentWeight = sectionSettings.termsContentWeight || 'normal';
+                          
+                          const heightPercent = sectionSettings.termsGoldLine?.heightPercent || 30;
+                          const insetPercent = (100 - heightPercent) / 2;
+                          
                           return (
                             <g key={term.id} onClick={() => handleSelectTerm(term)} style={{ cursor: 'pointer' }}>
                               {isSelected && (
@@ -1820,66 +1829,28 @@ export default function ContractTermsSettings() {
                                 />
                               )}
                               
-                              {contentLines.map((line, lineIndex) => {
-                                // First line contains the title
-                                if (lineIndex === 0) {
-                                  // Split the first line into title and content parts
-                                  const colonIndex = line.indexOf(':');
-                                  if (colonIndex !== -1) {
-                                    const titlePart = line.substring(0, colonIndex + 1);
-                                    const contentPart = line.substring(colonIndex + 1);
-                                    const titleFontSize = term.font_size || 42;
-                                    const titleWeight = sectionSettings.termsTitleWeight || "bold";
-                                    const titleWidth = Math.round(
-                                      measureTextWidthPx(titlePart, titleFontSize, "Doran, sans-serif", titleWeight)
-                                    );
-                                    
-                                    return (
-                                      <g key={lineIndex}>
-                                        {/* Gold Line behind title only */}
-                                        {sectionSettings.termsGoldLine?.visible !== false && (
-                                          <rect
-                                            x={termsX - titleWidth}
-                                            y={termY + (lineIndex * lineHeight) - (lineHeight * (sectionSettings.termsGoldLine?.heightPercent || 30) / 100 / 2)}
-                                            width={titleWidth}
-                                            height={lineHeight * (sectionSettings.termsGoldLine?.heightPercent || 30) / 100}
-                                            fill={sectionSettings.termsGoldLine?.color || '#D4AF37'}
-                                            rx="2"
-                                          />
-                                        )}
-                                        <text 
-                                          x={termsX}
-                                          y={termY + (lineIndex * lineHeight)}
-                                          fontFamily="Doran, sans-serif" 
-                                          fontSize={term.font_size || 42}
-                                          fill="#000" 
-                                          textAnchor="end"
-                                          dominantBaseline="middle"
-                                        >
-                                          <tspan fontWeight={sectionSettings.termsTitleWeight || 'bold'}>{titlePart}</tspan>
-                                          <tspan fontWeight={sectionSettings.termsContentWeight || 'normal'}>{contentPart}</tspan>
-                                        </text>
-                                      </g>
-                                    );
-                                  }
-                                }
-                                
-                                return (
-                                  <text 
-                                    key={lineIndex}
-                                    x={termsX}
-                                    y={termY + (lineIndex * lineHeight)}
-                                    fontFamily="Doran, sans-serif" 
-                                    fontWeight={sectionSettings.termsContentWeight || 'normal'}
-                                    fontSize={term.font_size || 42}
-                                    fill="#000" 
-                                    textAnchor="end"
-                                    dominantBaseline="middle"
-                                  >
-                                    {line}
-                                  </text>
-                                );
-                              })}
+                              <foreignObject x={foX} y={termY} width={sectionSettings.termsWidth} height={termHeight + 10}>
+                                <div xmlns="http://www.w3.org/1999/xhtml" style={{
+                                  direction: 'rtl',
+                                  textAlign: 'justify',
+                                  textJustify: 'inter-word',
+                                  fontFamily: "Doran, 'Noto Sans Arabic', sans-serif",
+                                  fontSize: `${term.font_size || 42}px`,
+                                  lineHeight: `${lineHeight}px`,
+                                  color: '#000',
+                                  fontWeight: contentWeight === 'bold' ? 'bold' : 'normal'
+                                }}>
+                                  <span style={{ position: 'relative', display: 'inline-block', zIndex: 1, marginLeft: '6px' }}>
+                                    {sectionSettings.termsGoldLine?.visible !== false && (
+                                      <span style={{ position: 'absolute', inset: `${insetPercent}% 0 ${insetPercent}% 0`, backgroundColor: goldColor, zIndex: -1, borderRadius: '2px', width: '100%' }}></span>
+                                    )}
+                                    <span style={{ position: 'relative', zIndex: 2, fontWeight: titleWeight === 'bold' || titleWeight === '800' ? 800 : 700, padding: '0 4px' }}>
+                                      {titleText}
+                                    </span>
+                                  </span>
+                                  {contentText}
+                                </div>
+                              </foreignObject>
                             </g>
                           );
                         });

@@ -38,6 +38,24 @@ const DEFAULT_PAYMENT_TYPES = [
   'نهاية العقد',
 ];
 
+// ✅ تقريب للأسفل لأقرب رقم مغلق
+const roundToCleanValue = (value: number): number => {
+  if (value <= 0) return 0;
+  if (value < 100) return Math.floor(value);
+  if (value < 1000) return Math.floor(value / 10) * 10;
+  if (value < 10000) return Math.floor(value / 100) * 100;
+  return Math.floor(value / 500) * 500;
+};
+
+// ✅ تقريب للأعلى لأقرب رقم مغلق
+const roundUpToCleanValue = (value: number): number => {
+  if (value <= 0) return 0;
+  if (value < 100) return Math.ceil(value);
+  if (value < 1000) return Math.ceil(value / 10) * 10;
+  if (value < 10000) return Math.ceil(value / 100) * 100;
+  return Math.ceil(value / 500) * 500;
+};
+
 interface Installment {
   amount: number;
   paymentType: string;
@@ -385,10 +403,13 @@ export function InstallmentsManager({
     const end = endDate ? new Date(endDate) : new Date(start.getTime() + 60 * 24 * 60 * 60 * 1000);
     const totalDuration = end.getTime() - start.getTime();
 
-    // 40% - 30% - 30%
-    const p1Amount = Math.round(finalTotal * 0.40 * 100) / 100;
-    const p2Amount = Math.round(finalTotal * 0.30 * 100) / 100;
-    const p3Amount = Math.round((finalTotal - p1Amount - p2Amount) * 100) / 100;
+    // ✅ 40% - 30% - 30% بأرقام مغلقة مع ترحيل الفرق للأمام (تقريب للأعلى)
+    let remaining = finalTotal;
+    const p1Amount = roundUpToCleanValue(remaining * 0.40);
+    remaining -= p1Amount;
+    const p2Amount = roundUpToCleanValue(remaining / 2);
+    remaining -= p2Amount;
+    const p3Amount = Math.round(remaining * 100) / 100; // المتبقي بالضبط
 
     const p1DateStr = start.toISOString().split('T')[0];
     const p2DateStr = new Date(start.getTime() + totalDuration * 0.40).toISOString().split('T')[0];
@@ -432,7 +453,8 @@ export function InstallmentsManager({
     const end = endDate ? new Date(endDate) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
     const totalDuration = end.getTime() - start.getTime();
     
-    const p1Amount = Math.round(finalTotal * 0.50 * 100) / 100;
+    // ✅ 50% - 50% بأرقام مغلقة مع ترحيل الفرق للدفعة الثانية (تقريب للأعلى)
+    const p1Amount = roundUpToCleanValue(finalTotal / 2);
     const p2Amount = Math.round((finalTotal - p1Amount) * 100) / 100;
 
     const p1DateStr = start.toISOString().split('T')[0];
@@ -470,10 +492,13 @@ export function InstallmentsManager({
     const end = endDate ? new Date(endDate) : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
     const totalDuration = end.getTime() - start.getTime();
 
-    // 33.33% - 33.33% - 33.34%
-    const p1Amount = Math.round(finalTotal * 0.3333 * 100) / 100;
-    const p2Amount = Math.round(finalTotal * 0.3333 * 100) / 100;
-    const p3Amount = Math.round((finalTotal - p1Amount - p2Amount) * 100) / 100;
+    // ✅ 33.33% لكل فترة بأرقام مغلقة مع ترحيل الفرق للأمام (تقريب للأعلى)
+    let remaining = finalTotal;
+    const p1Amount = roundUpToCleanValue(remaining / 3);
+    remaining -= p1Amount;
+    const p2Amount = roundUpToCleanValue(remaining / 2);
+    remaining -= p2Amount;
+    const p3Amount = Math.round(remaining * 100) / 100; // المتبقي بالضبط
 
     const p1DateStr = start.toISOString().split('T')[0];
     const p2DateStr = new Date(start.getTime() + totalDuration * 0.3333).toISOString().split('T')[0];
