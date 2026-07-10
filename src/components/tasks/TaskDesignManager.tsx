@@ -166,7 +166,26 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
         toast.success('تم تحديث التصميم بنجاح');
       } else {
         const targetTaskIds = Array.from(new Set([taskId, ...((replicateToTaskIds || []).filter(Boolean))]));
-        const rows = targetTaskIds.map((tid) => ({
+        
+        // التحقق من وجود المهام فعلياً في قاعدة البيانات لمنع أخطاء Constraint Foreign Key
+        const { data: validTasks, error: checkError } = await supabase
+          .from('installation_tasks')
+          .select('id')
+          .in('id', targetTaskIds);
+
+        if (checkError) throw checkError;
+
+        const validTaskIds = (validTasks || []).map(t => t.id);
+
+        if (validTaskIds.length === 0) {
+          throw new Error('المهمة المحددة (أو المهام التابعة لها) لم تعد موجودة في قاعدة البيانات. يرجى تحديث الصفحة.');
+        }
+
+        if (!validTaskIds.includes(taskId)) {
+          throw new Error('المهمة الحالية التي تحاول إضافة تصميم لها تم حذفها، يرجى تحديث الصفحة.');
+        }
+
+        const rows = validTaskIds.map((tid) => ({
           task_id: tid,
           design_name: designName,
           design_face_a_url: designFaceAUrl,
@@ -174,9 +193,10 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
           design_order: designs.length,
           created_at: new Date(designDate + 'T00:00:00').toISOString(),
         }));
+
         const { error } = await supabase.from('task_designs').insert(rows).select();
         if (error) throw error;
-        toast.success(targetTaskIds.length > 1 ? `تم إضافة التصميم لـ ${targetTaskIds.length} مهام` : 'تم إضافة التصميم بنجاح');
+        toast.success(validTaskIds.length > 1 ? `تم إضافة التصميم لـ ${validTaskIds.length} مهام` : 'تم إضافة التصميم بنجاح');
       }
 
       setDialogOpen(false);
