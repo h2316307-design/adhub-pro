@@ -199,6 +199,31 @@ export async function deletePausedBillboard(id: string) {
     .eq('id', id);
   if (error) throw error;
 
+  if (existing) {
+    const contractNumber = Number((existing as any).contract_number);
+    const billboardId = String((existing as any).billboard_id);
+    
+    // Read contract
+    const { data: contract } = await supabase
+      .from('Contract')
+      .select('billboard_ids')
+      .eq('Contract_Number', contractNumber)
+      .maybeSingle();
+      
+    if (contract) {
+      const idsStr: string = (contract as any).billboard_ids || '';
+      const ids = idsStr ? idsStr.split(',').map((s: string) => s.trim()).filter(Boolean) : [];
+      const updatedIds = ids.filter((x) => String(x) !== billboardId);
+      
+      await supabase
+        .from('Contract')
+        .update({
+          billboard_ids: updatedIds.length > 0 ? updatedIds.join(',') : null
+        })
+        .eq('Contract_Number', contractNumber);
+    }
+  }
+
   try {
     if (typeof window !== 'undefined' && existing) {
       window.dispatchEvent(new CustomEvent('paused-billboards-changed', {

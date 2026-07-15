@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,6 +52,7 @@ export function PauseBillboardDialog({
   const [notes, setNotes] = useState('');
   const [deductFromContract, setDeductFromContract] = useState(true);
   const [loading, setLoading] = useState(false);
+  const isSubmittingRef = useRef(false);
 
   // Reset state when opened — default to billboard rent start date (installation date in current contract)
   useEffect(() => {
@@ -61,6 +62,7 @@ export function PauseBillboardDialog({
       setNotes('');
       setDeductFromContract(true);
       setLoading(false);
+      isSubmittingRef.current = false;
     }
   }, [open, rentStartDate]);
 
@@ -222,6 +224,8 @@ export function PauseBillboardDialog({
           <Button
             disabled={loading}
             onClick={async () => {
+              if (isSubmittingRef.current) return;
+              isSubmittingRef.current = true;
               setLoading(true);
               try {
                 await onConfirm({
@@ -231,6 +235,7 @@ export function PauseBillboardDialog({
                   deductFromContract
                 });
               } catch (err) {
+                isSubmittingRef.current = false;
                 setLoading(false);
               }
             }}

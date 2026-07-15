@@ -64,14 +64,21 @@ export const pauseBillboardFromContract = async (
   const numBillboardId = Number(billboardId);
   const numContractNumber = Number(contractNumber);
 
-  // 1. Get current contract info (incl. original dates for accurate pause-day math)
-  const { data: contract, error: contractError } = await supabase
-    .from('Contract')
-    .select('*')
-    .eq('Contract_Number', contractNumber)
-    .single();
+  // 1. Get current contract info & installation tasks in parallel (saves 1 round trip)
+  const [contractRes, installationItemsRes] = await Promise.all([
+    supabase
+      .from('Contract')
+      .select('*')
+      .eq('Contract_Number', contractNumber)
+      .single(),
+    supabase
+      .from('installation_task_items')
+      .select('design_face_a, design_face_b, selected_design_id, installed_image_face_a_url, installed_image_face_b_url, installation_date, installation_tasks(contract_number, team_id, installation_teams(team_name))')
+      .eq('billboard_id', numBillboardId)
+  ]);
 
-  if (contractError) throw contractError;
+  if (contractRes.error) throw contractRes.error;
+  const contract = contractRes.data;
 
   // 2. Update the contract
   const currentIds = contract.billboard_ids
@@ -84,35 +91,32 @@ export const pauseBillboardFromContract = async (
     billboard_ids: updatedIds.length > 0 ? updatedIds.join(',') : null,
   };
 
-  const { error: updateContractError } = await supabase
-    .from('Contract')
-    .update(contractUpdates)
-    .eq('Contract_Number', contractNumber);
+  // 3. Update the contract & billboard in parallel, and select updated billboard details (saves 2 round trips)
+  const [updateContractRes, updateBillboardRes] = await Promise.all([
+    supabase
+      .from('Contract')
+      .update(contractUpdates)
+      .eq('Contract_Number', contractNumber),
+    supabase
+      .from('billboards')
+      .update({
+        Contract_Number: null,
+        Customer_Name: null,
+        Ad_Type: null,
+        Rent_Start_Date: null,
+        Rent_End_Date: null,
+        Status: 'متاح',
+        is_visible_in_available: null
+      })
+      .eq('ID', billboardId)
+      .select('*')
+      .single()
+  ]);
 
-  if (updateContractError) throw updateContractError;
+  if (updateContractRes.error) throw updateContractRes.error;
+  if (updateBillboardRes.error) throw updateBillboardRes.error;
 
-  // 3. Update the billboard
-  const { error: billboardError } = await supabase
-    .from('billboards')
-    .update({
-      Contract_Number: null,
-      Customer_Name: null,
-      Ad_Type: null,
-      Rent_Start_Date: null,
-      Rent_End_Date: null,
-      Status: 'متاح',
-      is_visible_in_available: null
-    })
-    .eq('ID', billboardId);
-
-  if (billboardError) throw billboardError;
-
-  // Fetch billboard details for logging
-  const { data: bb } = await supabase
-    .from('billboards')
-    .select('*')
-    .eq('ID', billboardId)
-    .single();
+  const bb = updateBillboardRes.data;
 
   // Fetch installation task details (if any) to populate designs/images/team
   let teamName = '';
@@ -123,11 +127,7 @@ export const pauseBillboardFromContract = async (
   let installationDate = '';
 
   try {
-    const { data: items } = await (supabase as any)
-      .from('installation_task_items')
-      .select('design_face_a, design_face_b, selected_design_id, installed_image_face_a_url, installed_image_face_b_url, installation_date, installation_tasks(contract_number, team_id, installation_teams(team_name))')
-      .eq('billboard_id', numBillboardId);
-      
+    const items = installationItemsRes.data;
     const contractItem = items?.find(
       (item: any) => Number(item?.installation_tasks?.contract_number) === numContractNumber
     );
@@ -272,45 +272,43 @@ export const pauseBillboardFromContract = async (
       net_rental_amount: finalNetRental
     };
 
-    if (existingHistory) {
-      const { error: historyError } = await supabase
-        .from('billboard_history')
-        .update(historyRow)
-        .eq('id', existingHistory.id);
-      if (historyError) console.error('Error updating billboard_history:', historyError);
-    } else {
-      const { error: historyError } = await supabase
-        .from('billboard_history')
-        .insert(historyRow);
-      if (historyError) console.error('Error inserting billboard_history:', historyError);
-    }
-  } catch (err) {
-    console.error('Error in billboard_history operation:', err);
-  }
-
-  // 5. Persist a paused_billboards record so it remains visible in the contract & print
-  try {
     const originalPrice = Number(bb?.Price || 0);
     const fullPrice = Math.max(0, originalPrice);
-    await supabase.from('paused_billboards' as any).insert({
-      contract_number: contractNumber,
-      billboard_id: billboardId,
-      billboard_name: bb?.Billboard_Name || null,
-      pause_date: pauseDate,
-      original_price: originalPrice,
-      net_rent: fullPrice,
-      full_price: fullPrice,
-      consumed_amount: Math.max(0, fullPrice - refundAmount),
-      refund_amount: refundAmount,
-      manual_refund: refundAmount,
-      // ✅ snapshot original contract dates so day-counters stay correct
-      original_start_date: contract['Contract Date'] || null,
-      original_end_date: contract['End Date'] || null,
-      deducted_from_contract: !!deductFromContract,
-      notes: notes || null,
-    });
-  } catch (e) {
-    console.error('Error inserting into paused_billboards:', e);
+
+    const historyPromise = existingHistory
+      ? supabase
+          .from('billboard_history')
+          .update(historyRow)
+          .eq('id', existingHistory.id)
+      : supabase
+          .from('billboard_history')
+          .insert(historyRow);
+
+    const pausedPromise = supabase
+      .from('paused_billboards' as any)
+      .insert({
+        contract_number: contractNumber,
+        billboard_id: billboardId,
+        billboard_name: bb?.Billboard_Name || null,
+        pause_date: pauseDate,
+        original_price: originalPrice,
+        net_rent: fullPrice,
+        full_price: fullPrice,
+        consumed_amount: Math.max(0, fullPrice - refundAmount),
+        refund_amount: refundAmount,
+        manual_refund: refundAmount,
+        // ✅ snapshot original contract dates so day-counters stay correct
+        original_start_date: contract['Contract Date'] || null,
+        original_end_date: contract['End Date'] || null,
+        deducted_from_contract: !!deductFromContract,
+        notes: notes || null,
+      });
+
+    const [historyRes, pausedRes] = await Promise.all([historyPromise, pausedPromise]);
+    if (historyRes.error) console.error('Error with billboard_history:', historyRes.error);
+    if (pausedRes.error) console.error('Error inserting into paused_billboards:', pausedRes.error);
+  } catch (err) {
+    console.error('Error in saving pause metadata:', err);
   }
 
   return true;

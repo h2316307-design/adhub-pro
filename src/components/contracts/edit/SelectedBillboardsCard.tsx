@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Calendar, X, Wrench, Building2, Users, TrendingUp, Pencil, Search, Filter, Printer, Square, CheckSquare, ArrowLeftRight, MoveRight, Trash2, PauseCircle, History as HistoryIcon, RefreshCw, MoreVertical, MapPin } from 'lucide-react';
+import { Calendar, X, Wrench, Building2, Users, TrendingUp, Pencil, Search, Filter, Printer, Square, CheckSquare, ArrowLeftRight, MoveRight, Trash2, PauseCircle, History as HistoryIcon, RefreshCw, MoreVertical, MapPin, AlertCircle, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { supabase } from '@/integrations/supabase/client';
@@ -25,6 +25,7 @@ import { PausedBillboardsList } from './PausedBillboardsList';
 import { toast } from 'sonner';
 import { pauseBillboardFromContract } from '@/services/billboardPauseService';
 import { listReplacementsByContract } from '@/services/pausedBillboardReplacementService';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
 
 // Component to show friend company name
 function FriendCompanyBadge({ billboardId, billboard }: { billboardId: string; billboard: any }) {
@@ -248,12 +249,15 @@ export function SelectedBillboardsCard({
     return true;
   };
 
+  const { confirm } = useSystemDialog();
   const [partnershipInfoMap, setPartnershipInfoMap] = useState<Map<string, PartnershipInfo>>(new Map());
   const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [editingBillboard, setEditingBillboard] = useState<any>(null);
   
   // Pause billboard state
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
+  const [deleteChoiceOpen, setDeleteChoiceOpen] = useState(false);
+  const [deletingBillboard, setDeletingBillboard] = useState<any>(null);
   const [pausingBillboard, setPausingBillboard] = useState<any>(null);
   const [pausingPrintCost, setPausingPrintCost] = useState(0);
   const [pausingInstallCost, setPausingInstallCost] = useState(0);
@@ -284,7 +288,7 @@ export function SelectedBillboardsCard({
     setBulkSelectedIds(new Set());
   };
 
-  const handleBulkRemove = () => {
+  const handleBulkRemove = async () => {
     const ids = Array.from(bulkSelectedIds);
     
     // Find billboards that cannot be deleted
@@ -295,9 +299,24 @@ export function SelectedBillboardsCard({
     });
 
     if (nonDeletableBillboards.length > 0) {
-      toast.error(
-        `لا يمكن حذف بعض اللوحات (${nonDeletableBillboards.map(b => b.Billboard_Name || b.name || `لوحة ${b.ID}`).join(', ')}) لوجود مهمة تركيب أو لتجاوز المدة المسموح بها. يمكنك فقط إيقافها.`
-      );
+      const ok = await confirm({
+        title: 'حذف فوري بدون إيقاف',
+        message: `بعض اللوحات المحددة (${nonDeletableBillboards.map(b => b.Billboard_Name || b.name || `لوحة ${b.ID}`).join(', ')}) لا يمكن حذفها مباشرة لوجود مهمة تركيب أو لتجاوز المدة. هل تريد حذف كافة اللوحات المحددة فورياً وبدون إيقاف؟`,
+        confirmText: 'حذف فوري للكل',
+        cancelText: 'إلغاء',
+        variant: 'destructive',
+      });
+      if (ok) {
+        if (onBulkRemove) {
+          onBulkRemove(ids);
+        } else {
+          ids.forEach(id => onRemoveSelected(id));
+        }
+        setBulkSelectedIds(new Set());
+        setBulkSelectMode(false);
+        toast.success('تم الحذف الفوري لكافة اللوحات المحددة');
+      }
+      return;
     }
 
     if (deletableIds.length > 0) {
@@ -306,6 +325,7 @@ export function SelectedBillboardsCard({
       } else {
         deletableIds.forEach(id => onRemoveSelected(id));
       }
+      toast.success('تم حذف اللوحات المحددة');
     }
 
     setBulkSelectedIds(new Set());
@@ -1228,13 +1248,8 @@ export function SelectedBillboardsCard({
                           onClick={(e) => {
                             e.stopPropagation();
                             if (!computeCanDelete(b)) {
-                              toast.error('لا يمكن حذف هذه اللوحة لوجود مهمة تركيب أو لتجاوز المدة المسموح بها. يمكنك فقط إيقافها أو استبدالها.');
-                              setPausingBillboard(b);
-                              const pCost = printCostDetails.find(p => p.billboardId === billboardId)?.printCost || 0;
-                              setPausingPrintCost(pCost);
-                              const iCost = installationDetails.find(i => i.billboardId === billboardId)?.adjustedPrice || 0;
-                              setPausingInstallCost(iCost);
-                              setPauseDialogOpen(true);
+                              setDeletingBillboard(b);
+                              setDeleteChoiceOpen(true);
                               return;
                             }
                             onRemoveSelected(billboardId);
@@ -1893,6 +1908,92 @@ export function SelectedBillboardsCard({
           }
         }}
       />
+
+      {/* Choice Dialog for Non-Deletable Billboard Removal */}
+      <Dialog open={deleteChoiceOpen} onOpenChange={setDeleteChoiceOpen}>
+        <DialogContent dir="rtl" className="sm:max-w-[500px] bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-foreground">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              خيارات إزالة اللوحة النشطة
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-3 text-right">
+            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-lg flex items-start gap-2">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
+              <div className="text-sm">
+                <p className="font-semibold text-foreground">
+                  اللوحة <span className="text-primary font-bold">{deletingBillboard?.Billboard_Name || deletingBillboard?.name}</span> مرتبطة بمهام تركيب أو تجاوزت مدة الحذف التلقائي.
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  الرجاء اختيار نوع الإزالة المناسب لمعالجة هذه اللوحة:
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <div className="p-3 border border-border rounded-lg bg-muted/40 hover:bg-muted/60 transition-all">
+                <h4 className="text-sm font-bold text-foreground mb-1">1. حذف فوري (بدون إيقاف)</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  حذف اللوحة فوراً من العقد وإلغاؤها مباشرة دون تسجيلها كلوحة موقوفة ودون تطبيق أي تسويات مالية أو خصومات إيقاف.
+                </p>
+              </div>
+
+              <div className="p-3 border border-border rounded-lg bg-muted/40 hover:bg-muted/60 transition-all">
+                <h4 className="text-sm font-bold text-foreground mb-1">2. إيقاف اللوحة (إجراء تسوية)</h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  تسجيل اللوحة كـ "موقوفة" لحساب المدة المستهلكة وإرجاع القيمة المتبقية كخصم إيقاف في العقد، وإتاحة اللوحة للإيجار مجدداً.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse justify-start">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (deletingBillboard) {
+                  onRemoveSelected(String(deletingBillboard.ID || deletingBillboard.id));
+                }
+                setDeleteChoiceOpen(false);
+                setDeletingBillboard(null);
+                toast.success('تم الحذف الفوري بنجاح');
+              }}
+              className="bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive hover:text-white"
+            >
+              حذف فوري (بدون إيقاف)
+            </Button>
+            <Button
+              onClick={() => {
+                if (deletingBillboard) {
+                  setPausingBillboard(deletingBillboard);
+                  const billboardId = String(deletingBillboard.ID || deletingBillboard.id);
+                  const pCost = printCostDetails.find(p => p.billboardId === billboardId)?.printCost || 0;
+                  setPausingPrintCost(pCost);
+                  const iCost = installationDetails.find(i => i.billboardId === billboardId)?.adjustedPrice || 0;
+                  setPausingInstallCost(iCost);
+                  setPauseDialogOpen(true);
+                }
+                setDeleteChoiceOpen(false);
+                setDeletingBillboard(null);
+              }}
+              className="bg-primary text-primary-foreground hover:bg-primary/95"
+            >
+              إيقاف اللوحة (إجراء تسوية)
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                setDeleteChoiceOpen(false);
+                setDeletingBillboard(null);
+              }}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Quick Edit Dialog - عرض جميع الأسعار */}
       <Dialog open={quickEditOpen} onOpenChange={(open) => { setQuickEditOpen(open); if (!open) setIsQuickEditMode(false); }}>

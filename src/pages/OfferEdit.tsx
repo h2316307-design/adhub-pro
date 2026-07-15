@@ -111,6 +111,15 @@ export default function OfferEdit() {
   const [installments, setInstallments] = useState<Array<{
     amount: number; paymentType: string; description: string; dueDate: string;
   }>>([]);
+  const [installmentsLoaded, setInstallmentsLoaded] = useState<boolean>(false);
+  const [installmentDistributionType, setInstallmentDistributionType] = useState<'single' | 'multiple' | 'periods'>('multiple');
+  const [installmentFirstPaymentAmount, setInstallmentFirstPaymentAmount] = useState<number>(0);
+  const [installmentFirstPaymentType, setInstallmentFirstPaymentType] = useState<'amount' | 'percent'>('amount');
+  const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>('month');
+  const [installmentCount, setInstallmentCount] = useState<number>(2);
+  const [installmentAutoCalculate, setInstallmentAutoCalculate] = useState<boolean>(false);
+  const [installmentFirstAtSigning, setInstallmentFirstAtSigning] = useState<boolean>(true);
+  const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = useState<boolean>(false);
 
   // Friend company costs
   const [friendBillboardCosts, setFriendBillboardCosts] = useState<Array<{
@@ -285,9 +294,30 @@ export default function OfferEdit() {
         if (offer.installments_data) {
           try {
             const inst = typeof offer.installments_data === 'string' ? JSON.parse(offer.installments_data) : offer.installments_data;
-            if (Array.isArray(inst)) setInstallments(inst);
+            if (Array.isArray(inst)) {
+              setInstallments(inst);
+              setInstallmentsLoaded(true);
+            }
           } catch (e) { console.warn('Failed to parse installments_data'); }
         }
+
+        // Load installment distribution settings from DB
+        const savedDistributionType = offer.installment_distribution_type || 'multiple';
+        const savedFirstPaymentAmount = Number(offer.installment_first_payment_amount || 0);
+        const savedFirstPaymentType = offer.installment_first_payment_type || 'amount';
+        const savedInterval = offer.installment_interval || 'month';
+        const savedCount = Number(offer.installment_count || 2);
+        const savedAutoCalculate = offer.installment_auto_calculate === true;
+        const savedFirstAtSigning = offer.installment_first_at_signing !== false; // default true
+        
+        setInstallmentDistributionType(savedDistributionType as 'single' | 'multiple' | 'periods');
+        setInstallmentFirstPaymentAmount(savedFirstPaymentAmount);
+        setInstallmentFirstPaymentType(savedFirstPaymentType as 'amount' | 'percent');
+        setInstallmentInterval(savedInterval as 'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months');
+        setInstallmentCount(savedCount);
+        setInstallmentAutoCalculate(savedAutoCalculate);
+        setInstallmentFirstAtSigning(savedFirstAtSigning);
+        setHasDifferentFirstPayment(savedFirstPaymentAmount > 0);
 
         // Single face billboards
         if (offer.single_face_billboards) {
@@ -690,6 +720,7 @@ export default function OfferEdit() {
 
   // Auto-create installments
   useEffect(() => {
+    if (installmentsLoaded) return;
     if (installments.length === 0 && finalTotal > 0) {
       const half = Math.round((finalTotal / 2) * 100) / 100;
       setInstallments([
@@ -697,7 +728,7 @@ export default function OfferEdit() {
         { amount: finalTotal - half, paymentType: 'شهري', description: 'الدفعة الثانية', dueDate: calculateDueDate('شهري', 1) },
       ]);
     }
-  }, [finalTotal]);
+  }, [finalTotal, installmentsLoaded]);
 
   // ========== FILTER BILLBOARDS - SHOW ALL ==========
 
@@ -954,16 +985,62 @@ export default function OfferEdit() {
     return date.toISOString().split('T')[0];
   };
 
+  // ✅ تقريب للأسفل لأقرب رقم مغلق
+  const roundToCleanValue = (value: number): number => {
+    if (value <= 0) return 0;
+    if (value < 100) return Math.floor(value);
+    if (value < 1000) return Math.floor(value / 10) * 10;
+    if (value < 10000) return Math.floor(value / 100) * 100;
+    return Math.floor(value / 500) * 500;
+  };
+
+  // ✅ تقريب للأعلى لأقرب رقم مغلق
+  const roundUpToCleanValue = (value: number): number => {
+    if (value <= 0) return 0;
+    if (value < 100) return Math.ceil(value);
+    if (value < 1000) return Math.ceil(value / 10) * 10;
+    if (value < 10000) return Math.ceil(value / 100) * 100;
+    return Math.ceil(value / 500) * 500;
+  };
+
   const distributeEvenly = (count: number) => {
-    count = Math.max(1, Math.min(6, Math.floor(count)));
-    const even = Math.floor((finalTotal / count) * 100) / 100;
-    const list = Array.from({ length: count }).map((_, i) => ({
-      amount: i === count - 1 ? Math.round((finalTotal - even * (count - 1)) * 100) / 100 : even,
-      paymentType: i === 0 ? 'عند التوقيع' : 'شهري',
-      description: `الدفعة ${i + 1}`,
-      dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : 'شهري', i)
-    }));
+    count = Math.max(1, Math.min(12, Math.floor(count)));
+    
+    let list;
+    if (count === 1) {
+      list = [{
+        amount: finalTotal,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة كامل قيمة العقد',
+        dueDate: calculateDueDate('عند التوقيع', 0)
+      }];
+    } else {
+      // ✅ خوارزمية ذكية: تقريب للأعلى وترحيل الفرق للدفعة التالية
+      let remainingTotal = finalTotal;
+      list = Array.from({ length: count }).map((_, i) => {
+        const isLast = i === count - 1;
+        let amount: number;
+
+        if (isLast) {
+          amount = Math.round(remainingTotal * 100) / 100;
+        } else {
+          const periodsLeft = count - i;
+          const exactShare = remainingTotal / periodsLeft;
+          amount = roundUpToCleanValue(exactShare);
+          remainingTotal -= amount;
+        }
+
+        return {
+          amount,
+          paymentType: i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'),
+          description: `الدفعة ${i + 1}`,
+          dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'), i)
+        };
+      });
+    }
+    
     setInstallments(list);
+    setInstallmentsLoaded(false);
   };
 
   const distributeWithInterval = (config: {
@@ -975,9 +1052,15 @@ export default function OfferEdit() {
     firstPaymentDate?: string;
     firstAtSigning?: boolean;
   }) => {
-    if (!startDate || finalTotal <= 0) { toast.error('يرجى تحديد تاريخ البداية'); return; }
+    if (!startDate || finalTotal <= 0) {
+      toast.error('يرجى تحديد تاريخ البداية');
+      return;
+    }
     const { firstPayment, interval, numPayments, lastPaymentDate, firstPaymentDate, firstAtSigning = true } = config;
-    if (firstPayment < 0 || firstPayment > finalTotal) { toast.error('قيمة الدفعة الأولى غير صحيحة'); return; }
+    if (firstPayment < 0 || firstPayment > finalTotal) {
+      toast.error('قيمة الدفعة الأولى غير صحيحة');
+      return;
+    }
     
     const remaining = finalTotal - firstPayment;
     const intervalMonthsMap: Record<string, number> = { 'month': 1, '2months': 2, '3months': 3, '4months': 4, '5months': 5, '6months': 6, '7months': 7 };
@@ -1034,13 +1117,109 @@ export default function OfferEdit() {
     }
     
     setInstallments(newInstallments);
+    setInstallmentsLoaded(false);
     toast.success(`تم التوزيع: ${newInstallments.length} دفعات`);
+  };
+
+  const distributeByDurationPeriods = React.useCallback((count: number) => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+    if (!startDate || !endDate) {
+      toast.info('يرجى تحديد تاريخ بداية ونهاية العقد أولاً');
+      return;
+    }
+
+    count = Math.max(2, Math.min(12, Math.floor(count)));
+    
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDuration = end.getTime() - start.getTime();
+    
+    if (totalDuration <= 0) {
+      toast.info('تاريخ نهاية العقد يجب أن يكون بعد تاريخ البداية');
+      return;
+    }
+
+    const intervalDuration = totalDuration / count;
+    // ✅ خوارزمية ذكية: كل دفعة تُقرّب للأسفل لأقرب رقم مغلق،
+    // والفرق ينتقل للدفعة التالية، والدفعة الأخيرة تستوعب المتبقي.
+    let remainingTotal = finalTotal;
+    const newInstallments = Array.from({ length: count }).map((_, i) => {
+      const offset = i * intervalDuration;
+      const targetDate = new Date(start.getTime() + offset);
+      const dueDateStr = targetDate.toISOString().split('T')[0];
+
+      const isLast = i === count - 1;
+      let amount: number;
+
+      if (isLast) {
+        amount = Math.round(remainingTotal * 100) / 100;
+      } else {
+        const periodsLeft = count - i;
+        const exactShare = remainingTotal / periodsLeft;
+        amount = roundUpToCleanValue(exactShare);
+        remainingTotal -= amount;
+      }
+
+      let percentageLabel = '';
+      if (i === 0) {
+        percentageLabel = 'عند التوقيع';
+      } else {
+        const percentPassed = Math.round((i / count) * 100);
+        percentageLabel = `بعد مرور ${percentPassed}% من العقد`;
+      }
+
+      return {
+        amount,
+        paymentType: percentageLabel,
+        description: `الدفعة ${i + 1} (${(100 / count).toFixed(2)}%)`,
+        dueDate: dueDateStr
+      };
+    });
+
+    setInstallments(newInstallments);
+    setInstallmentsLoaded(false);
+    toast.success(`تم توزيع الدفعات على ${count} فترات متساوية بأرقام مغلقة`);
+  }, [finalTotal, startDate, endDate]);
+
+  const createManualInstallments = (count: number) => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+    
+    count = Math.max(1, Math.min(12, Math.floor(count)));
+    
+    const newInstallments = Array.from({ length: count }).map((_, i) => ({
+      amount: 0,
+      paymentType: i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'),
+      description: `الدفعة ${i + 1}`,
+      dueDate: calculateDueDate(i === 0 ? 'عند التوقيع' : (i === 1 ? 'عند التركيب' : 'شهري'), i)
+    }));
+    
+    setInstallments(newInstallments);
+    setInstallmentsLoaded(false);
+  };
+
+  const handleApplyUnequalDistribution = (payments: any[]) => {
+    setInstallments(payments.map(p => ({
+      amount: p.amount,
+      paymentType: p.paymentType,
+      description: p.description,
+      dueDate: p.dueDate
+    })));
+    setInstallmentsLoaded(false);
   };
 
   const addInstallment = () => setInstallments([...installments, { amount: 0, paymentType: 'شهري', description: `الدفعة ${installments.length + 1}`, dueDate: calculateDueDate('شهري', installments.length) }]);
   const removeInstallment = (index: number) => setInstallments(installments.filter((_, i) => i !== index));
   const updateInstallment = (index: number, field: string, value: any) => setInstallments(prev => prev.map((inst, i) => i === index ? { ...inst, [field]: value, ...(field === 'paymentType' ? { dueDate: calculateDueDate(value, i) } : {}) } : inst));
-  const clearAllInstallments = () => setInstallments([]);
+  const clearAllInstallments = () => {
+    setInstallments([]);
+    setInstallmentsLoaded(false);
+  };
 
   const installmentSummary = React.useMemo(() => {
     if (installments.length === 0) return '';
@@ -1120,6 +1299,17 @@ export default function OfferEdit() {
         netRentalAfterDiscount: Math.round(r.netRentalAfterDiscount),
       }));
 
+      const installmentsForSaving = (installments || []).map((inst, idx) => {
+        const defaultPaymentType = idx === 0 ? 'عند التوقيع' : (idx === 1 ? 'عند التركيب' : 'شهري');
+        const paymentType = String(inst?.paymentType || '').trim() || defaultPaymentType;
+        return {
+          amount: Number(inst?.amount ?? 0) || 0,
+          paymentType,
+          description: String(inst?.description || '').trim() || `الدفعة ${idx + 1}`,
+          dueDate: String(inst?.dueDate || '').trim() || calculateDueDate(paymentType, idx)
+        };
+      });
+
       const offerData: any = {
         customer_name: customerName,
         customer_id: customerId,
@@ -1141,7 +1331,14 @@ export default function OfferEdit() {
         print_cost: printCostEnabled ? totalPrintCost : 0,
         print_cost_enabled: printCostEnabled,
         print_price_per_meter: printCostEnabled ? printPricePerMeter : 0,
-        installments_data: installments.length > 0 ? JSON.stringify(installments) : null,
+        installments_data: installmentsForSaving.length > 0 ? installmentsForSaving : null,
+        installment_distribution_type: installmentDistributionType,
+        installment_first_payment_amount: installmentFirstPaymentAmount,
+        installment_first_payment_type: installmentFirstPaymentType,
+        installment_interval: installmentInterval,
+        installment_count: installmentCount,
+        installment_auto_calculate: installmentAutoCalculate,
+        installment_first_at_signing: installmentFirstAtSigning,
         billboard_prices: JSON.stringify(billboardPrices),
         operating_fee: operatingFee,
         operating_fee_rate: 3,
@@ -1715,21 +1912,33 @@ export default function OfferEdit() {
               finalTotal={finalTotal}
               startDate={startDate}
               endDate={endDate}
+              disableAutoRedistribute={installmentsLoaded}
               onDistributeEvenly={distributeEvenly}
               onDistributeWithInterval={distributeWithInterval}
-              onApplyUnequalDistribution={(payments) => {
-                setInstallments(payments.map(p => ({
-                  amount: p.amount,
-                  paymentType: p.paymentType,
-                  description: p.description,
-                  dueDate: p.dueDate
-                })));
-              }}
+              onDistributeByDurationPeriods={distributeByDurationPeriods}
+              onCreateManualInstallments={createManualInstallments}
+              onApplyUnequalDistribution={handleApplyUnequalDistribution}
               onAddInstallment={addInstallment}
               onRemoveInstallment={removeInstallment}
               onUpdateInstallment={updateInstallment}
               onClearAll={clearAllInstallments}
               installmentSummary={installmentSummary}
+              // ✅ Pass saved settings
+              savedDistributionType={installmentDistributionType}
+              savedFirstPaymentAmount={installmentFirstPaymentAmount}
+              savedFirstPaymentType={installmentFirstPaymentType}
+              savedInterval={installmentInterval}
+              savedCount={installmentCount}
+              savedHasDifferentFirstPayment={hasDifferentFirstPayment}
+              savedFirstAtSigning={installmentFirstAtSigning}
+              // ✅ Sync callbacks
+              onDistributionTypeChange={setInstallmentDistributionType}
+              onFirstPaymentAmountChange={setInstallmentFirstPaymentAmount}
+              onFirstPaymentTypeChange={setInstallmentFirstPaymentType}
+              onIntervalChange={setInstallmentInterval}
+              onCountChange={setInstallmentCount}
+              onHasDifferentFirstPaymentChange={setHasDifferentFirstPayment}
+              onFirstAtSigningChange={setInstallmentFirstAtSigning}
             />
 
             {/* مؤشر مصدر الأسعار - مثل ContractEdit */}

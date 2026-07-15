@@ -5477,6 +5477,13 @@ export type Database = {
           installation_details: Json | null
           installation_enabled: boolean | null
           installments_data: Json | null
+          installment_auto_calculate: boolean | null
+          installment_count: number | null
+          installment_first_at_signing: boolean | null
+          installment_first_payment_amount: number | null
+          installment_first_payment_type: string | null
+          installment_distribution_type: string | null
+          installment_interval: string | null
           level_discounts: Json | null
           notes: string | null
           offer_number: number
@@ -5517,6 +5524,13 @@ export type Database = {
           installation_details?: Json | null
           installation_enabled?: boolean | null
           installments_data?: Json | null
+          installment_auto_calculate?: boolean | null
+          installment_count?: number | null
+          installment_first_at_signing?: boolean | null
+          installment_first_payment_amount?: number | null
+          installment_first_payment_type?: string | null
+          installment_distribution_type?: string | null
+          installment_interval?: string | null
           level_discounts?: Json | null
           notes?: string | null
           offer_number?: number
@@ -5557,6 +5571,13 @@ export type Database = {
           installation_details?: Json | null
           installation_enabled?: boolean | null
           installments_data?: Json | null
+          installment_auto_calculate?: boolean | null
+          installment_count?: number | null
+          installment_first_at_signing?: boolean | null
+          installment_first_payment_amount?: number | null
+          installment_first_payment_type?: string | null
+          installment_distribution_type?: string | null
+          installment_interval?: string | null
           level_discounts?: Json | null
           notes?: string | null
           offer_number?: number
