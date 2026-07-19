@@ -222,7 +222,8 @@ export function calculateAllBillboardPrices(
   }
 
   // ✅ تسوية متبقّيات التقريب: نضمن أن مجموع إجماليات اللوحات = إجمالي العقد بدقة.
-  // نعدّل لوحات فردية بخطوات نظيفة (10/50/100/500) حسب حجمها حتى تُغلق الفجوة.
+  // نُوزّع الفجوة بالتساوي على مجموعات اللوحات المتشابهة أولاً لضمان التوازن،
+  // ثم نعالج أي فجوة متبقّية بالطريقة التقليدية خطوةً بخطوة.
   {
     const getStep = (v: number): number => {
       if (v > 5000) return 500;
@@ -233,10 +234,6 @@ export function calculateAllBillboardPrices(
     const nonReplIdx = prelimResults
       .map((r, i) => (r.isReplacement ? -1 : i))
       .filter((i) => i >= 0);
-    // الأكبر أولاً ليستوعب خطوات أكبر
-    const sortedIdx = [...nonReplIdx].sort(
-      (a, b) => prelimResults[b].roundedTotal - prelimResults[a].roundedTotal
-    );
 
     const sumNonRepl = () =>
       prelimResults
@@ -244,6 +241,52 @@ export function calculateAllBillboardPrices(
         .reduce((s, r) => s + r.roundedTotal, 0);
 
     let curGap = roundMoney(sumNonRepl() - expectedContractTotal);
+
+    // ── مرحلة 1: توزيع الفجوة بالتساوي على مجموعات اللوحات المتشابهة ──
+    // نبني مجموعات حسب roundedTotal المتطابق.
+    // نُعطي الأولوية للمجموعات الأكبر (عدداً) ثم الأعلى قيمةً لامتصاص أكبر قدر من الفجوة.
+    if (Math.abs(curGap) >= 1) {
+      // بناء مجموعات اللوحات المتشابهة
+      const groupMap = new Map<number, number[]>();
+      nonReplIdx.forEach((i) => {
+        const key = prelimResults[i].roundedTotal;
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key)!.push(i);
+      });
+
+      // ترتيب المجموعات: الأكثر عدداً أولاً (تساعد أكثر في تغطية الفجوة)، ثم الأعلى قيمةً
+      const sortedGroups = Array.from(groupMap.entries()).sort(
+        ([valA, idxA], [valB, idxB]) =>
+          idxB.length - idxA.length || valB - valA
+      );
+
+      for (const [, indices] of sortedGroups) {
+        if (Math.abs(curGap) < 1) break;
+        const count = indices.length;
+        const step = getStep(prelimResults[indices[0]].roundedTotal);
+        // كم خطوة يمكن توزيعها على هذه المجموعة بالتساوي؟
+        const stepsNeeded = Math.round(Math.abs(curGap) / step);
+        // نوزّع: كل لوحة تأخذ نفس عدد الخطوات قدر الإمكان
+        const stepsPerBoard = Math.floor(stepsNeeded / count);
+        if (stepsPerBoard >= 1) {
+          const sign = curGap > 0 ? -1 : 1;
+          for (const i of indices) {
+            prelimResults[i].roundedTotal = Math.max(
+              0,
+              prelimResults[i].roundedTotal + sign * stepsPerBoard * step
+            );
+          }
+          curGap = roundMoney(sumNonRepl() - expectedContractTotal);
+        }
+      }
+    }
+
+    // ── مرحلة 2: أي فجوة متبقّية تُعالَج لوحةً بلوحة (سلوك التقليدي) ──
+    // الأكبر قيمةً أولاً ليستوعب خطوات أكبر
+    const sortedIdx = [...nonReplIdx].sort(
+      (a, b) => prelimResults[b].roundedTotal - prelimResults[a].roundedTotal
+    );
+
     let safety = 2000;
     while (Math.abs(curGap) >= 1 && safety-- > 0 && sortedIdx.length > 0) {
       // ابحث عن أكبر خطوة لا تتجاوز |الفجوة|
@@ -257,11 +300,27 @@ export function calculateAllBillboardPrices(
         }
       }
       if (bestI < 0) {
-        // الفجوة أصغر من أصغر خطوة (10): امتصها كاملةً في لوحة واحدة
-        const i = sortedIdx[0];
-        prelimResults[i].roundedTotal = roundMoney(
-          prelimResults[i].roundedTotal - curGap
+        // الفجوة أصغر من أصغر خطوة (10).
+        // نحاول توزيعها بالتساوي على اللوحات المتشابهة أولاً للمحافظة على التوازن.
+        // نبحث عن مجموعة اللوحات التي تساوي قيمة sortedIdx[0].
+        const refVal = prelimResults[sortedIdx[0]].roundedTotal;
+        const sameGroup = sortedIdx.filter(
+          (i) => prelimResults[i].roundedTotal === refVal
         );
+        if (sameGroup.length > 1) {
+          // وزّع الفجوة بالتساوي: كل لوحة تحمل حصتها من الفجوة
+          const sharePerBoard = roundMoney(curGap / sameGroup.length);
+          for (const i of sameGroup) {
+            prelimResults[i].roundedTotal = roundMoney(
+              prelimResults[i].roundedTotal - sharePerBoard
+            );
+          }
+        } else {
+          // لوحة واحدة: امتص الفجوة بالكامل
+          prelimResults[sortedIdx[0]].roundedTotal = roundMoney(
+            prelimResults[sortedIdx[0]].roundedTotal - curGap
+          );
+        }
         curGap = 0;
         break;
       }
