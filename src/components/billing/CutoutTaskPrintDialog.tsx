@@ -105,7 +105,7 @@ export function CutoutTaskPrintDialog({
     // ✅ جلب إعدادات القالب المحفوظة (async)
     const styles = await getMergedInvoiceStylesAsync('cutout_task');
     const baseUrl = window.location.origin;
-    const logoUrl = styles.logoPath || '/logofares.svg';
+    const logoUrl = styles.logoPath || '/logofaresgold.svg';
     const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
     const cutoutMetaHtml = `<strong>التاريخ:</strong> ${new Date().toLocaleDateString('ar-LY')}<br/><strong>رقم العقد:</strong> ${task.contract_id || 'غير محدد'}`;

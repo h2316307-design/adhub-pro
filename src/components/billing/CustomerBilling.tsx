@@ -37,7 +37,8 @@ import {
 } from '@/components/billing/BillingTypes';
 
 import {
-  getContractDetails
+  getContractDetails,
+  translateInvoiceType
 } from '@/components/billing/BillingUtils';
 
 interface PrintItem {
@@ -657,7 +658,12 @@ export default function CustomerBilling() {
     console.log('CustomerBilling: opening saved invoice for edit:', { invoice, editable });
     setEditingInvoice(editable as any);
     // Open the same modern print dialog for editing
-  setSelectedContractsForInv(Array.isArray(invoice.contract_numbers) ? invoice.contract_numbers.map(String) : (invoice.contract_numbers ? String(invoice.contract_numbers).split(',').map(s=>s.trim()) : (invoice.contract_number ? [String(invoice.contract_number)] : [])));
+    const initialContractNums = Array.isArray(invoice.contract_numbers) 
+      ? invoice.contract_numbers.map(String) 
+      : (invoice.contract_numbers 
+        ? String(invoice.contract_numbers).split(',').map(s=>s.trim()) 
+        : (invoice.contract_number ? [String(invoice.contract_number)] : []));
+    setSelectedContractsForInv(Array.from(new Set(initialContractNums)));
     setPrintOpenToPreview(preview);
     setPrintAuto(auto);
     setPrintForPrinter(forPrinter);
@@ -870,6 +876,7 @@ export default function CustomerBilling() {
                   <th>التاريخ</th>
                   <th>النوع</th>
                   <th>أرقام العقود</th>
+                  <th>نوع الإعلان</th>
                   <th>الإجمالي</th>
                   <th>الإجراءات</th>
                 </tr>
@@ -880,8 +887,9 @@ export default function CustomerBilling() {
                     <tr key={invoice.id} className="expenses-table-row">
                       <td className="num">{invoice.invoice_number}</td>
                       <td>{invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-LY') : ''}</td>
-                      <td><Badge variant="outline">{invoice.invoice_type}</Badge></td>
+                      <td><Badge variant="outline">{translateInvoiceType(invoice.invoice_type)}</Badge></td>
                       <td className="num">{Array.isArray(invoice.contract_numbers) ? invoice.contract_numbers.join(', ') : (invoice.contract_numbers ?? invoice.contract_number ?? '')}</td>
+                      <td className="text-xs max-w-[200px] truncate" title={getInvoiceAdTypes(invoice)}>{getInvoiceAdTypes(invoice)}</td>
                       <td className="expenses-amount-calculated num">
                         {((invoice.total_amount ?? 0) as number).toLocaleString('ar-LY')} د.ل
                       </td>
@@ -905,7 +913,7 @@ export default function CustomerBilling() {
                   ))
                 ) : (
                   <tr className="expenses-table-row">
-                    <td colSpan={6} className="text-center text-muted-foreground py-6">
+                    <td colSpan={7} className="text-center text-muted-foreground py-6">
                       لا توجد فواتير طباعة محفوظة لهذا العميل.
                     </td>
                   </tr>

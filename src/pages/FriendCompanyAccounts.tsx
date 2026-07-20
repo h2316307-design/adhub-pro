@@ -362,7 +362,7 @@ export default function FriendCompanyAccounts() {
         <div class="invoice-container">
           <div class="header">
             <div class="company-info">
-              <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
+              <img src="/logofaresgold.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
             </div>
             
             <div class="invoice-info">

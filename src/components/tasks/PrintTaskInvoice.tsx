@@ -326,7 +326,7 @@ export function PrintTaskInvoice({
         <div class="invoice-container">
           <div class="header">
             <div class="company-info">
-              <img src="${baseUrl}/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
+              <img src="${baseUrl}/logofaresgold.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
             </div>
             <div class="invoice-info">
               <div class="invoice-title">فاتورة طباعة</div>

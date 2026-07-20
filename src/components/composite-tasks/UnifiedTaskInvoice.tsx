@@ -68,6 +68,8 @@ interface InvoiceItem {
   isOriginalInstallation?: boolean; // هل هي صف التركيب الأصلي (قبل إعادة التركيب)
   originalInstalledImageA?: string; // صورة التركيب الأصلي - وجه أمامي
   originalInstalledImageB?: string; // صورة التركيب الأصلي - وجه خلفي
+  reinstallInstalledImageA?: string; // صورة إعادة التركيب - وجه أمامي
+  reinstallInstalledImageB?: string; // صورة إعادة التركيب - وجه خلفي
 }
 
 interface UnifiedTaskInvoiceProps {
@@ -270,23 +272,31 @@ export function UnifiedTaskInvoice({
     const loadData = async () => {
       try {
         setIsLoading(true);
-
-        // ✅ استخدم contract_id من المهام المجمعة فقط - لا تجلب من billboards.Contract_Number
-        // لأن billboards.Contract_Number قد يكون لعقد جديد لا علاقة له بهذه المهمة
+        // ✅ استخدم contract_id من المهام المجمعة والمهام الفرعية
         const taskContractIds: number[] = [...new Set(
-          allTasks.map(t => t.contract_id).filter(Boolean)
-        )] as number[];
+          allTasks.flatMap(t => {
+            const ids = t._contractIds || t.contractIds || (t.contract_id ? [t.contract_id] : []);
+            return Array.isArray(ids) ? ids : [ids];
+          })
+        )].filter(Boolean) as number[];
 
-        setContractIds(taskContractIds.sort((a, b) => a - b));
-
-        // جلب نوع الإعلان من العقود الصحيحة
+        // جلب نوع الإعلان من العقود الصحيحة للعميل فقط
         if (taskContractIds.length > 0) {
           const { data: contractsData } = await supabase
             .from('Contract')
-            .select('"Ad Type"')
+            .select('Contract_Number, "Ad Type", "Customer Name", customer_id')
             .in('Contract_Number', taskContractIds);
           if (contractsData && contractsData.length > 0) {
-            const uniqueAdTypes = [...new Set(contractsData.map(c => c['Ad Type']).filter(Boolean))];
+            const filteredContracts = contractsData.filter(c => {
+              if (c.customer_id && task.customer_id) {
+                return c.customer_id === task.customer_id;
+              }
+              return c['Customer Name'] === task.customer_name;
+            });
+            const finalContractIds = filteredContracts.map(c => Number(c.Contract_Number));
+            setContractIds(finalContractIds.sort((a, b) => a - b));
+
+            const uniqueAdTypes = [...new Set(filteredContracts.map(c => c['Ad Type']).filter(Boolean))];
             if (uniqueAdTypes.length > 0) setAdType(uniqueAdTypes.join(' / '));
           }
         }
@@ -1018,19 +1028,30 @@ export function UnifiedTaskInvoice({
 
           console.log('Installation Items Query Result:', { installItems, installError });
 
-          // ✅ جلب صور التركيب الأصلية من الأرشيف للوحات المُعاد تركيبها
+          // ✅ جلب صور التركيب الأصلية وإعادات التركيب من الأرشيف للوحات المُعاد تركيبها
           const reinstalledItemIds = (installItems || []).filter((item: any) => (item.reinstall_count || 0) > 0).map((item: any) => item.id);
           let photoHistoryMap: Record<string, { face_a?: string; face_b?: string; installation_date?: string }> = {};
+          let photoHistoryByItemMap: Record<string, Record<number, { face_a?: string; face_b?: string; installation_date?: string }>> = {};
           if (reinstalledItemIds.length > 0) {
             const { data: photoHistory } = await supabase
               .from('installation_photo_history')
-              .select('task_item_id, installed_image_face_a_url, installed_image_face_b_url, installation_date')
+              .select('task_item_id, installed_image_face_a_url, installed_image_face_b_url, installation_date, reinstall_number')
               .in('task_item_id', reinstalledItemIds)
-              .order('reinstall_number', { ascending: false });
+              .order('reinstall_number', { ascending: true });
 
-            // أخذ آخر أرشيف لكل عنصر (أحدث صورة أصلية)
             (photoHistory || []).forEach((ph: any) => {
-              if (!photoHistoryMap[ph.task_item_id]) {
+              if (!photoHistoryByItemMap[ph.task_item_id]) {
+                photoHistoryByItemMap[ph.task_item_id] = {};
+              }
+              const rNum = ph.reinstall_number || 1;
+              photoHistoryByItemMap[ph.task_item_id][rNum] = {
+                face_a: ph.installed_image_face_a_url || undefined,
+                face_b: ph.installed_image_face_b_url || undefined,
+                installation_date: ph.installation_date || undefined,
+              };
+
+              // أول أرشيف برقم 1 هو التركيب الأصلي
+              if (rNum === 1 || !photoHistoryMap[ph.task_item_id]) {
                 photoHistoryMap[ph.task_item_id] = {
                   face_a: ph.installed_image_face_a_url || undefined,
                   face_b: ph.installed_image_face_b_url || undefined,
@@ -1038,7 +1059,7 @@ export function UnifiedTaskInvoice({
                 };
               }
             });
-            console.log('Photo history for reinstalled items:', photoHistoryMap);
+            console.log('Photo history map by reinstall number:', photoHistoryByItemMap);
           }
 
           if (installItems && installItems.length > 0) {
@@ -1243,7 +1264,7 @@ export function UnifiedTaskInvoice({
               const faceAImage = designs.face_a || item.design_face_a;
               const faceBImageRaw = designs.face_b || item.design_face_b;
 
-              const billboardTotalFaces = item.billboard?.Faces_Count || 2;
+            const billboardTotalFaces = item.billboard?.Faces_Count || 2;
               const actualFacesCount = item.faces_to_install || billboardTotalFaces;
               const hasBackFace = actualFacesCount >= 2;
               const faceBImage = hasBackFace ? faceBImageRaw : undefined;
@@ -1308,76 +1329,157 @@ export function UnifiedTaskInvoice({
               const installPricePerMeterValue = isInstallByMeter ? itemPricePerMeter : undefined;
               const installCalculationType = isInstallByMeter ? 'meter' : 'piece';
 
-              // ✅ إذا كانت اللوحة مُعاد تركيبها: إنشاء صفوف إعادة التركيب فقط (تلبية لرغبة المستخدم في عدم تشويش الفاتورة بالتركيبات السابقة)
+              // ✅ اللوحات المُعاد تركيبها: إنشاء صفوف التركيب الأصلي + صفوف إعادات التركيب بشكل منفصل ومتراتب
               if (itemReinstallCount > 0) {
-                const reinstallCost = Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0;
-                const reinstallFacesCount = item.reinstalled_faces === 'both' ? 2 : 1;
-                const reinstallCostPerFace = reinstallCost / reinstallFacesCount;
+                const origCost = Number(item.customer_original_install_cost) || (hasStoredCustomerCost ? (item.customer_installation_cost ?? 0) : actualItemInstallCost);
+                const origCostPerFace = origCost / facesCountForBillboard;
+                const origBillboardId = billboardId + 100000;
 
-                // ========== صفوف إعادة التركيب (الأوجه المُعاد تركيبها فقط) ==========
-                const reinstallBillboardId = billboardId + 200000;
-                const reinstalledFaces = item.reinstalled_faces || 'both';
+                // صور التركيب الأصلي من الأرشيف رقم 1
+                const origPhotoA = photoHistoryByItemMap[item.id]?.[1]?.face_a || photoHistoryMap[item.id]?.face_a || item.billboardImage;
+                const origPhotoB = photoHistoryByItemMap[item.id]?.[1]?.face_b || photoHistoryMap[item.id]?.face_b || faceBImageRaw;
 
-                if (reinstalledFaces === 'both' || reinstalledFaces === 'face_a') {
-                  const itemPrintCost = printCostPerFace;
-                  const itemCutoutCost = hasCutout ? (taskCutoutCostPerBillboard / reinstallFacesCount) : 0;
+                // 1. ========== صفوف التركيب الأصلي (تركيب 1) ==========
+                items.push({
+                  designImage: faceAImage,
+                  face: 'a',
+                  sizeName: displaySizeName,
+                  width: sizeInfo.width || 0,
+                  height: sizeInfo.height || 0,
+                  quantity: 1,
+                  area: areaPerFace,
+                  printCost: printCostPerFace,
+                  installationCost: origCostPerFace,
+                  cutoutCost: hasCutout ? taskCutoutCostPerBillboard / facesCountForBillboard : 0,
+                  totalCost: printCostPerFace + origCostPerFace + (hasCutout ? taskCutoutCostPerBillboard / facesCountForBillboard : 0),
+                  billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
+                  billboardImage,
+                  nearestLandmark,
+                  district,
+                  city,
+                  facesCount: actualFacesCount,
+                  billboardId: origBillboardId,
+                  installationPricePerPiece: origCost,
+                  installationCalculationType: installCalculationType,
+                  billboardType,
+                  reinstallCount: 0,
+                  isOriginalInstallation: true,
+                  isReinstallation: false,
+                  isReplacement: item.replaces_item_id ? true : false,
+                  originalInstalledImageA: origPhotoA,
+                  originalInstalledImageB: origPhotoB,
+                });
+
+                if (hasBackFace) {
                   items.push({
-                    designImage: faceAImage,
-                    face: 'a',
-                    sizeName: displaySizeName,
-                    width: sizeInfo.width || 0,
-                    height: sizeInfo.height || 0,
-                    quantity: 1,
-                    area: areaPerFace,
-                    printCost: itemPrintCost,
-                    installationCost: reinstallCostPerFace,
-                    cutoutCost: itemCutoutCost,
-                    totalCost: itemPrintCost + reinstallCostPerFace + itemCutoutCost,
-                    billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
-                    billboardImage,
-                    nearestLandmark,
-                    district,
-                    city,
-                    facesCount: reinstallFacesCount,
-                    billboardId: reinstallBillboardId,
-                    installationPricePerPiece: reinstallCost,
-                    installationCalculationType: 'piece' as const,
-                    billboardType,
-                    reinstallCount: itemReinstallCount,
-                    isReinstallation: true,
-                    isReplacement: false,
-                  });
-                }
-
-                if (reinstalledFaces === 'both' || reinstalledFaces === 'face_b') {
-                  const itemPrintCost = printCostPerFace;
-                  const itemCutoutCost = hasCutout ? (taskCutoutCostPerBillboard / reinstallFacesCount) : 0;
-                  items.push({
-                    designImage: faceBImageRaw || faceAImage,
+                    designImage: faceBImage || undefined,
+                    designImageB: undefined,
                     face: 'b',
                     sizeName: displaySizeName,
                     width: sizeInfo.width || 0,
                     height: sizeInfo.height || 0,
                     quantity: 1,
                     area: areaPerFace,
-                    printCost: itemPrintCost,
-                    installationCost: reinstallCostPerFace,
-                    cutoutCost: itemCutoutCost,
-                    totalCost: itemPrintCost + reinstallCostPerFace + itemCutoutCost,
+                    printCost: printCostPerFace,
+                    installationCost: origCostPerFace,
+                    cutoutCost: hasCutout ? taskCutoutCostPerBillboard / facesCountForBillboard : 0,
+                    totalCost: printCostPerFace + origCostPerFace + (hasCutout ? taskCutoutCostPerBillboard / facesCountForBillboard : 0),
                     billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
                     billboardImage,
                     nearestLandmark,
                     district,
                     city,
-                    facesCount: reinstallFacesCount,
-                    billboardId: reinstallBillboardId,
-                    installationPricePerPiece: reinstallCost,
-                    installationCalculationType: 'piece' as const,
+                    facesCount: actualFacesCount,
+                    billboardId: origBillboardId,
+                    installationPricePerPiece: origCost,
+                    installationCalculationType: installCalculationType,
                     billboardType,
-                    reinstallCount: itemReinstallCount,
-                    isReinstallation: true,
-                    isReplacement: false,
+                    reinstallCount: 0,
+                    isOriginalInstallation: true,
+                    isReinstallation: false,
+                    isReplacement: item.replaces_item_id ? true : false,
+                    originalInstalledImageA: origPhotoA,
+                    originalInstalledImageB: origPhotoB,
                   });
+                }
+
+                // 2. ========== صفوف إعادات التركيب (إعادة تركيب 1، إعادة تركيب 2...) ==========
+                const reinstallCost = Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0;
+                const reinstallFacesCount = item.reinstalled_faces === 'both' ? 2 : 1;
+                const reinstallCostPerFace = reinstallCost / reinstallFacesCount;
+                const reinstalledFaces = item.reinstalled_faces || 'both';
+
+                for (let r = 1; r <= itemReinstallCount; r++) {
+                  const reinstallBillboardId = billboardId + 200000 + (r - 1) * 10000;
+
+                  // تحديد صورة إعادة التركيب الخاصة بالمرة r
+                  const rHist = photoHistoryByItemMap[item.id]?.[r + 1];
+                  const rPhotoA = rHist?.face_a || (r === itemReinstallCount ? (item.installed_image_face_a_url || item.billboardImage) : undefined);
+                  const rPhotoB = rHist?.face_b || (r === itemReinstallCount ? (item.installed_image_face_b_url || faceBImageRaw) : undefined);
+
+                  if (reinstalledFaces === 'both' || reinstalledFaces === 'face_a') {
+                    items.push({
+                      designImage: faceAImage,
+                      face: 'a',
+                      sizeName: displaySizeName,
+                      width: sizeInfo.width || 0,
+                      height: sizeInfo.height || 0,
+                      quantity: 1,
+                      area: areaPerFace,
+                      printCost: 0,
+                      installationCost: reinstallCostPerFace,
+                      cutoutCost: 0,
+                      totalCost: reinstallCostPerFace,
+                      billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
+                      billboardImage,
+                      nearestLandmark,
+                      district,
+                      city,
+                      facesCount: reinstallFacesCount,
+                      billboardId: reinstallBillboardId,
+                      installationPricePerPiece: reinstallCost,
+                      installationCalculationType: 'piece' as const,
+                      billboardType,
+                      reinstallCount: r,
+                      isReinstallation: true,
+                      isOriginalInstallation: false,
+                      isReplacement: false,
+                      reinstallInstalledImageA: rPhotoA,
+                      reinstallInstalledImageB: rPhotoB,
+                    });
+                  }
+
+                  if (reinstalledFaces === 'both' || reinstalledFaces === 'face_b') {
+                    items.push({
+                      designImage: faceBImageRaw || faceAImage,
+                      face: 'b',
+                      sizeName: displaySizeName,
+                      width: sizeInfo.width || 0,
+                      height: sizeInfo.height || 0,
+                      quantity: 1,
+                      area: areaPerFace,
+                      printCost: 0,
+                      installationCost: reinstallCostPerFace,
+                      cutoutCost: 0,
+                      totalCost: reinstallCostPerFace,
+                      billboardName: item.billboard?.Billboard_Name || `لوحة #${billboardId}`,
+                      billboardImage,
+                      nearestLandmark,
+                      district,
+                      city,
+                      facesCount: reinstallFacesCount,
+                      billboardId: reinstallBillboardId,
+                      installationPricePerPiece: reinstallCost,
+                      installationCalculationType: 'piece' as const,
+                      billboardType,
+                      reinstallCount: r,
+                      isReinstallation: true,
+                      isOriginalInstallation: false,
+                      isReplacement: false,
+                      reinstallInstalledImageA: rPhotoA,
+                      reinstallInstalledImageB: rPhotoB,
+                    });
+                  }
                 }
               } else {
                 // ✅ لوحة عادية (بدون إعادة تركيب) - المنطق الأصلي
@@ -1983,7 +2085,7 @@ export function UnifiedTaskInvoice({
     showPageNumber: mergedStyles?.showPageNumber !== false,
   };
 
-  const fullLogoUrl = shared.logoPath?.startsWith('http') ? shared.logoPath : `${window.location.origin}${shared.logoPath || '/logofares.svg'}`;
+  const fullLogoUrl = shared.logoPath?.startsWith('http') ? shared.logoPath : `${window.location.origin}${shared.logoPath || '/logofaresgold.svg'}`;
 
   // Build dynamic invoice title
   const getInvoiceTitleAr = () => {

@@ -11,6 +11,7 @@ import { useNavigate } from 'react-router-dom';
 import { PrintedInvoiceEditDialog } from '@/components/billing/PrintedInvoiceEditDialog';
 import { EnhancedDistributePaymentDialog } from '@/components/billing/EnhancedDistributePaymentDialog';
 import { CompositeTaskInvoicePrint } from '@/components/composite-tasks/CompositeTaskInvoicePrint';
+import ModernPrintInvoiceDialog from '@/components/billing/ModernPrintInvoiceDialog';
 
 interface PrintedInvoice {
   id: string;
@@ -35,10 +36,12 @@ export default function PrintedInvoicesPage() {
   const [invoices, setInvoices] = useState<PrintedInvoice[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
   const [distributeDialogOpen, setDistributeDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<PrintedInvoice | null>(null);
+  const [printDialogOpen, setPrintDialogOpen] = useState(false);
+  const [selectedInvoiceForPrint, setSelectedInvoiceForPrint] = useState<any | null>(null);
+  const [printOpenToPreview, setPrintOpenToPreview] = useState(true);
+  const [printAuto, setPrintAuto] = useState(false);
   const [stats, setStats] = useState({
     totalInvoices: 0,
     totalAmount: 0,
@@ -146,9 +149,11 @@ export default function PrintedInvoicesPage() {
     navigate(`/admin/customer-billing?id=${customerId}&name=${encodeURIComponent(customerName)}`);
   };
 
-  const handleEditInvoice = (invoiceId: string) => {
-    setSelectedInvoiceId(invoiceId);
-    setEditDialogOpen(true);
+  const handleEditInvoice = (invoice: any) => {
+    setSelectedInvoiceForPrint(invoice);
+    setPrintOpenToPreview(false);
+    setPrintAuto(false);
+    setPrintDialogOpen(true);
   };
 
   const handleDistributePayment = (invoice: PrintedInvoice) => {
@@ -348,6 +353,20 @@ export default function PrintedInvoicesPage() {
                         </TableCell>
                         <TableCell>
                           <div className="flex gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedInvoiceForPrint(invoice);
+                                setPrintOpenToPreview(true);
+                                setPrintAuto(true);
+                                setPrintDialogOpen(true);
+                              }}
+                              title="طباعة الفاتورة"
+                              className="text-primary hover:text-primary hover:bg-primary/10 border-primary/30"
+                            >
+                              <Printer className="h-4 w-4" />
+                            </Button>
                             {invoice.invoice_type === 'composite_task' && (
                               <Button
                                 size="sm"
@@ -365,7 +384,7 @@ export default function PrintedInvoicesPage() {
                                     }, 100);
                                   }
                                 }}
-                                title="طباعة فاتورة الزبون"
+                                title="طباعة فاتورة الزبون للمهمة المجمعة"
                                 className="text-purple-600 hover:text-purple-700"
                               >
                                 <Printer className="h-4 w-4" />
@@ -374,7 +393,7 @@ export default function PrintedInvoicesPage() {
                             <Button
                               size="sm"
                               variant="outline"
-                              onClick={() => handleEditInvoice(invoice.id)}
+                              onClick={() => handleEditInvoice(invoice)}
                               title="تعديل الفاتورة"
                             >
                               <Edit className="h-4 w-4" />
@@ -430,6 +449,34 @@ export default function PrintedInvoicesPage() {
           }}
         />
       )}
+
+      {/* نافذة طباعة ومريعة الفاتورة العصرية */}
+      <ModernPrintInvoiceDialog
+        open={printDialogOpen}
+        onClose={() => {
+          setPrintDialogOpen(false);
+          setSelectedInvoiceForPrint(null);
+        }}
+        customerId={selectedInvoiceForPrint?.customer_id}
+        customerName={selectedInvoiceForPrint?.customer_name || ''}
+        contracts={selectedInvoiceForPrint?.contract_number ? [{ Contract_Number: String(selectedInvoiceForPrint.contract_number), 'Customer Name': selectedInvoiceForPrint.customer_name, 'Ad Type': '', Total: selectedInvoiceForPrint.total_amount }] : []}
+        selectedContracts={selectedInvoiceForPrint?.contract_number ? [String(selectedInvoiceForPrint.contract_number)] : []}
+        onSelectContracts={() => {}}
+        printItems={selectedInvoiceForPrint?.items || []}
+        onUpdatePrintItem={() => {}}
+        onRemoveItem={() => {}}
+        includeAccountBalance={false}
+        onIncludeAccountBalance={() => {}}
+        accountPayments={0}
+        onSaveInvoice={() => {
+          loadInvoices();
+          setPrintDialogOpen(false);
+        }}
+        initialInvoice={selectedInvoiceForPrint}
+        openToPreview={printOpenToPreview}
+        autoPrint={printAuto}
+        onPrintInvoice={() => {}}
+      />
     </div>
   );
 }

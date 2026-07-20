@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useSendWhatsApp } from '@/hooks/useSendWhatsApp';
+import { filterCompositeRelatedPrintedInvoices } from './BillingUtils';
 
 interface OverdueInvoice {
   id: string;
@@ -19,6 +20,11 @@ interface OverdueInvoice {
   invoiceDate: string;
   daysOverdue: number;
   type: 'sales' | 'print';
+  notes?: string | null;
+  invoiceType?: string | null;
+  contractNumber?: number;
+  contractNumbers?: string;
+  adTypes?: string[];
 }
 
 export function OverdueInvoicesAlert() {
@@ -39,7 +45,7 @@ export function OverdueInvoicesAlert() {
 
       const { data: salesInvoices, error: salesErr } = await supabase
         .from('sales_invoices')
-        .select('id, invoice_number, invoice_name, customer_name, total_amount, paid_amount, remaining_amount, invoice_date, paid')
+        .select('id, invoice_number, invoice_name, customer_name, total_amount, paid_amount, remaining_amount, invoice_date, paid, notes')
         .eq('paid', false);
 
       if (salesErr) {
@@ -66,20 +72,62 @@ export function OverdueInvoicesAlert() {
               invoiceDate: inv.invoice_date,
               daysOverdue: diffDays,
               type: 'sales',
+              notes: inv.notes,
             });
           }
         }
       }
 
-      const { data: printInvoices, error: printErr } = await supabase
-        .from('printed_invoices')
-        .select('id, invoice_number, customer_name, total_amount, paid_amount, invoice_date, paid, printer_name')
-        .eq('paid', false);
+      const [printInvoicesRes, compositeTasksRes, printTasksRes, cutoutTasksRes] = await Promise.all([
+        supabase
+          .from('printed_invoices')
+          .select('id, invoice_number, customer_name, total_amount, paid_amount, invoice_date, paid, printer_name, invoice_type, notes, contract_number, contract_numbers')
+          .eq('paid', false),
+        supabase
+          .from('composite_tasks')
+          .select('id, customer_id, customer_total, combined_invoice_id, print_task_id, discount_amount'),
+        supabase
+          .from('print_tasks')
+          .select('id, customer_id, invoice_id, is_composite, installation_task_id, composite_task_id'),
+        supabase
+          .from('cutout_tasks')
+          .select('id, customer_id, invoice_id, is_composite, installation_task_id')
+      ]);
 
-      if (printErr) {
-        console.error('Error loading print invoices:', printErr);
+      if (printInvoicesRes.error) {
+        console.error('Error loading print invoices:', printInvoicesRes.error);
       } else {
-        for (const inv of printInvoices || []) {
+        const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(
+          printInvoicesRes.data || [],
+          compositeTasksRes.data || [],
+          printTasksRes.data || [],
+          cutoutTasksRes.data || []
+        );
+
+        // Fetch all unique contract numbers across print invoices to map their ad types
+        const printContractNumbers = new Set<number>();
+        for (const inv of billablePrintedInvoices) {
+          if (inv.contract_number) printContractNumbers.add(inv.contract_number);
+          if (inv.contract_numbers) {
+            inv.contract_numbers.split(',').forEach((numStr: string) => {
+              const num = Number(numStr.trim());
+              if (num) printContractNumbers.add(num);
+            });
+          }
+        }
+
+        const adTypeMap = new Map<number, string>();
+        if (printContractNumbers.size > 0) {
+          const { data: contracts } = await supabase
+            .from('Contract')
+            .select('Contract_Number, "Ad Type"')
+            .in('Contract_Number', Array.from(printContractNumbers));
+          for (const c of contracts || []) {
+            if (c['Ad Type']) adTypeMap.set(c.Contract_Number, c['Ad Type']);
+          }
+        }
+
+        for (const inv of billablePrintedInvoices) {
           const total = Number(inv.total_amount) || 0;
           const paid = Number(inv.paid_amount) || 0;
           const remaining = total - paid;
@@ -89,6 +137,16 @@ export function OverdueInvoicesAlert() {
           const diffDays = Math.ceil((today.getTime() - invoiceDate.getTime()) / (1000 * 60 * 60 * 24));
           
           if (diffDays > 15) {
+            const cNumbers = new Set<number>();
+            if (inv.contract_number) cNumbers.add(inv.contract_number);
+            if (inv.contract_numbers) {
+              inv.contract_numbers.split(',').forEach((numStr: string) => {
+                const num = Number(numStr.trim());
+                if (num) cNumbers.add(num);
+              });
+            }
+            const uniqueAdTypes = [...new Set(Array.from(cNumbers).map(num => adTypeMap.get(num)).filter(Boolean))];
+
             overdue.push({
               id: inv.id,
               invoiceNumber: inv.invoice_number,
@@ -100,6 +158,11 @@ export function OverdueInvoicesAlert() {
               invoiceDate: inv.invoice_date,
               daysOverdue: diffDays,
               type: 'print',
+              notes: inv.notes,
+              invoiceType: inv.invoice_type,
+              contractNumber: inv.contract_number,
+              contractNumbers: inv.contract_numbers,
+              adTypes: uniqueAdTypes,
             });
           }
         }
@@ -129,8 +192,22 @@ export function OverdueInvoicesAlert() {
         return;
       }
 
-      const typeLabel = inv.type === 'sales' ? 'فاتورة مبيعات' : 'فاتورة طباعة';
-      const message = `مرحباً ${inv.customerName},\nنود تذكيركم بوجود ${typeLabel} متأخرة بمبلغ ${formatAmount(inv.remainingAmount)} د.ل (فاتورة #${inv.invoiceNumber}).\nعدد أيام التأخير: ${inv.daysOverdue} يوم.\nنرجو التواصل معنا لتسوية المبلغ.\nشكراً لتعاونكم.`;
+      const typeLabel = inv.type === 'sales' ? 'فاتورة مبيعات' : (
+        inv.invoiceType === 'print_install' ? 'فاتورة طباعة وتركيب' :
+        inv.invoiceType === 'print_only' ? 'فاتورة طباعة' :
+        inv.invoiceType === 'install_only' ? 'فاتورة تركيب' :
+        'فاتورة طباعة'
+      );
+      const contractText = inv.type === 'print' && (inv.contractNumbers || inv.contractNumber)
+        ? `\nعقد/عقود رقم: ${inv.contractNumbers || inv.contractNumber}`
+        : '';
+      const adTypeText = inv.type === 'print' && inv.adTypes && inv.adTypes.length > 0
+        ? `\nنوع الإعلان: ${inv.adTypes.join(' / ')}`
+        : '';
+      const nameText = inv.invoiceName ? `\nالبيان: ${inv.invoiceName}` : '';
+      const notesText = inv.notes ? `\nملاحظات: ${inv.notes}` : '';
+
+      const message = `مرحباً ${inv.customerName},\nنود تذكيركم بوجود ${typeLabel} متأخرة بمبلغ ${formatAmount(inv.remainingAmount)} د.ل (فاتورة #${inv.invoiceNumber}).${contractText}${adTypeText}${nameText}${notesText}\nعدد أيام التأخير: ${inv.daysOverdue} يوم.\nنرجو التواصل معنا لتسوية المبلغ.\nشكراً لتعاونكم.`;
 
       await sendMessage({ phone: customer.phone, message });
     } catch (error) {
@@ -177,7 +254,12 @@ export function OverdueInvoicesAlert() {
                       {inv.daysOverdue} يوم
                     </Badge>
                     <Badge variant="outline" className="text-[10px]">
-                      {inv.type === 'sales' ? 'مبيعات' : 'طباعة'}
+                      {inv.type === 'sales' ? 'مبيعات' : (
+                        inv.invoiceType === 'print_install' ? 'طباعة وتركيب' :
+                        inv.invoiceType === 'print_only' ? 'طباعة فقط' :
+                        inv.invoiceType === 'install_only' ? 'تركيب فقط' :
+                        'طباعة'
+                      )}
                     </Badge>
                   </div>
                   
@@ -185,9 +267,24 @@ export function OverdueInvoicesAlert() {
                     <div className="font-semibold text-foreground truncate" title={inv.customerName}>
                       {inv.customerName}
                     </div>
+                    {inv.type === 'print' && (inv.contractNumbers || inv.contractNumber) && (
+                      <div className="text-xs text-purple-600 dark:text-purple-400 font-semibold">
+                        {inv.contractNumbers && inv.contractNumbers.length > 0 
+                          ? `عقود #${inv.contractNumbers}` 
+                          : `عقد #${inv.contractNumber}`}
+                        {inv.adTypes && inv.adTypes.length > 0 && (
+                          <span className="mr-1 text-purple-600 dark:text-purple-400"> ({inv.adTypes.join(' / ')})</span>
+                        )}
+                      </div>
+                    )}
                     {inv.invoiceName && (
                       <div className="text-xs text-muted-foreground truncate" title={inv.invoiceName}>
                         {inv.invoiceName}
+                      </div>
+                    )}
+                    {inv.notes && (
+                      <div className="text-[11px] text-muted-foreground/80 line-clamp-2" title={inv.notes}>
+                        {inv.notes}
                       </div>
                     )}
                     <div className="text-orange-600 dark:text-orange-400 font-bold text-lg">

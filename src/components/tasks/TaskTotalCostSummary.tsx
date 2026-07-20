@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { Separator } from '@/components/ui/separator';
 import { 
   DollarSign, Calculator, Ruler, ChevronDown, ChevronUp, 
-  Box, Building2, Landmark, LayoutGrid, Check, Pencil, X, Save, Gift, Square, Zap, CheckCircle2, MapPin
+  Box, Building2, Landmark, LayoutGrid, Check, Pencil, X, Save, Gift, Square, Zap, CheckCircle2, MapPin, Image as ImageIcon
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -188,6 +188,100 @@ export function TaskTotalCostSummary({
   const [collapsedTypes, setCollapsedTypes] = useState<Set<string>>(new Set());
   // تتبع ما إذا تم تهيئة الحالات
   const [initialized, setInitialized] = useState(false);
+
+  // حالة الطباعة والقص المباشرة
+  const [isPrintActive, setIsPrintActive] = useState(false);
+  const [printPricePerMeter, setPrintPricePerMeter] = useState<number>(0);
+  const [isCutoutActive, setIsCutoutActive] = useState(false);
+  const [cutoutCost, setCutoutCost] = useState<number>(0);
+  const [savingTaskSettings, setSavingTaskSettings] = useState(false);
+
+  useEffect(() => {
+    const fetchTaskSettings = async () => {
+      if (!taskId) return;
+      const cleanId = taskId.split('-')[0];
+      const { data: installTask } = await supabase
+        .from('installation_tasks')
+        .select('default_price_per_meter, print_task_id, cutout_task_id')
+        .eq('id', cleanId)
+        .maybeSingle();
+
+      if (installTask?.default_price_per_meter) {
+        setPrintPricePerMeter(Number(installTask.default_price_per_meter));
+        setIsPrintActive(true);
+      }
+
+      const { data: compTask } = await supabase
+        .from('composite_tasks')
+        .select('customer_print_cost, customer_cutout_cost, print_task_id, cutout_task_id')
+        .eq('installation_task_id', cleanId)
+        .maybeSingle();
+
+      if (compTask) {
+        if (compTask.customer_print_cost && Number(compTask.customer_print_cost) > 0) {
+          setIsPrintActive(true);
+        }
+        if (compTask.customer_cutout_cost && Number(compTask.customer_cutout_cost) > 0) {
+          setIsCutoutActive(true);
+          setCutoutCost(Number(compTask.customer_cutout_cost));
+        }
+      }
+    };
+    fetchTaskSettings();
+  }, [taskId]);
+
+  const handleSavePrintAndCutoutSettings = async (newPrintActive: boolean, newPrintPrice: number, newCutoutActive: boolean, newCutoutCost: number) => {
+    try {
+      setSavingTaskSettings(true);
+      const cleanId = taskId.split('-')[0];
+      
+      await supabase
+        .from('installation_tasks')
+        .update({
+          default_price_per_meter: newPrintActive ? newPrintPrice : 0
+        })
+        .eq('id', cleanId);
+
+      let totalArea = 0;
+      taskItems.forEach(item => {
+        const billboard = billboards[item.billboard_id];
+        const sizeName = billboard?.Size || '';
+        const area = calculateAreaFromSizeData(sizeName, sizesMap);
+        const faces = item.faces_to_install ?? billboard?.Faces_Count ?? 1;
+        totalArea += area * faces;
+      });
+
+      const totalCustomerPrint = newPrintActive ? (totalArea * newPrintPrice) : 0;
+      const totalCustomerCutout = newCutoutActive ? newCutoutCost : 0;
+
+      const { data: compTask } = await supabase
+        .from('composite_tasks')
+        .select('id, customer_installation_cost, discount_amount')
+        .eq('installation_task_id', cleanId)
+        .maybeSingle();
+
+      if (compTask) {
+        const newCustomerTotal = (Number(compTask.customer_installation_cost) || 0) + totalCustomerPrint + totalCustomerCutout - (Number(compTask.discount_amount) || 0);
+        await supabase
+          .from('composite_tasks')
+          .update({
+            customer_print_cost: totalCustomerPrint,
+            customer_cutout_cost: totalCustomerCutout,
+            customer_total: newCustomerTotal,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', compTask.id);
+      }
+
+      toast.success('تم تحديث إعدادات الطباعة والقص بنجاح');
+      onRefresh();
+    } catch (err: any) {
+      console.error(err);
+      toast.error('حدث خطأ أثناء حفظ الإعدادات');
+    } finally {
+      setSavingTaskSettings(false);
+    }
+  };
 
   useEffect(() => {
     const fetchSizes = async () => {
@@ -725,6 +819,97 @@ export function TaskTotalCostSummary({
                   <Ruler className="h-4 w-4" />
                   <span className="font-medium text-sm">بالمتر المربع</span>
                 </button>
+              </div>
+            </div>
+
+            {/* 🖨️ & ✂️ التحكم في إعدادات الطباعة والقص */}
+            <div className="p-4 rounded-xl border border-border/80 bg-muted/20 space-y-3 text-right" dir="rtl">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Pencil className="h-3.5 w-3.5 text-primary" />
+                  إعدادات وتكاليف الطباعة والقص / المجسمات للمهمة
+                </span>
+                {(isPrintActive || isCutoutActive) && (
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 font-bold">
+                    {isPrintActive && `🖨️ طباعة (${printPricePerMeter} د.ل/م²)`}
+                    {isPrintActive && isCutoutActive && ' • '}
+                    {isCutoutActive && `✂️ قص ومجسمات (${cutoutCost} د.ل)`}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* إعداد سعر متر الطباعة */}
+                <div className="p-3 rounded-lg bg-background border border-border/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-foreground flex items-center gap-1.5 cursor-pointer">
+                      <Switch 
+                        checked={isPrintActive}
+                        onCheckedChange={val => {
+                          setIsPrintActive(val);
+                          handleSavePrintAndCutoutSettings(val, printPricePerMeter, isCutoutActive, cutoutCost);
+                        }}
+                        disabled={disabled || savingTaskSettings}
+                      />
+                      <span>تفعيل احتساب تكلفة الطباعة</span>
+                    </Label>
+                    {isPrintActive && (
+                      <Badge className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-none text-[9px] font-bold">
+                        مفعلة
+                      </Badge>
+                    )}
+                  </div>
+                  {isPrintActive && (
+                    <div className="pt-1 flex items-center gap-2">
+                      <InlinePriceInput 
+                        label="سعر متر الطباعة"
+                        value={printPricePerMeter}
+                        onChange={val => {
+                          setPrintPricePerMeter(val);
+                          handleSavePrintAndCutoutSettings(isPrintActive, val, isCutoutActive, cutoutCost);
+                        }}
+                        disabled={disabled || savingTaskSettings}
+                        step={5}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* إعداد تكلفة القص والمجسمات */}
+                <div className="p-3 rounded-lg bg-background border border-border/40 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-foreground flex items-center gap-1.5 cursor-pointer">
+                      <Switch 
+                        checked={isCutoutActive}
+                        onCheckedChange={val => {
+                          setIsCutoutActive(val);
+                          handleSavePrintAndCutoutSettings(isPrintActive, printPricePerMeter, val, cutoutCost);
+                        }}
+                        disabled={disabled || savingTaskSettings}
+                      />
+                      <span>تفعيل تكلفة القص والمجسمات</span>
+                    </Label>
+                    {isCutoutActive && (
+                      <Badge className="bg-amber-500/10 text-amber-600 border-none text-[9px] font-bold">
+                        مفعلة
+                      </Badge>
+                    )}
+                  </div>
+                  {isCutoutActive && (
+                    <div className="pt-1 flex items-center gap-2">
+                      <InlinePriceInput 
+                        label="تكلفة القص / المجسم"
+                        value={cutoutCost}
+                        onChange={val => {
+                          setCutoutCost(val);
+                          handleSavePrintAndCutoutSettings(isPrintActive, printPricePerMeter, isCutoutActive, val);
+                        }}
+                        disabled={disabled || savingTaskSettings}
+                        step={10}
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

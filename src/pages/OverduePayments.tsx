@@ -10,7 +10,7 @@ import {
   AlertTriangle, AlertCircle, Clock, DollarSign, FileText, 
   TrendingDown, User, CreditCard, Receipt, Printer, 
   MessageCircle, Send, Search, SlidersHorizontal, Loader2, 
-  ChevronDown, X, Phone, ArrowUpRight, Scale, Check
+  ChevronDown, X, Phone, ArrowUpRight, Scale, Check, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
@@ -81,13 +81,17 @@ export default function OverduePayments() {
     open: boolean;
     installment: OverdueInstallment | null;
   }>({ open: false, installment: null });
+  const [copied, setCopied] = useState(false);
   const { sendMessage: sendWhatsApp } = useSendWhatsApp();
 
   const formatPhone = (phone: string): string => {
-    let cleaned = phone.replace(/\s+/g, '').replace(/[^0-9+]/g, '');
-    if (cleaned.startsWith('0')) cleaned = '218' + cleaned.slice(1);
-    if (!cleaned.startsWith('+') && !cleaned.startsWith('218')) cleaned = '218' + cleaned;
-    cleaned = cleaned.replace(/^\+/, '');
+    // Keep only numeric digits (strips spaces, hyphens, and invisible directional isolate characters)
+    let cleaned = phone.replace(/\D/g, '');
+    if (cleaned.startsWith('09') && cleaned.length === 10) {
+      cleaned = '218' + cleaned.substring(1);
+    } else if (cleaned.startsWith('9') && cleaned.length === 9) {
+      cleaned = '218' + cleaned;
+    }
     return cleaned;
   };
 
@@ -897,15 +901,25 @@ export default function OverduePayments() {
       )}
 
       {/* WhatsApp Choice Dialog */}
-      <Dialog open={whatsappChoiceDialog.open} onOpenChange={(open) => setWhatsappChoiceDialog({ open, installment: open ? whatsappChoiceDialog.installment : null })}>
-        <DialogContent className="sm:max-w-md" dir="rtl">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <MessageCircle className="h-6 w-6 text-green-600 animate-pulse" />
-              تنبيه الدفعة المتأخرة عبر الواتساب
-            </DialogTitle>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
+      <Dialog open={whatsappChoiceDialog.open} onOpenChange={(open) => {
+        setWhatsappChoiceDialog({ open, installment: open ? whatsappChoiceDialog.installment : null });
+        setCopied(false);
+      }}>
+        <DialogContent className="sm:max-w-md border-0 shadow-2xl rounded-2xl overflow-hidden p-0 bg-background" dir="rtl">
+          <div className="bg-gradient-to-r from-emerald-600 to-teal-500 p-6 text-white relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl transform translate-x-8 -translate-y-8" />
+            <DialogHeader className="space-y-1 relative z-10">
+              <DialogTitle className="text-2xl font-bold flex items-center gap-3 text-white">
+                <div className="bg-white/20 p-2 rounded-xl backdrop-blur-md">
+                  <MessageCircle className="h-6 w-6 text-white animate-pulse" />
+                </div>
+                تنبيه الدفعة المتأخرة
+              </DialogTitle>
+              <p className="text-white/80 text-xs font-medium">إرسال إشعار تذكيري للزبون بمتأخرات عقد إيجار لوحات</p>
+            </DialogHeader>
+          </div>
+          
+          <div className="p-6 space-y-5">
             {whatsappChoiceDialog.installment && (() => {
               const installment = whatsappChoiceDialog.installment;
               const phone = getCustomerPhone(installment);
@@ -922,25 +936,67 @@ export default function OverduePayments() {
                 setWhatsappChoiceDialog({ open: false, installment: null });
               };
 
+              const handleApiWhatsApp = async () => {
+                setWhatsappChoiceDialog({ open: false, installment: null });
+                await sendInstallmentWhatsApp(installment);
+              };
+
+              const handleCopyText = () => {
+                navigator.clipboard.writeText(messageText);
+                setCopied(true);
+                toast.success('تم نسخ نص الرسالة بنجاح');
+                setTimeout(() => setCopied(false), 2000);
+              };
+
               return (
                 <>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    يرجى اختيار طريقة إرسال رسالة التنبيه للزبون <strong>{installment.customerName}</strong> بشأن دفعة العقد رقم #{installment.contractNumber}.
-                  </p>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-semibold text-muted-foreground">معاينة نص الرسالة التذكيرية:</Label>
+                  <div className="flex items-center justify-between gap-4 p-4 rounded-xl bg-muted/40 border border-border/50 text-xs">
+                    <div>
+                      <span className="text-muted-foreground block mb-0.5">الزبون المستهدف</span>
+                      <strong className="text-foreground text-sm block">{installment.customerName}</strong>
+                    </div>
+                    <div className="text-left">
+                      <span className="text-muted-foreground block mb-0.5">رقم الهاتف</span>
+                      <strong className="text-foreground text-sm block">{phone || '—'}</strong>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 relative">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-xs font-bold text-muted-foreground">معاينة نص الرسالة التذكيرية:</Label>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-8 text-xs gap-1.5 px-2 hover:bg-muted text-muted-foreground hover:text-foreground cursor-pointer rounded-lg border border-border/50"
+                        onClick={handleCopyText}
+                      >
+                        {copied ? (
+                          <>
+                            <Check className="h-3.5 w-3.5 text-emerald-600" />
+                            <span className="text-emerald-600 font-semibold">تم النسخ</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>نسخ النص</span>
+                          </>
+                        )}
+                      </Button>
+                    </div>
                     <textarea
                       readOnly
                       value={messageText}
-                      className="w-full min-h-[160px] text-xs p-3 rounded-xl border bg-muted/40 resize-none leading-relaxed focus-visible:outline-none font-sans"
+                      className="w-full min-h-[160px] text-xs p-4 rounded-xl border bg-muted/20 resize-none leading-relaxed focus-visible:outline-none focus:border-emerald-500 focus:bg-background transition-all duration-200 font-sans shadow-inner"
                       dir="rtl"
                     />
                   </div>
+
                   <div className="grid grid-cols-1 gap-3 pt-2">
                     <Button
                       asChild
                       variant="outline"
-                      className="h-16 flex items-center justify-start gap-4 border-2 hover:border-green-600 hover:bg-green-500/[0.02] text-right px-4 cursor-pointer rounded-xl"
+                      className="h-16 flex items-center justify-start gap-4 border border-emerald-500/20 hover:border-emerald-500 bg-emerald-500/[0.01] hover:bg-emerald-500/[0.04] text-right px-4 cursor-pointer rounded-xl transition-all duration-200 shadow-sm"
                     >
                       <a
                         href={waLink}
@@ -948,23 +1004,27 @@ export default function OverduePayments() {
                         rel="noopener noreferrer"
                         onClick={handleManualClick}
                       >
-                        <MessageCircle className="h-6 w-6 text-green-600 shrink-0" />
+                        <div className="p-2 bg-emerald-500/10 rounded-lg shrink-0">
+                          <MessageCircle className="h-6 w-6 text-emerald-600" />
+                        </div>
                         <div>
                           <div className="font-bold text-sm text-foreground">إرسال يدوي (واتساب ويب / تطبيق)</div>
-                          <div className="text-[10px] text-muted-foreground">فتح محادثة مباشرة برابط wa.me وتجهيز نص الرسالة للنسخ</div>
+                          <div className="text-[10px] text-muted-foreground mt-0.5 font-sans">فتح محادثة مباشرة وتجهيز نص الرسالة للنسخ والتعديل قبل الإرسال</div>
                         </div>
                       </a>
                     </Button>
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-16 flex items-center justify-start gap-4 border-2 hover:border-blue-600 hover:bg-blue-500/[0.02] text-right px-4 rounded-xl"
-                      onClick={() => handleApiWhatsApp(installment)}
+                      className="h-16 flex items-center justify-start gap-4 border border-blue-500/20 hover:border-blue-500 bg-blue-500/[0.01] hover:bg-blue-500/[0.04] text-right px-4 rounded-xl cursor-pointer transition-all duration-200 shadow-sm"
+                      onClick={handleApiWhatsApp}
                     >
-                      <Send className="h-6 w-6 text-blue-600 shrink-0" />
+                      <div className="p-2 bg-blue-500/10 rounded-lg shrink-0">
+                        <Send className="h-6 w-6 text-blue-600" />
+                      </div>
                       <div>
                         <div className="font-bold text-sm text-foreground">إرسال تلقائي (عبر منصة الربط API)</div>
-                        <div className="text-[10px] text-muted-foreground">إرسال الرسالة تلقائياً في الخلفية باستخدام منصة الربط الحالية</div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 font-sans">إرسال الرسالة تلقائياً في الخلفية باستخدام منصة الربط المدمجة</div>
                       </div>
                     </Button>
                   </div>

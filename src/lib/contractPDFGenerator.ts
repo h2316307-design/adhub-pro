@@ -253,7 +253,7 @@ export async function generateContractHTML(data: ContractPDFData): Promise<strin
     <div class="content">
       <!-- الترويسة -->
       <div class="header">
-        <img src="/logofares.svg" alt="شعار الشركة" class="logo" onerror="this.style.display='none'">
+        <img src="/logofaresgold.svg" alt="شعار الشركة" class="logo" onerror="this.style.display='none'">
         <h1 class="contract-title">عقد إيجار لوحات إعلانية</h1>
         <p class="contract-number">رقم العقد: ${contractNumber} - سنة ${year}</p>
       </div>

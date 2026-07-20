@@ -84,7 +84,7 @@ export default function IntermediaryReceiptPrintDialog({
       // ✅ جلب إعدادات القالب الموحدة
       const styles = await getMergedInvoiceStylesAsync('receipt');
       const baseUrl = window.location.origin;
-      const logoUrl = styles.logoPath || '/logofares.svg';
+      const logoUrl = styles.logoPath || '/logofaresgold.svg';
       const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
       const testWindow = window.open('', '_blank', 'width=1,height=1');
@@ -447,7 +447,7 @@ export default function IntermediaryReceiptPrintDialog({
           <div class="receipt-container">
             <div class="header">
               <div class="company-info">
-                <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
+                <img src="/logofaresgold.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
               </div>
               
               <div class="receipt-info">

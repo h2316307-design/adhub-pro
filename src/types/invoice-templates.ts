@@ -479,17 +479,17 @@ export const DEFAULT_SHARED_SETTINGS: SharedInvoiceSettings = {
   companyTaxId: '',
   companyEmail: '',
   companyWebsite: '',
-  logoPath: '/logofaresgold.svg',
+  logoPath: '/logofares.svg',
 
-  logoSize: 60,
+  logoSize: 180,
   logoPosition: 'right',
 
   showContactInfo: false,
   contactInfoFontSize: 10,
   contactInfoAlignment: 'center',
 
-  headerBgColor: '#1a1a2e',
-  headerTextColor: '#ffffff',
+  headerBgColor: 'transparent',
+  headerTextColor: '#1a1a2e',
   headerBgOpacity: 100,
   headerAlignment: 'right',
 
@@ -536,18 +536,18 @@ export const DEFAULT_SHARED_SETTINGS: SharedInvoiceSettings = {
 
 export const DEFAULT_INDIVIDUAL_SETTINGS: IndividualInvoiceSettings = {
   // ✅ ألوان رسمية (أسود/رمادي) - مستوحاة من كشف الحساب
-  primaryColor: '#1a1a2e',
+  primaryColor: '#000000',
   secondaryColor: '#333333',
   accentColor: '#e8e8e8',
   
   customerSectionBgColor: '#f8f9fa',
-  customerSectionBorderColor: '#1a1a2e',
-  customerSectionTitleColor: '#1a1a2e',
+  customerSectionBorderColor: '#000000',
+  customerSectionTitleColor: '#000000',
   customerSectionTextColor: '#333333',
   customerSectionAlignment: 'center',
   
   tableBorderColor: '#cccccc',
-  tableHeaderBgColor: '#1a1a2e',
+  tableHeaderBgColor: '#000000',
   tableHeaderTextColor: '#ffffff',
   tableRowEvenColor: '#f8f9fa',
   tableRowOddColor: '#ffffff',
@@ -566,7 +566,7 @@ export const DEFAULT_INDIVIDUAL_SETTINGS: IndividualInvoiceSettings = {
   subtotalBgColor: 'transparent',
   subtotalTextColor: '#333333',
   discountTextColor: '#d9534f',
-  totalBgColor: '#1a1a2e',
+  totalBgColor: '#000000',
   totalTextColor: '#ffffff',
   totalsAlignment: 'right',
   

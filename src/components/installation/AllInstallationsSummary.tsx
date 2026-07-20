@@ -86,63 +86,133 @@ export const AllInstallationsSummary: React.FC<AllInstallationsSummaryProps> = (
     onRefresh();
   }, [fetchAllItems, onRefresh]);
 
-  // Calculate totals and breakdown
+  // Build iteration groups for each task or task items
+  const iterationGroups = useMemo(() => {
+    const groups: Array<{
+      id: string;
+      label: string;
+      items: any[];
+      taskCompany: number;
+      taskCustomer: number;
+      status: string;
+      isCurrent: boolean;
+    }> = [];
+
+    siblingTasks.forEach((t) => {
+      const rawItems = taskItemsMap[t.id] || [];
+      if (rawItems.length === 0) return;
+
+      const maxReinstall = Math.max(0, ...rawItems.map(i => i.reinstall_count || 0));
+
+      if (maxReinstall === 0) {
+        // Single iteration task
+        let taskCompany = 0;
+        let taskCustomer = 0;
+        rawItems.forEach(item => {
+          const billboard = billboards[item.billboard_id];
+          const totalFaces = billboard?.Faces_Count || 1;
+          const facesToInstall = item.faces_to_install ?? totalFaces;
+          const hasCompanyCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
+          const basicCompanyCost = hasCompanyCost
+            ? item.company_installation_cost!
+            : (() => {
+                const fullCompanyCost = installationPrices[item.billboard_id] || 0;
+                return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
+              })();
+          taskCompany += basicCompanyCost + (item.company_additional_cost || 0);
+          taskCustomer += (item.customer_installation_cost || 0) + (item.additional_cost || 0);
+        });
+
+        groups.push({
+          id: t.id,
+          label: 'التركيب الأصلي (المرة الأولى)',
+          items: rawItems,
+          taskCompany,
+          taskCustomer,
+          status: t.status || 'completed',
+          isCurrent: t.id === currentTaskId,
+        });
+      } else {
+        // Task has reinstalls! Split into Iteration 1 (التركيب الأصلي) + Iteration 2 (إعادة تركيب 1)...
+        let origCompany = 0;
+        let origCustomer = 0;
+        const origItems = rawItems.map(item => ({
+          ...item,
+          customer_installation_cost: item.customer_original_install_cost || item.customer_installation_cost || 0,
+        }));
+
+        rawItems.forEach(item => {
+          const billboard = billboards[item.billboard_id];
+          const totalFaces = billboard?.Faces_Count || 1;
+          const facesToInstall = item.faces_to_install ?? totalFaces;
+          const hasCompanyCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
+          const basicCompanyCost = hasCompanyCost
+            ? item.company_installation_cost!
+            : (() => {
+                const fullCompanyCost = installationPrices[item.billboard_id] || 0;
+                return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
+              })();
+          origCompany += basicCompanyCost + (item.company_additional_cost || 0);
+          origCustomer += (item.customer_original_install_cost || item.customer_installation_cost || 0) + (item.additional_cost || 0);
+        });
+
+        groups.push({
+          id: `${t.id}-orig`,
+          label: 'التركيب الأصلي (المرة الأولى)',
+          items: origItems,
+          taskCompany: origCompany,
+          taskCustomer: origCustomer,
+          status: 'completed',
+          isCurrent: t.id === currentTaskId,
+        });
+
+        for (let r = 1; r <= maxReinstall; r++) {
+          const reItemsRaw = rawItems.filter(i => (i.reinstall_count || 0) >= r);
+          const reItems = reItemsRaw.map(item => ({
+            ...item,
+            customer_installation_cost: item.customer_reinstall_cost || item.customer_installation_cost || 0,
+          }));
+
+          let reCustomer = 0;
+          reItemsRaw.forEach(item => {
+            reCustomer += (item.customer_reinstall_cost || item.customer_installation_cost || 0);
+          });
+
+          groups.push({
+            id: `${t.id}-re-${r}`,
+            label: `إعادة تركيب رقم ${r} (المرة ${r + 1})`,
+            items: reItems,
+            taskCompany: 0,
+            taskCustomer: reCustomer,
+            status: 'completed',
+            isCurrent: t.id === currentTaskId,
+          });
+        }
+      }
+    });
+
+    return groups;
+  }, [siblingTasks, taskItemsMap, billboards, installationPrices, currentTaskId]);
+
+  // Calculate totals across iteration groups
   const overallTotals = useMemo(() => {
     let companyTotal = 0;
     let customerTotal = 0;
-    let countTotal = 0;
 
-    const breakdown = siblingTasks.map(t => {
-      const items = taskItemsMap[t.id] || [];
-      let taskCompany = 0;
-      let taskCustomer = 0;
-
-      items.forEach(item => {
-        const billboard = billboards[item.billboard_id];
-        const totalFaces = billboard?.Faces_Count || 1;
-        const facesToInstall = item.faces_to_install ?? totalFaces;
-        const hasCompanyCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
-        const basicCompanyCost = hasCompanyCost
-          ? item.company_installation_cost!
-          : (() => {
-              const fullCompanyCost = installationPrices[item.billboard_id] || 0;
-              return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
-            })();
-        taskCompany += basicCompanyCost + (item.company_additional_cost || 0);
-        const isReinstalled = (item.reinstall_count || 0) > 0;
-        const itemCustomerCost = isReinstalled
-          ? (item.customer_original_install_cost || 0) + (item.customer_reinstall_cost || item.customer_installation_cost || 0)
-          : (item.customer_installation_cost || 0);
-        taskCustomer += itemCustomerCost + (item.additional_cost || 0);
-      });
-
-      companyTotal += taskCompany;
-      customerTotal += taskCustomer;
-      countTotal += items.length;
-
-      return {
-        taskId: t.id,
-        taskName: t.task_name,
-        taskType: t.task_type,
-        reinstallationNumber: t.reinstallation_number,
-        companyCost: taskCompany,
-        customerCost: taskCustomer,
-        profit: taskCustomer - taskCompany,
-        itemsCount: items.length,
-        status: t.status,
-        date: t.created_at,
-        teamName: t.installation_teams?.team_name
-      };
+    iterationGroups.forEach(g => {
+      companyTotal += g.taskCompany;
+      customerTotal += g.taskCustomer;
     });
+
+    const mainCount = siblingTasks.reduce((sum, t) => sum + (taskItemsMap[t.id]?.length || 0), 0);
 
     return {
       companyTotal,
       customerTotal,
       profitTotal: customerTotal - companyTotal,
-      countTotal,
-      breakdown
+      countTotal: mainCount,
     };
-  }, [siblingTasks, taskItemsMap, billboards, installationPrices]);
+  }, [iterationGroups, siblingTasks, taskItemsMap]);
 
   if (loading && Object.keys(taskItemsMap).length === 0) {
     return (
@@ -171,7 +241,7 @@ export const AllInstallationsSummary: React.FC<AllInstallationsSummaryProps> = (
             <div className="flex items-center gap-2.5">
               <Calculator className="h-5 w-5 text-primary" />
               <CardTitle className="text-base font-bold text-foreground">
-                ملخص إجمالي لجميع مرات التركيب ({siblingTasks.length})
+                ملخص إجمالي لجميع مرات التركيب ({iterationGroups.length})
               </CardTitle>
             </div>
             <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/20 font-bold">
@@ -200,14 +270,13 @@ export const AllInstallationsSummary: React.FC<AllInstallationsSummaryProps> = (
             <div className={cn(
               "p-4 rounded-xl border shadow-sm transition-all",
               overallTotals.profitTotal >= 0 
-                ? "bg-emerald-500/5 border-emerald-500/20 hover:bg-emerald-500/10 text-emerald-600" 
-                : "bg-destructive/5 border-destructive/20 hover:bg-destructive/10 text-destructive"
+                ? "bg-emerald-500/5 border-emerald-500/20 text-emerald-600 dark:text-emerald-400" 
+                : "bg-destructive/5 border-destructive/20 text-destructive"
             )}>
               <div className="text-2xl font-black font-mono">
-                {overallTotals.profitTotal >= 0 ? '+' : ''}
-                {overallTotals.profitTotal.toLocaleString('ar-LY')}
+                {overallTotals.profitTotal >= 0 ? '+' : ''}{overallTotals.profitTotal.toLocaleString('ar-LY')}
               </div>
-              <div className="text-xs font-semibold text-muted-foreground/90 mt-1">صافي الربح الإجمالي</div>
+              <div className="text-xs font-semibold mt-1">إجمالي الأرباح</div>
             </div>
 
             <div className="p-4 rounded-xl bg-muted/40 border border-border/40 shadow-sm transition-all hover:bg-muted/60">
@@ -219,69 +288,6 @@ export const AllInstallationsSummary: React.FC<AllInstallationsSummaryProps> = (
           </div>
 
           <Separator className="bg-border/60" />
-
-          {/* Iterations mini-breakdown timeline/table */}
-          <div className="space-y-2">
-            <h4 className="text-xs font-bold text-muted-foreground uppercase tracking-wide">جدول تفصيلي بالمرات</h4>
-            <div className="overflow-x-auto rounded-xl border border-border/50 bg-background/50">
-              <table className="w-full text-sm text-right border-collapse">
-                <thead>
-                  <tr className="bg-muted/40 text-muted-foreground font-semibold text-xs border-b border-border/40">
-                    <th className="p-2.5 font-bold">المرة</th>
-                    <th className="p-2.5 font-bold">اسم المهمة</th>
-                    <th className="p-2.5 font-bold">الفريق</th>
-                    <th className="p-2.5 font-bold text-left">التكلفة</th>
-                    <th className="p-2.5 font-bold text-left">سعر الزبون</th>
-                    <th className="p-2.5 font-bold text-left">الربح</th>
-                    <th className="p-2.5 font-bold">الحالة</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/30">
-                  {overallTotals.breakdown.map((item, index) => {
-                    const isRe = item.taskType === 'reinstallation';
-                    const label = isRe 
-                      ? `إعادة تركيب #${item.reinstallationNumber || 1}` 
-                      : 'التركيبة الأولى';
-                    const statusCfg = STATUS_CONFIG[item.status || 'pending'];
-                    const isCurrent = item.taskId === currentTaskId;
-
-                    return (
-                      <tr 
-                        key={item.taskId} 
-                        className={cn(
-                          "transition-colors hover:bg-muted/20",
-                          isCurrent && "bg-primary/[0.03] font-medium"
-                        )}
-                      >
-                        <td className="p-2.5 flex items-center gap-1.5">
-                          {isCurrent && <div className="h-1.5 w-1.5 rounded-full bg-primary animate-pulse" />}
-                          <span className={cn(isCurrent && "text-primary font-bold")}>{label}</span>
-                        </td>
-                        <td className="p-2.5 text-muted-foreground font-semibold max-w-[150px] truncate">
-                          {item.taskName || '-'}
-                        </td>
-                        <td className="p-2.5 text-muted-foreground text-xs">
-                          {item.teamName || '-'}
-                        </td>
-                        <td className="p-2.5 text-left font-mono font-medium">{item.companyCost.toLocaleString('ar-LY')}</td>
-                        <td className="p-2.5 text-left font-mono font-medium text-primary">{item.customerCost.toLocaleString('ar-LY')}</td>
-                        <td className={cn(
-                          "p-2.5 text-left font-mono font-bold",
-                          item.profit >= 0 ? "text-emerald-600" : "text-destructive"
-                        )}>
-                          {item.profit >= 0 ? '+' : ''}{item.profit.toLocaleString('ar-LY')}</td>
-                        <td className="p-2.5">
-                          <span className={cn("text-[10px] px-2 py-0.5 rounded-full border font-bold", statusCfg?.color)}>
-                            {statusCfg?.label || 'جديدة'}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
         </CardContent>
       </Card>
 
@@ -292,80 +298,42 @@ export const AllInstallationsSummary: React.FC<AllInstallationsSummaryProps> = (
           <h3 className="text-sm font-bold text-foreground">قائمة تكاليف كل مرة على حدة</h3>
         </div>
 
-        <Accordion type="single" collapsible defaultValue={currentTaskId} className="w-full space-y-3">
-          {siblingTasks.map((t) => {
-            const isRe = t.task_type === 'reinstallation';
-            const label = isRe 
-              ? `إعادة تركيب #${t.reinstallation_number || 1}` 
-              : 'التركيبة الأولى';
-            const statusCfg = STATUS_CONFIG[t.status || 'pending'];
-            const items = taskItemsMap[t.id] || [];
-            
-            // Calculate task specific values for header
-            let taskCompany = 0;
-            let taskCustomer = 0;
-            items.forEach(item => {
-              const billboard = billboards[item.billboard_id];
-              const totalFaces = billboard?.Faces_Count || 1;
-              const facesToInstall = item.faces_to_install ?? totalFaces;
-              const hasCompanyCost = item.company_installation_cost !== null && item.company_installation_cost !== undefined;
-              const basicCompanyCost = hasCompanyCost
-                ? item.company_installation_cost!
-                : (() => {
-                    const fullCompanyCost = installationPrices[item.billboard_id] || 0;
-                    return (totalFaces > 1 && facesToInstall === 1) ? fullCompanyCost / 2 : fullCompanyCost;
-                  })();
-              taskCompany += basicCompanyCost + (item.company_additional_cost || 0);
-              const isReinstalled = (item.reinstall_count || 0) > 0;
-              const customerCost = isReinstalled
-                ? (Number(item.customer_original_install_cost) || 0) + (Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0)
-                : (item.customer_installation_cost || 0);
-              taskCustomer += customerCost + (item.additional_cost || 0);
-            });
-
-            const isCurrent = t.id === currentTaskId;
+        <Accordion type="single" collapsible defaultValue={iterationGroups[0]?.id} className="w-full space-y-3">
+          {iterationGroups.map((g) => {
+            const statusCfg = STATUS_CONFIG[g.status || 'pending'];
+            const taskProfit = g.taskCustomer - g.taskCompany;
 
             return (
               <AccordionItem 
-                value={t.id} 
-                key={t.id} 
+                value={g.id} 
+                key={g.id} 
                 className={cn(
                   "border border-border/80 rounded-xl overflow-hidden bg-card transition-all shadow-sm",
-                  isCurrent ? "border-primary/40 ring-1 ring-primary/10 shadow-primary/5" : "hover:border-border-hover"
+                  g.isCurrent ? "border-primary/40 ring-1 ring-primary/10 shadow-primary/5" : "hover:border-border-hover"
                 )}
               >
                 <AccordionTrigger className={cn(
                   "px-4 py-3.5 hover:no-underline hover:bg-muted/10 transition-colors flex items-center justify-between w-full text-right gap-3 [&[data-state=open]>svg]:rotate-180",
-                  isCurrent && "bg-primary/[0.02]"
+                  g.isCurrent && "bg-primary/[0.02]"
                 )}>
                   <div className="flex flex-1 items-center justify-between flex-wrap gap-3">
                     <div className="flex items-center gap-2">
-                      <span className={cn("text-sm font-bold text-right", isCurrent ? "text-primary" : "text-foreground")}>
-                        {label}
+                      <span className={cn("text-sm font-bold text-right", g.isCurrent ? "text-primary" : "text-foreground")}>
+                        {g.label}
                       </span>
-                      {t.task_name && (
-                        <span className="text-xs font-semibold text-muted-foreground bg-muted px-2 py-0.5 rounded-lg max-w-[120px] truncate" title={t.task_name}>
-                          {t.task_name}
-                        </span>
-                      )}
-                      {isCurrent && (
-                        <Badge variant="secondary" className="bg-primary/15 text-primary text-[10px] font-black border border-primary/25">
-                          المهمة المعروضة حالياً
-                        </Badge>
-                      )}
                     </div>
 
                     <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground/80 pl-2">
-                      <span>اللوحات: <strong className="text-foreground">{items.length}</strong></span>
+                      <span>اللوحات: <strong className="text-foreground">{g.items.length}</strong></span>
                       <span className="text-muted-foreground/35">|</span>
-                      <span>سعر الزبون: <strong className="text-primary font-bold">{taskCustomer.toLocaleString('ar-LY')}</strong></span>
+                      <span>سعر الزبون: <strong className="text-primary font-bold">{g.taskCustomer.toLocaleString('ar-LY')} د.ل</strong></span>
                       <span className="text-muted-foreground/35">|</span>
-                      <span>الربح: <strong className={cn(taskCustomer - taskCompany >= 0 ? "text-emerald-600" : "text-destructive")}>
-                        {(taskCustomer - taskCompany).toLocaleString('ar-LY')}
+                      <span>الربح: <strong className={cn(taskProfit >= 0 ? "text-emerald-600" : "text-destructive")}>
+                        {taskProfit >= 0 ? '+' : ''}{taskProfit.toLocaleString('ar-LY')} د.ل
                       </strong></span>
                       <span className="text-muted-foreground/35">|</span>
                       <span className={cn("px-2 py-0.5 rounded-full border font-bold text-[9px]", statusCfg?.color)}>
-                        {statusCfg?.label || 'جديدة'}
+                        {statusCfg?.label || 'مكتملة'}
                       </span>
                     </div>
                   </div>
@@ -374,13 +342,12 @@ export const AllInstallationsSummary: React.FC<AllInstallationsSummaryProps> = (
                 <AccordionContent className="p-4 pt-0 border-t border-border/40">
                   <div className="mt-4">
                     <TaskTotalCostSummary
-                      taskId={t.id}
-                      taskItems={items}
+                      taskId={g.id}
+                      taskItems={g.items}
                       installationPrices={installationPrices}
                       billboards={billboards}
                       onRefresh={handleRefresh}
-                      taskType={t.task_type}
-                      disabled={disabled || t.id !== currentTaskId}
+                      disabled={disabled}
                     />
                   </div>
                 </AccordionContent>

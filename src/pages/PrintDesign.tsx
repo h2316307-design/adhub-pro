@@ -47,7 +47,7 @@ const AVAILABLE_FONTS = [
 
 // الشعارات المتوفرة في مجلد public
 const AVAILABLE_LOGOS = [
-  '/logofares.svg',
+  '/logofaresgold.svg',
   '/logofares2.svg',
   '/logofaresgold.svg',
   '/logo-symbol.svg',

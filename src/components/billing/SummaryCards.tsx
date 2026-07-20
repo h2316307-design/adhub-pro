@@ -17,6 +17,7 @@ interface SummaryCardsProps {
   totalFriendRentals?: number;
   totalCompositeTasks?: number;
   totalDebits?: number;
+  unallocatedBalance?: number;
 }
 
 export function SummaryCards({
@@ -33,7 +34,8 @@ export function SummaryCards({
   totalPrintedInvoices = 0,
   totalFriendRentals = 0,
   totalCompositeTasks = 0,
-  totalDebits = 0
+  totalDebits = 0,
+  unallocatedBalance = 0
 }: SummaryCardsProps) {
   // حساب نسبة السداد
   const paymentPercentage = totalRent > 0 ? Math.min(100, Math.round((totalCredits / totalRent) * 100)) : 0;
@@ -176,6 +178,38 @@ export function SummaryCards({
           </div>
         </CardContent>
       </Card>
+
+      {/* ⚠️ تنبيه الرصيد غير المستعمل */}
+      {unallocatedBalance > 0 && (
+        <div className="relative overflow-hidden rounded-2xl border-2 border-red-500/60 bg-gradient-to-r from-red-950/80 via-red-900/50 to-red-950/80 shadow-[0_0_30px_rgba(239,68,68,0.25)]">
+          {/* شريط أحمر متوهج على اليمين */}
+          <div className="absolute top-0 right-0 bottom-0 w-1.5 bg-gradient-to-b from-red-400 via-red-500 to-red-400 animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.6)]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(239,68,68,0.1),transparent_70%)]" />
+          <div className="relative flex items-center gap-4 px-6 py-4 pr-8">
+            <div className="flex-shrink-0 w-14 h-14 bg-red-500/20 border-2 border-red-500/50 rounded-2xl flex items-center justify-center shadow-lg shadow-red-500/20 animate-pulse">
+              <Wallet className="h-7 w-7 text-red-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <span className="relative inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-red-500/20 text-red-300 border border-red-500/40">
+                  <span className="relative flex h-2.5 w-2.5">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500" />
+                  </span>
+                  تنبيه
+                </span>
+                <h4 className="text-base font-bold text-red-300">يوجد رصيد غير مستعمل!</h4>
+              </div>
+              <p className="text-sm text-red-200/70">هذا الرصيد مدفوع ولكن غير موزع على أي عقد أو فاتورة — يحتاج توزيع أو استرداد</p>
+            </div>
+            <div className="flex-shrink-0 text-left">
+              <p className="text-3xl font-black text-red-400 tabular-nums drop-shadow-[0_0_8px_rgba(239,68,68,0.4)]">{unallocatedBalance.toLocaleString('en-US')}</p>
+              <p className="text-xs text-red-300/60 font-medium">دينار ليبي</p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* البطاقات الرئيسية الملونة */}
       <TooltipProvider delayDuration={150}>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

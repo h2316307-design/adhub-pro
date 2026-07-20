@@ -47,6 +47,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [currentInvoiceType, setCurrentInvoiceType] = useState<InvoiceType>('customer');
   const [calculatedInstallCost, setCalculatedInstallCost] = useState<number>(0);
+  const [realtimeCustomerInstall, setRealtimeCustomerInstall] = useState<number>(0);
   const [needsRecalculation, setNeedsRecalculation] = useState(false);
   const [recalculationReasons, setRecalculationReasons] = useState<string[]>([]);
   const [isRecalculating, setIsRecalculating] = useState(false);
@@ -58,6 +59,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
       try {
         const reasons: string[] = [];
         let mismatchDetected = false;
+        let actualCustomerInstall = 0;
 
         // التحقق من تكاليف التركيب
         if (task.installation_task_id) {
@@ -66,7 +68,6 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
             .select('customer_installation_cost, reinstall_count, customer_original_install_cost, customer_reinstall_cost')
             .eq('task_id', task.installation_task_id);
           
-          let actualCustomerInstall = 0;
           if (installItems) {
             installItems.forEach(item => {
               const isReinstalled = (item.reinstall_count || 0) > 0;
@@ -75,14 +76,27 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
                 : (Number(item.customer_installation_cost) || 0);
               actualCustomerInstall += itemCost;
             });
+            setRealtimeCustomerInstall(actualCustomerInstall);
           }
           
           const diff = Math.abs(actualCustomerInstall - (task.customer_installation_cost || 0));
-          if (diff > 1) {
+          if (diff > 1 && actualCustomerInstall > 0) {
             mismatchDetected = true;
             reasons.push(
               `تكلفة التركيب الفعلية (${actualCustomerInstall.toLocaleString()} د.ل) لا تتطابق مع التكلفة المخزنة (${(task.customer_installation_cost || 0).toLocaleString()} د.ل)`
             );
+            // ✅ مزامنة فورية في قاعدة البيانات لضمان تطابق الفاتورة مع الكارت والدفاتر
+            const newTotal = actualCustomerInstall + (task.customer_print_cost || 0) + (task.customer_cutout_cost || 0) - (task.discount_amount || 0);
+            await supabase
+              .from('composite_tasks')
+              .update({
+                customer_installation_cost: actualCustomerInstall,
+                customer_total: newTotal,
+              })
+              .eq('id', task.id);
+            
+            queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+            onRefresh?.();
           }
         }
 
@@ -361,25 +375,45 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           }
         }
         
-        // ثانياً: جلب صور التصميم من مهمة التركيب (installation_task_items)
+        // ثانياً: جلب صور التصميم من مهمة التركيب (task_designs و installation_task_items)
         if (images.length === 0 && task.installation_task_id) {
-          const { data: taskItems } = await supabase
-            .from('installation_task_items')
-            .select('billboard_id, design_face_a, design_face_b')
+          // 1) أولاً: المصدر الرئيسي - جدول task_designs
+          const { data: taskDesigns } = await supabase
+            .from('task_designs')
+            .select('design_face_a_url, design_face_b_url')
             .eq('task_id', task.installation_task_id);
 
-          if (taskItems && taskItems.length > 0) {
-            // 1) أولاً: استخدام التصميمات المحفوظة في عناصر مهمة التركيب
-            taskItems.forEach((item: any) => {
-              if (item.design_face_a && !seen.has(item.design_face_a)) {
-                seen.add(item.design_face_a);
-                images.push({ url: item.design_face_a, face: 'a' });
+          if (taskDesigns && taskDesigns.length > 0) {
+            taskDesigns.forEach((d: any) => {
+              if (d.design_face_a_url && !seen.has(d.design_face_a_url)) {
+                seen.add(d.design_face_a_url);
+                images.push({ url: d.design_face_a_url, face: 'a' });
               }
-              if (item.design_face_b && !seen.has(item.design_face_b)) {
-                seen.add(item.design_face_b);
-                images.push({ url: item.design_face_b, face: 'b' });
+              if (d.design_face_b_url && !seen.has(d.design_face_b_url)) {
+                seen.add(d.design_face_b_url);
+                images.push({ url: d.design_face_b_url, face: 'b' });
               }
             });
+          }
+
+          // 2) ثانياً: استخدام التصميمات المحفوظة في عناصر مهمة التركيب
+          if (images.length === 0) {
+            const { data: taskItems } = await supabase
+              .from('installation_task_items')
+              .select('billboard_id, design_face_a, design_face_b')
+              .eq('task_id', task.installation_task_id);
+
+            if (taskItems && taskItems.length > 0) {
+              taskItems.forEach((item: any) => {
+                if (item.design_face_a && !seen.has(item.design_face_a)) {
+                  seen.add(item.design_face_a);
+                  images.push({ url: item.design_face_a, face: 'a' });
+                }
+                if (item.design_face_b && !seen.has(item.design_face_b)) {
+                  seen.add(item.design_face_b);
+                  images.push({ url: item.design_face_b, face: 'b' });
+                }
+              });
 
             // 2) إذا لا تزال لا توجد صور، فولباك: جلب من جدول اللوحات باستخدام billboard_id
             if (images.length === 0) {
@@ -637,6 +671,10 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
   // Check if task has cutouts
   const hasCutouts = task.customer_cutout_cost > 0 || task.company_cutout_cost > 0;
 
+  // حساب إجمالي الزبون الفعلي ديناميكياً لتفادي 5520 د.ل والمزامنة الفورية
+  const realCustomerInstallCost = realtimeCustomerInstall > 0 ? realtimeCustomerInstall : (task.customer_installation_cost || 0);
+  const displayCustomerTotal = realCustomerInstallCost + (task.customer_print_cost || 0) + (task.customer_cutout_cost || 0) - (task.discount_amount || 0);
+
   // تحديد حالة الإكمال بناءً على حالة المهمة
   const isCompleted = task.status === 'completed';
   const isPartiallyCompleted = task.status === 'in_progress';
@@ -713,7 +751,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
                 <Pencil className="h-3 w-3 opacity-0 group-hover/name:opacity-100 transition-opacity" />
                 <span>{(task as any).task_name || 'انقر لإضافة اسم للمهمة...'}</span>
               </button>
-            )
+            )}
             <div className="flex gap-2 flex-wrap">
               {getTaskTypeBadge(task.task_type)}
               {getStatusBadge(task.status)}
@@ -740,7 +778,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           <div className="flex flex-col items-end gap-1">
             <div className="text-[11px] text-muted-foreground">المستحق على الزبون</div>
             <div className="text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-              {(task.customer_total || (task.customer_installation_cost + task.customer_print_cost + task.customer_cutout_cost)).toLocaleString('en-US')} د.ل
+              {displayCustomerTotal.toLocaleString('en-US')} د.ل
             </div>
             <div className="text-xs text-muted-foreground">
               {format(new Date(task.created_at), 'dd MMM yyyy', { locale: ar })}
@@ -811,14 +849,14 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
               <div className="flex-1">
                 <div className="text-sm font-medium text-muted-foreground">التركيب</div>
                 <div className="text-lg font-bold text-primary">
-                  {task.customer_installation_cost.toLocaleString('en-US')} د.ل
+                  {displayInstallCost.toLocaleString('en-US')} د.ل
                 </div>
-                {task.task_type === 'reinstallation' && task.customer_installation_cost > 0 && (
+                {task.task_type === 'reinstallation' && displayInstallCost > 0 && (
                   <div className="text-[10px] text-orange-500 mt-0.5">
                     ↺ إعادة تركيب
                   </div>
                 )}
-                {task.task_type === 'new_installation' && task.customer_installation_cost === 0 && (
+                {task.task_type === 'new_installation' && displayInstallCost === 0 && (
                   <div className="text-xs text-muted-foreground">شامل مع العقد</div>
                 )}
               </div>
@@ -862,7 +900,7 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
                 إجمالي المستحق على الزبون
               </span>
               <span className="text-2xl font-bold text-primary">
-                {(task.customer_total || (task.customer_installation_cost + task.customer_print_cost + task.customer_cutout_cost)).toLocaleString('en-US')} د.ل
+                {displayCustomerTotal.toLocaleString('en-US')} د.ل
               </span>
             </div>
           </div>

@@ -39,7 +39,7 @@ export function UnifiedInvoiceRenderer({ data, printRef }: Props) {
   const individualSettings = getIndividualSettings(data.invoiceType);
 
   const fontBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const logoUrl = sharedSettings.logoPath || '/logofares.svg';
+  const logoUrl = sharedSettings.logoPath || '/logofaresgold.svg';
   const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${fontBaseUrl}${logoUrl}`;
 
   const template = getInvoiceTemplate(data.invoiceType);

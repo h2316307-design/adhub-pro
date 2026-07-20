@@ -5,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Printer, Trash2, Edit, DollarSign } from 'lucide-react';
+import { Printer, Trash2, Edit, DollarSign, Coins, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { generateSalesInvoiceHTML } from './InvoiceTemplates';
@@ -118,14 +118,14 @@ export function SalesSection({
   // حساب الإحصائيات
   const totalAmount = invoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
   const totalPaid = invoices.reduce((sum, inv) => sum + (Number(inv.paid_amount) || 0), 0);
-  const totalRemaining = totalAmount - totalPaid;
+  const totalRemaining = Math.max(0, totalAmount - totalPaid);
   const paidCount = invoices.filter(inv => (Number(inv.total_amount) || 0) - (Number(inv.paid_amount) || 0) <= 0.01).length;
 
   return (
     <>
     <Card className="border border-emerald-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-emerald-500/30 rounded-2xl mt-6">
       <CardHeader className="bg-gradient-to-r from-emerald-500/10 via-emerald-500/5 to-transparent border-b border-emerald-500/20 text-white py-5">
-        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 bg-emerald-500/15 border border-emerald-500/30 rounded-xl flex items-center justify-center shadow-lg">
               <DollarSign className="h-6 w-6 text-emerald-500" />
@@ -133,22 +133,6 @@ export function SalesSection({
             <div>
               <CardTitle className="text-xl font-bold text-white">فواتير المبيعات</CardTitle>
               <p className="text-white/70 text-sm mt-0.5">{invoices.length} فاتورة • {paidCount} مسددة</p>
-            </div>
-          </div>
-          
-          {/* إحصائيات سريعة */}
-          <div className="flex items-center gap-6 flex-wrap">
-            <div className="text-center">
-              <p className="text-white/60 text-xs">الإجمالي</p>
-              <p className="text-lg font-bold text-white">{formatAmount(totalAmount)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-white/60 text-xs">المدفوع</p>
-              <p className="text-lg font-bold text-emerald-300">{formatAmount(totalPaid)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-white/60 text-xs">المتبقي</p>
-              <p className="text-lg font-bold text-rose-300">{formatAmount(totalRemaining)}</p>
             </div>
           </div>
 
@@ -159,7 +143,49 @@ export function SalesSection({
           )}
         </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="pt-6 px-6 pb-6">
+        {invoices.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5 select-none">
+            {/* Total Card */}
+            <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+              <div className="space-y-1 text-right">
+                <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المبلغ</span>
+                <p className="text-base sm:text-lg lg:text-xl font-black text-white">
+                  {totalAmount.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-emerald-500/10 text-emerald-400 group-hover:scale-110 transition-transform shrink-0">
+                <DollarSign className="h-4.5 w-4.5" />
+              </div>
+            </div>
+
+            {/* Paid Card */}
+            <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-green-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+              <div className="space-y-1 text-right">
+                <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المدفوع</span>
+                <p className="text-base sm:text-lg lg:text-xl font-black text-green-400">
+                  {totalPaid.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-green-500/10 text-green-400 group-hover:scale-110 transition-transform shrink-0">
+                <Coins className="h-4.5 w-4.5" />
+              </div>
+            </div>
+
+            {/* Remaining Card */}
+            <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-rose-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+              <div className="space-y-1 text-right">
+                <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">المبلغ المتبقي</span>
+                <p className="text-base sm:text-lg lg:text-xl font-black text-rose-400">
+                  {totalRemaining.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                </p>
+              </div>
+              <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform shrink-0">
+                <Wallet className="h-4.5 w-4.5" />
+              </div>
+            </div>
+          </div>
+        )}
         {invoices.length > 0 ? (
           <div className="overflow-x-auto">
             <Table>

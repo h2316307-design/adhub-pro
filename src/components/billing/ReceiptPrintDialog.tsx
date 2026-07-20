@@ -364,7 +364,7 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
       // ✅ جلب إعدادات القالب المحفوظة (async)
       const styles = await getMergedInvoiceStylesAsync('receipt');
       const fontBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const logoUrl = styles.logoPath || '/logofares.svg';
+      const logoUrl = styles.logoPath || '/logofaresgold.svg';
       const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${fontBaseUrl}${logoUrl}`;
 
       const receiptDate = formatDateForPrint(new Date().toISOString(), styles.showHijriDate);

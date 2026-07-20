@@ -195,7 +195,7 @@ export default function PricingList() {
   // الشعارات المتوفرة
   const AVAILABLE_LOGOS = [
     { src: '/logofaresgold.svg', label: 'الفارس الذهبي' },
-    { src: '/logofares.svg', label: 'الفارس' },
+    { src: '/logofaresgold.svg', label: 'الفارس' },
     { src: '/logofares2.svg', label: 'الفارس 2' },
     { src: '/new-logo.svg', label: 'الشعار الجديد' },
     { src: '/logo-symbol.svg', label: 'الرمز' },

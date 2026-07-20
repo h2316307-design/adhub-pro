@@ -20,6 +20,8 @@ interface OverdueCompositeTask {
   daysOverdue: number;
   contractId: number | null;
   adType: string;
+  contractIds?: number[];
+  adTypes?: string[];
 }
 
 export function OverdueCompositeTasksAlert() {
@@ -40,7 +42,7 @@ export function OverdueCompositeTasksAlert() {
 
       const { data: tasks, error } = await supabase
         .from('composite_tasks')
-        .select('id, task_number, task_type, customer_name, customer_total, paid_amount, created_at, status, contract_id')
+        .select('id, task_number, task_type, customer_name, customer_total, paid_amount, created_at, status, contract_id, installation_task_id')
         .not('status', 'eq', 'cancelled');
 
       if (error) {
@@ -48,20 +50,108 @@ export function OverdueCompositeTasksAlert() {
         return;
       }
 
-      const contractIds = [...new Set((tasks || []).map(t => t.contract_id).filter(Boolean))] as number[];
-      const adTypeMap = new Map<number, string>();
-      if (contractIds.length > 0) {
-        const { data: contracts } = await supabase
+      // Fetch all contract IDs from sub-tasks (installation task items)
+      const installationTaskIds = Array.from(
+        new Set((tasks || []).map(t => t.installation_task_id).filter(Boolean))
+      ) as string[];
+
+      const taskToContractsMap = new Map<string, number[]>();
+      
+      // Initialize map with task's default contract_id
+      (tasks || []).forEach(t => {
+        if (t.contract_id) {
+          taskToContractsMap.set(t.id, [t.contract_id]);
+        }
+      });
+
+      const realInstallMap = new Map<string, number>();
+
+      if (installationTaskIds.length > 0) {
+        const [installItemsRes, installTasksRes] = await Promise.all([
+          supabase
+            .from('installation_task_items')
+            .select('task_id, customer_installation_cost, reinstall_count, customer_original_install_cost, customer_reinstall_cost, billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
+            .in('task_id', installationTaskIds),
+          supabase
+            .from('installation_tasks')
+            .select('id, contract_ids, contract_id')
+            .in('id', installationTaskIds)
+        ]);
+
+        const installItems = installItemsRes.data || [];
+        const installTasksData = installTasksRes.data || [];
+
+        // حساب تكاليف التركيب الحقيقية لكل مهمة
+        installItems.forEach((row: any) => {
+          const isReinstalled = (row.reinstall_count || 0) > 0;
+          const origCost = Number(row.customer_original_install_cost) || Number(row.customer_installation_cost) || 0;
+          const reinstallCost = isReinstalled
+            ? (Number(row.customer_reinstall_cost) || Number(row.customer_installation_cost) || 0)
+            : 0;
+          const itemCost = isReinstalled ? (origCost + reinstallCost) : Number(row.customer_installation_cost) || 0;
+          realInstallMap.set(row.task_id, (realInstallMap.get(row.task_id) || 0) + itemCost);
+        });
+
+        const installTaskToContracts = new Map<string, Set<number>>();
+        
+        // 1. Map from installation tasks table
+        installTasksData.forEach((it: any) => {
+          const ids = it.contract_ids || (it.contract_id ? [it.contract_id] : []);
+          if (ids && ids.length > 0) {
+            installTaskToContracts.set(it.id, new Set(ids.map(Number)));
+          }
+        });
+
+        // 2. Map from installation task items
+        installItems.forEach((row: any) => {
+          const taskId = row.task_id as string;
+          const contractNo = row.billboard?.Contract_Number;
+          if (taskId && contractNo) {
+            if (!installTaskToContracts.has(taskId)) {
+              installTaskToContracts.set(taskId, new Set());
+            }
+            installTaskToContracts.get(taskId)!.add(Number(contractNo));
+          }
+        });
+
+        (tasks || []).forEach(t => {
+          const set = t.installation_task_id ? installTaskToContracts.get(t.installation_task_id) : undefined;
+          const derived = set ? Array.from(set) : [];
+          const existing = taskToContractsMap.get(t.id) || [];
+          const combined = [...new Set([...existing, ...derived])].filter(Boolean);
+          if (combined.length > 0) {
+            taskToContractsMap.set(t.id, combined);
+          }
+        });
+      }
+
+      // Fetch ad types and customer info for all contract IDs
+      const allContractIds = [...new Set(Array.from(taskToContractsMap.values()).flat())];
+      const contractCustomerMap = new Map<number, { adType: string; customerId: string | null; customerName: string }>();
+      
+      if (allContractIds.length > 0) {
+        const { data: contractsData } = await supabase
           .from('Contract')
-          .select('Contract_Number, "Ad Type"')
-          .in('Contract_Number', contractIds);
-        for (const c of contracts || []) {
-          if (c['Ad Type']) adTypeMap.set(c.Contract_Number, c['Ad Type']);
+          .select('Contract_Number, "Ad Type", "Customer Name", customer_id')
+          .in('Contract_Number', allContractIds);
+        for (const c of contractsData || []) {
+          if (c.Contract_Number != null) {
+            contractCustomerMap.set(c.Contract_Number, {
+              adType: c['Ad Type'] || '',
+              customerId: c.customer_id || null,
+              customerName: c['Customer Name'] || '',
+            });
+          }
         }
       }
 
       for (const task of tasks || []) {
-        const customerTotal = Number(task.customer_total) || 0;
+        const realInstallTotal = task.installation_task_id && realInstallMap.has(task.installation_task_id)
+          ? realInstallMap.get(task.installation_task_id)!
+          : null;
+        const customerTotal = realInstallTotal !== null
+          ? (realInstallTotal + (Number(task.customer_print_cost) || 0) + (Number(task.customer_cutout_cost) || 0) - (Number(task.discount_amount) || 0))
+          : (Number(task.customer_total) || 0);
         const paidAmount = Number(task.paid_amount) || 0;
         const remaining = customerTotal - paidAmount;
         
@@ -71,6 +161,20 @@ export function OverdueCompositeTasksAlert() {
         const diffDays = Math.ceil((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
         
         if (diffDays > 15) {
+          const rawTaskContracts = taskToContractsMap.get(task.id) || [];
+          
+          // Filter contracts to only keep those belonging to this customer
+          const taskContracts = rawTaskContracts.filter(cNum => {
+            const cInfo = contractCustomerMap.get(cNum);
+            if (!cInfo) return true;
+            if (cInfo.customerId && task.customer_id) {
+              return cInfo.customerId === task.customer_id;
+            }
+            return cInfo.customerName === task.customer_name;
+          });
+
+          const uniqueAdTypes = [...new Set(taskContracts.map(cId => contractCustomerMap.get(cId)?.adType).filter(Boolean))];
+
           overdue.push({
             id: task.id,
             taskNumber: task.task_number,
@@ -81,8 +185,10 @@ export function OverdueCompositeTasksAlert() {
             remainingAmount: remaining,
             createdAt: task.created_at || '',
             daysOverdue: diffDays,
-            contractId: task.contract_id,
-            adType: task.contract_id ? (adTypeMap.get(task.contract_id) || '') : '',
+            contractIds: taskContracts,
+            adTypes: uniqueAdTypes,
+            contractId: taskContracts[0] || null,
+            adType: uniqueAdTypes.join(' / '),
           });
         }
       }
@@ -124,7 +230,14 @@ export function OverdueCompositeTasksAlert() {
         return;
       }
 
-      const message = `مرحباً ${task.customerName},\nنود تذكيركم بوجود مبلغ متأخر قدره ${formatAmount(task.remainingAmount)} د.ل على مهمة ${getTaskTypeLabel(task.taskType)} رقم #${task.taskNumber}.\nعدد أيام التأخير: ${task.daysOverdue} يوم.\nنرجو التواصل معنا لتسوية المبلغ.\nشكراً لتعاونكم.`;
+      const contractText = task.contractIds && task.contractIds.length > 0
+        ? `\nعقد/عقود رقم: ${task.contractIds.join(', ')}`
+        : '';
+      const adTypeText = task.adTypes && task.adTypes.length > 0
+        ? `\nنوع الإعلان: ${task.adTypes.join(' / ')}`
+        : '';
+
+      const message = `مرحباً ${task.customerName},\nنود تذكيركم بوجود مبلغ متأخر قدره ${formatAmount(task.remainingAmount)} د.ل على مهمة ${getTaskTypeLabel(task.taskType)} رقم #${task.taskNumber}.${contractText}${adTypeText}\nعدد أيام التأخير: ${task.daysOverdue} يوم.\nنرجو التواصل معنا لتسوية المبلغ.\nشكراً لتعاونكم.`;
 
       await sendMessage({ phone: customer.phone, message });
     } catch (error) {
@@ -177,12 +290,19 @@ export function OverdueCompositeTasksAlert() {
                     <div className="font-semibold text-foreground truncate" title={task.customerName}>
                       {task.customerName}
                     </div>
-                    {task.contractId && (
+                    {task.contractIds && task.contractIds.length > 0 ? (
+                      <div className="text-xs text-muted-foreground">
+                        {task.contractIds.length > 1 ? `عقود #${task.contractIds.join(', #')}` : `عقد #${task.contractIds[0]}`}
+                        {task.adTypes && task.adTypes.length > 0 && (
+                          <span className="mr-1 text-purple-600 dark:text-purple-400"> ({task.adTypes.join(' / ')})</span>
+                        )}
+                      </div>
+                    ) : task.contractId ? (
                       <div className="text-xs text-muted-foreground">
                         عقد #{task.contractId}
-                        {task.adType && <span className="mr-1 text-purple-600 dark:text-purple-400">({task.adType})</span>}
+                        {task.adType && <span className="mr-1 text-purple-600 dark:text-purple-400"> ({task.adType})</span>}
                       </div>
-                    )}
+                    ) : null}
                     <div className="text-xs text-muted-foreground truncate">
                       {getTaskTypeLabel(task.taskType)}
                     </div>

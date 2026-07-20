@@ -26,6 +26,7 @@ export interface PrintInvoiceData {
   invoiceNumber: string;
   invoiceDate: string;
   customerName: string;
+  customerCompany?: string;
   customerId?: string;
   customerPhone?: string;
   contractNumbers?: string[];
@@ -234,6 +235,7 @@ export async function generatePrintInvoiceHTML(data: PrintInvoiceData): Promise<
     label: 'العميل',
     name: data.customerName,
     phone: data.customerPhone,
+    company: data.customerCompany,
     statsCards: `
       <div class="stat-card">
         <div class="stat-value">${totalQuantity}</div>

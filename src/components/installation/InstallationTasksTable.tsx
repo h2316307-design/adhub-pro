@@ -963,7 +963,9 @@ export const InstallationTasksTable: React.FC<Props> = ({
       return s + cost;
     }, 0);
     const totalCustomerCost = items.reduce((s, i) => {
-      return s + (Number(i.customer_installation_cost) || 0);
+      return s + ((i.reinstall_count || 0) > 0 
+        ? ((Number(i.customer_original_install_cost) || Number(i.customer_installation_cost) || 0) + (Number(i.customer_reinstall_cost) || Number(i.customer_installation_cost) || 0))
+        : (Number(i.customer_installation_cost) || 0));
     }, 0);
     const displayStatus = getDisplayStatus(items);
     const installDate = items.find(i => i.installation_date)?.installation_date;

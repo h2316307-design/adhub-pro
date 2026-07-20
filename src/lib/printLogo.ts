@@ -11,7 +11,7 @@ export async function loadPrintLogo(): Promise<string> {
 
   try {
     // تحميل الشعار من المجلد العام
-    const response = await fetch('/logofares.svg');
+    const response = await fetch('/logofaresgold.svg');
     const svgText = await response.text();
     
     // تحويل SVG إلى PNG باستخدام Canvas

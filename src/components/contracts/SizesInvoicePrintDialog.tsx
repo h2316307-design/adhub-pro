@@ -350,14 +350,14 @@ export function SizesInvoicePrintDialog({
   }
 
   // All colors from individual settings
-  const primaryColor = individual.primaryColor || '#D4AF37';
-  const secondaryColor = individual.secondaryColor || '#1a1a2e';
+  const primaryColor = individual.primaryColor || '#000000';
+  const secondaryColor = individual.secondaryColor || '#333333';
   const accentColor = individual.accentColor || '#f5f5f5';
 
   // Table colors
-  const tableHeaderBg = individual.tableHeaderBgColor || '#D4AF37';
+  const tableHeaderBg = individual.tableHeaderBgColor || '#000000';
   const tableHeaderText = individual.tableHeaderTextColor || '#ffffff';
-  const tableBorder = individual.tableBorderColor || '#D4AF37';
+  const tableBorder = individual.tableBorderColor || '#000000';
   const tableRowEven = individual.tableRowEvenColor || '#f8f9fa';
   const tableRowOdd = individual.tableRowOddColor || '#ffffff';
   const tableText = individual.tableTextColor || '#333333';
@@ -365,20 +365,20 @@ export function SizesInvoicePrintDialog({
 
   // Customer section colors
   const customerBg = individual.customerSectionBgColor || '#f8f9fa';
-  const customerBorder = individual.customerSectionBorderColor || '#D4AF37';
-  const customerTitle = individual.customerSectionTitleColor || '#D4AF37';
+  const customerBorder = individual.customerSectionBorderColor || '#000000';
+  const customerTitle = individual.customerSectionTitleColor || '#000000';
   const customerText = individual.customerSectionTextColor || '#333333';
 
   // Totals colors
   const subtotalBg = individual.subtotalBgColor || '#f0f0f0';
   const subtotalText = individual.subtotalTextColor || '#333333';
-  const totalBg = individual.totalBgColor || '#D4AF37';
+  const totalBg = individual.totalBgColor || '#000000';
   const totalText = individual.totalTextColor || '#ffffff';
 
   // Notes colors
-  const notesBg = individual.notesBgColor || '#fffbeb';
-  const notesText = individual.notesTextColor || '#92400e';
-  const notesBorder = individual.notesBorderColor || '#fbbf24';
+  const notesBg = individual.notesBgColor || '#f9f9f9';
+  const notesText = individual.notesTextColor || '#333333';
+  const notesBorder = individual.notesBorderColor || '#dddddd';
 
   // Font sizes
   const titleFontSize = individual.titleFontSize || 24;

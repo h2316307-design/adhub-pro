@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { RefreshCw, Replace, Search, MapPin, Box, AlertTriangle, DollarSign, Layers } from 'lucide-react';
+import { RefreshCw, Replace, Search, MapPin, Box, AlertTriangle, DollarSign, Layers, FolderPlus, Info } from 'lucide-react';
 
 interface ReplaceBillboardDialogProps {
   open: boolean;
@@ -45,6 +45,7 @@ export function ReplaceBillboardDialog({
   const [splitPercentage, setSplitPercentage] = useState(50);
   const [loading, setLoading] = useState(false);
   const [reinstalledFaces, setReinstalledFaces] = useState<'both' | 'face_a' | 'face_b'>('both');
+  const [destinationType, setDestinationType] = useState<'new_task' | 'current_task'>('new_task');
   
   // للاستبدال
   const [searchQuery, setSearchQuery] = useState('');
@@ -146,41 +147,117 @@ export function ReplaceBillboardDialog({
         const newTotalReinstalled = currentTotalReinstalled === 0
           ? originalFaces + newFacesToInstall  // أول إعادة تركيب: نحسب التركيب الأصلي + الإعادة
           : currentTotalReinstalled + newFacesToInstall;  // إعادات لاحقة: نضيف فقط
-        
-        const updateData: any = {
-          reinstall_count: (item.reinstall_count || 0) + 1,
-          total_reinstalled_faces: newTotalReinstalled,
-          replacement_status: 'reinstalled',
-          replacement_reason: finalReason,
-          replacement_cost_bearer: costBearer,
-          replacement_cost_percentage: costBearer === 'split' ? splitPercentage : (costBearer === 'customer' ? 100 : 0),
-          status: 'pending',
-          installation_date: null,
-          reinstalled_faces: reinstalledFaces,
-          faces_to_install: newFacesToInstall,
-          // فصل التكاليف: الأصلي = السعر الأساسي (مرجعي فقط)، إعادة التركيب = المحسوب على الزبون
-          customer_original_install_cost: item.customer_original_install_cost || item.customer_installation_cost || 0,
-          customer_reinstall_cost: 0, // سيتم حسابه تلقائياً عند إكمال التركيب بواسطة trigger
-        };
 
-        // تصفير فقط الأوجه المعاد تركيبها
-        if (reinstalledFaces === 'both') {
-          updateData.installed_image_face_a_url = null;
-          updateData.installed_image_face_b_url = null;
-        } else if (reinstalledFaces === 'face_a') {
-          updateData.installed_image_face_a_url = null;
-          // الوجه الخلفي يبقى كما هو
-        } else if (reinstalledFaces === 'face_b') {
-          updateData.installed_image_face_b_url = null;
-          // الوجه الأمامي يبقى كما هو
+        if (destinationType === 'new_task') {
+          // جلب تفاصيل المهمة الحالية لنسخها
+          const { data: currentTask, error: currentTaskError } = await supabase
+            .from('installation_tasks')
+            .select('*')
+            .eq('id', taskId)
+            .single();
+
+          if (currentTaskError) throw currentTaskError;
+          if (!currentTask) throw new Error('لم يتم العثور على المهمة الأصلية');
+
+          // حساب الرقم التالي لإعادات تركيب العقد
+          const { data: existingReinstalls, error: countError } = await supabase
+            .from('installation_tasks')
+            .select('reinstallation_number')
+            .eq('contract_id', currentTask.contract_id)
+            .eq('task_type', 'reinstallation')
+            .order('reinstallation_number', { ascending: false })
+            .limit(1);
+
+          if (countError) throw countError;
+
+          const nextNumber = ((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1;
+
+          // إنشاء مهمة جديدة
+          const { data: newTask, error: taskError } = await supabase
+            .from('installation_tasks')
+            .insert({
+              contract_id: currentTask.contract_id,
+              team_id: null, // نترك فريق التركيب فارغاً ليقوم المستخدم باختياره يدوياً
+              status: 'pending',
+              task_type: 'reinstallation',
+              reinstallation_number: nextNumber,
+              contract_ids: currentTask.contract_ids,
+              task_name: `إعادة تركيب لوحة #${billboard?.ID} (${finalReason})`
+            })
+            .select()
+            .single();
+
+          if (taskError) throw taskError;
+          if (!newTask) throw new Error('فشل في إنشاء مهمة إعادة التركيب');
+
+          // إدراج اللوحة في المهمة الجديدة
+          const { error: itemError } = await supabase
+            .from('installation_task_items')
+            .insert({
+              task_id: newTask.id,
+              billboard_id: item.billboard_id,
+              status: 'pending',
+              faces_to_install: newFacesToInstall,
+              reinstall_count: (item.reinstall_count || 0) + 1,
+              total_reinstalled_faces: newTotalReinstalled,
+              replacement_status: 'reinstalled',
+              replacement_reason: finalReason,
+              replacement_cost_bearer: costBearer,
+              replacement_cost_percentage: costBearer === 'split' ? splitPercentage : (costBearer === 'customer' ? 100 : 0),
+              reinstalled_faces: reinstalledFaces,
+              customer_original_install_cost: item.customer_original_install_cost || item.customer_installation_cost || 0,
+              customer_reinstall_cost: 0,
+            });
+
+          if (itemError) throw itemError;
+
+          // تعديل حالة اللوحة في المهمة الحالية (تبقى مكتملة ولكن يتم تحديث وسم الاستبدال لربطها)
+          await supabase
+            .from('installation_task_items')
+            .update({
+              replacement_status: 'reinstalled',
+              replacement_reason: finalReason,
+              replacement_cost_bearer: costBearer,
+              replacement_cost_percentage: costBearer === 'split' ? splitPercentage : (costBearer === 'customer' ? 100 : 0),
+              reinstall_count: (item.reinstall_count || 0) + 1,
+              reinstalled_faces: reinstalledFaces,
+            } as any)
+            .eq('id', item.id);
+
+          toast.success('تم إنشاء مهمة إعادة تركيب مستقلة وجديدة بنجاح');
+        } else {
+          // إعادة تركيب في نفس المهمة الحالية (الآلية القديمة)
+          const updateData: any = {
+            reinstall_count: (item.reinstall_count || 0) + 1,
+            total_reinstalled_faces: newTotalReinstalled,
+            replacement_status: 'reinstalled',
+            replacement_reason: finalReason,
+            replacement_cost_bearer: costBearer,
+            replacement_cost_percentage: costBearer === 'split' ? splitPercentage : (costBearer === 'customer' ? 100 : 0),
+            status: 'pending',
+            installation_date: null,
+            reinstalled_faces: reinstalledFaces,
+            faces_to_install: newFacesToInstall,
+            customer_original_install_cost: item.customer_original_install_cost || item.customer_installation_cost || 0,
+            customer_reinstall_cost: 0,
+          };
+
+          if (reinstalledFaces === 'both') {
+            updateData.installed_image_face_a_url = null;
+            updateData.installed_image_face_b_url = null;
+          } else if (reinstalledFaces === 'face_a') {
+            updateData.installed_image_face_a_url = null;
+          } else if (reinstalledFaces === 'face_b') {
+            updateData.installed_image_face_b_url = null;
+          }
+
+          await supabase
+            .from('installation_task_items')
+            .update(updateData)
+            .eq('id', item.id);
+
+          toast.success('تم تسجيل إعادة التركيب داخل المهمة الحالية بنجاح');
         }
-
-        await supabase
-          .from('installation_task_items')
-          .update(updateData)
-          .eq('id', item.id);
-
-        toast.success('تم تسجيل إعادة التركيب بنجاح');
       } else {
         // استبدال بلوحة أخرى
         await supabase
@@ -303,6 +380,41 @@ export function ReplaceBillboardDialog({
             </div>
           </div>
 
+          {/* وجهة إعادة التركيب - تظهر فقط عند اختيار إعادة تركيب */}
+          {actionType === 'reinstall' && (
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">طريقة تنفيذ إعادة التركيب</Label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDestinationType('new_task')}
+                  className={`flex flex-col items-center gap-2 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                    destinationType === 'new_task'
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'border-border hover:border-primary/40'
+                  }`}
+                >
+                  <FolderPlus className={`h-5 w-5 ${destinationType === 'new_task' ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className="text-xs font-semibold">مهمة جديدة مستقلة (موصى به)</span>
+                  <span className="text-[10px] text-muted-foreground text-center leading-normal">إنشاء مهمة منفصلة للوحة لمتابعة التركيب دون التأثير على اكتمال المهمة الحالية</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDestinationType('current_task')}
+                  className={`flex flex-col items-center gap-2 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                    destinationType === 'current_task'
+                      ? 'border-primary bg-primary/5 shadow-sm'
+                      : 'border-border hover:border-primary/40'
+                  }`}
+                >
+                  <RefreshCw className={`h-5 w-5 ${destinationType === 'current_task' ? 'text-primary' : 'text-muted-foreground'}`} />
+                  <span className="text-xs font-semibold">إعادة تعيين في المهمة الحالية</span>
+                  <span className="text-[10px] text-muted-foreground text-center leading-normal">يرجع حالة اللوحة قيد التنفيذ في نفس هذه المهمة ويقلل نسبة اكتمالها</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* اختيار الوجه - يظهر فقط للوحات متعددة الأوجه */}
           {hasMultipleFaces && (
             <div className="space-y-2">
@@ -358,9 +470,10 @@ export function ReplaceBillboardDialog({
                 </button>
               </div>
               {reinstalledFaces !== 'both' && (
-                <p className="text-[11px] text-muted-foreground bg-muted/50 p-2 rounded-lg">
-                  💡 سيتم {actionType === 'reinstall' ? 'إعادة تركيب' : 'استبدال'} {reinstalledFaces === 'face_a' ? 'الوجه الأمامي' : 'الوجه الخلفي'} فقط، والوجه الآخر سيبقى كما هو.
-                </p>
+                <div className="text-[11px] text-muted-foreground bg-muted/50 p-2.5 rounded-lg flex items-start gap-1.5 leading-normal">
+                  <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                  <span>سيتم {actionType === 'reinstall' ? 'إعادة تركيب' : 'استبدال'} {reinstalledFaces === 'face_a' ? 'الوجه الأمامي' : 'الوجه الخلفي'} فقط، والوجه الآخر سيبقى كما هو.</span>
+                </div>
               )}
             </div>
           )}
@@ -394,8 +507,9 @@ export function ReplaceBillboardDialog({
                   className="text-sm"
                   autoFocus
                 />
-                <p className="text-[10px] text-muted-foreground">
-                  💡 اختر من يتحمل التكلفة من الخيارات أدناه
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <span>اختر من يتحمل التكلفة من الخيارات أدناه</span>
                 </p>
               </div>
             )}

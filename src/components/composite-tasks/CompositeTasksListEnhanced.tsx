@@ -21,7 +21,7 @@ import {
   CheckCircle2, Clock, Package, Users,
   RefreshCw, XCircle, Printer, Scissors,
   Trash2, Edit, ChevronDown, Image as ImageIcon,
-  LayoutList, Layers, FileText, X,
+  LayoutList, Layers, FileText, X, Wallet, Coins,
   ChevronLeft, ChevronRight, CalendarDays,
   DollarSign, TrendingUp, TrendingDown, Wrench,
   FileOutput, Loader2, AlertTriangle, ChevronUp, Percent,
@@ -356,34 +356,37 @@ const TaskCardRow = ({
           </div>
 
           {/* Customer Due */}
-          <div className={`w-[170px] lg:w-[200px] shrink-0 px-5 lg:px-6 py-5 lg:py-6 flex flex-col justify-between gap-3 border-r border-border/20 ${containerBg}`} onClick={e => e.stopPropagation()}>
-            <div>
-              <div className={`text-[10px] font-bold ${
-                (task.customer_total || 0) > 0 
-                  ? (isFullyPaid ? 'text-emerald-500/70' : 'text-rose-500/70') 
-                  : 'text-muted-foreground/50'
-              } leading-none mb-1.5 text-right`}>المستحق على الزبون</div>
-              {(task.customer_total || 0) > 0 ? (
-                isFullyPaid ? (
-                  <div className="text-xs font-extrabold text-emerald-500 dark:text-emerald-400 text-right bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20 inline-block">
-                    تم السداد
-                  </div>
-                ) : (
-                  <div className="text-lg font-black text-rose-500 dark:text-rose-400 flex items-baseline justify-end gap-1 font-mono">
-                    <span>{remainingDue.toLocaleString('ar-LY')}</span>
-                    <span className="text-[10px] font-medium text-rose-500/60 ">د.ل</span>
-                  </div>
-                )
-              ) : (
-                <div className="text-xs font-bold text-muted-foreground/45 text-right">—</div>
-              )}
+          <div className={`w-[175px] lg:w-[210px] shrink-0 px-5 py-4 flex flex-col justify-between gap-3 border-r border-border/20 ${containerBg}`} onClick={e => e.stopPropagation()}>
+            <div className="space-y-2">
+              <div className="text-[10px] font-bold text-muted-foreground/60 leading-none text-right">الحالة المالية للزبون</div>
+              
+              <div className="space-y-1.5 text-right">
+                <div className="flex items-center justify-between text-[10px] font-extrabold text-muted-foreground/77">
+                  <span>إجمالي العقد:</span>
+                  <span className="text-white text-[11px] font-black">{(task.customer_total || 0).toLocaleString('ar-LY')} د.ل</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-extrabold text-muted-foreground/77">
+                  <span>المدفوع:</span>
+                  <span className="text-emerald-400 text-[11px] font-black">{task._totalPaid.toLocaleString('ar-LY')} د.ل</span>
+                </div>
+                <div className="flex items-center justify-between text-[10px] font-extrabold border-t border-border/15 pt-1.5">
+                  <span className="text-muted-foreground/80">المتبقي:</span>
+                  {isFullyPaid ? (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-black">
+                      تم السداد
+                    </span>
+                  ) : (
+                    <span className="text-rose-500 text-xs font-black">{remainingDue.toLocaleString('ar-LY')} د.ل</span>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* نسبة السداد */}
             {(task.customer_total || 0) > 0 && (
-              <div className="w-full space-y-1 mt-1.5 text-right" dir="rtl">
+              <div className="w-full space-y-1 text-right" dir="rtl">
                 <div className="flex items-center justify-between text-[9px] font-extrabold">
-                  <span className="text-muted-foreground/75">نسبة السداد</span>
+                  <span className="text-muted-foreground/50">نسبة السداد</span>
                   <span className={task._paymentPercentage >= 100 ? 'text-emerald-400' : task._paymentPercentage >= 50 ? 'text-amber-400' : 'text-rose-400'}>
                     {task._paymentPercentage}%
                   </span>
@@ -393,10 +396,6 @@ const TaskCardRow = ({
                     className={`h-full rounded-full transition-all duration-300 ${task._paymentPercentage >= 100 ? 'bg-emerald-500' : task._paymentPercentage >= 50 ? 'bg-amber-500' : 'bg-rose-500'}`}
                     style={{ width: `${Math.min(100, task._paymentPercentage)}%` }}
                   />
-                </div>
-                <div className="flex items-center justify-between text-[8px] font-bold text-muted-foreground/60">
-                  <span>المدفوع:</span>
-                  <span className="font-mono text-[9px]">{task._totalPaid.toLocaleString('ar-LY')} د.ل</span>
                 </div>
 
                 {/* أرقام الدفعات */}
@@ -429,12 +428,12 @@ const TaskCardRow = ({
                 <div className="text-[10px] font-bold text-muted-foreground/70 uppercase tracking-wide mb-1">
                   التكلفة {showInstallExcluded && <span className="text-muted-foreground/50">(بدون تركيب)</span>}
                 </div>
-                <div className="text-base font-black text-orange-400 font-mono">{adjCompanyTotal.toLocaleString('ar-LY')} <span className="text-[10px] font-medium text-orange-400/60">د.ل</span></div>
+                <div className="text-base font-black text-orange-400">{adjCompanyTotal.toLocaleString('ar-LY')} <span className="text-[10px] font-medium text-orange-400/60">د.ل</span></div>
               </div>
               {discountAmt > 0 && (
                 <div>
                   <div className="text-[10px] font-bold text-red-400/80 uppercase tracking-wide mb-1">الخصم</div>
-                  <div className="text-sm font-black text-red-400 font-mono">−{discountAmt.toLocaleString('ar-LY')} <span className="text-[10px] font-medium text-red-400/60">د.ل</span></div>
+                  <div className="text-sm font-black text-red-400">−{discountAmt.toLocaleString('ar-LY')} <span className="text-[10px] font-medium text-red-400/60">د.ل</span></div>
                 </div>
               )}
             </div>
@@ -556,22 +555,19 @@ const TaskCardRow = ({
 
         <div className="bg-background/40 p-3 rounded-xl border border-border/20 grid grid-cols-3 gap-2 text-center text-xs">
           <div>
-            <div className="text-[10px] font-bold text-muted-foreground/60 mb-0.5">المستحق</div>
+            <div className="text-[10px] font-bold text-muted-foreground/60 mb-1">المالية للزبون</div>
             {(task.customer_total || 0) > 0 ? (
-              isFullyPaid ? (
-                <div className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 inline-block">
-                  تم السداد
-                </div>
-              ) : (
-                <>
-                  <div className="text-xs font-black text-rose-500">{remainingDue.toLocaleString('ar-LY')}</div>
-                  <div className="text-[8px] text-muted-foreground/75 mt-1">
-                    سداد {task._paymentPercentage}%
-                  </div>
-                </>
-              )
+              <div className="text-[9px] text-right space-y-0.5 font-semibold text-muted-foreground/90 mx-auto w-fit" dir="rtl">
+                <div>الإجمالي: <span className="font-bold text-white">{(task.customer_total || 0).toLocaleString('ar-LY')} د.ل</span></div>
+                <div>المدفوع: <span className="font-bold text-emerald-400">{task._totalPaid.toLocaleString('ar-LY')} د.ل</span></div>
+                <div>المتبقي: {isFullyPaid ? (
+                  <span className="text-emerald-400 font-extrabold text-[8px] bg-emerald-500/10 px-1 rounded border border-emerald-500/15">مسدد</span>
+                ) : (
+                  <span className="font-black text-rose-400">{remainingDue.toLocaleString('ar-LY')} د.ل</span>
+                )}</div>
+              </div>
             ) : (
-              <div className="text-[10px] font-bold text-muted-foreground/40">—</div>
+              <div className="text-[10px] font-bold text-muted-foreground/45">—</div>
             )}
           </div>
           <div>
@@ -853,15 +849,42 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
       const promises: Promise<any>[] = [];
 
-      if (installIds.length > 0) {
-        // PRIMARY: Fetch from task_designs table (the actual design source)
+      // 1. PRIMARY: Fetch from task_designs table for all installation tasks under these contracts
+      if (contractIds.length > 0 || installIds.length > 0) {
         promises.push(
-          Promise.resolve(supabase.from('task_designs')
-            .select('task_id, design_face_a_url, design_face_b_url, design_order')
-            .in('task_id', installIds)
-            .order('design_order', { ascending: true }))
-            .then(({ data }) => { taskDesignsData = data || []; })
+          Promise.resolve(
+            supabase
+              .from('installation_tasks')
+              .select('id, contract_id')
+              .in('contract_id', contractIds.length > 0 ? contractIds : [-1])
+          ).then(async ({ data: installTasksForContracts }) => {
+            const allInstallTaskIds = [...new Set([
+              ...installIds,
+              ...(installTasksForContracts || []).map(t => t.id)
+            ])];
+
+            const taskToContractMap = new Map<string, number>();
+            (installTasksForContracts || []).forEach(t => {
+              if (t.id && t.contract_id) taskToContractMap.set(t.id, Number(t.contract_id));
+            });
+
+            if (allInstallTaskIds.length > 0) {
+              const { data: designs } = await supabase
+                .from('task_designs')
+                .select('task_id, design_face_a_url, design_face_b_url, design_order')
+                .in('task_id', allInstallTaskIds)
+                .order('design_order', { ascending: true });
+
+              taskDesignsData = (designs || []).map(d => ({
+                ...d,
+                contract_id: taskToContractMap.get(d.task_id) || null
+              }));
+            }
+          })
         );
+      }
+
+      if (installIds.length > 0) {
         promises.push(
           Promise.resolve(supabase.from('installation_task_items')
             .select('task_id, design_face_a, design_face_b')
@@ -921,7 +944,9 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
       compositeTasks.forEach(task => {
         if (!task.installation_task_id) return;
-        const hasDesign = installDesigns.some(d => d.task_id === task.installation_task_id && (d.design_face_a || d.design_face_b));
+        const hasDesign = 
+          taskDesignsData.some(d => (d.task_id === task.installation_task_id || Number(d.contract_id) === Number(task.contract_id)) && (d.design_face_a_url || d.design_face_b_url)) ||
+          installDesigns.some(d => d.task_id === task.installation_task_id && (d.design_face_a || d.design_face_b));
         if (!hasDesign) taskIdsWithNoDesigns.add(task.installation_task_id);
       });
 
@@ -983,15 +1008,35 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         printerNameMap.set(pt.id, pt.printer?.name || '');
       });
 
+      const realInstallCostMap = new Map<string, number>();
+      if (installTaskIds.length > 0) {
+        const { data: realItems } = await supabase
+          .from('installation_task_items')
+          .select('task_id, customer_installation_cost, reinstall_count, customer_original_install_cost, customer_reinstall_cost')
+          .in('task_id', installTaskIds);
+
+        (realItems || []).forEach((item: any) => {
+          const isReinstalled = (item.reinstall_count || 0) > 0;
+          const itemCost = isReinstalled
+            ? (Number(item.customer_original_install_cost) || 0) + (Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0)
+            : (Number(item.customer_installation_cost) || 0);
+          
+          const curr = realInstallCostMap.get(item.task_id) || 0;
+          realInstallCostMap.set(item.task_id, curr + itemCost);
+        });
+      }
+
       compositeTasks.forEach(task => {
         const seen = new Set<string>();
         const urls: string[] = [];
 
         // PRIMARY: From task_designs table (main design source)
-        taskDesignsData.filter(d => d.task_id === task.installation_task_id).forEach(d => {
-          if (d.design_face_a_url && !seen.has(d.design_face_a_url)) { seen.add(d.design_face_a_url); urls.push(d.design_face_a_url); }
-          if (d.design_face_b_url && !seen.has(d.design_face_b_url)) { seen.add(d.design_face_b_url); urls.push(d.design_face_b_url); }
-        });
+        taskDesignsData
+          .filter(d => (d.task_id && task.installation_task_id && String(d.task_id) === String(task.installation_task_id)) || (d.contract_id && task.contract_id && Number(d.contract_id) === Number(task.contract_id)))
+          .forEach(d => {
+            if (d.design_face_a_url && !seen.has(d.design_face_a_url)) { seen.add(d.design_face_a_url); urls.push(d.design_face_a_url); }
+            if (d.design_face_b_url && !seen.has(d.design_face_b_url)) { seen.add(d.design_face_b_url); urls.push(d.design_face_b_url); }
+          });
 
         // From print task items
         if (urls.length === 0) {
@@ -1047,6 +1092,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           teamName: task.installation_task_id ? teamNameMap.get(task.installation_task_id) || '' : '',
           reinstallationNumber: task.installation_task_id ? reinstallMap.get(task.installation_task_id) ?? null : null,
           printerName: task.print_task_id ? printerNameMap.get(task.print_task_id) || '' : '',
+          realInstallCost: task.installation_task_id ? (realInstallCostMap.get(task.installation_task_id) ?? Number(task.customer_installation_cost) ?? 0) : Number(task.customer_installation_cost) ?? 0,
         };
       });
 
@@ -1110,12 +1156,16 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
   // Enrich tasks
   const enriched = useMemo(() => compositeTasks.map((task: any) => {
-    const extra = taskExtras[task.id] || { designUrls: [], adType: '', teamName: '', reinstallationNumber: null, printerName: '' };
+    const extra = taskExtras[task.id] || { designUrls: [], adType: '', teamName: '', reinstallationNumber: null, printerName: '', realInstallCost: 0 };
     const payments = taskPayments[task.id] || [];
     const totalPaid = payments.length > 0 
       ? payments.reduce((s: number, p: any) => s + p.amount, 0) 
       : (task.paid_amount || 0);
-    const customerTotal = task.customer_total || 0;
+
+    const realCustomerInstall = extra.realInstallCost > 0 ? extra.realInstallCost : (Number(task.customer_installation_cost) || 0);
+    const customerTotal = realCustomerInstall + (Number(task.customer_print_cost) || 0) + (Number(task.customer_cutout_cost) || 0) - (Number(task.discount_amount) || 0);
+    const companyTotal = (Number(task.company_installation_cost) || 0) + (Number(task.company_print_cost) || 0) + (Number(task.company_cutout_cost) || 0);
+    const netProfit = customerTotal - companyTotal;
     const paymentPercentage = customerTotal > 0 ? Math.min(Math.round((totalPaid / customerTotal) * 100), 100) : 0;
     
     let h = 0;
@@ -1123,6 +1173,10 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
     const accent = `hsl(${Math.abs(h) % 360}, 55%, 58%)`;
     return {
       ...task,
+      customer_installation_cost: realCustomerInstall,
+      customer_total: customerTotal,
+      company_total: companyTotal,
+      net_profit: netProfit,
       designUrls: extra.designUrls,
       adType: extra.adType,
       teamName: extra.teamName,
@@ -1137,13 +1191,20 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
   }), [compositeTasks, taskExtras, taskPayments]);
 
   // Stats
-  const stats = useMemo(() => ({
-    total: enriched.length,
-    pending: enriched.filter(t => t.status === 'pending' || t.status === 'in_progress').length,
-    completed: enriched.filter(t => t.status === 'completed').length,
-    totalRevenue: enriched.reduce((s, t) => s + (t.customer_total || 0), 0),
-    totalProfit: enriched.reduce((s, t) => s + (t.net_profit || 0), 0),
-  }), [enriched]);
+  const stats = useMemo(() => {
+    const totalRevenue = enriched.reduce((s, t) => s + (t.customer_total || 0), 0);
+    const totalPaid = enriched.reduce((s, t) => s + (t._totalPaid || 0), 0);
+    const totalRemaining = enriched.reduce((s, t) => s + Math.max(0, (t.customer_total || 0) - (t._totalPaid || 0)), 0);
+    return {
+      total: enriched.length,
+      pending: enriched.filter(t => t.status === 'pending' || t.status === 'in_progress').length,
+      completed: enriched.filter(t => t.status === 'completed').length,
+      totalRevenue,
+      totalProfit: enriched.reduce((s, t) => s + (t.net_profit || 0), 0),
+      totalPaid,
+      totalRemaining,
+    };
+  }, [enriched]);
 
   // Filter
   const filtered = useMemo(() => {
@@ -1448,39 +1509,115 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       <div className="flex flex-col h-full gap-4.5" dir="rtl">
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 shrink-0">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-7 gap-4 shrink-0">
           {[
-            { label: 'إجمالي المهام', value: stats.total, color: 'text-indigo-400', icon: LayoutList, bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', accent: 'bg-indigo-500', pct: 100 },
-            { label: 'قيد التنفيذ', value: stats.pending, color: 'text-amber-400', icon: Clock, bg: 'bg-amber-500/10', border: 'border-amber-500/20', accent: 'bg-amber-500', pct: stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0 },
-            { label: 'مكتملة', value: stats.completed, color: 'text-emerald-400', icon: CheckCircle2, bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', accent: 'bg-emerald-500', pct: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0 },
-            { label: 'الإيرادات', value: `${stats.totalRevenue.toLocaleString('ar-LY')} د.ل`, color: 'text-indigo-400', icon: DollarSign, bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', accent: 'bg-indigo-500', pct: stats.totalRevenue > 0 ? 100 : 0 },
-            { label: 'صافي الربح', value: `${stats.totalProfit.toLocaleString('ar-LY')} د.ل`, color: stats.totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400', icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown, bg: stats.totalProfit >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10', border: stats.totalProfit >= 0 ? 'border-emerald-500/20' : 'border-rose-500/20', accent: stats.totalProfit >= 0 ? 'bg-emerald-500' : 'bg-rose-500', pct: stats.totalRevenue > 0 ? Math.max(0, Math.min(100, Math.round((stats.totalProfit / stats.totalRevenue) * 100))) : 0 },
-          ].map(({ label, value, color, icon: Icon, bg, border, accent, pct }) => (
+            {
+              label: 'إجمالي المهام',
+              value: stats.total,
+              color: 'text-violet-400',
+              icon: LayoutList,
+              bg: 'bg-violet-500/10',
+              border: 'border-violet-500/20 hover:border-violet-500/40',
+              accent: 'bg-violet-500',
+              pct: 100,
+              pctLabel: 'المهام المسجلة'
+            },
+            {
+              label: 'قيد التنفيذ',
+              value: stats.pending,
+              color: 'text-amber-400',
+              icon: Clock,
+              bg: 'bg-amber-500/10',
+              border: 'border-amber-500/20 hover:border-amber-500/40',
+              accent: 'bg-amber-500',
+              pct: stats.total > 0 ? Math.round((stats.pending / stats.total) * 100) : 0,
+              pctLabel: 'قيد المتابعة والتنفيذ'
+            },
+            {
+              label: 'مكتملة',
+              value: stats.completed,
+              color: 'text-emerald-400',
+              icon: CheckCircle2,
+              bg: 'bg-emerald-500/10',
+              border: 'border-emerald-500/20 hover:border-emerald-500/40',
+              accent: 'bg-emerald-500',
+              pct: stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0,
+              pctLabel: 'نسبة الإنجاز الفعلي'
+            },
+            {
+              label: 'الإيرادات',
+              value: `${stats.totalRevenue.toLocaleString('ar-LY')} د.ل`,
+              color: 'text-primary',
+              icon: DollarSign,
+              bg: 'bg-primary/10',
+              border: 'border-primary/20 hover:border-primary/40',
+              accent: 'bg-primary',
+              pct: stats.totalRevenue > 0 ? 100 : 0,
+              pctLabel: 'إجمالي القيمة التعاقدية'
+            },
+            {
+              label: 'المبالغ المدفوعة',
+              value: `${stats.totalPaid.toLocaleString('ar-LY')} د.ل`,
+              color: 'text-teal-400',
+              icon: Coins,
+              bg: 'bg-teal-500/10',
+              border: 'border-teal-500/20 hover:border-teal-500/40',
+              accent: 'bg-teal-500',
+              pct: stats.totalRevenue > 0 ? Math.min(100, Math.round((stats.totalPaid / stats.totalRevenue) * 100)) : 0,
+              pctLabel: 'نسبة التحصيل والمدفوع'
+            },
+            {
+              label: 'المبالغ المتبقية',
+              value: `${stats.totalRemaining.toLocaleString('ar-LY')} د.ل`,
+              color: 'text-rose-400',
+              icon: Wallet,
+              bg: 'bg-rose-500/10',
+              border: 'border-rose-500/20 hover:border-rose-500/40',
+              accent: 'bg-rose-500',
+              pct: stats.totalRevenue > 0 ? Math.round((stats.totalRemaining / stats.totalRevenue) * 100) : 0,
+              pctLabel: 'المتبقي غير المحصل'
+            },
+            {
+              label: 'صافي الربح',
+              value: `${stats.totalProfit.toLocaleString('ar-LY')} د.ل`,
+              color: stats.totalProfit >= 0 ? 'text-emerald-400' : 'text-rose-400',
+              icon: stats.totalProfit >= 0 ? TrendingUp : TrendingDown,
+              bg: stats.totalProfit >= 0 ? 'bg-emerald-500/10' : 'bg-rose-500/10',
+              border: stats.totalProfit >= 0 ? 'border-emerald-500/20 hover:border-emerald-500/40' : 'border-rose-500/20 hover:border-rose-500/40',
+              accent: stats.totalProfit >= 0 ? 'bg-emerald-500' : 'bg-rose-500',
+              pct: stats.totalRevenue > 0 ? Math.max(0, Math.min(100, Math.round((stats.totalProfit / stats.totalRevenue) * 100))) : 0,
+              pctLabel: 'هامش الربح الإجمالي'
+            },
+          ].map(({ label, value, color, icon: Icon, bg, border, accent, pct, pctLabel }) => (
             <div
               key={label}
-              className={`bg-card/45 backdrop-blur-md border ${border} rounded-[22px] p-3.5 sm:p-4.5 flex flex-col justify-between min-h-[130px] sm:min-h-[140px] shadow-sm relative overflow-hidden group select-none transition-all duration-300 hover:shadow-md hover:scale-[1.01]`}
+              className={`bg-card/35 backdrop-blur-xl border ${border} rounded-[24px] p-4.5 sm:p-5 flex flex-col justify-between min-h-[145px] sm:min-h-[155px] shadow-card hover:shadow-luxury transition-all duration-300 ease-out hover:-translate-y-1 select-none relative overflow-hidden group`}
             >
-              <div className={`absolute top-0 right-0 left-0 h-[3px] ${accent} opacity-70 group-hover:opacity-100 transition-opacity`} />
-              
-              <div className="flex items-start justify-between">
-                <div className="text-right">
-                  <p className="text-[10px] sm:text-[11px] font-bold text-muted-foreground/80 leading-none mb-1.5 sm:mb-2">{label}</p>
-                  <p className={`text-lg sm:text-xl lg:text-2xl font-black tracking-tight ${color}`}>{value}</p>
+              {/* Glowing Accent Top Border */}
+              <div className={`absolute top-0 right-0 left-0 h-[3.5px] ${accent} opacity-70 group-hover:opacity-100 transition-opacity duration-300`} />
+
+              {/* Ambient Glow Orb */}
+              <div className={`absolute -right-6 -bottom-6 w-24 h-24 rounded-full bg-current opacity-0 group-hover:opacity-[0.06] blur-xl transition-all duration-500 pointer-events-none ${color}`} />
+
+              <div className="flex items-start justify-between relative z-10">
+                <div className="text-right space-y-1.5">
+                  <p className="text-[11px] sm:text-xs font-bold text-muted-foreground/75 tracking-wide leading-none">{label}</p>
+                  <p className={`text-xl sm:text-2xl lg:text-[26px] font-black tracking-tight ${color}`}>{value}</p>
                 </div>
-                <div className={`p-2 sm:p-2.5 rounded-xl ${bg} ${color} group-hover:scale-110 transition-transform duration-300 shrink-0`}>
-                  <Icon className="h-4 w-4 sm:h-4.5 sm:w-4.5" />
+                <div className={`p-2.5 rounded-[16px] ${bg} ${color} border border-white/5 shadow-inner group-hover:scale-110 transition-transform duration-300 shrink-0`}>
+                  <Icon className="h-4.5 w-4.5" />
                 </div>
               </div>
 
               {/* Progress Indicator */}
-              <div className="mt-3 sm:mt-4 space-y-1 sm:space-y-1.5">
-                <div className="flex items-center justify-between text-[8px] sm:text-[9px] font-bold text-muted-foreground/60">
-                  <span>نسبة الإنجاز</span>
-                  <span className="font-mono">{pct}%</span>
+              <div className="mt-4 sm:mt-5 space-y-1.5 relative z-10">
+                <div className="flex items-center justify-between text-[9px] sm:text-[10px] font-bold text-muted-foreground/50">
+                  <span className="font-tajawal">{pctLabel}</span>
+                  <span>{pct}%</span>
                 </div>
-                <div className="h-1 w-full bg-muted/40 rounded-full overflow-hidden">
+                <div className="h-1.5 w-full bg-muted/20 rounded-full overflow-hidden">
                   <div 
-                    className={`h-full ${accent} rounded-full transition-all duration-500`}
+                    className={`h-full ${accent} rounded-full transition-all duration-500 ease-out`}
                     style={{ width: `${pct}%` }}
                   />
                 </div>

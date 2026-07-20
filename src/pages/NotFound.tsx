@@ -18,7 +18,7 @@ const NotFound = () => {
       <div className="text-center px-6 max-w-2xl">
         <div className="mb-8 flex justify-center">
           <img
-            src="/logofares.svg"
+            src="/logofaresgold.svg"
             alt="شعار الشركة"
             className="h-24 w-auto animate-in fade-in zoom-in duration-500"
             onError={(e) => {

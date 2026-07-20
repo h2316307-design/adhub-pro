@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/components/ui/sonner';
-import { Printer, ArrowRight, Plus, Minus, RefreshCw, Database, Trash2, ShoppingCart } from 'lucide-react';
+import { Printer, ArrowRight, Plus, Minus, RefreshCw, Database, Trash2, ShoppingCart, Scissors, Wrench } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 // Legacy import removed - unified print engine is used via PrintInvoicePrint
 
@@ -65,8 +65,56 @@ interface SelectedContract {
 const INVOICE_TYPES = [
   { value: 'print_only', label: 'فاتورة طباعة فقط', description: 'تشمل تكلفة الطباعة فقط' },
   { value: 'installation_only', label: 'فاتورة تركيب فقط', description: 'تشمل تكلفة التركيب فقط' },
-  { value: 'print_and_installation', label: 'فاتورة طباعة وتركيب', description: 'تشمل تكلفة الطباعة والتركيب معاً' }
+  { value: 'print_and_installation', label: 'فاتورة طباعة وتركيب', description: 'تشمل تكلفة الطباعة والتركيب معاً' },
+  { value: 'cutting_only', label: 'فاتورة قص فقط', description: 'تشمل تكلفة القص فقط' },
+  { value: 'print_cutting', label: 'فاتورة طباعة وقص', description: 'تشمل تكلفة الطباعة والقص' },
+  { value: 'print_cutting_install', label: 'فاتورة طباعة وقص وتركيب', description: 'تشمل جميع الخدمات' },
+  { value: 'cutting_install', label: 'فاتورة قص وتركيب', description: 'تشمل تكلفة القص والتركيب' },
 ];
+
+// Service toggle options
+const SERVICE_OPTIONS = [
+  { key: 'print', label: 'طباعة', icon: Printer, color: 'blue' },
+  { key: 'cut', label: 'قص', icon: Scissors, color: 'amber' },
+  { key: 'install', label: 'تركيب', icon: Wrench, color: 'green' },
+] as const;
+
+// Helper: convert services set to invoice_type string
+const servicesToInvoiceType = (services: Set<string>): string => {
+  const hasPrint = services.has('print');
+  const hasCut = services.has('cut');
+  const hasInstall = services.has('install');
+  if (hasPrint && hasCut && hasInstall) return 'print_cutting_install';
+  if (hasPrint && hasCut) return 'print_cutting';
+  if (hasPrint && hasInstall) return 'print_and_installation';
+  if (hasCut && hasInstall) return 'cutting_install';
+  if (hasPrint) return 'print_only';
+  if (hasCut) return 'cutting_only';
+  if (hasInstall) return 'installation_only';
+  return 'print_only';
+};
+
+// Helper: get label from services
+const getServicesLabel = (services: Set<string>): string => {
+  const parts: string[] = [];
+  if (services.has('print')) parts.push('طباعة');
+  if (services.has('cut')) parts.push('قص');
+  if (services.has('install')) parts.push('تركيب');
+  return parts.length > 0 ? `فاتورة ${parts.join(' و')}` : 'فاتورة';
+};
+
+// Helper calculations for size item costs
+const calculateSizeUnitCost = (size: BillboardSize, services: Set<string>): number => {
+  let unitCost = 0;
+  if (services.has('print')) unitCost += Number(size.print_price || 0);
+  if (services.has('cut')) unitCost += Number(size.cut_price || 0);
+  if (services.has('install')) unitCost += Number(size.installation_price || size.install_price || 0);
+  return unitCost;
+};
+
+const calculateSizeTotalCost = (size: BillboardSize, services: Set<string>): number => {
+  return (size.quantity || 1) * calculateSizeUnitCost(size, services);
+};
 
 export default function PrintInstallationInvoice() {
   const location = useLocation();
@@ -80,9 +128,26 @@ export default function PrintInstallationInvoice() {
   const [installationPricingData, setInstallationPricingData] = useState<InstallationPrintPricing[]>([]);
   const [selectedContracts, setSelectedContracts] = useState<SelectedContract[]>([]);
   const [printInvoiceReason, setPrintInvoiceReason] = useState('');
-  const [invoiceType, setInvoiceType] = useState('print_only');
+  const [activeServices, setActiveServices] = useState<Set<string>>(new Set(['print', 'install']));
+  const invoiceType = servicesToInvoiceType(activeServices);
   const [loading, setLoading] = useState(false);
   const [debugInfo, setDebugInfo] = useState<string>('');
+
+  const toggleService = (serviceKey: string) => {
+    setActiveServices(prev => {
+      const next = new Set(prev);
+      if (next.has(serviceKey)) {
+        if (next.size > 1) {
+          next.delete(serviceKey);
+        } else {
+          toast.error('يجب اختيار خدمة واحدة على الأقل');
+        }
+      } else {
+        next.add(serviceKey);
+      }
+      return next;
+    });
+  };
 
   const loadData = async () => {
     try {
@@ -206,18 +271,8 @@ export default function PrintInstallationInvoice() {
       total: 0
     };
 
-    // Calculate cost based on invoice type
-    newContract.total = sizes.reduce((sum, size) => {
-      let itemCost = 0;
-      if (invoiceType === 'print_only') {
-        itemCost = size.quantity * (size.print_price || 0);
-      } else if (invoiceType === 'installation_only') {
-        itemCost = size.quantity * (size.installation_price || 0);
-      } else if (invoiceType === 'print_and_installation') {
-        itemCost = size.quantity * ((size.print_price || 0) + (size.installation_price || 0));
-      }
-      return sum + itemCost;
-    }, 0);
+    // Calculate cost based on active services
+    newContract.total = sizes.reduce((sum, size) => sum + calculateSizeTotalCost(size, activeServices), 0);
 
     setSelectedContracts(prev => [...prev, newContract]);
     toast.success(`تم إضافة عقد رقم ${contractNumber} للفاتورة`);
@@ -235,18 +290,8 @@ export default function PrintInstallationInvoice() {
       const newSizes = [...contract.sizes];
       newSizes[sizeIndex] = { ...newSizes[sizeIndex], [field]: value };
       
-      // Recalculate total based on invoice type
-      contract.total = newSizes.reduce((sum, size) => {
-        let itemCost = 0;
-        if (invoiceType === 'print_only') {
-          itemCost = size.quantity * (size.print_price || 0);
-        } else if (invoiceType === 'installation_only') {
-          itemCost = size.quantity * (size.installation_price || 0);
-        } else if (invoiceType === 'print_and_installation') {
-          itemCost = size.quantity * ((size.print_price || 0) + (size.installation_price || 0));
-        }
-        return sum + itemCost;
-      }, 0);
+      // Recalculate total based on active services
+      contract.total = newSizes.reduce((sum, size) => sum + calculateSizeTotalCost(size, activeServices), 0);
       
       contract.sizes = newSizes;
       newContracts[contractIndex] = contract;
@@ -255,24 +300,13 @@ export default function PrintInstallationInvoice() {
     });
   };
 
-  // Recalculate totals when invoice type changes
+  // Recalculate totals when active services change
   useEffect(() => {
     setSelectedContracts(prev => prev.map(contract => {
-      const newTotal = contract.sizes.reduce((sum, size) => {
-        let itemCost = 0;
-        if (invoiceType === 'print_only') {
-          itemCost = size.quantity * (size.print_price || 0);
-        } else if (invoiceType === 'installation_only') {
-          itemCost = size.quantity * (size.installation_price || 0);
-        } else if (invoiceType === 'print_and_installation') {
-          itemCost = size.quantity * ((size.print_price || 0) + (size.installation_price || 0));
-        }
-        return sum + itemCost;
-      }, 0);
-      
+      const newTotal = contract.sizes.reduce((sum, size) => sum + calculateSizeTotalCost(size, activeServices), 0);
       return { ...contract, total: newTotal };
     }));
-  }, [invoiceType]);
+  }, [activeServices]);
 
   const printInstallationInvoice = async () => {
     if (selectedContracts.length === 0) {
@@ -297,8 +331,7 @@ export default function PrintInstallationInvoice() {
 
     // Save invoice to customer account
     try {
-      const selectedInvoiceType = INVOICE_TYPES.find(type => type.value === invoiceType);
-      const invoiceMethod = selectedInvoiceType?.label || 'فاتورة';
+      const invoiceMethod = getServicesLabel(activeServices);
       
       const payload = {
         customer_id: customerId || null,
@@ -326,22 +359,17 @@ export default function PrintInstallationInvoice() {
       return;
     }
 
-    // Generate invoice items based on type
+    // Generate invoice items based on active services
     const invoiceItems = selectedContracts.flatMap(contract => 
       contract.sizes.map(size => {
-        let description = '';
-        let unitPrice = 0;
-        
-        if (invoiceType === 'print_only') {
-          description = `طباعة ${contract.adType} - ${size.size} (${size.level}) - عقد ${contract.contractNumber} - ${size.faces} وجه`;
-          unitPrice = size.print_price || 0;
-        } else if (invoiceType === 'installation_only') {
-          description = `تركيب ${contract.adType} - ${size.size} (${size.level}) - عقد ${contract.contractNumber} - ${size.faces} وجه`;
-          unitPrice = size.installation_price || 0;
-        } else if (invoiceType === 'print_and_installation') {
-          description = `طباعة وتركيب ${contract.adType} - ${size.size} (${size.level}) - عقد ${contract.contractNumber} - ${size.faces} وجه`;
-          unitPrice = (size.print_price || 0) + (size.installation_price || 0);
-        }
+        const serviceNames: string[] = [];
+        if (activeServices.has('print')) serviceNames.push('طباعة');
+        if (activeServices.has('cut')) serviceNames.push('قص');
+        if (activeServices.has('install')) serviceNames.push('تركيب');
+
+        const actionText = serviceNames.length > 0 ? serviceNames.join(' و') : 'خدمة';
+        const description = `${actionText} ${contract.adType} - ${size.size} (${size.level}) - عقد ${contract.contractNumber} - ${size.faces} وجه`;
+        const unitPrice = calculateSizeUnitCost(size, activeServices);
         
         return {
           description,
@@ -684,9 +712,8 @@ export default function PrintInstallationInvoice() {
       <div className="container mx-auto px-4 py-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-primary">فاتورة طباعة وتركيب</h1>
+            <h1 className="text-3xl font-bold text-primary">{getServicesLabel(activeServices)}</h1>
             <p className="text-muted-foreground mt-1">{customerName || '—'}</p>
-            <p className="text-sm text-blue-600 mt-1">{selectedInvoiceType?.description}</p>
           </div>
           <div className="flex gap-2">
             <Button 
@@ -723,29 +750,49 @@ export default function PrintInstallationInvoice() {
           </Card>
         )}
 
-        {/* Invoice Type Selection */}
+        {/* Invoice Services Multi-Selection */}
         <Card className="bg-card border-border">
           <CardHeader className="bg-muted/30 border-b border-border">
-            <CardTitle className="text-primary">نوع الفاتورة</CardTitle>
+            <CardTitle className="text-primary flex items-center justify-between">
+              <span>الخدمات المشمولة بالفاتورة</span>
+              <span className="text-xs font-normal bg-primary/10 text-primary px-3 py-1 rounded-full border border-primary/20">
+                {getServicesLabel(activeServices)}
+              </span>
+            </CardTitle>
           </CardHeader>
           <CardContent className="p-4">
-            <div className="space-y-4">
-              <Label className="text-sm font-semibold text-foreground">اختر نوع الفاتورة</Label>
-              <Select value={invoiceType} onValueChange={setInvoiceType}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="اختر نوع الفاتورة" />
-                </SelectTrigger>
-                <SelectContent>
-                  {INVOICE_TYPES.map((type) => (
-                    <SelectItem key={type.value} value={type.value}>
-                      <div className="text-right">
-                        <div className="font-semibold">{type.label}</div>
-                        <div className="text-xs text-muted-foreground">{type.description}</div>
+            <div className="space-y-3">
+              <Label className="text-sm font-semibold text-foreground">
+                اختر الخدمات المطلوبة (يمكن تحديد خدمة واحدة أو أكثر حسب الحالة):
+              </Label>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {SERVICE_OPTIONS.map((opt) => {
+                  const Icon = opt.icon;
+                  const isSelected = activeServices.has(opt.key);
+                  return (
+                    <button
+                      key={opt.key}
+                      type="button"
+                      onClick={() => toggleService(opt.key)}
+                      className={`flex items-center gap-3 p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                        isSelected
+                          ? 'border-primary bg-primary/5 text-primary shadow-sm font-bold'
+                          : 'border-border bg-background text-muted-foreground hover:border-primary/40'
+                      }`}
+                    >
+                      <div className={`p-2 rounded-lg ${isSelected ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+                        <Icon className="h-5 w-5" />
                       </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                      <div className="text-right">
+                        <div className="text-sm font-bold">{opt.label}</div>
+                        <div className="text-[11px] opacity-75">
+                          {isSelected ? 'محددة بالفاتورة ✓' : 'غير محددة'}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -864,17 +911,14 @@ export default function PrintInstallationInvoice() {
                             <TableHead className="text-foreground font-semibold">المستوى</TableHead>
                             <TableHead className="text-foreground font-semibold">عدد الأوجه</TableHead>
                             <TableHead className="text-foreground font-semibold">الكمية</TableHead>
-                            {invoiceType === 'print_only' && (
+                            {activeServices.has('print') && (
                               <TableHead className="text-foreground font-semibold">سعر الطباعة</TableHead>
                             )}
-                            {invoiceType === 'installation_only' && (
-                              <TableHead className="text-foreground font-semibold">سعر التركيب</TableHead>
+                            {activeServices.has('cut') && (
+                              <TableHead className="text-foreground font-semibold">سعر القص</TableHead>
                             )}
-                            {invoiceType === 'print_and_installation' && (
-                              <>
-                                <TableHead className="text-foreground font-semibold">سعر الطباعة</TableHead>
-                                <TableHead className="text-foreground font-semibold">سعر التركيب</TableHead>
-                              </>
+                            {activeServices.has('install') && (
+                              <TableHead className="text-foreground font-semibold">سعر التركيب</TableHead>
                             )}
                             <TableHead className="text-foreground font-semibold">الإجمالي</TableHead>
                           </TableRow>
@@ -916,7 +960,7 @@ export default function PrintInstallationInvoice() {
                                   </Button>
                                 </div>
                               </TableCell>
-                              {invoiceType === 'print_only' && (
+                              {activeServices.has('print') && (
                                 <TableCell>
                                   <Input
                                     type="number"
@@ -924,58 +968,36 @@ export default function PrintInstallationInvoice() {
                                     step="0.01"
                                     value={size.print_price || 0}
                                     onChange={(e) => updateContractSizeItem(contractIndex, sizeIndex, 'print_price', Number(e.target.value) || 0)}
-                                    className="w-24"
+                                    className="w-20"
                                   />
                                 </TableCell>
                               )}
-                              {invoiceType === 'installation_only' && (
+                              {activeServices.has('cut') && (
                                 <TableCell>
                                   <Input
                                     type="number"
                                     min="0"
                                     step="0.01"
-                                    value={size.installation_price || 0}
-                                    onChange={(e) => updateContractSizeItem(contractIndex, sizeIndex, 'installation_price', Number(e.target.value) || 0)}
-                                    className="w-24"
+                                    value={size.cut_price || 0}
+                                    onChange={(e) => updateContractSizeItem(contractIndex, sizeIndex, 'cut_price', Number(e.target.value) || 0)}
+                                    className="w-20"
                                   />
                                 </TableCell>
                               )}
-                              {invoiceType === 'print_and_installation' && (
-                                <>
-                                  <TableCell>
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={size.print_price || 0}
-                                      onChange={(e) => updateContractSizeItem(contractIndex, sizeIndex, 'print_price', Number(e.target.value) || 0)}
-                                      className="w-20"
-                                    />
-                                  </TableCell>
-                                  <TableCell>
-                                    <Input
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={size.installation_price || 0}
-                                      onChange={(e) => updateContractSizeItem(contractIndex, sizeIndex, 'installation_price', Number(e.target.value) || 0)}
-                                      className="w-20"
-                                    />
-                                  </TableCell>
-                                </>
+                              {activeServices.has('install') && (
+                                <TableCell>
+                                  <Input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={size.installation_price || size.install_price || 0}
+                                    onChange={(e) => updateContractSizeItem(contractIndex, sizeIndex, 'installation_price', Number(e.target.value) || 0)}
+                                    className="w-20"
+                                  />
+                                </TableCell>
                               )}
                               <TableCell className="font-semibold text-primary">
-                                {(() => {
-                                  let itemTotal = 0;
-                                  if (invoiceType === 'print_only') {
-                                    itemTotal = size.quantity * (size.print_price || 0);
-                                  } else if (invoiceType === 'installation_only') {
-                                    itemTotal = size.quantity * (size.installation_price || 0);
-                                  } else if (invoiceType === 'print_and_installation') {
-                                    itemTotal = size.quantity * ((size.print_price || 0) + (size.installation_price || 0));
-                                  }
-                                  return itemTotal.toLocaleString('en-US');
-                                })()} د.ل
+                                {calculateSizeTotalCost(size, activeServices).toLocaleString('en-US')} د.ل
                               </TableCell>
                             </TableRow>
                           ))}
@@ -1011,7 +1033,7 @@ export default function PrintInstallationInvoice() {
                   </span>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  * نوع الفاتورة: {selectedInvoiceType?.label}
+                  * نوع الفاتورة: {getServicesLabel(activeServices)}
                 </p>
               </CardContent>
             </Card>

@@ -658,6 +658,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const totalSuspensionDiscount = contractPaused.reduce((sum, pb) => sum + (Number(pb.refund_amount) || 0), 0);
         
         const contractTotal = Number(contract['Total']) || 0;
+        const discountAmount = Number(contract['Discount']) || 0;
         const originalContractTotal = contractTotal + totalSuspensionDiscount;
 
         // حساب المدفوع الفعلي من الدفعات
@@ -665,7 +666,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           .filter(p => String(p.contract_number) === String(contract.Contract_Number) && 
                        (p.entry_type === 'receipt' || p.entry_type === 'account_payment' || p.entry_type === 'payment'))
           .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
-        const contractRemaining = Math.max(0, originalContractTotal - contractPaid);
+        const contractRemaining = Math.max(0, originalContractTotal - discountAmount - contractPaid);
         
         // ✅ إضافة نوع الإعلان في المرجع
         const adType = contract['Ad Type'] || 'غير محدد';
@@ -679,7 +680,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           balance: 0,
           reference: `عقد-${contract.Contract_Number} (${adType})`,
           notes: '',
-          details: `القيمة: ${originalContractTotal.toLocaleString()} | المدفوع: ${contractPaid.toLocaleString()} | المتبقي: ${contractRemaining.toLocaleString()}`,
+          details: `القيمة: ${originalContractTotal.toLocaleString()} | الخصم: ${discountAmount.toLocaleString()} | المدفوع: ${contractPaid.toLocaleString()} | المتبقي: ${contractRemaining.toLocaleString()}`,
           originalAmount: originalContractTotal,
           paidAmount: contractPaid,
           remainingAmount: contractRemaining,
@@ -688,6 +689,24 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           adType: adType,
           contractNumber: contract.Contract_Number,
         });
+
+        // إدراج خصم العقد كحركة منفصلة عند وجوده
+        if (discountAmount > 0) {
+          transactions.push({
+            id: `contract-discount-${contract.Contract_Number}`,
+            date: contract['Contract Date'],
+            type: 'discount',
+            description: `خصم عقد رقم ${contract.Contract_Number}`,
+            debit: 0,
+            credit: discountAmount,
+            balance: 0,
+            reference: `عقد-${contract.Contract_Number}`,
+            notes: cleanStatementNote(`خصم ممنوح عند التوقيع`),
+            itemTotal: originalContractTotal,
+            itemRemaining: contractRemaining,
+            targetContractNumber: contract.Contract_Number,
+          });
+        }
 
         // إدراج خصم الإيقاف كحركة منفصلة عند وجوده
         if (totalSuspensionDiscount > 0) {
@@ -739,12 +758,14 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         if (excludedInvoiceIds.has(invoice.id)) return;
         
         let invoiceTypeText = '';
-        if (invoice.invoice_type === 'print_only') {
+        if (invoice.invoice_type === 'print_only' || invoice.invoice_type === 'print') {
           invoiceTypeText = ' (طباعة فقط)';
         } else if (invoice.invoice_type === 'print_install') {
           invoiceTypeText = ' (طباعة وتركيب)';
-        } else if (invoice.invoice_type === 'install_only') {
+        } else if (invoice.invoice_type === 'install_only' || invoice.invoice_type === 'install') {
           invoiceTypeText = ' (تركيب فقط)';
+        } else if (invoice.invoice_type === 'cutout') {
+          invoiceTypeText = ' (قص مجسمات)';
         }
         
         const invoiceTotal = Number(invoice.total_amount) || 0;
@@ -863,8 +884,9 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         const invoiceTitle = trimmedSalesInvoiceName || `فاتورة مبيعات ${invoice.invoice_number || ''}`;
         
         const invoiceTotal = Number(invoice.total_amount) || 0;
+        const salesDiscount = Number(invoice.discount) || 0;
         const invoicePaid = Number(invoice.paid_amount) || 0;
-        const invoiceRemaining = invoiceTotal - invoicePaid;
+        const invoiceRemaining = Math.max(0, invoiceTotal - salesDiscount - invoicePaid);
         
         transactions.push({
           id: `sales-${invoice.id}`,
@@ -876,13 +898,27 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           balance: 0,
           reference: invoice.invoice_name ? `مبيعات-${invoice.invoice_number || invoice.id}` : '—',
           notes: cleanStatementNote(invoice.notes || '—'),
-          details: `القيمة: ${invoiceTotal.toLocaleString()} | المدفوع: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()}`,
+          details: `القيمة: ${invoiceTotal.toLocaleString()} | الخصم: ${salesDiscount.toLocaleString()} | المدفوع: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()}`,
           originalAmount: invoiceTotal,
           paidAmount: invoicePaid,
           remainingAmount: invoiceRemaining,
           itemTotal: invoiceTotal,
           itemRemaining: invoiceRemaining,
         });
+
+        if (salesDiscount > 0) {
+          transactions.push({
+            id: `sales-discount-${invoice.id}`,
+            date: invoice.invoice_date || invoice.created_at,
+            type: 'discount',
+            description: `خصم فاتورة مبيعات رقم ${invoice.invoice_number || '—'}`,
+            debit: 0,
+            credit: salesDiscount,
+            balance: 0,
+            reference: invoice.invoice_name ? `مبيعات-${invoice.invoice_number || invoice.id}` : '—',
+            notes: cleanStatementNote(`خصم ممنوح على الفاتورة`),
+          });
+        }
       });
 
       // ✅ خريطة فواتير المشتريات (لاستخدام عنوان الفاتورة داخل ملاحظات/مرجع الدفعات المقايضة)
@@ -1141,15 +1177,16 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           const linkedContract = contractsData.find((c: any) => c.Contract_Number === payment.contract_number);
           if (linkedContract) {
             const contractTotalValue = Number(linkedContract.Total) || 0;
+            const contractDiscount = Number(linkedContract.Discount) || 0;
             const contractPaid = paymentsData
               .filter((p: any) => 
                 String(p.contract_number) === String(payment.contract_number) && 
                 (p.entry_type === 'receipt' || p.entry_type === 'account_payment' || p.entry_type === 'payment')
               )
               .reduce((sum: number, p: any) => sum + (Number(p.amount) || 0), 0);
-            const contractRemaining = Math.max(0, contractTotalValue - contractPaid);
+            const contractRemaining = Math.max(0, contractTotalValue - contractDiscount - contractPaid);
             linkedContractAdType = linkedContract['Ad Type'] || '';
-            detailsText = `الدين: ${contractTotalValue.toLocaleString()} | المسدد: ${contractPaid.toLocaleString()} | المتبقي: ${contractRemaining.toLocaleString()}${linkedContractAdType ? ` | ${linkedContractAdType}` : ''}`;
+            detailsText = `الدين: ${contractTotalValue.toLocaleString()} | الخصم: ${contractDiscount.toLocaleString()} | المسدد: ${contractPaid.toLocaleString()} | المتبقي: ${contractRemaining.toLocaleString()}${linkedContractAdType ? ` | ${linkedContractAdType}` : ''}`;
             itemTotal = contractTotalValue;
             itemRemaining = contractRemaining;
           }
@@ -1160,10 +1197,11 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           const salesInvoice = salesInvoicesMap.get(payment.sales_invoice_id);
           if (salesInvoice) {
             const invoiceTotalValue = Number(salesInvoice.total_amount) || 0;
+            const salesDiscount = Number(salesInvoice.discount) || 0;
             const invoicePaid = Number(salesInvoice.paid_amount) || 0;
-            const invoiceRemaining = invoiceTotalValue - invoicePaid;
+            const invoiceRemaining = Math.max(0, invoiceTotalValue - salesDiscount - invoicePaid);
             const invoiceName = salesInvoice.invoice_name?.trim() || '';
-            detailsText = `الدين: ${invoiceTotalValue.toLocaleString()} | المسدد: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()}${invoiceName ? ` | ${invoiceName}` : ''}`;
+            detailsText = `الدين: ${invoiceTotalValue.toLocaleString()} | الخصم: ${salesDiscount.toLocaleString()} | المسدد: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()}${invoiceName ? ` | ${invoiceName}` : ''}`;
             itemTotal = invoiceTotalValue;
             itemRemaining = invoiceRemaining;
           }
@@ -1176,13 +1214,14 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
             const salesInvoice = salesInvoicesData.find((inv: any) => inv.invoice_number === saleMatch[0]);
             if (salesInvoice) {
               const invoiceTotalValue = Number(salesInvoice.total_amount) || 0;
+              const salesDiscount = Number(salesInvoice.discount) || 0;
               const invoicePaid = Number(salesInvoice.paid_amount) || 0;
-              const invoiceRemaining = invoiceTotalValue - invoicePaid;
+              const invoiceRemaining = Math.max(0, invoiceTotalValue - salesDiscount - invoicePaid);
               const invoiceName = salesInvoice.invoice_name?.trim() || saleMatch[0];
               
               // ✅ تحديث التفاصيل والمتبقي
               if (!detailsText) {
-                detailsText = `الدين: ${invoiceTotalValue.toLocaleString()} | المسدد: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()} | ${invoiceName}`;
+                detailsText = `الدين: ${invoiceTotalValue.toLocaleString()} | الخصم: ${salesDiscount.toLocaleString()} | المسدد: ${invoicePaid.toLocaleString()} | المتبقي: ${invoiceRemaining.toLocaleString()} | ${invoiceName}`;
               }
               if (itemTotal === null) {
                 itemTotal = invoiceTotalValue;
@@ -1780,11 +1819,12 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                       <tbody>
                         {contracts.map((contract, index) => {
                           const status = getContractStatus(contract['End Date']);
+                          const contractDiscount = Number(contract['Discount']) || 0;
                           const contractTotal = Number(contract['Total']) || 0;
                           const totalSuspensionDiscount = Number(contract.totalSuspensionDiscount) || 0;
                           const originalContractTotal = Number(contract.originalContractTotal) || contractTotal;
                           const contractPaid = Number(contract['Total Paid']) || 0;
-                          const contractRemaining = contractTotal - contractPaid;
+                          const contractRemaining = Math.max(0, contractTotal - contractDiscount - contractPaid);
                           return (
                             <tr key={contract.Contract_Number} className={index % 2 === 0 ? 'bg-card/50' : 'bg-background'}>
                               <td className="border border-border p-2 text-center font-semibold">{contract.Contract_Number}</td>
@@ -1793,10 +1833,15 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                               </td>
                               <td className="border border-border p-2 text-center">{contract['Ad Type'] || '—'}</td>
                               <td className="border border-border p-2 text-center text-primary font-medium">
-                                {totalSuspensionDiscount > 0 ? (
+                                {totalSuspensionDiscount > 0 || contractDiscount > 0 ? (
                                   <div className="flex flex-col items-center">
-                                    <span className="line-through text-xs text-muted-foreground">{formatArabicNumber(originalContractTotal)} {currency.symbol}</span>
-                                    <span>{formatArabicNumber(contractTotal)} {currency.symbol}</span>
+                                    {totalSuspensionDiscount > 0 && (
+                                      <span className="line-through text-xs text-muted-foreground">{formatArabicNumber(originalContractTotal)} {currency.symbol}</span>
+                                    )}
+                                    {contractDiscount > 0 && (
+                                      <span className="text-[10px] text-rose-500 font-semibold">خصم: -{formatArabicNumber(contractDiscount)} {currency.symbol}</span>
+                                    )}
+                                    <span>{formatArabicNumber(contractTotal - contractDiscount)} {currency.symbol}</span>
                                   </div>
                                 ) : (
                                   `${formatArabicNumber(contractTotal)} ${currency.symbol}`

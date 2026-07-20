@@ -1766,7 +1766,7 @@ function StickerContent({
         >
           {elementVisibility.companyLogo && (
             <img
-              src="/logofares.svg"
+              src="/logofaresgold.svg"
               alt="شعار الشركة"
               style={{
                 height: elementVisibility.logosVertical 

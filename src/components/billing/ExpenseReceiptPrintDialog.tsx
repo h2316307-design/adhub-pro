@@ -36,7 +36,7 @@ export default function ExpenseReceiptPrintDialog({
       // جلب إعدادات القالب المحفوظة
       const styles = await getMergedInvoiceStylesAsync('receipt');
       const baseUrl = window.location.origin;
-      const logoUrl = styles.logoPath || '/logofares.svg';
+      const logoUrl = styles.logoPath || '/logofaresgold.svg';
       const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
       // No popup test needed

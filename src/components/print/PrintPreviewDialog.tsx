@@ -206,20 +206,20 @@ export function PrintPreviewDialog() {
   return (
     <Dialog open={open} onOpenChange={(v) => !v && handleClose()}>
       <DialogContent
-        className={`p-0 gap-0 overflow-hidden flex flex-col ${fullscreen
+        className={`p-0 gap-0 overflow-hidden flex flex-col [&>button]:hidden ${fullscreen
           ? 'max-w-[100vw] w-[100vw] h-[100dvh] max-h-[100dvh] rounded-none'
           : 'max-w-5xl w-full h-[100dvh] max-h-[100dvh] sm:h-[95vh] sm:max-h-[95vh]'
           }`}
         dir="rtl"
       >
         <DialogHeader className="p-4 border-b bg-gradient-to-l from-primary/5 to-background shrink-0">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
                 <FileText className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-lg">
+                <DialogTitle className="text-lg font-bold text-foreground">
                   {job?.title || 'معاينة الطباعة'}
                 </DialogTitle>
                 <VisuallyHidden>
@@ -229,95 +229,123 @@ export function PrintPreviewDialog() {
             </div>
 
             <div className="flex items-center gap-2 sm:gap-3 flex-wrap justify-end">
-              {/* Signature toggle */}
-              <div className="flex items-center gap-2">
-                <Switch id="print-signature-toggle" checked={showSignature} onCheckedChange={setShowSignature} />
-                <Label htmlFor="print-signature-toggle" className="text-sm cursor-pointer whitespace-nowrap flex items-center gap-1">
-                  <Stamp className="h-4 w-4" />
-                  <span className="hidden sm:inline">الختم والتوقيع</span>
-                </Label>
-              </div>
-
-              {/* Total meters toggle - only for friend rental invoices */}
-              {hasTotalMetersRow && (
-                <div className="flex items-center gap-2">
-                  <Switch id="print-meters-toggle" checked={showTotalMeters} onCheckedChange={setShowTotalMeters} />
-                  <Label htmlFor="print-meters-toggle" className="text-sm cursor-pointer whitespace-nowrap flex items-center gap-1">
-                    <Ruler className="h-4 w-4" />
-                    <span className="hidden sm:inline">إجمالي الأمتار</span>
-                  </Label>
-                </div>
-              )}
-
-              {/* Hide invoice date toggle */}
-              {hasInvoiceDate && (
-                <div className="flex items-center gap-2">
-                  <Switch id="print-hide-date" checked={hideInvoiceDate} onCheckedChange={setHideInvoiceDate} />
-                  <Label htmlFor="print-hide-date" className="text-sm cursor-pointer whitespace-nowrap">
-                    <span className="hidden sm:inline">إخفاء التاريخ</span>
-                  </Label>
-                </div>
-              )}
-
-              {/* Hide rental notes toggle */}
-              {hasRentalNotes && (
-                <div className="flex items-center gap-2">
-                  <Switch id="print-hide-notes" checked={hideRentalNotes} onCheckedChange={setHideRentalNotes} />
-                  <Label htmlFor="print-hide-notes" className="text-sm cursor-pointer whitespace-nowrap">
-                    <span className="hidden sm:inline">إخفاء الملاحظات</span>
-                  </Label>
-                </div>
-              )}
-
-              <Button onClick={handlePrint} className="gap-2" size="sm">
+              <Button 
+                onClick={handlePrint} 
+                className="gap-2 bg-[#d6ac40] hover:bg-[#c59b35] text-black font-bold h-9 px-4 rounded-xl shadow-md cursor-pointer transition-all border-none" 
+                size="sm"
+              >
                 <Printer className="h-4 w-4" />
                 <span className="hidden sm:inline">طباعة</span>
               </Button>
 
-              <Button variant="outline" className="gap-2" size="sm" onClick={handleDownloadPdf} disabled={isPdfLoading}>
-                {isPdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              <Button 
+                variant="outline" 
+                className="gap-2 h-9 px-4 rounded-xl cursor-pointer border-border/80 hover:bg-accent" 
+                size="sm" 
+                onClick={handleDownloadPdf} 
+                disabled={isPdfLoading}
+              >
+                {isPdfLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4 text-emerald-500" />}
                 <span className="hidden sm:inline">تحميل PDF</span>
               </Button>
 
-              <Button variant="outline" className="gap-2" size="sm" onClick={handleUploadToDrive} disabled={isDriveUploading}>
-                {isDriveUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4" />}
+              <Button 
+                variant="outline" 
+                className="gap-2 h-9 px-4 rounded-xl cursor-pointer border-border/80 hover:bg-accent" 
+                size="sm" 
+                onClick={handleUploadToDrive} 
+                disabled={isDriveUploading}
+              >
+                {isDriveUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <CloudUpload className="h-4 w-4 text-blue-500" />}
                 <span className="hidden sm:inline">رفع للمجلد</span>
               </Button>
 
               {job?.phone ? (
-                <Button variant="outline" className="gap-2 border-green-500 text-green-600 hover:bg-green-50" size="sm" onClick={handleSendWhatsApp} disabled={isWhatsAppSending}>
+                <Button 
+                  variant="outline" 
+                  className="gap-2 border-green-500/30 text-green-500 hover:bg-green-500/10 h-9 px-4 rounded-xl cursor-pointer" 
+                  size="sm" 
+                  onClick={handleSendWhatsApp} 
+                  disabled={isWhatsAppSending}
+                >
                   {isWhatsAppSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
                   <span className="hidden sm:inline">واتساب</span>
                 </Button>
               ) : (
                 <Popover open={whatsAppOpen} onOpenChange={setWhatsAppOpen}>
                   <PopoverTrigger asChild>
-                    <Button variant="outline" className="gap-2 border-green-500 text-green-600 hover:bg-green-50" size="sm">
+                    <Button 
+                      variant="outline" 
+                      className="gap-2 border-green-500/30 text-green-500 hover:bg-green-500/10 h-9 px-4 rounded-xl cursor-pointer" 
+                      size="sm"
+                    >
                       <MessageCircle className="h-4 w-4" />
                       <span className="hidden sm:inline">واتساب</span>
                     </Button>
                   </PopoverTrigger>
-                  <PopoverContent className="w-72" align="end">
+                  <PopoverContent className="w-72 z-[9999]" align="end" dir="rtl">
                     <div className="space-y-3">
-                      <Label className="text-sm font-medium">رقم الهاتف</Label>
+                      <Label className="text-sm font-medium">رقم الهاتف للواتساب</Label>
                       <Input value={whatsAppPhone} onChange={(e) => setWhatsAppPhone(e.target.value)} placeholder="مثال: 218912345678" dir="ltr" className="text-left" />
-                      <Button onClick={handleSendWhatsApp} disabled={isWhatsAppSending || !whatsAppPhone.trim()} className="w-full gap-2 bg-green-600 hover:bg-green-700" size="sm">
+                      <Button onClick={handleSendWhatsApp} disabled={isWhatsAppSending || !whatsAppPhone.trim()} className="w-full gap-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg" size="sm">
                         {isWhatsAppSending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        إرسال عبر واتساب
+                        إرسال المستند
                       </Button>
                     </div>
                   </PopoverContent>
                 </Popover>
               )}
 
-              <Button variant="ghost" size="icon" onClick={() => setFullscreen(!fullscreen)}>
+              <div className="h-6 w-px bg-border/85 mx-1"></div>
+
+              <Button variant="ghost" size="icon" onClick={() => setFullscreen(!fullscreen)} className="h-9 w-9 rounded-xl hover:bg-accent cursor-pointer">
                 {fullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
 
-              <Button variant="ghost" size="icon" onClick={handleClose}>
-                <X className="h-4 w-4" />
+              <Button variant="ghost" size="icon" onClick={handleClose} className="h-9 w-9 rounded-xl hover:bg-destructive/10 hover:text-destructive cursor-pointer">
+                <X className="h-5 w-5" />
               </Button>
             </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 mt-3 pt-3 border-t border-border/40 text-sm bg-muted/20 p-2.5 rounded-xl">
+            <span className="text-xs font-semibold text-muted-foreground">خيارات العرض والطباعة:</span>
+            
+            <div className="flex items-center gap-2">
+              <Switch id="print-signature-toggle" checked={showSignature} onCheckedChange={setShowSignature} />
+              <Label htmlFor="print-signature-toggle" className="text-xs cursor-pointer whitespace-nowrap flex items-center gap-1 select-none font-medium">
+                <Stamp className="h-3.5 w-3.5 text-amber-500" />
+                <span>إدراج الختم والتوقيع</span>
+              </Label>
+            </div>
+
+            {hasTotalMetersRow && (
+              <div className="flex items-center gap-2">
+                <Switch id="print-meters-toggle" checked={showTotalMeters} onCheckedChange={setShowTotalMeters} />
+                <Label htmlFor="print-meters-toggle" className="text-xs cursor-pointer whitespace-nowrap flex items-center gap-1 select-none font-medium">
+                  <Ruler className="h-3.5 w-3.5 text-blue-500" />
+                  <span>إظهار إجمالي الأمتار</span>
+                </Label>
+              </div>
+            )}
+
+            {hasInvoiceDate && (
+              <div className="flex items-center gap-2">
+                <Switch id="print-hide-date" checked={hideInvoiceDate} onCheckedChange={setHideInvoiceDate} />
+                <Label htmlFor="print-hide-date" className="text-xs cursor-pointer whitespace-nowrap select-none font-medium">
+                  <span>إخفاء التاريخ</span>
+                </Label>
+              </div>
+            )}
+
+            {hasRentalNotes && (
+              <div className="flex items-center gap-2">
+                <Switch id="print-hide-notes" checked={hideRentalNotes} onCheckedChange={setHideRentalNotes} />
+                <Label htmlFor="print-hide-notes" className="text-xs cursor-pointer whitespace-nowrap select-none font-medium">
+                  <span>إخفاء الملاحظات</span>
+                </Label>
+              </div>
+            )}
           </div>
         </DialogHeader>
 

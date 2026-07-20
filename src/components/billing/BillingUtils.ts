@@ -129,13 +129,13 @@ export const calculateTotalRemainingDebt = (
   compositeTasks: any[] = [],
   extraPurchases: number = 0
 ): number => {
-  // إجمالي العقود
+  // إجمالي العقود (Total هو المبلغ الفعلي المطلوب - Discount مرجعي فقط ومحسوب ضمنياً)
   const totalContracts = contracts.reduce(
     (sum, c) => sum + (Number((c as any)['Total']) || 0),
     0
   );
 
-  // إجمالي فواتير المبيعات
+  // إجمالي فواتير المبيعات (total_amount هو المبلغ الفعلي المطلوب)
   const totalSalesInvoices = salesInvoices.reduce(
     (sum, inv) => sum + (Number(inv.total_amount) || 0),
     0
@@ -194,7 +194,7 @@ export const calculateTotalRemainingDebt = (
 
   const totalPurchases = totalPurchasesFromInvoices + (Number(extraPurchases) || 0);
 
-  // المتبقي = الديون - المدفوعات - الخصومات - المشتريات
+  // المتبقي = الديون - المدفوعات - الخصومات العامة - المشتريات
   return totalDebits - totalCredits - discounts - totalPurchases;
 };
 
@@ -271,15 +271,15 @@ export const calculateTotalRemainingDebtExcludingFriendRentals = (
   compositeTasks: any[] = [],
   friendRentalsToExclude: number = 0
 ): number => {
-  // إجمالي العقود (مطروح منه إيجارات الصديقة لأنها مضمنة في Total)
+  // إجمالي العقود (مطروح منه إيجارات الصديقة والتخفيضات الخاصة بكل عقد)
   const totalContracts = contracts.reduce(
-    (sum, c) => sum + (Number((c as any)['Total']) || 0),
+    (sum, c) => sum + (Number((c as any)['Total']) || 0) - (Number((c as any)['Discount']) || 0),
     0
   ) - friendRentalsToExclude;
 
-  // إجمالي فواتير المبيعات
+  // إجمالي فواتير المبيعات (مطروحاً منها الخصومات)
   const totalSalesInvoices = salesInvoices.reduce(
-    (sum, inv) => sum + (Number(inv.total_amount) || 0),
+    (sum, inv) => sum + (Number(inv.total_amount) || 0) - (Number(inv.discount) || 0),
     0
   );
 
@@ -435,7 +435,8 @@ export const parseBillboardSizes = (
           level,
           quantity: 1,
           print_price: pricing?.print_price || 50, // Default fallback
-          install_price: pricing?.installation_price || 30 // Default fallback
+          install_price: pricing?.installation_price || 30, // Default fallback
+          cut_price: 0,
         });
       });
     }
@@ -455,7 +456,8 @@ export const parseBillboardSizes = (
         level: 'أرضي',
         quantity: 1,
         print_price: defaultPricing?.print_price || 50,
-        install_price: defaultPricing?.installation_price || 30
+        install_price: defaultPricing?.installation_price || 30,
+        cut_price: 0,
       });
     }
     
@@ -472,11 +474,32 @@ export const parseBillboardSizes = (
         level: 'أرضي',
         quantity: 1,
         print_price: defaultPricing?.print_price || 50,
-        install_price: defaultPricing?.installation_price || 30
+        install_price: defaultPricing?.installation_price || 30,
+        cut_price: 0,
       });
     }
   }
   
   console.log('Final parsed sizes:', sizes);
   return sizes;
+};
+
+export const translateInvoiceType = (type: string | null | undefined): string => {
+  if (!type) return 'طباعة';
+  switch (type.trim().toLowerCase()) {
+    case 'print':
+    case 'print_only':
+      return 'طباعة فقط';
+    case 'print_install':
+      return 'طباعة وتركيب';
+    case 'install':
+    case 'install_only':
+      return 'تركيب فقط';
+    case 'cutout':
+      return 'قص مجسمات';
+    case 'composite_task':
+      return 'مهمة مجمعة';
+    default:
+      return type;
+  }
 };

@@ -68,7 +68,7 @@ export function OverduePaymentsPrintDialog({
     if (!printContent || !styles) return;
 
     const baseUrl = window.location.origin;
-    const logoUrl = styles.logoPath || '/logofares.svg';
+    const logoUrl = styles.logoPath || '/logofaresgold.svg';
     const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
     
     const htmlContent = `
@@ -80,7 +80,7 @@ export function OverduePaymentsPrintDialog({
         ${printContent.querySelector('style')?.outerHTML || ''}
       </head>
       <body>
-        ${printContent.innerHTML.replace('/logofares.svg', fullLogoUrl)}
+        ${printContent.innerHTML.replace('/logofaresgold.svg', fullLogoUrl)}
       </body>
       </html>
     `;
@@ -339,7 +339,7 @@ export function OverduePaymentsPrintDialog({
           `}</style>
 
           <div className="company-logo">
-            <img src="/logofares.svg" alt="شعار الشركة" />
+            <img src="/logofaresgold.svg" alt="شعار الشركة" />
           </div>
 
           <div className="statement-header">

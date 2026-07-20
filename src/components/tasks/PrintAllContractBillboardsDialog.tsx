@@ -1626,7 +1626,7 @@ export function PrintAllContractBillboardsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl" aria-describedby={undefined}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-describedby={undefined}>
         <DialogHeader>
           <DialogTitle className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-lg font-bold">

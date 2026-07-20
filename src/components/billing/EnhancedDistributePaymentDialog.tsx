@@ -2115,14 +2115,23 @@ export function EnhancedDistributePaymentDialog({
 
               {/* Step 2: Disbursements & Custody */}
               {step === 2 && (
-                <div className="flex-1 grid grid-cols-1 md:grid-cols-3 overflow-y-auto p-5 gap-5 min-h-0 bg-background/20">
+                <div className="flex-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 overflow-y-auto p-5 gap-5 min-h-0 bg-background/20">
                   {/* 1. Employee Distributions */}
-                  <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[300px] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-2 flex items-center gap-2">
-                      <UserCheck className="h-4 w-4 text-primary" />
-                      دفعات وسلف الموظفين
-                    </h3>
-                    <div className="flex-1 pr-1">
+                  <div className="bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[420px] overflow-y-auto">
+                    <div className="flex items-center justify-between border-b pb-3 mb-4">
+                      <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-emerald-500/10">
+                          <UserCheck className="h-4 w-4 text-emerald-600" />
+                        </div>
+                        دفعات وسلف الموظفين
+                      </h3>
+                      {employeesAllocated > 0 && (
+                        <span className="text-sm font-black text-emerald-600 dark:text-emerald-400">
+                          {employeesAllocated.toLocaleString('ar-LY')} د.ل
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
                       <EmployeeDistributionSection
                         enableEmployee={enableEmployee}
                         setEnableEmployee={setEnableEmployee}
@@ -2142,12 +2151,21 @@ export function EnhancedDistributePaymentDialog({
                   </div>
 
                   {/* 2. Custody Section */}
-                  <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[300px] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-2 flex items-center gap-2">
-                      <Wallet className="h-4 w-4 text-primary" />
-                      توزيع وإصدار العهد المالية
-                    </h3>
-                    <div className="flex-1 pr-1">
+                  <div className="bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[420px] overflow-y-auto">
+                    <div className="flex items-center justify-between border-b pb-3 mb-4">
+                      <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-amber-500/10">
+                          <Wallet className="h-4 w-4 text-amber-600" />
+                        </div>
+                        توزيع وإصدار العهد المالية
+                      </h3>
+                      {custodyAllocated > 0 && (
+                        <span className="text-sm font-black text-amber-600 dark:text-amber-400">
+                          {custodyAllocated.toLocaleString('ar-LY')} د.ل
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
                       <CustodySection
                         enableCustodyOption={enableCustodyOption}
                         setEnableCustodyOption={setEnableCustodyOption}
@@ -2168,12 +2186,21 @@ export function EnhancedDistributePaymentDialog({
                   </div>
 
                   {/* 3. Expense Payment Section */}
-                  <div className="space-y-4 bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[300px] overflow-y-auto">
-                    <h3 className="text-sm font-bold text-primary dark:text-white border-b pb-2 mb-2 flex items-center gap-2">
-                      <Wrench className="h-4 w-4 text-primary" />
-                      تسوية وسداد مصروفات تشغيلية
-                    </h3>
-                    <div className="flex-1 pr-1">
+                  <div className="bg-card p-5 rounded-2xl border border-border/40 shadow-sm flex flex-col min-h-[420px] overflow-y-auto">
+                    <div className="flex items-center justify-between border-b pb-3 mb-4">
+                      <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                        <div className="p-1.5 rounded-lg bg-rose-500/10">
+                          <Wrench className="h-4 w-4 text-rose-600" />
+                        </div>
+                        تسوية وسداد مصروفات تشغيلية
+                      </h3>
+                      {expensesAllocated > 0 && (
+                        <span className="text-sm font-black text-rose-600 dark:text-rose-400">
+                          {expensesAllocated.toLocaleString('ar-LY')} د.ل
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1">
                       <ExpensePaymentSection
                         enabled={enableExpensePayment}
                         setEnabled={setEnableExpensePayment}

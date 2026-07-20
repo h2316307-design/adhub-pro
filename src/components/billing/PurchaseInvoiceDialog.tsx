@@ -164,7 +164,8 @@ export function PurchaseInvoiceDialog({
           method: 'نقدي',
           paid_at: new Date().toISOString().split('T')[0],
           notes: `فاتورة مشتريات ${invoiceNumber}` + (notes ? ` - ${notes}` : ''),
-          entry_type: 'purchase_invoice'
+          entry_type: 'purchase_invoice',
+          purchase_invoice_id: invoice.id
         });
 
       toast.success('تم حفظ فاتورة المشتريات بنجاح');

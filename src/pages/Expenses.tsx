@@ -1106,7 +1106,7 @@ export default function OperatingExpenses() {
   }
 
   return (
-    <div className="container mx-auto px-4 py-6 md:py-8 space-y-6 max-w-7xl animate-fade-in" dir="rtl">
+    <div className="w-full px-4 md:px-6 py-6 md:py-8 space-y-6 animate-fade-in" dir="rtl">
       {/* Premium Glassmorphic Header */}
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-orange-500/10 via-amber-500/5 to-transparent border border-orange-500/15 p-6 backdrop-blur-sm shadow-sm">
         <div className="absolute right-0 top-0 -z-10 h-32 w-32 rounded-full bg-orange-500/5 blur-3xl"></div>

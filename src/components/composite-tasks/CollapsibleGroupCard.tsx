@@ -40,7 +40,6 @@ export const CollapsibleGroupCard: React.FC<CollapsibleGroupCardProps> = ({
   useEffect(() => {
     const fetchDesignImage = async () => {
       try {
-        // جلب أول مهمة تركيب للعقد
         const firstTask = group.tasks[0];
         if (!firstTask?.installation_task_id) {
           // جلب من اللوحات مباشرة
@@ -56,7 +55,22 @@ export const CollapsibleGroupCard: React.FC<CollapsibleGroupCardProps> = ({
           return;
         }
 
-        // جلب من مهمة التركيب
+        // 1. أولاً: جلب من جدول task_designs (المصدر الرئيسي لتصاميم التركيب)
+        const { data: taskDesigns } = await supabase
+          .from('task_designs')
+          .select('design_face_a_url, design_face_b_url')
+          .eq('task_id', firstTask.installation_task_id)
+          .limit(1);
+
+        if (taskDesigns && taskDesigns.length > 0) {
+          const d = taskDesigns[0];
+          if (d.design_face_a_url || d.design_face_b_url) {
+            setDesignImage(d.design_face_a_url || d.design_face_b_url || null);
+            return;
+          }
+        }
+
+        // 2. ثانياً: جلب من عناصر المهمة installation_task_items
         const { data: taskItems } = await supabase
           .from('installation_task_items')
           .select('design_face_a, design_face_b, billboard_id')

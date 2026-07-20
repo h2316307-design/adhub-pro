@@ -91,7 +91,7 @@ export default function FriendRentalReceiptPrintDialog({
       // جلب إعدادات القالب المحفوظة
       const styles = await getMergedInvoiceStylesAsync('friend_rental');
       const baseUrl = window.location.origin;
-      const logoUrl = styles.logoPath || '/logofares.svg';
+      const logoUrl = styles.logoPath || '/logofaresgold.svg';
       const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
       
       // No popup test needed

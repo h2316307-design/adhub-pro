@@ -117,7 +117,7 @@ export default function ContractInvoiceDialog({ open, onOpenChange, contract }: 
     // ✅ جلب إعدادات القالب المحفوظة (async) من النظام الموحد
     const styles = await getMergedInvoiceStylesAsync('contract');
     const baseUrl = window.location.origin;
-    const logoUrl = styles.logoPath || '/logofares.svg';
+    const logoUrl = styles.logoPath || '/logofaresgold.svg';
 
     const currencyInfo = getCurrencyInfo();
     const currentDate = formatDateForPrint(new Date().toISOString(), styles.showHijriDate);
@@ -427,7 +427,7 @@ export default function ContractInvoiceDialog({ open, onOpenChange, contract }: 
           <!-- ✅ Header from unified system -->
           ${unifiedHeaderHtml({
             styles,
-            fullLogoUrl: styles.showLogo !== false ? (styles.logoPath ? `${baseUrl}${styles.logoPath}` : `${baseUrl}/logofares.svg`) : `${baseUrl}/logofares.svg`,
+            fullLogoUrl: styles.showLogo !== false ? (styles.logoPath ? `${baseUrl}${styles.logoPath}` : `${baseUrl}/logofaresgold.svg`) : `${baseUrl}/logofaresgold.svg`,
             metaLinesHtml: `
               <div><strong>التاريخ:</strong> ${currentDate}</div>
               <div><strong>رقم العقد:</strong> ${contract?.id || contract?.Contract_Number || ''}</div>

@@ -60,7 +60,7 @@ export default function BillboardPrintDialog({
           <!-- Header -->
           <div class="header">
             <div class="logo">
-              <img src="/logofares.svg" alt="Al-Fares Logo" style="height: 80px;" />
+              <img src="/logofaresgold.svg" alt="Al-Fares Logo" style="height: 80px;" />
             </div>
             <div class="title">
               <h1>عقـــد إستئجــــار</h1>

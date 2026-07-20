@@ -6,8 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { ContractRow, PaymentRow } from './BillingTypes';
-import { FileText, CreditCard, Calendar, Clock, CheckCircle2, AlertCircle, ImageIcon, ZoomIn, Receipt } from 'lucide-react';
+import { FileText, CreditCard, Calendar, Clock, CheckCircle2, AlertCircle, ImageIcon, ZoomIn, Receipt, DollarSign, Coins, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Dialog, DialogContent, DialogTrigger } from '@/components/ui/dialog';
 
@@ -357,7 +356,7 @@ export function ContractSection({
     <div className="max-w-[96%] mx-auto px-6 mb-6">
       <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl">
         <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
             <div className="flex items-center gap-3">
               <div className="w-12 h-12 bg-amber-500/15 border border-amber-500/30 rounded-xl flex items-center justify-center shadow-lg">
                 <FileText className="h-6 w-6 text-amber-500" />
@@ -367,30 +366,13 @@ export function ContractSection({
                 <p className="text-white/70 text-sm mt-0.5">{contracts.length} عقد • {activeContracts} نشط</p>
               </div>
             </div>
-            
-            {/* إحصائيات سريعة */}
-            <div className="flex items-center gap-6 flex-wrap">
-              <div className="text-center">
-                <p className="text-white/60 text-xs">الإجمالي</p>
-                <p className="text-lg font-bold text-white">{totalContractValue.toLocaleString('ar-LY')}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-white/60 text-xs">المدفوع</p>
-                <p className="text-lg font-bold text-emerald-400">{totalPaidValue.toLocaleString('ar-LY')}</p>
-              </div>
-              <div className="text-center">
-                <p className="text-white/60 text-xs">{hasSurplus ? 'فائض' : 'المتبقي'}</p>
-                <p className={`text-lg font-bold ${hasSurplus ? 'text-emerald-400' : 'text-rose-400'}`}>
-                  {hasSurplus ? Math.abs(totalRemaining).toLocaleString('ar-LY') : totalRemaining.toLocaleString('ar-LY')}
-                </p>
-              </div>
-            </div>
+
             {selectedContracts.size > 0 && (
               <div className="flex gap-2">
                 {onDistributePayment && (
                   <Button 
                     onClick={onDistributePayment}
-                    className="bg-blue-500 hover:bg-blue-600 text-white shadow-md"
+                    className="bg-blue-500 hover:bg-blue-600 text-white shadow-md cursor-pointer"
                     size="sm"
                   >
                     <CreditCard className="h-4 w-4 ml-2" />
@@ -401,9 +383,51 @@ export function ContractSection({
             )}
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="pt-6 px-6 pb-6">
+          {contracts.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5 select-none">
+              {/* Total Card */}
+              <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-amber-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي قيمة العقود</span>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-white">
+                    {totalContractValue.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform shrink-0">
+                  <DollarSign className="h-4.5 w-4.5" />
+                </div>
+              </div>
+
+              {/* Paid Card */}
+              <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-green-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المدفوع للتحصيل</span>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-green-400">
+                    {totalPaidValue.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-green-500/10 text-green-400 group-hover:scale-110 transition-transform shrink-0">
+                  <Coins className="h-4.5 w-4.5" />
+                </div>
+              </div>
+
+              {/* Remaining Card */}
+              <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-rose-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">{hasSurplus ? 'فائض الدفع' : 'المبلغ المتبقي'}</span>
+                  <p className={`text-base sm:text-lg lg:text-xl font-black ${hasSurplus ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {hasSurplus ? Math.abs(totalRemaining).toLocaleString('ar-LY') : totalRemaining.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                  </p>
+                </div>
+                <div className={`p-2.5 rounded-xl ${hasSurplus ? 'bg-emerald-500/10 text-emerald-400' : 'bg-rose-500/10 text-rose-400'} group-hover:scale-110 transition-transform shrink-0`}>
+                  <Wallet className="h-4.5 w-4.5" />
+                </div>
+              </div>
+            </div>
+          )}
           {contracts.length ? (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto border border-white/10 rounded-xl bg-slate-900/40">
               <Table>
                 <TableHeader>
                   <TableRow className="bg-muted/50 hover:bg-muted/50">

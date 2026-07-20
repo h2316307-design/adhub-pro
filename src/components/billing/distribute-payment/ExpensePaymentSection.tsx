@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, Wallet, Loader2, CheckSquare, Square, Zap } from 'lucide-react';
+import { ChevronDown, Wallet, Loader2, CheckSquare, Square, Zap, AlertCircle, User } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 
 export interface ExpensePaymentRow {
@@ -106,15 +106,15 @@ export function ExpensePaymentSection({
             ? Number(expensePayments.find(p => p.expense_id === e.id)?.amount || 0)
             : 0;
           return {
-          id: e.id,
-          description: e.description,
-          amount: Number(e.amount),
-          paid_amount: Number(e.paid_amount || 0),
-          remaining: baseRemaining + editingAmt,
-          employee_id: e.employee_id,
-          employee_name: e.employee_id ? empMap[e.employee_id] : undefined,
-          category: e.category,
-          expense_date: e.expense_date,
+            id: e.id,
+            description: e.description,
+            amount: Number(e.amount),
+            paid_amount: Number(e.paid_amount || 0),
+            remaining: baseRemaining + editingAmt,
+            employee_id: e.employee_id,
+            employee_name: e.employee_id ? empMap[e.employee_id] : undefined,
+            category: e.category,
+            expense_date: e.expense_date,
           };
         }).filter(e => e.remaining > 0 || includeSet.has(e.id)));
       } finally {
@@ -203,7 +203,6 @@ export function ExpensePaymentSection({
 
   const autoDistribute = () => {
     if (availableNum <= 0 || visibleExpenses.length === 0) return;
-    // sort ascending by remaining amount — pay smallest first to clear more expenses
     const sorted = [...visibleExpenses].sort((a, b) => a.remaining - b.remaining);
     const others = expensePayments.filter(p => !visibleExpenses.some(e => e.id === p.expense_id));
     const otherSum = others.reduce((s, p) => s + Number(p.amount || 0), 0);
@@ -220,48 +219,77 @@ export function ExpensePaymentSection({
     setExpensePayments([...others, ...newPayments]);
   };
 
+  // نسبة التسديد من مستحقات الموظف
+  const payRatio = employeeTotalRemaining > 0 ? Math.min(1, totalSelected / employeeTotalRemaining) : 0;
 
   return (
     <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger className="flex items-center justify-between w-full p-2.5 rounded-lg border border-border/50 hover:bg-accent/30 transition-colors">
-        <div className="flex items-center gap-2">
+      {/* ── رأس القسم ── */}
+      <CollapsibleTrigger className="flex items-center justify-between w-full p-3 rounded-xl border border-border/50 hover:bg-accent/30 transition-all duration-200 cursor-pointer">
+        <div className="flex items-center gap-3">
           <Checkbox
             checked={enabled}
-            onCheckedChange={(v) => { setEnabled(!!v); if (v) setIsOpen(true); else { setExpensePayments([]); setSelectedEmployeeId(''); } }}
+            onCheckedChange={(v) => {
+              setEnabled(!!v);
+              if (v) setIsOpen(true);
+              else { setExpensePayments([]); setSelectedEmployeeId(''); }
+            }}
             onClick={(e) => e.stopPropagation()}
+            className="h-5 w-5"
           />
-          <Wallet className="h-4 w-4 text-primary" />
-          <span className="text-sm font-semibold">سداد مصروفات موظفين</span>
+          <div className="p-1.5 rounded-lg bg-primary/10">
+            <Wallet className="h-4 w-4 text-primary" />
+          </div>
+          <div className="flex flex-col items-start">
+            <span className="text-sm font-bold">سداد مصروفات موظفين</span>
+            {enabled && totalSelected > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {expensePayments.length} مصروف
+              </span>
+            )}
+          </div>
           {enabled && totalSelected > 0 && (
-            <Badge variant="outline" className="text-xs bg-primary/10 text-primary border-primary/30">
-              {totalSelected.toFixed(0)} د.ل
+            <Badge className="bg-primary/15 text-primary border-primary/30 text-sm font-bold px-3 py-1">
+              {totalSelected.toLocaleString('ar-LY')} د.ل
             </Badge>
           )}
         </div>
-        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
       </CollapsibleTrigger>
+
       <CollapsibleContent>
         {enabled && (
-          <div className="space-y-2 p-3 mt-1 bg-primary/5 dark:bg-primary/5 rounded-lg border border-primary/20">
+          <div className="space-y-4 p-4 mt-2 bg-primary/5 rounded-xl border border-primary/20">
+
             {loading ? (
-              <div className="flex justify-center py-3"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
+              <div className="flex flex-col items-center justify-center py-8 gap-3">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                <span className="text-sm text-muted-foreground">جاري تحميل المصروفات...</span>
+              </div>
             ) : employees.length === 0 ? (
-              <div className="text-xs text-center text-muted-foreground py-3">لا يوجد موظفون لديهم مصروفات غير مسددة</div>
+              <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+                <AlertCircle className="h-8 w-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">لا يوجد موظفون لديهم مصروفات غير مسددة</p>
+              </div>
             ) : (
               <>
-                {/* Employee selector */}
-                <div className="space-y-1">
-                  <label className="text-[11px] font-semibold text-primary dark:text-white">اختر الموظف</label>
+                {/* ── اختيار الموظف ── */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" />
+                    اختر الموظف
+                  </label>
                   <Select value={selectedEmployeeId} onValueChange={setSelectedEmployeeId}>
-                    <SelectTrigger className="h-8 text-xs bg-background">
-                      <SelectValue placeholder="-- اختر موظف --" />
+                    <SelectTrigger className="h-11 text-sm bg-background border-primary/30 focus:ring-primary/20">
+                      <SelectValue placeholder="-- اختر الموظف لعرض مصروفاته --" />
                     </SelectTrigger>
                     <SelectContent>
                       {employees.map(emp => {
                         const cnt = allExpenses.filter(e => e.employee_id === emp.id).length;
+                        const total = allExpenses.filter(e => e.employee_id === emp.id).reduce((s, e) => s + e.remaining, 0);
                         return (
-                          <SelectItem key={emp.id} value={emp.id} className="text-xs">
-                            {emp.name} ({cnt} مصروف)
+                          <SelectItem key={emp.id} value={emp.id} className="text-sm py-2">
+                            {emp.name} ({cnt} مصروف · {total.toLocaleString('ar-LY')} د.ل)
                           </SelectItem>
                         );
                       })}
@@ -271,120 +299,177 @@ export function ExpensePaymentSection({
 
                 {selectedEmployeeId && visibleExpenses.length > 0 && (
                   <>
-                    {/* Available amount + auto distribute */}
-                    <div className="flex items-end gap-2 p-2 rounded border border-primary/20 bg-background">
-                      <div className="flex-1 space-y-1">
-                        <label className="text-[10px] font-semibold text-primary dark:text-white">
+                    {/* ── حقل المبلغ المتاح + توزيع تلقائي ── */}
+                    <div className="p-4 rounded-xl border border-primary/25 bg-background space-y-3">
+                      <div className="space-y-2">
+                        <label className="text-sm font-semibold text-foreground">
                           المبلغ المتاح لتوزيعه على هذا الموظف
                         </label>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex gap-2">
                           <Input
-                            type="number"
+                            type="text"
+                            inputMode="decimal"
                             value={availableAmount}
                             onChange={(e) => {
-                              const v = e.target.value;
+                              const v = e.target.value.replace(/[^\d.]/g, '');
                               if (v === '') { setAvailableAmount(''); return; }
                               const raw = parseFloat(v) || 0;
                               const clamped = Math.max(0, Math.min(raw, availableMaxCap));
                               setAvailableAmount(String(clamped));
                             }}
-                            placeholder="0"
-                            className="h-8 text-xs flex-1"
-                            dir="ltr"
+                            placeholder="0.00"
+                            className="h-10 text-sm flex-1 text-right font-bold"
+                            dir="rtl"
                           />
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
                             onClick={() => setAvailableAmount(String(availableMaxCap))}
-                            className="text-[10px] h-7 border-primary/30 text-primary hover:bg-primary/10"
+                            className="h-10 px-3 text-xs border-primary/30 text-primary hover:bg-primary/10 font-semibold"
                             disabled={availableMaxCap <= 0}
-                            title={`الحد الأقصى: ${availableMaxCap.toFixed(2)}`}
                           >
                             كامل
                           </Button>
+                          <Button
+                            type="button"
+                            size="sm"
+                            onClick={autoDistribute}
+                            disabled={availableNum <= 0}
+                            className="h-10 px-3 text-xs gap-1.5 bg-primary hover:bg-primary/90 text-primary-foreground font-bold"
+                          >
+                            <Zap className="h-3.5 w-3.5" />
+                            تلقائي
+                          </Button>
                         </div>
                       </div>
-                      <Button
-                        type="button"
-                        size="sm"
-                        onClick={autoDistribute}
-                        disabled={availableNum <= 0}
-                        className="h-8 text-[11px] gap-1 bg-primary hover:bg-primary/90 text-primary-foreground"
-                      >
-                        <Zap className="h-3 w-3" />
-                        توزيع تلقائي
-                      </Button>
+
+                      {/* ── بطاقات الحالة الثلاث ── */}
+                      {availableNum > 0 && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="flex flex-col items-center gap-0.5 p-2 rounded-lg bg-primary/10 border border-primary/20">
+                            <span className="text-[10px] text-muted-foreground">المُختار</span>
+                            <span className="text-sm font-black text-primary leading-none">
+                              {totalSelected.toLocaleString('ar-LY')}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground">د.ل</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5 p-2 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                            <span className="text-[10px] text-muted-foreground">متبقي من المبلغ</span>
+                            <span className="text-sm font-black text-amber-600 dark:text-amber-400 leading-none">
+                              {remainingFromAvailable.toLocaleString('ar-LY')}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground">د.ل</span>
+                          </div>
+                          <div className="flex flex-col items-center gap-0.5 p-2 rounded-lg bg-rose-500/10 border border-rose-500/20">
+                            <span className="text-[10px] text-muted-foreground">مستحقات الموظف</span>
+                            <span className="text-sm font-black text-rose-600 dark:text-rose-400 leading-none">
+                              {employeeTotalRemaining.toLocaleString('ar-LY')}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground">د.ل</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* شريط تقدم الموظف */}
+                      {totalSelected > 0 && employeeTotalRemaining > 0 && (
+                        <div className="space-y-1">
+                          <div className="flex justify-between text-xs text-muted-foreground">
+                            <span>نسبة تسديد مستحقات الموظف</span>
+                            <span className="font-bold text-primary">{(payRatio * 100).toFixed(0)}%</span>
+                          </div>
+                          <div className="h-2.5 bg-primary/10 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-gradient-to-r from-primary to-primary/70 rounded-full transition-all duration-500"
+                              style={{ width: `${payRatio * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Status bar */}
-                    {availableNum > 0 && (
-                      <div className="grid grid-cols-3 gap-1 text-[10px] p-1.5 rounded bg-primary/10 dark:bg-primary/20">
-                        <div className="text-center">
-                          <div className="text-muted-foreground">المُختار</div>
-                          <div className="font-bold text-primary">{totalSelected.toFixed(2)}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-muted-foreground">المتبقي من المبلغ</div>
-                          <div className="font-bold text-primary">{remainingFromAvailable.toFixed(2)}</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-muted-foreground">مستحقات الموظف</div>
-                          <div className="font-bold text-primary">{employeeTotalRemaining.toFixed(2)}</div>
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="flex items-center justify-between px-1">
-                      <Button type="button" size="sm" variant="ghost" onClick={selectAll} className="h-7 text-[11px] gap-1">
-                        {allSelected ? <Square className="h-3 w-3" /> : <CheckSquare className="h-3 w-3" />}
+                    {/* ── شريط تحديد الكل ── */}
+                    <div className="flex items-center justify-between">
+                      <Button type="button" size="sm" variant="ghost" onClick={selectAll}
+                        className="h-9 text-sm gap-2 hover:bg-primary/10">
+                        {allSelected ? <Square className="h-4 w-4" /> : <CheckSquare className="h-4 w-4" />}
                         {allSelected ? 'إلغاء الكل' : 'تحديد الكل'}
                       </Button>
-                      <span className="text-[10px] text-muted-foreground">
-                        إجمالي مستحقات الموظف: <strong className="text-primary">{employeeTotalRemaining.toLocaleString('ar-LY')} د.ل</strong>
+                      <span className="text-sm text-muted-foreground">
+                        إجمالي مستحقات: <strong className="text-foreground">{employeeTotalRemaining.toLocaleString('ar-LY')} د.ل</strong>
                       </span>
                     </div>
 
-
-                    <div className="space-y-1.5 max-h-72 overflow-y-auto">
+                    {/* ── قائمة المصروفات ── */}
+                    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                       {visibleExpenses.map(e => {
                         const sel = expensePayments.find(p => p.expense_id === e.id);
                         const max = rowMax(e);
                         const poolFull = !sel && Math.max(0, sectionPool - totalSelected) <= 0;
                         return (
-                          <div key={e.id} className="flex items-center gap-2 p-1.5 bg-background rounded border border-primary/20">
-                            <Checkbox checked={!!sel} onCheckedChange={(v) => toggle(e, !!v)} disabled={poolFull} title={poolFull ? 'تم بلوغ سقف الدفعة' : undefined} />
-                            <div className="flex-1 min-w-0">
-                              <div className="text-xs truncate">{e.description}</div>
-                              <div className="text-[10px] text-muted-foreground">
-                                متبقي: {e.remaining.toLocaleString('ar-LY')} د.ل
-                                {e.expense_date && ` · ${e.expense_date}`}
-                                {e.category && ` · ${e.category}`}
-                                {poolFull && <span className="text-red-600 font-semibold"> · ⛔ السقف ممتلئ</span>}
+                          <div
+                            key={e.id}
+                            className={`flex flex-col gap-2.5 p-3 rounded-xl border transition-all duration-150 ${
+                              sel
+                                ? 'bg-primary/8 border-primary/30 shadow-sm'
+                                : poolFull
+                                  ? 'bg-muted/30 border-border/30 opacity-60'
+                                  : 'bg-background border-border/50 hover:border-primary/30 hover:bg-primary/5'
+                            }`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                checked={!!sel}
+                                onCheckedChange={(v) => toggle(e, !!v)}
+                                disabled={poolFull}
+                                className="h-5 w-5 mt-0.5 shrink-0"
+                              />
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <div className="text-sm font-semibold leading-tight break-words">{e.description}</div>
+                                <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                                  <span className="font-bold text-rose-600 dark:text-rose-400">
+                                    متبقي: {e.remaining.toLocaleString('ar-LY')} د.ل
+                                  </span>
+                                  {e.expense_date && (
+                                    <span>{new Date(e.expense_date).toLocaleDateString('ar-LY')}</span>
+                                  )}
+                                  {e.category && <Badge variant="outline" className="text-[10px] h-4 px-1">{e.category}</Badge>}
+                                  {poolFull && (
+                                    <span className="text-red-600 font-semibold flex items-center gap-1">
+                                      <AlertCircle className="h-3 w-3" /> السقف ممتلئ
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
                             {sel && (
-                              <>
-                                <Input
-                                  type="number"
-                                  value={sel.amount || ''}
-                                  onChange={(ev) => updateAmount(e.id, ev.target.value, e.remaining)}
-                                  className="h-7 w-20 text-xs text-left disabled:opacity-60"
-                                  dir="ltr"
-                                  disabled={max <= 0 && Number(sel.amount || 0) === 0}
-                                />
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => updateAmount(e.id, String(max), e.remaining)}
-                                  className="text-[10px] h-7 px-1.5 border-primary/30 text-primary hover:bg-primary/10"
-                                  disabled={max <= 0}
-                                  title={`الحد الأقصى: ${max.toFixed(2)}`}
-                                >
-                                  كامل
-                                </Button>
-                              </>
+                              <div className="flex items-center justify-between gap-2 pt-2.5 border-t border-border/30">
+                                <span className="text-xs text-muted-foreground font-semibold">مبلغ السداد:</span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={sel.amount || ''}
+                                    onChange={(ev) => {
+                                      const val = ev.target.value.replace(/[^\d.]/g, '');
+                                      updateAmount(e.id, val, e.remaining);
+                                    }}
+                                    className="h-8.5 w-24 text-xs text-right font-bold"
+                                    dir="rtl"
+                                    disabled={max <= 0 && Number(sel.amount || 0) === 0}
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => updateAmount(e.id, String(max), e.remaining)}
+                                    className="h-8.5 px-2.5 text-xs border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                                    disabled={max <= 0}
+                                  >
+                                    كامل
+                                  </Button>
+                                </div>
+                              </div>
                             )}
                           </div>
                         );
@@ -394,13 +479,18 @@ export function ExpensePaymentSection({
                 )}
 
                 {selectedEmployeeId && visibleExpenses.length === 0 && (
-                  <div className="text-xs text-center text-muted-foreground py-3">لا توجد مصروفات غير مسددة لهذا الموظف</div>
+                  <div className="flex flex-col items-center justify-center py-8 gap-2 text-center">
+                    <AlertCircle className="h-8 w-8 text-muted-foreground/40" />
+                    <p className="text-sm text-muted-foreground">لا توجد مصروفات غير مسددة لهذا الموظف</p>
+                  </div>
                 )}
               </>
             )}
-            <div className="flex justify-between pt-1.5 border-t border-primary/20 text-xs">
-              <span className="text-primary">إجمالي السداد:</span>
-              <span className="font-bold text-primary">{totalSelected.toFixed(2)} د.ل</span>
+
+            {/* ── شريط الإجمالي ── */}
+            <div className="flex items-center justify-between pt-3 border-t border-primary/20">
+              <span className="text-sm font-semibold text-primary">إجمالي السداد</span>
+              <span className="text-lg font-black text-primary">{totalSelected.toLocaleString('ar-LY')} <span className="text-sm font-normal">د.ل</span></span>
             </div>
           </div>
         )}

@@ -19,6 +19,7 @@ export interface BillboardSize {
   faces: number; // عدد الأوجه
   print_price: number;
   install_price: number;
+  cut_price: number; // سعر القص
   adType?: string; // نوع الإعلان (وجه، تيبول)
 }
 

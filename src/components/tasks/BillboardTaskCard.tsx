@@ -21,7 +21,7 @@ import {
   PaintBucket, Printer, RotateCcw, Palette, Box, DollarSign, Trash2, 
   Pencil, Plus, AlertTriangle, Lock, Unlock, Camera, Link2, RefreshCw, 
   Replace, ArrowLeftRight, History, Building2, PauseCircle, Repeat2, 
-  ChevronDown, ChevronUp, MoreVertical, SlidersHorizontal, Settings, HelpCircle, TrendingUp, TrendingDown 
+  ChevronDown, ChevronUp, MoreVertical, SlidersHorizontal, Settings, HelpCircle, TrendingUp, TrendingDown, GitBranch, Layers 
 } from "lucide-react";
 import { ReplaceBillboardDialog } from './ReplaceBillboardDialog';
 import { EditReplacementDialog } from './EditReplacementDialog';
@@ -64,6 +64,7 @@ interface BillboardTaskCardProps {
   pausedInfo?: { pauseDate?: string };
   replacementInfo?: { replacedName?: string; startDate?: string };
   isPrintActive?: boolean;
+  printPricePerMeter?: number;
 }
 
 export function BillboardTaskCard({
@@ -72,6 +73,7 @@ export function BillboardTaskCard({
   isSelected,
   isCompleted,
   isPrintActive = false,
+  printPricePerMeter = 0,
   taskDesigns = [],
   installationPrice = 0,
   allItems = [],
@@ -88,6 +90,7 @@ export function BillboardTaskCard({
   replacementInfo,
 }: BillboardTaskCardProps) {
   const [selectedDesignId, setSelectedDesignId] = useState<string>(item.selected_design_id || 'none');
+  const [isExpanded, setIsExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hasCutout, setHasCutout] = useState<boolean>(item.has_cutout || false);
   const [customerInstallationCost, setCustomerInstallationCost] = useState<number>(item.customer_installation_cost || 0);
@@ -106,7 +109,20 @@ export function BillboardTaskCard({
   const [savingDate, setSavingDate] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [facesToInstall, setFacesToInstall] = useState<number>(item.faces_to_install || (billboard?.Faces_Count || 1));
+  const [photoHistoryItems, setPhotoHistoryItems] = useState<any[]>([]);
+  const [isBranchesExpanded, setIsBranchesExpanded] = useState(false);
   const { confirm: systemConfirm } = useSystemDialog();
+
+  useEffect(() => {
+    if (item?.id && ((item.reinstall_count || 0) > 0 || item.replacement_status)) {
+      supabase
+        .from('installation_photo_history')
+        .select('*')
+        .eq('task_item_id', item.id)
+        .order('reinstall_number', { ascending: true })
+        .then(({ data }) => setPhotoHistoryItems(data || []));
+    }
+  }, [item?.id, item?.reinstall_count, item?.replacement_status]);
   const [isCustomerCostEditable, setIsCustomerCostEditable] = useState(false);
   const [additionalCost, setAdditionalCost] = useState<number>(item.additional_cost || 0);
   const [additionalCostNotes, setAdditionalCostNotes] = useState<string>(item.additional_cost_notes || '');
@@ -572,6 +588,110 @@ export function BillboardTaskCard({
   const isDelayed = !isCompleted && item.created_at && differenceInDays(new Date(), new Date(item.created_at)) > 15;
   const delayDays = item.created_at ? differenceInDays(new Date(), new Date(item.created_at)) : 0;
 
+  // Visual layout for Reinstallation Branches (Collapsible)
+  const renderReinstallBranches = () => {
+    if ((item.reinstall_count || 0) === 0 && !item.replacement_status) return null;
+
+    const totalIterations = (item.reinstall_count || 0) + 1;
+
+    return (
+      <div className="mt-2.5 bg-amber-500/5 dark:bg-amber-500/10 rounded-2xl border border-amber-500/30 overflow-hidden text-xs" onClick={e => e.stopPropagation()}>
+        <button
+          type="button"
+          onClick={() => setIsBranchesExpanded(!isBranchesExpanded)}
+          className="w-full flex items-center justify-between p-3 text-right hover:bg-amber-500/10 transition-colors font-bold text-amber-700 dark:text-amber-300 cursor-pointer"
+        >
+          <span className="flex items-center gap-1.5 font-extrabold">
+            <GitBranch className="h-4 w-4 text-amber-500 shrink-0" />
+            فروع وقوائم إعادات التركيب (سجل المرات)
+          </span>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300 font-extrabold border-amber-500/40">
+              {totalIterations} قوائم / مرات
+            </Badge>
+            {isBranchesExpanded ? <ChevronUp className="h-4 w-4 text-amber-600 shrink-0" /> : <ChevronDown className="h-4 w-4 text-amber-600 shrink-0" />}
+          </div>
+        </button>
+
+        {isBranchesExpanded && (
+          <div className="p-3 pt-0 space-y-2 border-t border-amber-500/20">
+            {/* الفرع 1: التركيب الأصلي (المرة الأولى) */}
+            <div className="p-2.5 bg-card rounded-xl border border-border/60 space-y-1.5 shadow-sm mt-2">
+              <div className="flex items-center justify-between font-bold text-[11px]">
+                <div className="flex items-center gap-1.5">
+                  <Badge className="text-[9px] px-1.5 py-0 bg-blue-600 text-white border-0 font-black">الفرع 1</Badge>
+                  <span className="text-foreground">التركيب الأصلي (المرة الأولى)</span>
+                </div>
+                <span className="text-emerald-600 dark:text-emerald-400 font-black">
+                  التكلفة: {(customerOriginalInstallCost || customerInstallationCost || 0).toLocaleString('en-US')} د.ل
+                </span>
+              </div>
+
+              <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 flex-wrap gap-2">
+                <div className="flex items-center gap-2">
+                  {photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_a_url || item.billboardImage ? (
+                    <img
+                      src={photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_a_url || item.billboardImage}
+                      alt="صورة التركيب الأصلي"
+                      className="h-10 w-14 object-cover rounded-lg border border-border/60 cursor-pointer hover:opacity-90 shadow-sm"
+                      onClick={() => setPreviewImageUrl(photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_a_url || item.billboardImage)}
+                    />
+                  ) : null}
+                  <div>
+                    <div>التاريخ: {photoHistoryItems.find(h => h.reinstall_number === 1)?.installation_date ? format(new Date(photoHistoryItems.find(h => h.reinstall_number === 1).installation_date), 'dd/MM/yyyy', { locale: ar }) : (item.installation_date ? format(new Date(item.installation_date), 'dd/MM/yyyy', { locale: ar }) : 'غير محدد')}</div>
+                    <div className="font-semibold text-foreground">الوجوه: {item.faces_to_install || facesCount || 2} وجه</div>
+                  </div>
+                </div>
+                <Badge variant="outline" className="text-[9px] bg-green-500/10 text-green-600 border-green-500/30 font-bold">مكتملة</Badge>
+              </div>
+            </div>
+
+            {/* الفروع 2، 3... (إعادات التركيب) */}
+            {Array.from({ length: item.reinstall_count || 0 }).map((_, rIdx) => {
+              const rNum = rIdx + 1;
+              const branchNo = rNum + 1;
+              const hist = photoHistoryItems.find(h => h.reinstall_number === branchNo) || photoHistoryItems[rIdx + 1];
+              const rCost = customerReinstallCost || customerInstallationCost || 0;
+              const rFacesText = item.reinstalled_faces === 'both' ? 'وجهين (أمامي وخلفي)' : item.reinstalled_faces === 'face_a' ? 'وجه أمامي' : 'وجه خلفي';
+
+              return (
+                <div key={rIdx} className="p-2.5 bg-card rounded-xl border border-amber-500/40 space-y-1.5 shadow-sm">
+                  <div className="flex items-center justify-between font-bold text-[11px]">
+                    <div className="flex items-center gap-1.5">
+                      <Badge className="text-[9px] px-1.5 py-0 bg-amber-500 text-white border-0 font-black">الفرع {branchNo}</Badge>
+                      <span className="text-amber-700 dark:text-amber-300">إعادة تركيب ({rNum}) - المرة {branchNo}</span>
+                    </div>
+                    <span className="text-amber-600 font-black">
+                      التكلفة: {rCost.toLocaleString('en-US')} د.ل
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-1 flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      {hist?.installed_image_face_a_url || (rNum === item.reinstall_count ? item.installed_image_face_a_url : null) ? (
+                        <img
+                          src={hist?.installed_image_face_a_url || item.installed_image_face_a_url || ''}
+                          alt={`صورة إعادة تركيب ${rNum}`}
+                          className="h-10 w-14 object-cover rounded-lg border border-border/60 cursor-pointer hover:opacity-90 shadow-sm"
+                          onClick={() => setPreviewImageUrl(hist?.installed_image_face_a_url || item.installed_image_face_a_url || '')}
+                        />
+                      ) : null}
+                      <div>
+                        <div>التاريخ: {hist?.installation_date ? format(new Date(hist.installation_date), 'dd/MM/yyyy', { locale: ar }) : (item.installation_date ? format(new Date(item.installation_date), 'dd/MM/yyyy', { locale: ar }) : 'غير محدد')}</div>
+                        <div className="font-semibold text-amber-700 dark:text-amber-400">الوجوه المُعاد تركيبها: {rFacesText}</div>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-[9px] bg-amber-500/10 text-amber-600 border-amber-500/30 font-bold">معاد تركيبها</Badge>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   // Visual layout for Location Hub
   const renderLocationHub = () => (
     <div className="p-4 bg-muted/40 dark:bg-muted/10 rounded-2xl border border-border/60 space-y-2 text-[12px] shadow-inner relative group-hover:bg-muted/50 transition-all duration-300">
@@ -793,6 +913,26 @@ export function BillboardTaskCard({
                 )}
               </div>
 
+              {/* Itemized breakdown per element: تركيب / قص / طباعة */}
+              <div className="p-2.5 rounded-xl bg-muted/30 border border-border/40 space-y-1 text-right">
+                <span className="text-[10px] font-bold text-muted-foreground block">تفاصيل التكلفة لكل عنصر لللوحة:</span>
+                <div className="flex items-center gap-1.5 text-[10px] flex-wrap font-bold">
+                  <Badge variant="outline" className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200">
+                    🔧 تركيب: {totalCustomerCost.toLocaleString('ar-LY')} د.ل
+                  </Badge>
+                  {item.has_cutout && (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200">
+                      ✂️ قص/مجسم
+                    </Badge>
+                  )}
+                  {(isPrintActive || (item.price_per_meter || printPricePerMeter) > 0) && (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200">
+                      🖨️ طباعة {item.price_per_meter || printPricePerMeter ? `(${item.price_per_meter || printPricePerMeter} د.ل/م²)` : ''}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+
               {/* Quick Action: Paid / Settled Costs */}
               <div className="flex items-center justify-between gap-2 bg-amber-500/[0.03] border border-amber-500/10 p-2.5 rounded-xl shadow-sm transition-all duration-200 hover:bg-amber-500/[0.06]">
                 <div className="flex flex-col text-right">
@@ -982,19 +1122,13 @@ export function BillboardTaskCard({
                 </Badge>
               )}
               {isPrintActive && (
-                <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-blue-600/90 backdrop-blur-sm text-white border-0 shadow-sm flex items-center gap-0.5">
+                <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-blue-600/90 backdrop-blur-sm text-white border-0 shadow-sm flex items-center gap-1">
                   <Printer className="h-3 w-3" />
-                  طباعة ✓
+                  <span>طباعة</span>
                 </Badge>
               )}
             </div>
 
-            {/* ID Badge */}
-            <div className="absolute bottom-2.5 right-2.5 z-10">
-              <div className="bg-gradient-to-r from-primary to-accent backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-md border border-white/10">
-                <span className="font-extrabold text-[10px] text-white">#{billboard?.ID}</span>
-              </div>
-            </div>
           </div>
 
           {/* Details & Tags */}
@@ -1010,7 +1144,7 @@ export function BillboardTaskCard({
                 htmlFor={`select-completed-${item.id}`}
                 className="font-extrabold text-sm line-clamp-1 text-foreground leading-tight cursor-pointer flex-1"
               >
-                {billboard?.Billboard_Name || `لوحة #${billboard?.ID}`}
+                {billboard?.Billboard_Name || 'لوحة إعلانية'}
               </label>
             </div>
             
@@ -1020,12 +1154,35 @@ export function BillboardTaskCard({
                 <CheckCircle2 className="h-3 w-3 mr-1" />
                 مكتملة بنجاح
               </Badge>
+              {billboard?.Size && (
+                <Badge variant="secondary" className="text-[9px] px-2 py-0.5 font-extrabold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center gap-1 rounded-full">
+                  <Box className="h-3 w-3 text-blue-500" />
+                  <span>المقاس: {billboard.Size}</span>
+                </Badge>
+              )}
+              <Badge variant="secondary" className="text-[9px] px-2 py-0.5 font-extrabold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center gap-1 rounded-full">
+                <Layers className="h-3 w-3 text-purple-500" />
+                <span>
+                  الوجوه: {
+                    item.reinstalled_faces === 'both' ? 'وجهين (أمامي وخلفي)' :
+                    item.reinstalled_faces === 'face_a' ? 'وجه أمامي (1)' :
+                    item.reinstalled_faces === 'face_b' ? 'وجه خلفي (1)' :
+                    `${item.faces_to_install || facesCount || 1} وجه`
+                  }
+                </span>
+              </Badge>
               {isPrintActive && (
                 <Badge className="text-[9px] px-2 py-0.5 font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 flex items-center gap-1">
                   <Printer className="h-3 w-3" />
-                  تم احتساب الطباعة ✓
+                  <span>تم احتساب الطباعة</span>
                 </Badge>
               )}
+              <Badge className="text-[9px] px-2 py-0.5 font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 rounded-full">
+                <DollarSign className="h-3 w-3" />
+                <span>
+                  الزبون: {((item.reinstall_count || 0) > 0 ? (customerOriginalInstallCost + customerReinstallCost) : customerInstallationCost).toLocaleString('en-US')} د.ل ({item.pricing_type === 'meter' ? `بالمتر ${item.price_per_meter || 0} د.ل/م²` : 'بالقطعة'})
+                </span>
+              </Badge>
               {onUncomplete && (
                 <Button
                   variant="ghost"
@@ -1042,10 +1199,10 @@ export function BillboardTaskCard({
                   تراجع عن الإكمال
                 </Button>
               )}
-              {(item.replacement_status === 'reinstalled' || item.replacement_status === 'replaced') && (
-                <Badge className="text-[9px] px-2 py-0.5 font-bold bg-gradient-to-r from-amber-500 to-orange-500 text-white border-0">
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  {item.replacement_status === 'reinstalled' ? 'معاد تركيبها' : 'مستبدلة'} ({item.reinstall_count || 1})
+              {(item.replacement_status === 'reinstalled' || (item.reinstall_count || 0) > 0) && (
+                <Badge className="text-[9px] px-2 py-0.5 font-extrabold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/30 flex items-center gap-1 rounded-full">
+                  <RefreshCw className="h-3 w-3 text-amber-500" />
+                  <span>معاد تركيبها (المرة {(item.reinstall_count || 0) + 1})</span>
                 </Badge>
               )}
               {pausedInfo && (
@@ -1059,6 +1216,37 @@ export function BillboardTaskCard({
                 </Badge>
               )}
             </div>
+
+            {/* Location Strip on Card Header */}
+            {(billboard?.Nearest_Landmark || billboard?.District || billboard?.Municipality || billboard?.City || billboard?.GPS_Link) && (
+              <div className="flex items-center justify-between gap-1.5 text-[11px] p-2 bg-muted/40 dark:bg-muted/15 rounded-xl border border-border/40 text-foreground font-bold flex-wrap mt-1">
+                <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                  <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                  {billboard?.Nearest_Landmark && (
+                    <span className="text-foreground font-extrabold">{billboard.Nearest_Landmark}</span>
+                  )}
+                  {billboard?.District && (
+                    <span className="text-muted-foreground">{billboard?.Nearest_Landmark ? '• ' : ''}{billboard.District}</span>
+                  )}
+                  {(billboard?.Municipality || billboard?.City) && (
+                    <span className="text-muted-foreground/80">• {billboard.Municipality || billboard.City}</span>
+                  )}
+                </div>
+                {billboard?.GPS_Link && (
+                  <a
+                    href={billboard.GPS_Link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="inline-flex items-center gap-1 text-[10px] text-primary hover:text-white font-extrabold bg-primary/10 hover:bg-primary px-2.5 py-0.5 rounded-lg border border-primary/30 transition-all shrink-0 mr-auto"
+                    title="فتح اللوكيشن GPS"
+                  >
+                    <Navigation className="h-3 w-3" />
+                    <span>الموقع GPS</span>
+                  </a>
+                )}
+              </div>
+            )}
 
             {/* Quick Actions Row */}
             <div className="flex items-center gap-1.5 pt-1.5 pb-2 border-b border-border/30" onClick={e => e.stopPropagation()}>
@@ -1162,125 +1350,149 @@ export function BillboardTaskCard({
               </button>
             )}
 
-            {/* Location details */}
-            {renderLocationHub()}
+            {/* فروع وإعادات التركيب - المرات */}
+            {renderReinstallBranches()}
 
-            {/* Completion Date */}
-            {item.installation_date && (
-              <div className="flex items-center justify-between text-xs p-2.5 bg-blue-500/5 dark:bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-700 dark:text-blue-400 shadow-sm" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-1.5 font-bold">
-                  <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-                  <span>تاريخ التركيب المنفذ: {format(new Date(item.installation_date), "dd/MM/yyyy", { locale: ar })}</span>
-                </div>
-                <button
-                  onClick={() => {
-                    setEditingDate(item.installation_date || '');
-                    setEditDateDialogOpen(true);
-                  }}
-                  className="h-6 px-2.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 flex items-center justify-center transition-colors text-primary font-bold text-[10px]"
-                >
-                  تعديل التاريخ
-                </button>
-              </div>
-            )}
           </div>
 
-          {/* Design Face Selector */}
-          {taskDesigns.length > 0 && (
-            <div className="pt-2.5 border-t border-border/40 space-y-2" onClick={(e) => e.stopPropagation()}>
-              <label className="text-xs font-bold text-foreground flex items-center gap-1">
-                <Palette className="h-3.5 w-3.5 text-primary" />
-                التصميم المعتمد
-              </label>
-              <Select 
-                value={selectedDesignId} 
-                onValueChange={handleDesignChange}
-                disabled={saving}
+          <AnimatePresence initial={false}>
+            {isExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-3 pt-2.5 border-t border-border/40 overflow-hidden"
               >
-                <SelectTrigger className="h-8.5 text-xs bg-muted/40 border-border/50 rounded-xl focus:ring-1 focus:ring-primary">
-                  <SelectValue placeholder="-- اختر التصميم --" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-border/60 shadow-lg">
-                  <SelectItem value="none">-- بدون تصميم --</SelectItem>
-                  {taskDesigns.map((design) => (
-                    <SelectItem key={design.id} value={design.id}>{design.design_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Design Face Previews */}
-          {(() => {
-            const displayDesign = selectedDesign || (item.design_face_a || item.design_face_b ? {
-              design_name: 'التصميم المحفوظ',
-              design_face_a_url: item.design_face_a,
-              design_face_b_url: item.design_face_b
-            } : null);
-
-            if (!displayDesign) return null;
-
-            return (
-              <div className="grid grid-cols-2 gap-2 mt-2 p-2 bg-muted/20 border border-border/30 rounded-2xl" onClick={e => e.stopPropagation()}>
-                {displayDesign.design_face_a_url && (
-                  <div className="space-y-1">
-                    <div className="text-[9px] text-center text-muted-foreground font-bold">الوجه الأمامي</div>
-                    <div 
-                      className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
-                      onClick={() => setLightboxImage(displayDesign.design_face_a_url!)}
+                {/* Completion Date */}
+                {item.installation_date && (
+                  <div className="flex items-center justify-between text-xs p-2.5 bg-blue-500/5 dark:bg-blue-500/10 rounded-xl border border-blue-500/20 text-blue-700 dark:text-blue-400 shadow-sm" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center gap-1.5 font-bold">
+                      <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+                      <span>تاريخ التركيب المنفذ: {format(new Date(item.installation_date), "dd/MM/yyyy", { locale: ar })}</span>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setEditingDate(item.installation_date || '');
+                        setEditDateDialogOpen(true);
+                      }}
+                      className="h-6 px-2.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 flex items-center justify-center transition-colors text-primary font-bold text-[10px] cursor-pointer"
                     >
-                      <img src={displayDesign.design_face_a_url} alt="الوجه الأمامي" className="w-full h-full object-contain" />
+                      تعديل التاريخ
+                    </button>
+                  </div>
+                )}
+
+                {/* Design Face Selector */}
+                {taskDesigns.length > 0 && (
+                  <div className="pt-2.5 border-t border-border/40 space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <Palette className="h-3.5 w-3.5 text-primary" />
+                      التصميم المعتمد
+                    </label>
+                    <Select 
+                      value={selectedDesignId} 
+                      onValueChange={handleDesignChange}
+                      disabled={saving}
+                    >
+                      <SelectTrigger className="h-8.5 text-xs bg-muted/40 border-border/50 rounded-xl focus:ring-1 focus:ring-primary cursor-pointer">
+                        <SelectValue placeholder="-- اختر التصميم --" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/60 shadow-lg">
+                        <SelectItem value="none">-- بدون تصميم --</SelectItem>
+                        {taskDesigns.map((design) => (
+                          <SelectItem key={design.id} value={design.id} className="cursor-pointer">{design.design_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Design Face Preview (One Face Only) */}
+                {(() => {
+                  const displayDesign = selectedDesign || (item.design_face_a || item.design_face_b ? {
+                    design_name: 'التصميم المحفوظ',
+                    design_face_a_url: item.design_face_a,
+                    design_face_b_url: item.design_face_b
+                  } : null);
+
+                  if (!displayDesign) return null;
+                  const singleFaceUrl = displayDesign.design_face_a_url || displayDesign.design_face_b_url;
+                  if (!singleFaceUrl) return null;
+
+                  return (
+                    <div className="mt-2 p-2 bg-muted/20 border border-border/30 rounded-2xl" onClick={e => e.stopPropagation()}>
+                      <div className="space-y-1">
+                        <div className="text-[9px] text-center text-muted-foreground font-bold">التصميم المعتمد (معاينة الوجه)</div>
+                        <div 
+                          className="relative aspect-[16/10] max-h-[140px] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
+                          onClick={() => setLightboxImage(singleFaceUrl)}
+                        >
+                          <img src={singleFaceUrl} alt="تصميم اللوحة" className="w-full h-full object-contain" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Installed photos display */}
+                {(item.installed_image_face_a_url || item.installed_image_face_b_url) && (
+                  <div className="pt-2.5 border-t border-border/40 space-y-1.5" onClick={e => e.stopPropagation()}>
+                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <ImageIcon className="h-3.5 w-3.5 text-green-500" />
+                      إثبات صور التركيب المنفذ
+                    </span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {item.installed_image_face_a_url && (
+                        <div className="space-y-1">
+                          <div className="text-[9px] text-center text-muted-foreground font-bold">صورة الوجه الأمامي</div>
+                          <div 
+                            className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-sm"
+                            onClick={() => setLightboxImage(item.installed_image_face_a_url)}
+                          >
+                            <img src={item.installed_image_face_a_url} alt="إثبات أمامي" className="w-full h-full object-contain" />
+                          </div>
+                        </div>
+                      )}
+                      {item.installed_image_face_b_url && (
+                        <div className="space-y-1">
+                          <div className="text-[9px] text-center text-muted-foreground font-bold">صورة الوجه الخلفي</div>
+                          <div 
+                            className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-sm"
+                            onClick={() => setLightboxImage(item.installed_image_face_b_url)}
+                          >
+                            <img src={item.installed_image_face_b_url} alt="إثبات خلفي" className="w-full h-full object-contain" />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
-                {displayDesign.design_face_b_url && (
-                  <div className="space-y-1">
-                    <div className="text-[9px] text-center text-muted-foreground font-bold">الوجه الخلفي</div>
-                    <div 
-                      className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
-                      onClick={() => setLightboxImage(displayDesign.design_face_b_url!)}
-                    >
-                      <img src={displayDesign.design_face_b_url} alt="الوجه الخلفي" className="w-full h-full object-contain" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Installed photos display */}
-          {(item.installed_image_face_a_url || item.installed_image_face_b_url) && (
-            <div className="pt-2.5 border-t border-border/40 space-y-1.5" onClick={e => e.stopPropagation()}>
-              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <ImageIcon className="h-3.5 w-3.5 text-green-500" />
-                إثبات صور التركيب المنفذ
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {item.installed_image_face_a_url && (
-                  <div className="space-y-1">
-                    <div className="text-[9px] text-center text-muted-foreground font-bold">صورة الوجه الأمامي</div>
-                    <div 
-                      className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-sm"
-                      onClick={() => setLightboxImage(item.installed_image_face_a_url)}
-                    >
-                      <img src={item.installed_image_face_a_url} alt="إثبات أمامي" className="w-full h-full object-contain" />
-                    </div>
-                  </div>
-                )}
-                {item.installed_image_face_b_url && (
-                  <div className="space-y-1">
-                    <div className="text-[9px] text-center text-muted-foreground font-bold">صورة الوجه الخلفي</div>
-                    <div 
-                      className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-sm"
-                      onClick={() => setLightboxImage(item.installed_image_face_b_url)}
-                    >
-                      <img src={item.installed_image_face_b_url} alt="إثبات خلفي" className="w-full h-full object-contain" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            className="w-full mt-2.5 h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl transition-all cursor-pointer"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="h-4 w-4" />
+                <span>إخفاء التفاصيل</span>
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4" />
+                <span>تفاصيل اللوحة واللوكيشن</span>
+              </>
+            )}
+          </Button>
         </div>
 
         {/* Dialog تمديد الإيجار */}
@@ -1372,9 +1584,9 @@ export function BillboardTaskCard({
           {/* Badges Overlay */}
           <div className="absolute top-2.5 left-2.5 flex items-center gap-1 z-10">
             {isPrintActive && (
-              <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-blue-600/90 backdrop-blur-sm text-white border-0 shadow-sm flex items-center gap-0.5">
+              <Badge className="text-[9px] px-1.5 py-0.5 font-extrabold bg-blue-600/90 backdrop-blur-sm text-white border-0 shadow-sm flex items-center gap-1">
                 <Printer className="h-3 w-3" />
-                طباعة ✓
+                <span>طباعة</span>
               </Badge>
             )}
             {hasCutout && (
@@ -1392,12 +1604,6 @@ export function BillboardTaskCard({
             </div>
           )}
           
-          {/* ID Code overlay */}
-          <div className="absolute bottom-2.5 right-2.5 z-10">
-            <div className="bg-gradient-to-r from-primary to-accent backdrop-blur-md px-2.5 py-0.5 rounded-full shadow-md border border-white/10">
-              <span className="font-extrabold text-[10px] text-white">#{billboard?.ID}</span>
-            </div>
-          </div>
         </div>
 
         {/* Details and tags */}
@@ -1415,7 +1621,7 @@ export function BillboardTaskCard({
                   htmlFor={`select-pending-${item.id}`}
                   className="font-extrabold text-sm line-clamp-1 text-foreground leading-tight cursor-pointer flex-1"
                 >
-                  {billboard?.Billboard_Name || `لوحة #${billboard?.ID}`}
+                  {billboard?.Billboard_Name || 'لوحة إعلانية'}
                 </label>
               </div>
               
@@ -1424,11 +1630,34 @@ export function BillboardTaskCard({
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
                   قيد التركيب
                 </span>
-                {isPrintActive && (
-                  <Badge className="text-[9px] px-2 py-0.5 font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 flex items-center gap-1 rounded-full">
-                    تم تفعيل الطباعة ✓
+                {billboard?.Size && (
+                  <Badge variant="secondary" className="text-[9px] px-2 py-0.5 font-extrabold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/30 flex items-center gap-1 rounded-full">
+                    <Box className="h-3 w-3 text-blue-500" />
+                    <span>المقاس: {billboard.Size}</span>
                   </Badge>
                 )}
+                <Badge variant="secondary" className="text-[9px] px-2 py-0.5 font-extrabold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30 flex items-center gap-1 rounded-full">
+                  <Layers className="h-3 w-3 text-purple-500" />
+                  <span>
+                    الوجوه: {
+                      item.reinstalled_faces === 'both' ? 'وجهين (أمامي وخلفي)' :
+                      item.reinstalled_faces === 'face_a' ? 'وجه أمامي (1)' :
+                      item.reinstalled_faces === 'face_b' ? 'وجه خلفي (1)' :
+                      `${item.faces_to_install || facesCount || 1} وجه`
+                    }
+                  </span>
+                </Badge>
+                {isPrintActive && (
+                  <Badge className="text-[9px] px-2 py-0.5 font-bold bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 border border-blue-500/30 flex items-center gap-1 rounded-full">
+                    <span>تم تفعيل الطباعة</span>
+                  </Badge>
+                )}
+                <Badge className="text-[9px] px-2 py-0.5 font-extrabold bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 flex items-center gap-1 rounded-full">
+                  <DollarSign className="h-3 w-3" />
+                  <span>
+                    الزبون: {((item.reinstall_count || 0) > 0 ? (customerOriginalInstallCost + customerReinstallCost) : customerInstallationCost).toLocaleString('en-US')} د.ل ({item.pricing_type === 'meter' ? `بالمتر ${item.price_per_meter || 0} د.ل/م²` : 'بالقطعة'})
+                  </span>
+                </Badge>
                 {billboard?.friend_companies?.name && (
                   <div className="flex items-center gap-1 text-[9px] text-muted-foreground font-bold">
                     <Building2 className="h-3 w-3.5 shrink-0" />
@@ -1436,6 +1665,37 @@ export function BillboardTaskCard({
                   </div>
                 )}
               </div>
+
+              {/* Location Strip on Card Header */}
+              {(billboard?.Nearest_Landmark || billboard?.District || billboard?.Municipality || billboard?.City || billboard?.GPS_Link) && (
+                <div className="flex items-center justify-between gap-1.5 text-[11px] p-2 bg-muted/40 dark:bg-muted/15 rounded-xl border border-border/40 text-foreground font-bold flex-wrap mt-1">
+                  <div className="flex items-center gap-1.5 flex-wrap flex-1">
+                    <MapPin className="h-3.5 w-3.5 text-primary shrink-0" />
+                    {billboard?.Nearest_Landmark && (
+                      <span className="text-foreground font-extrabold">{billboard.Nearest_Landmark}</span>
+                    )}
+                    {billboard?.District && (
+                      <span className="text-muted-foreground">{billboard?.Nearest_Landmark ? '• ' : ''}{billboard.District}</span>
+                    )}
+                    {(billboard?.Municipality || billboard?.City) && (
+                      <span className="text-muted-foreground/80">• {billboard.Municipality || billboard.City}</span>
+                    )}
+                  </div>
+                  {billboard?.GPS_Link && (
+                    <a
+                      href={billboard.GPS_Link}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      onClick={(e) => e.stopPropagation()}
+                      className="inline-flex items-center gap-1 text-[10px] text-primary hover:text-white font-extrabold bg-primary/10 hover:bg-primary px-2.5 py-0.5 rounded-lg border border-primary/30 transition-all shrink-0 mr-auto"
+                      title="فتح اللوكيشن GPS"
+                    >
+                      <Navigation className="h-3 w-3" />
+                      <span>الموقع GPS</span>
+                    </a>
+                  )}
+                </div>
+              )}
 
               {/* Quick Actions Row */}
               <div className="flex items-center gap-1.5 pt-1.5 pb-2 border-b border-border/30" onClick={e => e.stopPropagation()}>
@@ -1565,200 +1825,181 @@ export function BillboardTaskCard({
               {item.replacement_status === 'replacement' && item.replaces_item_id && (
                 <div className="flex items-center gap-1 text-[9px] text-muted-foreground mt-1">
                   <ArrowLeftRight className="h-3 w-3" />
-                  <span>بديلة عن: لوحة #{allItems?.find(i => i.id === item.replaces_item_id)?.billboard_id || '...'}</span>
+                  <span>بديلة للوحة #{allItems?.find(i => i.id === item.replaces_item_id)?.billboard_id || '...'}</span>
                 </div>
               )}
-
-              {/* Actions row for replacements */}
-              <div className="flex items-center justify-between gap-1.5 pt-2 border-t border-border/20 mt-1">
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={(e) => { e.stopPropagation(); setEditReplacementOpen(true); }}
-                  className="h-7 text-[10px] gap-1 hover:bg-muted text-foreground/80 transition-colors"
-                >
-                  <Pencil className="h-3 w-3" />
-                  <span>تعديل البيانات</span>
-                </Button>
-                
-                {item.replacement_status === 'reinstalled' ? (
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await handleUndoReinstall();
-                    }}
-                    className="h-7 text-[10px] gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    <span>تراجع عن إعادة التركيب</span>
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    onClick={async (e) => {
-                      e.stopPropagation();
-                      await handleUndoReplacement();
-                    }}
-                    className="h-7 text-[10px] gap-1 text-destructive hover:bg-destructive/10 hover:text-destructive transition-colors cursor-pointer"
-                  >
-                    <RotateCcw className="h-3 w-3" />
-                    <span>تراجع عن الاستبدال</span>
-                  </Button>
-                )}
-              </div>
-            </div>
+              {/* فروع وإعادات التركيب - المرات */}
+              {renderReinstallBranches()}
+          </div>
           )}
 
-          {/* Location hub */}
-          {renderLocationHub()}
-
-          {/* Installation Date Picker inline row */}
-          <div
-            className="flex items-center justify-between text-xs p-2.5 bg-blue-500/5 rounded-xl border border-blue-500/20 text-blue-700 dark:text-blue-400 shadow-sm"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center gap-1.5 font-bold">
-              <CalendarIcon className="h-3.5 w-3.5 text-primary shrink-0" />
-              <span className={item.installation_date ? 'font-bold' : 'italic text-muted-foreground'}>
-                {item.installation_date
-                  ? format(new Date(item.installation_date), 'dd/MM/yyyy', { locale: ar })
-                  : 'تاريخ التركيب غير محدد'}
-              </span>
-            </div>
-            <button
-              onClick={() => {
-                setEditingDate(item.installation_date || '');
-                setEditDateDialogOpen(true);
-              }}
-              className="h-6 px-2.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 flex items-center justify-center transition-all text-primary font-extrabold text-[10px]"
-            >
-              تعديل التاريخ
-            </button>
-          </div>
-
-          {/* Design Face Select Dropdown */}
-          {taskDesigns.length > 0 && (
-            <div className="pt-2.5 border-t border-border/40 space-y-2" onClick={(e) => e.stopPropagation()}>
-              <label className="text-xs font-bold text-foreground flex items-center gap-1">
-                <Palette className="h-3.5 w-3.5 text-primary" />
-                تخصيص تصميم اللوحة
-              </label>
-              <Select 
-                value={selectedDesignId} 
-                onValueChange={handleDesignChange}
-                disabled={saving}
+          <AnimatePresence initial={false}>
+            {isExpanded && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+                className="space-y-3 pt-2.5 border-t border-border/40 overflow-hidden"
               >
-                <SelectTrigger className="h-8.5 text-xs bg-muted/40 border-border/50 rounded-xl focus:ring-1 focus:ring-primary">
-                  <SelectValue placeholder="-- اختر التصميم --" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl border-border/60 shadow-lg">
-                  <SelectItem value="none">-- بدون تصميم --</SelectItem>
-                  {taskDesigns.map((design) => (
-                    <SelectItem key={design.id} value={design.id}>{design.design_name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          {/* Active design face preview */}
-          {(() => {
-            const displayDesign = selectedDesign || (item.design_face_a || item.design_face_b ? {
-              design_name: 'التصميم المحفوظ',
-              design_face_a_url: item.design_face_a,
-              design_face_b_url: item.design_face_b
-            } : null);
-
-            if (!displayDesign) return null;
-
-            return (
-              <div className="grid grid-cols-2 gap-2 mt-2 p-2 bg-muted/20 border border-border/30 rounded-2xl" onClick={e => e.stopPropagation()}>
-                {displayDesign.design_face_a_url && (
-                  <div className="space-y-1">
-                    <div className="text-[9px] text-center text-muted-foreground font-bold">الوجه الأمامي</div>
-                    <div 
-                      className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
-                      onClick={() => setLightboxImage(displayDesign.design_face_a_url!)}
-                    >
-                      <img src={displayDesign.design_face_a_url} alt="أمامية" className="w-full h-full object-contain" />
-                    </div>
+                {/* Installation Date Picker inline row */}
+                <div
+                  className="flex items-center justify-between text-xs p-2.5 bg-blue-500/5 rounded-xl border border-blue-500/20 text-blue-700 dark:text-blue-400 shadow-sm"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <CalendarIcon className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <span className={item.installation_date ? 'font-bold' : 'italic text-muted-foreground'}>
+                      {item.installation_date
+                        ? format(new Date(item.installation_date), 'dd/MM/yyyy', { locale: ar })
+                        : 'تاريخ التركيب غير محدد'}
+                    </span>
                   </div>
-                )}
-                {displayDesign.design_face_b_url && (
-                  <div className="space-y-1">
-                    <div className="text-[9px] text-center text-muted-foreground font-bold">الوجه الخلفي</div>
-                    <div 
-                      className="relative aspect-[16/10] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
-                      onClick={() => setLightboxImage(displayDesign.design_face_b_url!)}
-                    >
-                      <img src={displayDesign.design_face_b_url} alt="خلفية" className="w-full h-full object-contain" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            );
-          })()}
-
-          {/* Faces to install selection */}
-          {billboard?.Faces_Count > 1 && (
-            <div className="pt-2 border-t border-border/40 space-y-1.5" onClick={(e) => e.stopPropagation()}>
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">الوجه المطلوب تركيبه</span>
-                {onApplyFacesToAll && (
                   <button
-                    onClick={() => onApplyFacesToAll(facesToInstall)}
-                    className="text-[9px] text-primary hover:underline font-bold flex items-center gap-0.5"
+                    onClick={() => {
+                      setEditingDate(item.installation_date || '');
+                      setEditDateDialogOpen(true);
+                    }}
+                    className="h-6 px-2.5 rounded-lg bg-blue-500/10 hover:bg-blue-500/20 flex items-center justify-center transition-all text-primary font-extrabold text-[10px] cursor-pointer"
                   >
-                    <Link2 className="h-3 w-3" />
-                    تعميم الخيار للكل
+                    تعديل التاريخ
                   </button>
+                </div>
+
+                {/* Design Face Select Dropdown */}
+                {taskDesigns.length > 0 && (
+                  <div className="pt-2.5 border-t border-border/40 space-y-2" onClick={(e) => e.stopPropagation()}>
+                    <label className="text-xs font-bold text-foreground flex items-center gap-1">
+                      <Palette className="h-3.5 w-3.5 text-primary" />
+                      تخصيص تصميم اللوحة
+                    </label>
+                    <Select 
+                      value={selectedDesignId} 
+                      onValueChange={handleDesignChange}
+                      disabled={saving}
+                    >
+                      <SelectTrigger className="h-8.5 text-xs bg-muted/40 border-border/50 rounded-xl focus:ring-1 focus:ring-primary cursor-pointer">
+                        <SelectValue placeholder="-- اختر التصميم --" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border-border/60 shadow-lg">
+                        <SelectItem value="none">-- بدون تصميم --</SelectItem>
+                        {taskDesigns.map((design) => (
+                          <SelectItem key={design.id} value={design.id} className="cursor-pointer">{design.design_name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => handleFacesChange(1)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                    facesToInstall === 1
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
-                  }`}
-                >
-                  الوجه الأمامي فقط
-                </button>
-                <button
-                  onClick={() => handleFacesChange(2)}
-                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                    facesToInstall === 2
-                      ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                      : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
-                  }`}
-                >
-                  الوجهين بالكامل
-                </button>
-              </div>
-            </div>
-          )}
 
-          {/* Cutout toggle button */}
-          <div className="pt-2 border-t border-border/40 flex items-center justify-between flex-wrap gap-2" onClick={e => e.stopPropagation()}>
-            <button
-              onClick={() => handleCutoutChange(!hasCutout)}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all ${
-                hasCutout 
-                  ? 'bg-accent/15 text-accent border-accent/40 shadow-sm' 
-                  : 'bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/60'
-              }`}
-            >
-              <Box className="h-4 w-4" />
-              {hasCutout ? 'يحتوي مجسم ✓' : 'إضافة مجسم'}
-            </button>
-          </div>
+                {/* Active design face preview (One Face Only) */}
+                {(() => {
+                  const displayDesign = selectedDesign || (item.design_face_a || item.design_face_b ? {
+                    design_name: 'التصميم المحفوظ',
+                    design_face_a_url: item.design_face_a,
+                    design_face_b_url: item.design_face_b
+                  } : null);
 
-          {/* Pricing hub calculator display */}
-          {renderFinancialCalculator()}
+                  if (!displayDesign) return null;
+                  const singleFaceUrl = displayDesign.design_face_a_url || displayDesign.design_face_b_url;
+                  if (!singleFaceUrl) return null;
+
+                  return (
+                    <div className="mt-2 p-2 bg-muted/20 border border-border/30 rounded-2xl" onClick={e => e.stopPropagation()}>
+                      <div className="space-y-1">
+                        <div className="text-[9px] text-center text-muted-foreground font-bold">التصميم المعتمد (معاينة الوجه)</div>
+                        <div 
+                          className="relative aspect-[16/10] max-h-[140px] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
+                          onClick={() => setLightboxImage(singleFaceUrl)}
+                        >
+                          <img src={singleFaceUrl} alt="تصميم اللوحة" className="w-full h-full object-contain" />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Faces to install selection */}
+                {billboard?.Faces_Count > 1 && (
+                  <div className="pt-2 border-t border-border/40 space-y-1.5" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">الوجه المطلوب تركيبه</span>
+                      {onApplyFacesToAll && (
+                        <button
+                          onClick={() => onApplyFacesToAll(facesToInstall)}
+                          className="text-[9px] text-primary hover:underline font-bold flex items-center gap-0.5"
+                        >
+                          <Link2 className="h-3 w-3" />
+                          تعميم الخيار للكل
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleFacesChange(1)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          facesToInstall === 1
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
+                        }`}
+                      >
+                        الوجه الأمامي فقط
+                      </button>
+                      <button
+                        onClick={() => handleFacesChange(2)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
+                          facesToInstall === 2
+                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                            : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
+                        }`}
+                      >
+                        الوجهين بالكامل
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Cutout toggle button */}
+                <div className="pt-2 border-t border-border/40 flex items-center justify-between flex-wrap gap-2" onClick={e => e.stopPropagation()}>
+                  <button
+                    onClick={() => handleCutoutChange(!hasCutout)}
+                    className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                      hasCutout 
+                        ? 'bg-accent/15 text-accent border-accent/40 shadow-sm' 
+                        : 'bg-muted/40 text-muted-foreground border-border/60 hover:bg-muted/60'
+                    }`}
+                  >
+                    <Box className="h-4 w-4" />
+                    {hasCutout ? 'يحتوي مجسم' : 'إضافة مجسم'}
+                  </button>
+                </div>
+
+                {/* Pricing hub calculator display */}
+                {renderFinancialCalculator()}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsExpanded(!isExpanded);
+            }}
+            className="w-full mt-2.5 h-8 gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-xl transition-all cursor-pointer"
+          >
+            {isExpanded ? (
+              <>
+                <ChevronUp className="h-4 w-4" />
+                <span>إخفاء التفاصيل</span>
+              </>
+            ) : (
+              <>
+                <ChevronDown className="h-4 w-4" />
+                <span>تفاصيل اللوحة واللوكيشن</span>
+              </>
+            )}
+          </Button>
         </div>
 
       </div>

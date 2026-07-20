@@ -109,7 +109,7 @@ export function PrintTaskPrintDialog({
     // ✅ جلب إعدادات القالب المحفوظة (async)
     const styles = await getMergedInvoiceStylesAsync('print_task');
     const baseUrl = window.location.origin;
-    const logoUrl = styles.logoPath || '/logofares.svg';
+    const logoUrl = styles.logoPath || '/logofaresgold.svg';
     const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
     const printTaskMetaHtml = `<strong>التاريخ:</strong> ${formatDateForPrint(new Date().toISOString(), styles.showHijriDate)}<br/><strong>رقم العقد:</strong> ${task.contract_id || 'غير محدد'}`;

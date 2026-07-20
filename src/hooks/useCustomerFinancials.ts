@@ -26,6 +26,8 @@ export interface CustomerFinancialData {
   totalPurchases: number;
   // إجمالي إيجارات الأصدقاء المتاحة
   totalFriendRentals: number;
+  // الرصيد غير الموزع
+  unallocatedBalance: number;
   // حالة التحميل
   isLoading: boolean;
   // خطأ
@@ -350,6 +352,18 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
       ? Math.round(((totalPaid + totalDiscounts + totalPurchases) / totalDebt) * 100) 
       : 100;
 
+    // حساب الرصيد غير الموزع
+    const unallocatedBalance = payments.reduce((sum, p) => {
+      const isUnallocated = 
+        (p.entry_type === 'payment' || p.entry_type === 'receipt' || p.entry_type === 'account_payment') &&
+        !p.contract_number &&
+        !p.sales_invoice_id &&
+        !p.printed_invoice_id &&
+        !p.purchase_invoice_id &&
+        !p.composite_task_id;
+      return isUnallocated ? sum + (Number(p.amount) || 0) : sum;
+    }, 0);
+
     return {
       totalDebt,
       totalPaid,
@@ -358,6 +372,7 @@ export function useCustomerFinancials(customerId: string | null): CustomerFinanc
       totalDiscounts,
       totalPurchases,
       totalFriendRentals: friendRentals,
+      unallocatedBalance,
       debtBreakdown: {
         contracts: totalContracts,
         salesInvoices: totalSalesInvoices,
@@ -458,6 +473,18 @@ export function calculateCustomerFinancials(
     ? Math.round(((totalPaid + totalDiscounts + totalPurchases) / totalDebt) * 100) 
     : 100;
 
+  // حساب الرصيد غير الموزع
+  const unallocatedBalance = payments.reduce((sum, p) => {
+    const isUnallocated = 
+      (p.entry_type === 'payment' || p.entry_type === 'receipt' || p.entry_type === 'account_payment') &&
+      !p.contract_number &&
+      !p.sales_invoice_id &&
+      !p.printed_invoice_id &&
+      !p.purchase_invoice_id &&
+      !p.composite_task_id;
+    return isUnallocated ? sum + (Number(p.amount) || 0) : sum;
+  }, 0);
+
   return {
     totalDebt,
     totalPaid,
@@ -466,6 +493,7 @@ export function calculateCustomerFinancials(
     totalDiscounts,
     totalPurchases,
     totalFriendRentals: friendRentals,
+    unallocatedBalance,
     debtBreakdown: {
       contracts: totalContracts,
       salesInvoices: totalSalesInvoices,

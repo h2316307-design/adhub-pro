@@ -2,7 +2,7 @@
  * UnifiedReceiptPrint - طباعة إيصال موحد
  * 
  * ✅ نفس تصميم كشف الحساب (BLACK/GRAY formal theme)
- * ✅ Logo: /logofares.svg (101px)
+ * ✅ Logo: /logofaresgold.svg (101px)
  * ✅ Compact A4-friendly layout
  * ✅ جدول العقود الموزعة
  */

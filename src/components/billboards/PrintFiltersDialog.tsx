@@ -124,7 +124,7 @@ export const PrintFiltersDialog: React.FC<PrintFiltersDialogProps> = ({
             .map((pageRows) => `
               <div class="template-container page">
                 <img src="/mt1.svg" alt="خلفية جدول اللوحات" class="template-image" onerror="console.warn('Failed to load mt1.svg')" />
-                ${withLogo ? `<img src="/logofares.svg" alt="شعار" class="logo" />` : ''}
+                ${withLogo ? `<img src="/logofaresgold.svg" alt="شعار" class="logo" />` : ''}
                 <div class="table-area">
                   <table class="btable" dir="rtl">
                     <colgroup>

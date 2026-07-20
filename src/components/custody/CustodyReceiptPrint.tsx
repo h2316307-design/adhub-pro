@@ -56,7 +56,7 @@ export function CustodyReceiptPrint({ account }: CustodyReceiptPrintProps) {
 
 async function generateReceiptHTML(account: CustodyAccount, baseUrl: string): Promise<string> {
   const styles = await getMergedInvoiceStylesAsync('custody');
-  const logoUrl = styles.logoPath || '/logofares.svg';
+  const logoUrl = styles.logoPath || '/logofaresgold.svg';
   const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
   const date = formatDateForPrint(account.assigned_date, styles.showHijriDate);

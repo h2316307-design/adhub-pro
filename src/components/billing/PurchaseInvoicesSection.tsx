@@ -3,7 +3,7 @@ import { formatAmount } from '@/lib/formatUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Printer, DollarSign, Trash2, Edit, ArrowRightLeft } from 'lucide-react';
+import { Printer, DollarSign, Trash2, Edit, ArrowRightLeft, Coins, Wallet } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { PurchaseInvoicePaymentDialog } from './PurchaseInvoicePaymentDialog';
 import { PurchaseInvoiceEditDialog } from './PurchaseInvoiceEditDialog';
@@ -124,6 +124,20 @@ export function PurchaseInvoicesSection({
     if (!invoiceToDelete) return;
 
     try {
+      // 1. إلغاء ربط دفعات المقايضة المرتبطة بهذه الفاتورة
+      await supabase
+        .from('customer_payments')
+        .update({ purchase_invoice_id: null })
+        .eq('purchase_invoice_id', invoiceToDelete.id);
+
+      // 2. حذف حركة فاتورة المشتريات (السالبة) من جدول customer_payments
+      await supabase
+        .from('customer_payments')
+        .delete()
+        .eq('entry_type', 'purchase_invoice')
+        .or(`purchase_invoice_id.eq.${invoiceToDelete.id},notes.like.%${invoiceToDelete.invoice_number}%`);
+
+      // 3. حذف فاتورة المشتريات نفسها
       const { error } = await supabase
         .from('purchase_invoices')
         .delete()
@@ -146,8 +160,53 @@ export function PurchaseInvoicesSection({
     return null;
   }
 
+  const totalAmount = invoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0);
+  const totalPaid = invoices.reduce((sum, inv) => sum + (Number(inv.paid_amount || 0) + Number(inv.used_as_payment || 0)), 0);
+  const totalRemaining = Math.max(0, totalAmount - totalPaid);
+
   return (
     <>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5 select-none">
+        {/* Total Card */}
+        <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-amber-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+          <div className="space-y-1 text-right">
+            <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المبلغ</span>
+            <p className="text-base sm:text-lg lg:text-xl font-black text-white">
+              {totalAmount.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+            </p>
+          </div>
+          <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform shrink-0">
+            <DollarSign className="h-4.5 w-4.5" />
+          </div>
+        </div>
+
+        {/* Paid Card */}
+        <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-green-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+          <div className="space-y-1 text-right">
+            <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المدفوع</span>
+            <p className="text-base sm:text-lg lg:text-xl font-black text-green-400">
+              {totalPaid.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+            </p>
+          </div>
+          <div className="p-2.5 rounded-xl bg-green-500/10 text-green-400 group-hover:scale-110 transition-transform shrink-0">
+            <Coins className="h-4.5 w-4.5" />
+          </div>
+        </div>
+
+        {/* Remaining Card */}
+        <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-rose-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+          <div className="space-y-1 text-right">
+            <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">المبلغ المتبقي</span>
+            <p className="text-base sm:text-lg lg:text-xl font-black text-rose-400">
+              {totalRemaining.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+            </p>
+          </div>
+          <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform shrink-0">
+            <Wallet className="h-4.5 w-4.5" />
+          </div>
+        </div>
+      </div>
+
       <div className="space-y-3">
         {invoices.map((invoice) => {
           const paidAmount = Number(invoice.paid_amount || 0);

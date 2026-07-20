@@ -542,7 +542,7 @@ export default function Customers() {
     const primary = styles.primaryColor || '#D4AF37';
     const secondary = styles.secondaryColor || '#B8860B';
     const baseUrl = window.location.origin;
-    const logoUrl = styles.logoPath || '/logofares.svg';
+    const logoUrl = styles.logoPath || '/logofaresgold.svg';
     const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
     const { unifiedHeaderFooterCss, unifiedHeaderHtml, unifiedFooterHtml } = await import('@/lib/unifiedInvoiceBase');

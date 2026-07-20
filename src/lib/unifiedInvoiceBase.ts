@@ -129,8 +129,8 @@ export async function resolveInvoiceStyles(
   const s = await fetchPrintSettingsForInvoice(invoiceType) || {};
   const fontBaseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
-  const primaryColor = s.primaryColor || '#D4AF37';
-  const secondaryColor = s.secondaryColor || '#1a1a2e';
+  const primaryColor = s.primaryColor || '#000000';
+  const secondaryColor = s.secondaryColor || '#333333';
   const logoPath = s.logoPath || '/logofares.svg';
   const fullLogoUrl = logoPath.startsWith('http') ? logoPath : `${fontBaseUrl}${logoPath}`;
 
@@ -336,6 +336,7 @@ export function generateBaseCSS(t: ResolvedPrintStyles): string {
 
     .company-name {
       font-weight: bold; font-size: ${t.headerFontSize + 1}px; color: ${t.primaryColor}; margin-bottom: 2px;
+      font-family: 'Doran', 'Noto Sans Arabic', 'Cairo', 'Tajawal', sans-serif;
     }
     .company-subtitle {
       font-size: 10px; color: ${t.secondaryColor}; opacity: 0.85;
@@ -365,6 +366,7 @@ export function generateBaseCSS(t: ResolvedPrintStyles): string {
     .invoice-title-ar {
       font-size: ${t.invoiceTitleArFontSize + 4}px; font-weight: bold; color: ${t.primaryColor};
       margin-bottom: 6px;
+      font-family: 'Doran', 'Noto Sans Arabic', 'Cairo', 'Tajawal', sans-serif;
     }
 
     .invoice-title-en {
@@ -392,6 +394,8 @@ export function generateBaseCSS(t: ResolvedPrintStyles): string {
 
     .customer-name-text {
       font-size: ${t.customerNameFontSize}px; font-weight: bold; color: ${t.customerTitle};
+      font-family: 'Doran', 'Noto Sans Arabic', 'Cairo', 'Tajawal', sans-serif;
+      margin-bottom: 8px;
     }
 
     .customer-detail {

@@ -191,6 +191,37 @@ export function PurchaseInvoiceEditDialog({
 
       if (itemsError) throw itemsError;
 
+      // تحديث حركة الدفع المرتبطة بالفاتورة في جدول customer_payments
+      const { data: existingPayments, error: searchError } = await supabase
+        .from('customer_payments')
+        .select('id')
+        .eq('entry_type', 'purchase_invoice')
+        .or(`purchase_invoice_id.eq.${invoice.id},notes.like.%${invoice.invoice_number}%`);
+
+      if (!searchError && existingPayments && existingPayments.length > 0) {
+        await supabase
+          .from('customer_payments')
+          .update({
+            amount: -totalAmount,
+            notes: `فاتورة مشتريات ${invoice.invoice_number}` + (notes ? ` - ${notes}` : ''),
+            purchase_invoice_id: invoice.id
+          })
+          .eq('id', existingPayments[0].id);
+      } else {
+        // إذا لم توجد، نقوم بإنشائها
+        await supabase
+          .from('customer_payments')
+          .insert({
+            customer_id: invoice.customer_id,
+            amount: -totalAmount,
+            method: 'نقدي',
+            paid_at: invoiceDate || invoice.invoice_date,
+            notes: `فاتورة مشتريات ${invoice.invoice_number}` + (notes ? ` - ${notes}` : ''),
+            entry_type: 'purchase_invoice',
+            purchase_invoice_id: invoice.id
+          });
+      }
+
       toast.success('تم تحديث فاتورة المشتريات بنجاح');
 
       if (shouldPrint) {

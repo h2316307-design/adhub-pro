@@ -1,6 +1,6 @@
 // @ts-nocheck
 // @ts-nocheck
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -151,6 +151,7 @@ export default function ModernPrintInvoiceDialog({
   const [showNotes, setShowNotes] = useState(true); // ✅ إظهار/إخفاء الملاحظات
   const [includedInContract, setIncludedInContract] = useState(false); // ✅ مضمنة في العقد
   const [isReinstallation, setIsReinstallation] = useState(false); // ✅ علامة إعادة التركيب
+  const isInitialLoadRef = useRef(true);
 
   const [localPrintItems, setLocalPrintItems] = useState<PrintItem[]>([]);
   const [sizeOrderMap, setSizeOrderMap] = useState<{ [key: string]: number }>({});
@@ -159,6 +160,8 @@ export default function ModernPrintInvoiceDialog({
   const [customDesc, setCustomDesc] = useState('');
   const [customQty, setCustomQty] = useState<number>(1);
   const [customPrice, setCustomPrice] = useState<number>(0);
+
+  const [customerCompany, setCustomerCompany] = useState('');
 
   // ✅ استخدام Print Engine الموحد للطباعة (بنفس تصميم فاتورة المقاسات)
   const { print: printWithEngine, isPrinting: isEnginePrinting, isLoading: isThemeLoading } = usePrintInvoicePrint();
@@ -244,8 +247,32 @@ export default function ModernPrintInvoiceDialog({
     return Math.max(0, finalTotal);
   }, [moneySubtotal, discountAmount, accountDeduction]);
 
+  // ✅ جلب بيانات الشركة للعميل عند تغير المعرف
+  useEffect(() => {
+    const fetchCustomerCompany = async () => {
+      if (!customerId) {
+        setCustomerCompany('');
+        return;
+      }
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('company')
+          .eq('id', customerId)
+          .single();
+        if (!error && data) {
+          setCustomerCompany(data.company || '');
+        }
+      } catch (err) {
+        console.error('Error fetching customer company:', err);
+      }
+    };
+    fetchCustomerCompany();
+  }, [customerId]);
+
   useEffect(() => {
     if (open) {
+      isInitialLoadRef.current = true;
       // If an initial invoice is provided (editing a saved invoice), populate fields from it
       if (initialInvoice) {
         try {
@@ -335,8 +362,13 @@ export default function ModernPrintInvoiceDialog({
 
           // If contract_numbers provided, set selected contracts via callback
           if (inv.contract_numbers && onSelectContracts) {
-            if (Array.isArray(inv.contract_numbers)) onSelectContracts(inv.contract_numbers.map(String));
-            else if (typeof inv.contract_numbers === 'string') onSelectContracts(inv.contract_numbers.split(',').map((s: string) => s.trim()));
+            let parsedContracts: string[] = [];
+            if (Array.isArray(inv.contract_numbers)) {
+              parsedContracts = inv.contract_numbers.map(String);
+            } else if (typeof inv.contract_numbers === 'string') {
+              parsedContracts = inv.contract_numbers.split(',').map((s: string) => s.trim());
+            }
+            onSelectContracts(Array.from(new Set(parsedContracts)));
           }
 
           // open preview tab if requested
@@ -373,7 +405,7 @@ export default function ModernPrintInvoiceDialog({
 
     try {
       const selectedContractData = contracts.filter(contract =>
-        contractNumbers.includes(contract.Contract_Number)
+        contractNumbers.map(String).includes(String(contract.Contract_Number))
       );
 
       let allBillboards: any[] = [];
@@ -491,18 +523,23 @@ export default function ModernPrintInvoiceDialog({
   };
 
   useEffect(() => {
-    // If we're editing an existing saved invoice (initialInvoice), do not override its items
-    if (open && Object.keys(sizeDimensionsMap).length > 0 && !initialInvoice) {
-      getBillboardsFromContracts(selectedContracts);
+    // If we're editing an existing saved invoice (initialInvoice), do not override its items on initial load
+    if (open && Object.keys(sizeDimensionsMap).length > 0) {
+      if (!initialInvoice || !isInitialLoadRef.current) {
+        getBillboardsFromContracts(selectedContracts);
+      }
     }
   }, [selectedContracts, open, contracts, sizeDimensionsMap, initialInvoice]);
 
   const handleContractToggle = (contractNumber: string) => {
-    const isSelected = selectedContracts.includes(contractNumber);
+    isInitialLoadRef.current = false; // Mark as user manually changed selection
+    const numStr = String(contractNumber);
+    const uniqueContracts = Array.from(new Set(selectedContracts.map(String)));
+    const isSelected = uniqueContracts.includes(numStr);
     if (isSelected) {
-      onSelectContracts(selectedContracts.filter(c => c !== contractNumber));
+      onSelectContracts(uniqueContracts.filter(c => c !== numStr));
     } else {
-      onSelectContracts([...selectedContracts, contractNumber]);
+      onSelectContracts([...uniqueContracts, numStr]);
     }
   };
 
@@ -510,7 +547,26 @@ export default function ModernPrintInvoiceDialog({
     if ((event.target as HTMLElement).closest('input[type="checkbox"]')) {
       return;
     }
-    handleContractToggle(contractNumber);
+    handleContractToggle(String(contractNumber));
+  };
+
+  // ✅ دالة تطبيق سعر المتر على الكل
+  const applyPricePerMeterToAll = (price: number) => {
+    if (isNaN(price) || price <= 0) {
+      toast.error('يرجى إدخال سعر متر صالح');
+      return;
+    }
+    const updated = localPrintItems.map(item => {
+      // Recalculate totalPrice: width * height * totalFaces * pricePerMeter
+      const calculatedPrice = item.width * item.height * item.totalFaces * price;
+      return {
+        ...item,
+        pricePerMeter: price,
+        totalPrice: calculatedPrice
+      };
+    });
+    setLocalPrintItems(updated);
+    toast.success(`تم تطبيق سعر المتر (${price} د.ل) على جميع البنود`);
   };
 
   // ✅ دالة تحديث العناصر مع الحساب الصحيح
@@ -620,6 +676,7 @@ export default function ModernPrintInvoiceDialog({
         invoiceNumber: invoiceNumber,
         invoiceDate: invoiceDate,
         customerName: customerName,
+        customerCompany: customerCompany || undefined,
         customerId: customerId || undefined,
         customerPhone: customerPhone,
         contractNumbers: selectedContracts,
@@ -655,6 +712,17 @@ export default function ModernPrintInvoiceDialog({
       toast.error(`حدث خطأ أثناء تحضير الفاتورة للطباعة: ${errorMessage}`);
     }
   };
+
+  // ✅ Auto-print and auto-close when dialog is opened with autoPrint=true
+  useEffect(() => {
+    if (open && autoPrint && localPrintItems.length > 0) {
+      const timer = setTimeout(() => {
+        handlePrint(autoPrintForPrinter || false);
+        onClose();
+      }, 600);
+      return () => clearTimeout(timer);
+    }
+  }, [open, autoPrint, localPrintItems]);
 
   const handleSave = async () => {
     if (localPrintItems.length === 0) {
@@ -1022,51 +1090,62 @@ export default function ModernPrintInvoiceDialog({
   );
 
   if (!open) return null;
+  if (autoPrint || autoPrintForPrinter) return null;
 
   return (
-    <div className="fixed inset-0 z-[1000] bg-background/80 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4">
+    <div className="fixed inset-0 z-[1000] bg-[#000000]/60 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-200">
       <div
-        className="bg-background border border-border/80 rounded-xl shadow-2xl w-full max-w-5xl h-[92vh] max-h-[92vh] flex flex-col overflow-hidden transition-all duration-300"
+        className="bg-background/95 dark:bg-[#15110a]/95 backdrop-blur-xl border border-primary/20 dark:border-[#d6ac40]/30 rounded-2xl shadow-2xl shadow-primary/5 w-full max-w-5xl h-[90vh] max-h-[90vh] flex flex-col overflow-hidden transition-all duration-300 relative"
         dir="rtl"
       >
         {/* Header */}
-        <div className="border-b border-border/80 pb-4 px-6 pt-4 flex-shrink-0">
+        <div className="bg-gradient-to-r from-primary/10 to-transparent border-b border-primary/20 dark:border-[#d6ac40]/20 pb-4 px-6 pt-4 flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="flex items-center gap-3 text-xl font-bold text-primary">
-              <Receipt className="h-6 w-6 text-primary" />
-              <span>فاتورة طباعة عصرية</span>
+            <h2 className="flex items-center gap-3 text-xl font-bold text-foreground">
+              <Receipt className="h-6 w-6 text-primary dark:text-[#d6ac40]" />
+              <span className="bg-clip-text bg-gradient-to-r from-primary via-[#f4c25a] to-[#b8860b] dark:from-[#d6ac40] dark:to-[#f4c25a]">فاتورة طباعة عصرية</span>
             </h2>
             <Button
               variant="ghost"
               size="sm"
               onClick={onClose}
-              className="h-8 w-8 p-0 hover:bg-accent/50 rounded-full cursor-pointer"
+              className="h-8 w-8 p-0 hover:bg-primary/10 rounded-full cursor-pointer transition-colors"
             >
-              <X className="h-5 w-5" />
+              <X className="h-5 w-5 text-foreground" />
             </Button>
           </div>
 
-          {/* Tabs */}
-          <div className="flex gap-3 mt-4">
-            <Button
-              variant={activeTab === 'setup' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTab('setup')}
-              className="text-sm px-4 py-2 gap-2 cursor-pointer transition-colors"
-            >
-              <Settings className="h-4 w-4" />
-              <span>الإعداد</span>
-            </Button>
-            <Button
-              variant={activeTab === 'preview' ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => setActiveTab('preview')}
-              className="text-sm px-4 py-2 gap-2 cursor-pointer transition-colors"
-            >
-              <Eye className="h-4 w-4" />
-              <span>معاينة</span>
-            </Button>
-          </div>
+          {/* Tabs (hidden in preview mode) */}
+          {!openToPreview && (
+            <div className="flex gap-2 mt-4 bg-muted/20 p-1 rounded-lg w-fit">
+              <Button
+                variant={activeTab === 'setup' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('setup')}
+                className={`text-xs px-4 py-1.5 gap-2 cursor-pointer transition-all duration-200 rounded-md ${
+                  activeTab === 'setup' 
+                    ? 'bg-primary dark:bg-[#d6ac40] text-primary-foreground font-bold shadow-md shadow-primary/10' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-primary/5'
+                }`}
+              >
+                <Settings className="h-3.5 w-3.5" />
+                <span>إعداد البيانات</span>
+              </Button>
+              <Button
+                variant={activeTab === 'preview' ? 'default' : 'ghost'}
+                size="sm"
+                onClick={() => setActiveTab('preview')}
+                className={`text-xs px-4 py-1.5 gap-2 cursor-pointer transition-all duration-200 rounded-md ${
+                  activeTab === 'preview' 
+                    ? 'bg-primary dark:bg-[#d6ac40] text-primary-foreground font-bold shadow-md shadow-primary/10' 
+                    : 'text-muted-foreground hover:text-foreground hover:bg-primary/5'
+                }`}
+              >
+                <Eye className="h-3.5 w-3.5" />
+                <span>المعاينة المباشرة</span>
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Content */}
@@ -1076,9 +1155,9 @@ export default function ModernPrintInvoiceDialog({
               {/* Left Panel - Configuration */}
               <div className="lg:col-span-5 space-y-6">
                 {/* Invoice Settings */}
-                <Card className="expenses-preview-card">
+                <Card className="border border-primary/20 dark:border-[#d6ac40]/20 bg-background/50 dark:bg-card/30 backdrop-blur-sm shadow-md rounded-xl transition-all duration-200 hover:border-primary/30 dark:hover:border-[#d6ac40]/30">
                   <CardHeader className="pb-4">
-                    <CardTitle className="expenses-preview-label flex items-center gap-3 text-lg">
+                    <CardTitle className="expenses-preview-label flex items-center gap-3 text-lg text-primary dark:text-[#d6ac40]">
                       <FileText className="h-5 w-5" />
                       إعدادات الفاتورة
                     </CardTitle>
@@ -1111,7 +1190,7 @@ export default function ModernPrintInvoiceDialog({
                       <select
                         value={currency.code}
                         onChange={(e) => setCurrency(CURRENCIES.find(c => c.code === e.target.value) || CURRENCIES[0])}
-                        className="w-full p-3 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm"
+                        className="w-full px-3 py-1.5 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         {CURRENCIES.map(curr => (
                           <option key={curr.code} value={curr.code}>
@@ -1126,7 +1205,7 @@ export default function ModernPrintInvoiceDialog({
                       <select
                         value={localPaymentMethod}
                         onChange={(e) => setLocalPaymentMethod(e.target.value)}
-                        className="w-full p-3 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm"
+                        className="w-full px-3 py-1.5 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="نقدي">نقدي</option>
                         <option value="بنكي">بنكي</option>
@@ -1141,7 +1220,7 @@ export default function ModernPrintInvoiceDialog({
                       <select
                         value={invoiceType}
                         onChange={(e) => setInvoiceType(e.target.value as any)}
-                        className="w-full p-3 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm"
+                        className="w-full px-3 py-1.5 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="print_only">طباعة فقط</option>
                         <option value="print_install">طباعة وتركيب</option>
@@ -1154,7 +1233,7 @@ export default function ModernPrintInvoiceDialog({
                       <select
                         value={selectedPrinterId}
                         onChange={(e) => setSelectedPrinterId(e.target.value)}
-                        className="w-full p-3 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm"
+                        className="w-full px-3 py-1.5 h-10 border border-border rounded-md text-right bg-input text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                       >
                         <option value="">اختر المطبعة...</option>
                         {printers.map((printer) => (
@@ -1209,46 +1288,46 @@ export default function ModernPrintInvoiceDialog({
                 </Card>
 
                 {/* Contract Selection */}
-                <Card className="expenses-preview-card">
+                <Card className="border border-primary/20 dark:border-[#d6ac40]/20 bg-background/50 dark:bg-card/30 backdrop-blur-sm shadow-md rounded-xl transition-all duration-200 hover:border-primary/30 dark:hover:border-[#d6ac40]/30">
                   <CardHeader className="pb-4">
-                    <CardTitle className="expenses-preview-label text-lg">اختيار العقود</CardTitle>
+                    <CardTitle className="expenses-preview-label text-lg text-primary dark:text-[#d6ac40] font-semibold">اختيار العقود</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3 max-h-60 overflow-y-auto">
+                    <div className="space-y-3 max-h-60 overflow-y-auto custom-scrollbar">
                       {contracts.map((contract) => (
                         <div
                           key={contract.Contract_Number}
-                          className="flex items-center space-x-3 space-x-reverse p-3 border border-border rounded-lg hover:bg-card/50 cursor-pointer transition-colors"
+                          className="flex items-center space-x-3 space-x-reverse p-3 border border-border rounded-lg hover:bg-primary/5 dark:hover:bg-[#d6ac40]/5 cursor-pointer transition-all duration-150"
                           onClick={(e) => handleRowClick(contract.Contract_Number, e)}
                         >
                           <Checkbox
-                            checked={selectedContracts.includes(contract.Contract_Number)}
-                            onCheckedChange={() => handleContractToggle(contract.Contract_Number)}
+                            checked={selectedContracts.map(String).includes(String(contract.Contract_Number))}
+                            onCheckedChange={() => handleContractToggle(String(contract.Contract_Number))}
                             className="w-4 h-4"
                             onClick={(e) => e.stopPropagation()}
                           />
                           <div className="flex-1">
-                            <div className="expenses-contract-number text-sm">رقم العقد {contract.Contract_Number}</div>
-                            <div className="expenses-preview-text text-xs">{contract['Ad Type']}</div>
+                            <div className="expenses-contract-number text-sm font-semibold">رقم العقد {contract.Contract_Number}</div>
+                            <div className="expenses-preview-text text-xs text-muted-foreground">{contract['Ad Type']}</div>
                           </div>
-                          <Badge variant="outline" className="border-primary text-primary text-xs px-2 py-1">
+                          <Badge variant="outline" className="border-primary/50 text-primary dark:border-[#d6ac40]/50 dark:text-[#d6ac40] text-xs px-2 py-1 font-mono">
                             {formatArabicNumber(contract['Total'])} د.ل
                           </Badge>
                         </div>
                       ))}
                     </div>
-                    <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                      <p className="text-xs text-muted-foreground">
-                        💡 انقر على أي صف لاختيار العقد، أو انقر على المربع للتحديد المباشر
+                    <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-border/50">
+                      <p className="text-xs text-muted-foreground text-center">
+                        💡 انقر على أي عقد لتحديده/إلغاء تحديده مباشرة
                       </p>
                     </div>
                   </CardContent>
                 </Card>
 
                 {/* Discount & Account Balance */}
-                <Card className="expenses-preview-card">
+                <Card className="border border-primary/20 dark:border-[#d6ac40]/20 bg-background/50 dark:bg-card/30 backdrop-blur-sm shadow-md rounded-xl transition-all duration-200 hover:border-primary/30 dark:hover:border-[#d6ac40]/30">
                   <CardHeader className="pb-4">
-                    <CardTitle className="expenses-preview-label text-lg">خصومات ورصيد</CardTitle>
+                    <CardTitle className="expenses-preview-label text-lg text-primary dark:text-[#d6ac40] font-semibold">خصومات ورصيد</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <div className="grid grid-cols-3 gap-4">
@@ -1266,7 +1345,7 @@ export default function ModernPrintInvoiceDialog({
                         <select
                           value={discountType}
                           onChange={(e) => setDiscountType(e.target.value as 'percentage' | 'fixed')}
-                          className="w-full p-3 h-10 border border-border rounded-md bg-input text-foreground text-sm"
+                          className="w-full px-3 py-1.5 h-10 border border-border rounded-md bg-input text-foreground text-sm focus:outline-none focus:ring-1 focus:ring-primary"
                         >
                           <option value="percentage">%</option>
                           <option value="fixed">ثابت</option>
@@ -1289,7 +1368,7 @@ export default function ModernPrintInvoiceDialog({
                             const value = Number(e.target.value) || 0;
                             // منع إدخال قيمة أكبر من الرصيد المتاح
                             if (value <= accountPayments) {
-                              setAccountDeduction(value);
+                               setAccountDeduction(value);
                             } else {
                               toast.error(`لا يمكن خصم أكثر من الرصيد المتاح (${formatArabicNumber(accountPayments)} ${currency.symbol})`);
                             }
@@ -1299,7 +1378,7 @@ export default function ModernPrintInvoiceDialog({
                           className="text-right text-sm p-3 h-10"
                         />
                         {accountDeduction > 0 && (
-                          <p className="text-xs text-success mt-1">
+                          <p className="text-xs text-green-600 dark:text-green-400 mt-1 font-semibold">
                             ✓ سيتم خصم {formatArabicNumber(accountDeduction)} {currency.symbol} من رصيد الحساب
                           </p>
                         )}
@@ -1312,9 +1391,9 @@ export default function ModernPrintInvoiceDialog({
               {/* Right Panel - Items */}
               <div className="lg:col-span-7 space-y-6">
                 {/* إضافة بند مخصص */}
-                <Card className="expenses-preview-card border-2 border-primary/30 bg-primary/5">
+                <Card className="border-2 border-primary/30 dark:border-[#d6ac40]/40 bg-primary/5 dark:bg-[#d6ac40]/5 shadow-md rounded-xl transition-all duration-200">
                   <CardHeader className="pb-4">
-                    <CardTitle className="expenses-preview-label flex items-center gap-3 text-lg">
+                    <CardTitle className="expenses-preview-label flex items-center gap-3 text-lg text-primary dark:text-[#d6ac40] font-semibold">
                       <Plus className="h-5 w-5" />
                       إضافة بند مخصص
                     </CardTitle>
@@ -1370,19 +1449,54 @@ export default function ModernPrintInvoiceDialog({
                   </CardContent>
                 </Card>
 
-                <Card className="expenses-preview-card">
+                <Card className="border border-primary/20 dark:border-[#d6ac40]/20 bg-background/50 dark:bg-card/30 backdrop-blur-sm shadow-md rounded-xl transition-all duration-200 hover:border-primary/30 dark:hover:border-[#d6ac40]/30">
                   <CardHeader className="pb-4">
-                    <CardTitle className="expenses-preview-label flex items-center gap-3 text-lg">
-                      <Calculator className="h-5 w-5" />
-                      عناصر الفاتورة ({localPrintItems.length})
+                    <CardTitle className="expenses-preview-label flex flex-col sm:flex-row sm:items-center gap-3 text-lg text-primary dark:text-[#d6ac40] font-semibold w-full">
+                      <div className="flex items-center gap-2">
+                        <Calculator className="h-5 w-5" />
+                        <span>عناصر الفاتورة ({localPrintItems.length})</span>
+                      </div>
                       {localPrintItems.length > 0 && (
-                        <span className="text-sm font-normal text-muted-foreground">
-                          - المجموع: {formatArabicNumber(moneySubtotal)} {currency.symbol}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-normal text-muted-foreground sm:mr-auto sm:ml-2">
+                          <span>• المجموع (قبل الخصم): <strong className="text-foreground">{formatArabicNumber(moneySubtotal)} {currency.symbol}</strong></span>
+                          <span>• الإجمالي النهائي: <strong className="text-[#22C55E]">{formatArabicNumber(total)} {currency.symbol}</strong></span>
+                        </div>
                       )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
+                    {localPrintItems.length > 0 && (
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-muted/20 dark:bg-card/40 rounded-xl border border-border/50 mb-5 justify-between">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-muted-foreground flex items-center gap-1">سعر المتر الموحد:</span>
+                          <div className="flex items-center gap-1.5 bg-background dark:bg-muted/40 px-2 py-1 rounded-lg border border-border/80">
+                            <Input
+                              type="number"
+                              placeholder="سعر المتر"
+                              className="w-20 h-7 border-none bg-transparent focus-visible:ring-0 focus-visible:ring-offset-0 px-1 text-sm num text-center font-bold"
+                              id="bulk-price-input"
+                              defaultValue="110"
+                            />
+                            <span className="text-xs text-muted-foreground font-semibold">{currency.symbol}</span>
+                          </div>
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => {
+                              const input = document.getElementById('bulk-price-input') as HTMLInputElement;
+                              const val = Number(input?.value);
+                              applyPricePerMeterToAll(val);
+                            }}
+                            className="bg-[#d6ac40] hover:bg-[#c59b35] text-black font-bold h-8 px-3 rounded-lg text-xs cursor-pointer shadow-sm hover:shadow-yellow-600/10 transition-all duration-150 border-none"
+                          >
+                            تطبيق سعر المتر على الكل
+                          </Button>
+                        </div>
+                        <div className="text-[11px] text-muted-foreground hidden lg:block">
+                          💡 يتيح لك تطبيق سعر متر واحد لجميع عناصر الفاتورة دفعة واحدة
+                        </div>
+                      </div>
+                    )}
                     {selectedContracts.length === 0 ? (
                       <div className="expenses-empty-state py-12">
                         <Calculator className="h-16 w-16 mx-auto mb-4 opacity-50" />
@@ -1534,7 +1648,7 @@ export default function ModernPrintInvoiceDialog({
 
                 {/* Quick Summary */}
                 {localPrintItems.length > 0 && (
-                  <Card className="expenses-preview-card">
+                  <Card className="border border-primary/30 dark:border-[#d6ac40]/30 bg-primary/5 dark:bg-[#d6ac40]/5 shadow-md rounded-xl">
                     <CardContent className="pt-6">
                       <div className="space-y-3">
                         <div className="flex justify-between text-sm">
@@ -1574,7 +1688,7 @@ export default function ModernPrintInvoiceDialog({
         {/* Actions */}
         <div className="border-t border-border/80 pt-4 pb-4 px-6 flex justify-between items-center flex-shrink-0 flex-wrap gap-4">
           <div>
-            <Button variant="outline" onClick={onClose} className="text-sm px-6 py-2 cursor-pointer hover:bg-accent/50">
+            <Button variant="outline" onClick={onClose} className="text-sm px-6 py-2.5 cursor-pointer hover:bg-accent/50 rounded-xl transition-all duration-200 border-border/80">
               إغلاق
             </Button>
           </div>
@@ -1589,19 +1703,18 @@ export default function ModernPrintInvoiceDialog({
               />
             )}
             <Button
-              variant="secondary"
               onClick={handleSave}
-              className="text-sm px-4 py-2 gap-2 cursor-pointer transition-colors border border-border"
+              className="text-sm px-5 py-2.5 gap-2 cursor-pointer transition-all bg-[#d6ac40] hover:bg-[#c59b35] text-black font-bold border-none rounded-xl shadow-md shadow-yellow-600/10 hover:shadow-yellow-600/20"
               disabled={localPrintItems.length === 0}
             >
-              <Save className="h-4 w-4 text-primary" />
+              <Save className="h-4 w-4" />
               <span>حفظ في الحساب</span>
             </Button>
 
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button
-                  className="text-sm px-5 py-2 gap-2 cursor-pointer transition-all bg-gradient-to-r from-primary to-primary-deep text-primary-foreground hover:opacity-90 shadow-md"
+                  className="text-sm px-5 py-2.5 gap-2 cursor-pointer transition-all bg-gradient-to-r from-emerald-600 to-teal-500 hover:from-emerald-700 hover:to-teal-600 text-white font-bold rounded-xl shadow-md"
                   disabled={localPrintItems.length === 0}
                 >
                   <Printer className="h-4 w-4" />

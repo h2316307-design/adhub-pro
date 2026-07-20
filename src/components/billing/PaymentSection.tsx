@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Edit, Trash2, Plus, ChevronDown, ChevronUp, Send, Wallet, CreditCard, AlertCircle } from 'lucide-react';
+import { Edit, Trash2, Plus, ChevronDown, ChevronUp, Send, Wallet, CreditCard, AlertCircle, DollarSign, Coins, Receipt } from 'lucide-react';
 import { PaymentRow } from './BillingTypes';
 import { DistributedPaymentDetailsDialog } from './DistributedPaymentDetailsDialog';
 import { supabase } from '@/integrations/supabase/client';
@@ -503,6 +503,25 @@ export function PaymentSection({
     }
   };
 
+  const summaryStats = useMemo(() => {
+    let receipts = 0;
+    let debts = 0;
+    let credits = 0;
+    
+    payments.forEach(p => {
+      const amt = Number(p.amount) || 0;
+      if (p.entry_type === 'receipt' || p.entry_type === 'payment' || p.entry_type === 'general_debit') {
+        receipts += amt;
+      } else if (p.entry_type === 'debt') {
+        debts += amt;
+      } else if (p.entry_type === 'general_credit') {
+        credits += amt;
+      }
+    });
+    
+    return { receipts, debts, credits };
+  }, [payments]);
+
   return (
     <>
       {/* قسم الديون السابقة */}
@@ -616,9 +635,51 @@ export function PaymentSection({
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
+          <CardContent className="pt-6 px-6 pb-6">
+            {payments.length > 0 && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5 select-none">
+                {/* Total Collected / Receipts */}
+                <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-emerald-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المقبوضات</span>
+                    <p className="text-base sm:text-lg lg:text-xl font-black text-emerald-400">
+                      {summaryStats.receipts.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-green-500/10 text-green-400 group-hover:scale-110 transition-transform shrink-0">
+                    <Coins className="h-4.5 w-4.5" />
+                  </div>
+                </div>
+
+                {/* Total Registered Debts */}
+                <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-amber-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي الديون السابقة</span>
+                    <p className="text-base sm:text-lg lg:text-xl font-black text-amber-400">
+                      {summaryStats.debts.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform shrink-0">
+                    <DollarSign className="h-4.5 w-4.5" />
+                  </div>
+                </div>
+
+                {/* Total Disbursed / Refunds */}
+                <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-rose-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                  <div className="space-y-1 text-right">
+                    <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي الصادرات والمسترد</span>
+                    <p className="text-base sm:text-lg lg:text-xl font-black text-rose-400">
+                      {summaryStats.credits.toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform shrink-0">
+                    <Wallet className="h-4.5 w-4.5" />
+                  </div>
+                </div>
+              </div>
+            )}
             {payments.length ? (
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto border border-white/10 rounded-xl bg-slate-900/40">
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/50 hover:bg-muted/50">
@@ -658,6 +719,11 @@ export function PaymentSection({
                     const firstPayment = distributionPayments[0];
                     const isInCustody = paymentsInCustody.has(distributionId);
                     const hasWithdrawal = paymentsWithWithdrawal.has(distributionId);
+
+                    const hasUnlinkedChild = distributionPayments.some(p => isUnlinkedPayment(p));
+                    const unlinkedChildSum = distributionPayments
+                      .filter(p => isUnlinkedPayment(p))
+                      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
                     const hasPurchaseInvoice = distributionPayments.some(p => p.purchase_invoice_id || p.notes?.includes('مشتريات') || p.notes?.includes('PUR-'));
                     const isBarter = distributionPayments.some(p => p.method === 'مقايضة');
@@ -708,7 +774,15 @@ export function PaymentSection({
                     return (
                       <React.Fragment key={distributionId}>
                         <TableRow
-                          className={`cursor-pointer ${isInCustody ? 'bg-amber-100 dark:bg-amber-950/30 hover:bg-amber-200 dark:hover:bg-amber-950/50' : hasWithdrawal ? 'bg-blue-100 dark:bg-blue-950/30 hover:bg-blue-200 dark:hover:bg-blue-950/50' : 'bg-primary/5 hover:bg-primary/10'}`}
+                          className={`cursor-pointer transition-all duration-300 ${
+                            hasUnlinkedChild
+                              ? 'bg-red-500/10 hover:bg-red-500/15 border-r-4 border-r-red-500/70 shadow-[inset_0_0_15px_rgba(239,68,68,0.15)]'
+                              : isInCustody 
+                                ? 'bg-amber-100 dark:bg-amber-950/30 hover:bg-amber-200 dark:hover:bg-amber-950/50' 
+                                : hasWithdrawal 
+                                  ? 'bg-blue-100 dark:bg-blue-950/30 hover:bg-blue-200 dark:hover:bg-blue-950/50' 
+                                  : 'bg-primary/5 hover:bg-primary/10'
+                          }`}
                           onClick={() => toggleDistribution(distributionId)}
                         >
                           <TableCell className="font-bold text-primary">
@@ -722,6 +796,11 @@ export function PaymentSection({
                               <Badge variant="secondary" className={isInCustody ? "bg-amber-200 text-amber-800 border-amber-400" : hasWithdrawal ? "bg-blue-200 text-blue-800 border-blue-400" : "bg-primary/20"}>
                                 دفعة موزعة - {distributionPayments.length} بنود
                               </Badge>
+                              {hasUnlinkedChild && (
+                                <Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/40 gap-1.5 font-extrabold animate-pulse">
+                                  ⚠️ يوجد رصيد غير مستعمل: {unlinkedChildSum.toLocaleString('ar-LY')} د.ل
+                                </Badge>
+                              )}
                               {/* عرض أرقام العقود/المهام المجمعة */}
                               <div className="flex flex-wrap gap-1">
                                 {distributionPayments.map((p, idx) => {
@@ -821,8 +900,18 @@ export function PaymentSection({
                           </TableCell>
                         </TableRow>
 
-                        {isExpanded && distributionPayments.map(payment => (
-                          <TableRow key={payment.id} id={`payment-${payment.id}`} className="bg-accent/30 transition-all duration-300">
+                        {isExpanded && distributionPayments.map(payment => {
+                          const isUnlinked = isUnlinkedPayment(payment);
+                          return (
+                            <TableRow 
+                              key={payment.id} 
+                              id={`payment-${payment.id}`} 
+                              className={`transition-all duration-300 ${
+                                isUnlinked 
+                                  ? 'bg-red-500/10 hover:bg-red-500/15 border-r-4 border-r-red-500/70 shadow-[inset_0_0_15px_rgba(239,68,68,0.15)]' 
+                                  : 'bg-accent/30 hover:bg-accent/40'
+                              }`}
+                            >
                             <TableCell className="pr-8">
                               <span className="inline-flex items-center justify-center min-w-[32px] h-6 px-2 rounded-md bg-blue-400 text-white text-sm font-bold">
                                 {payments.findIndex(p => p.id === payment.id) + 1}
@@ -838,9 +927,20 @@ export function PaymentSection({
                               {getPaymentStatement(payment)}
                             </TableCell>
                             <TableCell>
-                              <span className={getPaymentTypeStyle(payment.entry_type)}>
-                                {getPaymentTypeText(payment.entry_type)}
-                              </span>
+                              <div className="flex flex-col gap-1 items-start">
+                                <span className={getPaymentTypeStyle(payment.entry_type)}>
+                                  {getPaymentTypeText(payment.entry_type)}
+                                </span>
+                                {isUnlinked && (
+                                  <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
+                                    <span className="relative flex h-1.5 w-1.5">
+                                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+                                    </span>
+                                    غير مستعملة
+                                  </span>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell className="font-semibold stat-green">
                               {(Number(payment.amount) || 0).toLocaleString('ar-LY')} د.ل
@@ -875,14 +975,22 @@ export function PaymentSection({
                               </div>
                             </TableCell>
                           </TableRow>
-                        ))}
+                          );
+                        })}
                       </React.Fragment>
                     );
-                  })}
+                  })
+                }
 
                   {/* عرض الدفعات الفردية */}
-                  {individualPayments.map(payment => (
-                    <TableRow key={payment.id} id={`payment-${payment.id}`} className="transition-all duration-300">
+                  {individualPayments.map((payment) => {
+                    const isUnlinked = isUnlinkedPayment(payment);
+                    return (
+                      <TableRow 
+                        key={payment.id} 
+                        id={`payment-${payment.id}`} 
+                        className={`transition-all duration-300 ${isUnlinked ? 'bg-red-500/5 hover:bg-red-500/10 border-r-4 border-r-red-500/70 shadow-[inset_0_0_15px_rgba(239,68,68,0.05)]' : ''}`}
+                      >
                       <TableCell className="font-bold text-primary">
                         <span className="inline-flex items-center justify-center min-w-[40px] h-8 px-3 rounded-lg bg-emerald-500 text-white text-base font-bold shadow-sm">
                           {payments.findIndex(p => p.id === payment.id) + 1}
@@ -898,9 +1006,20 @@ export function PaymentSection({
                         {getPaymentStatement(payment)}
                       </TableCell>
                       <TableCell>
-                        <span className={getPaymentTypeStyle(payment.entry_type)}>
-                          {getPaymentTypeText(payment.entry_type)}
-                        </span>
+                        <div className="flex flex-col gap-1 items-start">
+                          <span className={getPaymentTypeStyle(payment.entry_type)}>
+                            {getPaymentTypeText(payment.entry_type)}
+                          </span>
+                          {isUnlinked && (
+                            <span className="inline-flex items-center gap-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
+                              <span className="relative flex h-1.5 w-1.5">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-red-500" />
+                              </span>
+                              غير مستعملة
+                            </span>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-semibold stat-green">
                         {(Number(payment.amount) || 0).toLocaleString('ar-LY')} د.ل
@@ -990,7 +1109,8 @@ export function PaymentSection({
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             </div>

@@ -73,7 +73,7 @@ export function CustodyStatementPrint({ accountId }: CustodyStatementPrintProps)
 async function generateStatementHTML(account: any, transactions: any[], expenses: any[]): Promise<string> {
   const styles = await getMergedInvoiceStylesAsync('custody');
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-  const logoUrl = styles.logoPath || '/logofares.svg';
+  const logoUrl = styles.logoPath || '/logofaresgold.svg';
   const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
   const statementFooterText = `${styles.footerText || 'تاريخ الطباعة:'} ${new Date().toLocaleString('ar-LY-u-nu-latn')}<br/>${styles.companyName} ${styles.companySubtitle}`;

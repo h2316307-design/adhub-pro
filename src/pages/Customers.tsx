@@ -71,6 +71,7 @@ interface CustomerSummary {
   repaymentPercentage: number; // ✅ نسبة السداد الصحيحة
   friendRentals?: number;  // ✅ الإيجارات الصديقة غير المستعملة
   totalPurchases?: number; // ✅ المشتريات والإيجارات غير المستعملة
+  unallocatedBalance?: number; // ✅ الرصيد غير الموزع
   isSupplier?: boolean;
   isCustomer?: boolean;
   supplierType?: string | null;
@@ -161,6 +162,11 @@ function CustomerRow({
                   {customer.supplierType === 'printer' && ' (مطبعة)'}
                 </Badge>
               )}
+              {customer.unallocatedBalance && customer.unallocatedBalance > 0 ? (
+                <Badge variant="outline" className="bg-red-500/15 text-red-500 border-red-500/35 text-[10px] font-bold px-1.5 py-0 animate-pulse">
+                  ⚠️ رصيد معلق: {customer.unallocatedBalance.toLocaleString('ar-LY')} د.ل
+                </Badge>
+              ) : null}
             </div>
           </div>
         </div>
@@ -454,7 +460,7 @@ export default function Customers() {
         supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 9999),
         supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id, pricing_category').order('name', { ascending: true }).range(0, 9999),
         supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 9999),
-        supabase.from('printed_invoices').select('id, customer_id, total_amount, print_cost, invoice_type, included_in_contract').range(0, 9999),
+        supabase.from('printed_invoices').select('id, customer_id, total_amount, invoice_type, included_in_contract').range(0, 9999),
         supabase.from('purchase_invoices').select('id, customer_id, total_amount, used_as_payment').range(0, 9999),
         supabase.from('customer_general_discounts').select('id, customer_id, discount_value').eq('status', 'active'),
         supabase.from('composite_tasks').select('id, customer_id, combined_invoice_id, print_task_id, customer_total').range(0, 9999),
@@ -870,6 +876,7 @@ export default function Customers() {
       customerData.repaymentPercentage = financials.repaymentPercentage;
       customerData.friendRentals = financials.totalFriendRentals;
       customerData.totalPurchases = financials.totalPurchases;
+      customerData.unallocatedBalance = financials.unallocatedBalance;
       customerData.overdueInfo = overdueMap.get(customerId) || {
         hasOverdue: false,
         oldestDueDate: null,
@@ -1296,7 +1303,7 @@ export default function Customers() {
     const primary = styles.primaryColor || '#D4AF37';
 
     const baseUrl = window.location.origin;
-    const logoUrl = styles.logoPath || '/logofares.svg';
+    const logoUrl = styles.logoPath || '/logofaresgold.svg';
     const fullLogoUrl = logoUrl.startsWith('http') ? logoUrl : `${baseUrl}${logoUrl}`;
 
     const { unifiedHeaderFooterCss, unifiedHeaderHtml, unifiedFooterHtml } = await import('@/lib/unifiedInvoiceBase');

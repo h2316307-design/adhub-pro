@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
-import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft, Layers, Trash2, Wallet } from 'lucide-react';
+import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft, Layers, Trash2, Wallet, Coins, DollarSign } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllBillboards } from '@/services/supabaseService';
 // Legacy print imports removed - unified engine used via PrintInvoicePrint
@@ -52,7 +52,8 @@ import {
   calculateRemainingBalanceAfterPayment,
   getContractDetails,
   calculateTotalRemainingDebt,
-  filterCompositeRelatedPrintedInvoices
+  filterCompositeRelatedPrintedInvoices,
+  translateInvoiceType
 } from '@/components/billing/BillingUtils';
 
 import { CompositeTasksList } from '@/components/composite-tasks/CompositeTasksList';
@@ -96,6 +97,8 @@ export default function CustomerBilling() {
   const [allBillboards, setAllBillboards] = useState<any[]>([]);
   const [compositeTasks, setCompositeTasks] = useState<any[]>([]);
   const [friendBillboardRentals, setFriendBillboardRentals] = useState<any[]>([]);
+  const [printTasks, setPrintTasks] = useState<any[]>([]);
+  const [cutoutTasks, setCutoutTasks] = useState<any[]>([]);
   
   // ✅ NEW: Print invoice details dialog state
   const [printInvoiceDetailsOpen, setPrintInvoiceDetailsOpen] = useState(false);
@@ -384,6 +387,10 @@ export default function CustomerBilling() {
           const cutoutTasksRes = customerId 
             ? await supabase.from('cutout_tasks').select('id, invoice_id').eq('customer_id', customerId)
             : await supabase.from('cutout_tasks').select('id, invoice_id').eq('customer_name', customerName);
+
+          // تخزين بيانات المهام للاستخدام في الحسابات المالية
+          setPrintTasks(printTasksRes.data || []);
+          setCutoutTasks(cutoutTasksRes.data || []);
 
           printedInvoicesData = filterCompositeRelatedPrintedInvoices(
             printedInvoicesData,
@@ -720,25 +727,25 @@ export default function CustomerBilling() {
   const totalDebits = useMemo(() => {
     let totalDebit = totalRent;
 
-    // إضافة الديون من الدفعات مع استثناء ما هو مرتبط بفواتير المبيعات/الطباعة (يتم احتسابها أدناه)
+    // إضافة الديون من الدفعات مع استثناء ما هو مرتبط بفواتير المبيعات/الطباعة/المشتريات (يتم احتسابها أدناه)
     payments.forEach(p => {
       const amount = Number(p.amount) || 0;
       const isInvoiceOrDebt = p.entry_type === 'invoice' || (p.entry_type === 'debt' && amount > 0) || p.entry_type === 'general_debit';
-      const isLinkedToSalesOrPrint = p.sales_invoice_id || p.printed_invoice_id;
+      const isLinkedToSalesOrPrint = p.sales_invoice_id || p.printed_invoice_id || p.purchase_invoice_id;
       if (isInvoiceOrDebt && !isLinkedToSalesOrPrint) {
         totalDebit += amount;
       }
     });
 
-    // ✅ إضافة فواتير الطباعة (استثناء فواتير المهام المجمعة)
-    const compositeTaskInvoiceIds = new Set(compositeTasks.map(t => t.combined_invoice_id).filter(Boolean));
-    printedInvoices.forEach(invoice => {
-      if (compositeTaskInvoiceIds.has((invoice as any).id)) return; // استثناء فواتير المهام المجمعة
+    // ✅ إضافة فواتير الطباعة (استثناء فواتير المهام المجمعة وفواتير print_tasks المرتبطة بمهام مجمعة)
+    const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(printedInvoices, compositeTasks, printTasks, cutoutTasks);
+    billablePrintedInvoices.forEach(invoice => {
+      if ((invoice as any).included_in_contract === true) return;
       const totalAmount = Number((invoice as any).total_amount ?? (invoice as any).print_cost) || 0;
       totalDebit += totalAmount;
     });
 
-    // ✅ إضافة فواتير المبيعات (جميع الفواتير)
+    // ✅ إضافة فواتير المبيعات
     salesInvoices.forEach(invoice => {
       const totalAmount = Number(invoice.total_amount) || 0;
       totalDebit += totalAmount;
@@ -752,10 +759,10 @@ export default function CustomerBilling() {
     });
 
     return totalDebit;
-  }, [payments, totalRent, printedInvoices, salesInvoices, compositeTasks]);
+  }, [payments, totalRent, printedInvoices, salesInvoices, compositeTasks, printTasks, cutoutTasks]);
   
   const totalCredits = useMemo(() => {
-    return payments.reduce((s, p) => {
+    const sum = payments.reduce((s, p) => {
       const amount = Number(p.amount) || 0;
       // ✅ احتساب جميع أنواع الدفعات: receipt, account_payment, payment, general_credit
       if (p.entry_type === 'receipt' || 
@@ -766,6 +773,7 @@ export default function CustomerBilling() {
       }
       return s;
     }, 0);
+    return sum;
   }, [payments]);
   
   // إجمالي الخصومات (مب��لغ ثابتة فقط)
@@ -773,9 +781,10 @@ export default function CustomerBilling() {
 
   // ✅ إجمالي إيجارات اللوحات الصديقة المتبقية (غير المستعملة)
   const totalFriendRentals = useMemo(() => {
-    return friendBillboardRentals.reduce((sum, rental) => {
+    const sum = friendBillboardRentals.reduce((sum, rental) => {
       return sum + Math.max(0, (Number(rental.friend_rental_cost) || 0) - (Number(rental.used_as_payment) || 0));
     }, 0);
+    return sum;
   }, [friendBillboardRentals]);
 
   // ✅ حساب إجمالي المشتريات من الزبون (فواتير المشتريات + إيجارات اللوحات الصديقة)
@@ -792,33 +801,35 @@ export default function CustomerBilling() {
 
   // ✅ حساب إجمالي المبيعات للزبون (فواتير المبيعات)
   const totalSales = useMemo(() => {
-    return salesInvoices.reduce((sum, invoice) => {
+    const sum = salesInvoices.reduce((sum, invoice) => {
       return sum + (Number(invoice.total_amount) || 0);
     }, 0);
+    return sum;
   }, [salesInvoices]);
 
-  // ✅ حساب إجمالي فواتير الطباعة
+  // ✅ حساب إجمالي فواتير الطباعة (مع استثناء فواتير المهام المجمعة والمضمنة في العقود)
   const totalPrintedInvoices = useMemo(() => {
-    // استثناء فواتير المهام المجمعة لتجنب التكرار
-    const compositeTaskInvoiceIds = new Set(compositeTasks.map(t => t.combined_invoice_id).filter(Boolean));
-    return printedInvoices.reduce((sum, invoice) => {
-      if (compositeTaskInvoiceIds.has((invoice as any).id)) return sum;
+    const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(printedInvoices, compositeTasks, printTasks, cutoutTasks);
+    const sum = billablePrintedInvoices.reduce((sum, invoice) => {
+      if ((invoice as any).included_in_contract === true) return sum;
       return sum + (Number(invoice.total_amount) || 0);
     }, 0);
-  }, [printedInvoices, compositeTasks]);
+    return sum;
+  }, [printedInvoices, compositeTasks, printTasks, cutoutTasks]);
 
   // ✅ حساب إجمالي المهام المجمعة (غير المنشأ لها فواتير)
   const totalCompositeTasks = useMemo(() => {
-    return compositeTasks.reduce((sum, task) => {
+    const sum = compositeTasks.reduce((sum, task) => {
       // إذا تم إنشاء فاتورة، يتم احتسابها من printed_invoices
       if (task.combined_invoice_id) return sum;
       return sum + (Number(task.customer_total) || 0);
     }, 0);
+    return sum;
   }, [compositeTasks]);
 
   // ✅ حساب موحد للمتبقي من إجمالي الديون (مع طرح إيجارات اللوحات الصديقة كمشتريات)
   const balance = useMemo(() => {
-    return calculateTotalRemainingDebt(
+    const rawBalance = calculateTotalRemainingDebt(
       contracts,
       payments,
       salesInvoices,
@@ -828,6 +839,7 @@ export default function CustomerBilling() {
       compositeTasks,
       totalFriendRentals
     );
+    return rawBalance;
   }, [
     contracts,
     payments,
@@ -849,6 +861,21 @@ export default function CustomerBilling() {
       .reduce((s, p) => s + (Number(p.amount) || 0), 0), 
     [payments]
   );
+
+  // ✅ حساب الرصيد غير الموزع (دفعات غير مرتبطة بأي عقد أو فاتورة أو مهمة)
+  const unallocatedBalance = useMemo(() => {
+    const sum = payments
+      .filter(p => 
+        (p.entry_type === 'payment' || p.entry_type === 'receipt' || p.entry_type === 'account_payment') &&
+        !p.contract_number &&
+        !p.sales_invoice_id &&
+        !p.printed_invoice_id &&
+        !p.purchase_invoice_id &&
+        !p.composite_task_id
+      )
+      .reduce((s, p) => s + (Number(p.amount) || 0), 0);
+    return sum;
+  }, [payments]);
 
   // ✅ FIXED: Calculate payments per contract using proper type conversion
   const getContractPayments = (contractNumber: number | string): number => {
@@ -1602,7 +1629,12 @@ export default function CustomerBilling() {
     }
     setEditingInvoice(editable as any);
     // Open the same modern print dialog for editing
-  setSelectedContractsForInv(Array.isArray(invoice.contract_numbers) ? invoice.contract_numbers.map(String) : (invoice.contract_numbers ? String(invoice.contract_numbers).split(',').map(s=>s.trim()) : (invoice.contract_number ? [String(invoice.contract_number)] : [])));
+    const initialContractNums = Array.isArray(invoice.contract_numbers) 
+      ? invoice.contract_numbers.map(String) 
+      : (invoice.contract_numbers 
+        ? String(invoice.contract_numbers).split(',').map(s=>s.trim()) 
+        : (invoice.contract_number ? [String(invoice.contract_number)] : []));
+    setSelectedContractsForInv(Array.from(new Set(initialContractNums)));
     setPrintOpenToPreview(preview);
     setPrintAuto(auto);
     setPrintForPrinter(forPrinter);
@@ -1668,6 +1700,23 @@ export default function CustomerBilling() {
       console.error('Invoice save error:', e); 
       toast.error(`خطأ غير متوقع: ${(e as Error).message}`); 
     }
+  };
+
+  const getInvoiceAdTypes = (invoice: any) => {
+    const cNums = Array.isArray(invoice.contract_numbers) 
+      ? invoice.contract_numbers.map(String) 
+      : (invoice.contract_numbers 
+        ? String(invoice.contract_numbers).split(',').map(s => s.trim()) 
+        : (invoice.contract_number ? [String(invoice.contract_number)] : []));
+        
+    const adTypes = cNums
+      .map(num => {
+        const found = contracts.find(c => String(c.Contract_Number) === num);
+        return found ? found['Ad Type'] : null;
+      })
+      .filter(Boolean);
+      
+    return adTypes.length > 0 ? Array.from(new Set(adTypes)).join(' - ') : '—';
   };
 
   return (
@@ -1809,6 +1858,7 @@ export default function CustomerBilling() {
         totalFriendRentals={totalFriendRentals}
         totalCompositeTasks={totalCompositeTasks}
         totalDebits={totalDebits}
+        unallocatedBalance={unallocatedBalance}
         lastContractDate={contracts.length > 0 ? contracts[0]['Contract Date'] : undefined}
         lastPaymentDate={
           payments
@@ -1891,7 +1941,7 @@ export default function CustomerBilling() {
                     {accountPaymentsList.map((p) => (
                       <tr key={p.id} className="hover:bg-indigo-500/5 transition-all duration-300 border-b border-white/5">
                         <td className="py-4 px-4">{p.paid_at ? new Date(p.paid_at).toLocaleDateString('ar-LY') : '—'}</td>
-                        <td className="py-4 px-4 font-bold text-indigo-400 font-manrope">{Number(p.amount || 0).toLocaleString('ar-LY')} د.ل</td>
+                        <td className="py-4 px-4 font-bold text-indigo-400">{Number(p.amount || 0).toLocaleString('ar-LY')} د.ل</td>
                         <td className="py-4 px-4">{p.notes || '—'}</td>
                         <td className="py-4 px-4 text-left">
                           <div className="flex justify-end gap-2">
@@ -2078,7 +2128,7 @@ export default function CustomerBilling() {
                         <td className="py-3 px-4 text-white/70">
                           {record.paid_at ? new Date(record.paid_at).toLocaleDateString('ar-LY') : '—'}
                         </td>
-                        <td className="py-3 px-4 font-mono text-white font-semibold">
+                        <td className="py-3 px-4 text-white font-semibold">
                           {Math.abs(Number(record.amount) || 0).toLocaleString('ar-LY')} د.ل
                           {Number(record.amount) < 0 && (
                             <Badge variant="secondary" className="mr-2 text-xs bg-slate-700 text-slate-300 border border-slate-600/30">دائن</Badge>
@@ -2165,6 +2215,48 @@ export default function CustomerBilling() {
           </div>
         </CardHeader>
         <CardContent className="pt-6">
+          {printedInvoices.length > 0 && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 mb-5 select-none">
+              {/* Total Card */}
+              <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-amber-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المبلغ</span>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-white">
+                    {printedInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0), 0).toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-amber-500/10 text-amber-400 group-hover:scale-110 transition-transform shrink-0">
+                  <DollarSign className="h-4.5 w-4.5" />
+                </div>
+              </div>
+
+              {/* Paid Card */}
+              <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-green-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">إجمالي المدفوع</span>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-green-400">
+                    {printedInvoices.reduce((sum, inv) => sum + (Number(inv.paid_amount) || 0), 0).toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-green-500/10 text-green-400 group-hover:scale-110 transition-transform shrink-0">
+                  <Coins className="h-4.5 w-4.5" />
+                </div>
+              </div>
+
+              {/* Remaining Card */}
+              <div className="bg-slate-950/45 backdrop-blur-md border border-white/5 hover:border-rose-500/30 rounded-2xl p-4 flex items-center justify-between shadow-sm transition-all duration-300 hover:-translate-y-0.5 group">
+                <div className="space-y-1 text-right">
+                  <span className="text-[10px] sm:text-xs font-bold text-muted-foreground/75">المبلغ المتبقي</span>
+                  <p className="text-base sm:text-lg lg:text-xl font-black text-rose-400">
+                    {Math.max(0, printedInvoices.reduce((sum, inv) => sum + (Number(inv.total_amount) || 0) - (Number(inv.paid_amount) || 0), 0)).toLocaleString('ar-LY')} <span className="text-xs font-normal text-white/50 font-tajawal">د.ل</span>
+                  </p>
+                </div>
+                <div className="p-2.5 rounded-xl bg-rose-500/10 text-rose-400 group-hover:scale-110 transition-transform shrink-0">
+                  <Wallet className="h-4.5 w-4.5" />
+                </div>
+              </div>
+            </div>
+          )}
           <div className="border border-white/10 rounded-xl overflow-hidden bg-slate-900/40">
             <table className="w-full text-sm text-right">
               <thead>
@@ -2173,6 +2265,7 @@ export default function CustomerBilling() {
                   <th className="py-4 px-4">التاريخ</th>
                   <th className="py-4 px-4">النوع</th>
                   <th className="py-4 px-4">{customerType.supplierType === 'printer' ? 'اسم الزبون' : 'أرقام العقود'}</th>
+                  <th className="py-4 px-4">نوع الإعلان</th>
                   <th className="py-4 px-4">الإجمالي</th>
                   <th className="py-4 px-4">الحالة</th>
                   <th className="py-4 px-4">الملاحظات</th>
@@ -2186,14 +2279,15 @@ export default function CustomerBilling() {
                       <td className="p-4 num font-semibold text-white">#{invoice.invoice_number}</td>
                       <td className="p-4 text-white/70">{invoice.invoice_date ? new Date(invoice.invoice_date).toLocaleDateString('ar-LY') : ''}</td>
                       <td className="p-4">
-                        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-400">{invoice.invoice_type}</Badge>
+                        <Badge variant="outline" className="border-amber-500/30 bg-amber-500/5 text-amber-400">{translateInvoiceType(invoice.invoice_type)}</Badge>
                       </td>
                       <td className="p-4 num text-white/70">
                         {customerType.supplierType === 'printer' 
                           ? (invoice.customer_name || '—')
                           : (Array.isArray(invoice.contract_numbers) ? invoice.contract_numbers.join(', ') : (invoice.contract_numbers ?? invoice.contract_number ?? ''))}
                       </td>
-                      <td className="p-4 font-mono font-semibold text-white">
+                      <td className="p-4 text-xs text-white/70 max-w-[200px] truncate" title={getInvoiceAdTypes(invoice)}>{getInvoiceAdTypes(invoice)}</td>
+                      <td className="p-4 font-semibold text-white">
                         {((invoice.total_amount ?? 0) as number).toLocaleString('ar-LY')} د.ل
                       </td>
                       <td className="p-4">
@@ -3001,7 +3095,7 @@ export default function CustomerBilling() {
                     </div>
                     <div>
                       <label className="text-sm font-medium text-muted-foreground">نوع الفاتورة:</label>
-                      <Badge variant="outline">{selectedInvoiceDetails.invoice_type || 'طباعة'}</Badge>
+                      <Badge variant="outline">{translateInvoiceType(selectedInvoiceDetails.invoice_type)}</Badge>
                     </div>
                   </div>
                 </CardContent>

@@ -24,7 +24,7 @@ export const createMeasurementsConfigFromSettings = (settings: Partial<PrintSett
   const secondaryColor = settings.secondary_color || '#333333';
   const borderColor = settings.table_border_color || '#000000';
   const fontFamily = settings.font_family || 'Doran';
-  const logoPath = settings.logo_path || '/logofares.svg';
+  const logoPath = settings.logo_path || '/logofaresgold.svg';
   const logoSize = settings.logo_size || 101;
   const footerText = settings.footer_text || '';
   const showFooter = settings.show_footer !== false;
@@ -186,7 +186,7 @@ export const createMeasurementsConfig = (settings: MeasurementsThemeSettings = {
     table_header_bg_color: '#f0f0f0',
     table_header_text_color: '#000000',
     summary_bg_color: '#1a1a1a',
-    logo_path: '/logofares.svg',
+    logo_path: '/logofaresgold.svg',
     logo_size: 101,
     font_family: 'Doran',
   });

@@ -314,7 +314,7 @@ export default function ContractInvoiceDialog({
       
       ${unifiedHeaderHtml({
         styles,
-        fullLogoUrl: `${baseUrl}${styles.logoPath || '/logofares.svg'}`,
+        fullLogoUrl: `${baseUrl}${styles.logoPath || '/logofaresgold.svg'}`,
         metaLinesHtml: `<div><strong>التاريخ:</strong> ${new Date().toLocaleDateString('ar-LY')}</div><div><strong>رقم العقد:</strong> ${contract.Contract_Number || '—'}</div>`,
         titleAr: 'فاتورة طباعة',
         titleEn: 'PRINT INVOICE',
@@ -432,7 +432,7 @@ export default function ContractInvoiceDialog({
       
       ${unifiedHeaderHtml({
         styles,
-        fullLogoUrl: `${baseUrl}${styles.logoPath || '/logofares.svg'}`,
+        fullLogoUrl: `${baseUrl}${styles.logoPath || '/logofaresgold.svg'}`,
         metaLinesHtml: `<div><strong>أمر طباعة رقم:</strong> ${Date.now()}</div><div><strong>التاريخ:</strong> ${new Date().toLocaleDateString('ar-LY')}</div>`,
         titleAr: 'أمر طباعة',
         titleEn: 'PRINT ORDER',

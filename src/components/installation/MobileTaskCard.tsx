@@ -121,7 +121,15 @@ export function MobileTaskCard({
     const price = hasCost ? item.company_installation_cost : (installationPricingByBillboard[item.billboard_id] || 0);
     return sum + price;
   }, 0);
-  const customerTotal = taskItems.reduce((sum, item) => sum + (item.customer_installation_cost || 0), 0);
+  const customerTotal = taskItems.reduce((sum, item) => {
+    const isReinstalled = (item.reinstall_count || 0) > 0;
+    const origCost = Number(item.customer_original_install_cost) || Number(item.customer_installation_cost) || 0;
+    const reinstallCost = isReinstalled
+      ? (Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0)
+      : 0;
+    const itemCost = isReinstalled ? (origCost + reinstallCost) : (Number(item.customer_installation_cost) || 0);
+    return sum + itemCost;
+  }, 0);
   const additionalTotal = taskItems.reduce((sum, item) => sum + (item.additional_cost || 0), 0);
   const pendingItems = taskItems.filter(i => i.status !== 'completed').length;
 

@@ -838,7 +838,7 @@ export default function ContractClosureSimulator() {
 
     // Load logo with absolute path fallback using window origin
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    const fullLogoUrl = `${origin}/logofares.svg`;
+    const fullLogoUrl = `${origin}/logofaresgold.svg`;
     let logoDataUri = '';
     try {
       logoDataUri = await loadLogoAsDataUri(fullLogoUrl);
@@ -853,7 +853,7 @@ export default function ContractClosureSimulator() {
     const themeToUse = {
       ...printTheme,
       showLogo: true,
-      logoPath: '/logofares.svg',
+      logoPath: '/logofaresgold.svg',
       headerSwap: true, // Swaps header: title on the right, logo on the left in RTL
       showCompanyName: false,
       showCompanySubtitle: false,

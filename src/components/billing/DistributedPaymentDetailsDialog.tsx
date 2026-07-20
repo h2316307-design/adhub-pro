@@ -553,7 +553,7 @@ export function DistributedPaymentDetailsDialog({
                               <div class="receipt-container">
                                 <div class="header">
                                   <div class="company-info">
-                                    <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
+                                    <img src="/logofaresgold.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
                                   </div>
                                   <div class="receipt-info">
                                     <div class="receipt-title">إيصال استلام عهدة مالية</div>
@@ -796,7 +796,7 @@ export function DistributedPaymentDetailsDialog({
                               <div class="receipt-container">
                                 <div class="header">
                                   <div class="company-info">
-                                    <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
+                                    <img src="/logofaresgold.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
                                   </div>
                                   <div class="receipt-info">
                                     <div class="receipt-title">إيصال تسليم مبلغ للموظف</div>
@@ -1034,7 +1034,7 @@ export function DistributedPaymentDetailsDialog({
                               <div class="receipt-container">
                                 <div class="header">
                                   <div class="company-info">
-                                    <img src="/logofares.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
+                                    <img src="/logofaresgold.svg" alt="شعار الشركة" class="company-logo" onerror="this.style.display='none'">
                                   </div>
                                   <div class="receipt-info">
                                     <div class="receipt-title">إيصال سحب من رصيد الموظف</div>
