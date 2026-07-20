@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { fetchContractDesignUrls } from '@/lib/contractDesignUtils';
 
 interface EnhancedCompositeTaskCardProps {
   task: CompositeTaskWithDetails;
@@ -350,94 +351,16 @@ export const EnhancedCompositeTaskCard: React.FC<EnhancedCompositeTaskCardProps>
           }
         }
 
-        // جلب صور التصميم من مصادر مختلفة
+        // جلب صور التصميم بآلية مطابقة لـ ContractCard.tsx
+        const contractNumber = Number(task.contract_id);
         const images: Array<{ url: string; face: 'a' | 'b' }> = [];
-        const seen = new Set<string>();
         
-        // أولاً: حاول جلب من print_task_items إذا كانت مهمة الطباعة موجودة
-        if (task.print_task_id) {
-          const { data: printItems } = await supabase
-            .from('print_task_items')
-            .select('design_face_a, design_face_b')
-            .eq('task_id', task.print_task_id);
-          
-          if (printItems) {
-            printItems.forEach((item: any) => {
-              if (item.design_face_a && !seen.has(item.design_face_a)) {
-                seen.add(item.design_face_a);
-                images.push({ url: item.design_face_a, face: 'a' });
-              }
-              if (item.design_face_b && !seen.has(item.design_face_b)) {
-                seen.add(item.design_face_b);
-                images.push({ url: item.design_face_b, face: 'b' });
-              }
-            });
-          }
+        if (Number.isFinite(contractNumber)) {
+          const urls = await fetchContractDesignUrls(contractNumber);
+          urls.forEach((u, idx) => {
+            images.push({ url: u, face: idx % 2 === 0 ? 'a' : 'b' });
+          });
         }
-        
-        // ثانياً: جلب صور التصميم من مهمة التركيب (task_designs و installation_task_items)
-        if (images.length === 0 && task.installation_task_id) {
-          // 1) أولاً: المصدر الرئيسي - جدول task_designs
-          const { data: taskDesigns } = await supabase
-            .from('task_designs')
-            .select('design_face_a_url, design_face_b_url')
-            .eq('task_id', task.installation_task_id);
-
-          if (taskDesigns && taskDesigns.length > 0) {
-            taskDesigns.forEach((d: any) => {
-              if (d.design_face_a_url && !seen.has(d.design_face_a_url)) {
-                seen.add(d.design_face_a_url);
-                images.push({ url: d.design_face_a_url, face: 'a' });
-              }
-              if (d.design_face_b_url && !seen.has(d.design_face_b_url)) {
-                seen.add(d.design_face_b_url);
-                images.push({ url: d.design_face_b_url, face: 'b' });
-              }
-            });
-          }
-
-          // 2) ثانياً: استخدام التصميمات المحفوظة في عناصر مهمة التركيب
-          if (images.length === 0) {
-            const { data: taskItems } = await supabase
-              .from('installation_task_items')
-              .select('billboard_id, design_face_a, design_face_b')
-              .eq('task_id', task.installation_task_id);
-
-            if (taskItems && taskItems.length > 0) {
-              taskItems.forEach((item: any) => {
-                if (item.design_face_a && !seen.has(item.design_face_a)) {
-                  seen.add(item.design_face_a);
-                  images.push({ url: item.design_face_a, face: 'a' });
-                }
-                if (item.design_face_b && !seen.has(item.design_face_b)) {
-                  seen.add(item.design_face_b);
-                  images.push({ url: item.design_face_b, face: 'b' });
-                }
-              });
-
-            // 2) إذا لا تزال لا توجد صور، فولباك: جلب من جدول اللوحات باستخدام billboard_id
-            if (images.length === 0) {
-              const billboardIds = taskItems.map((item: any) => item.billboard_id).filter(Boolean);
-
-              if (billboardIds.length > 0) {
-                const { data: billboards } = await supabase
-                  .from('billboards')
-                  .select('design_face_a, design_face_b')
-                  .in('ID', billboardIds);
-
-                if (billboards) {
-                  billboards.forEach((b: any) => {
-                    if (b.design_face_a && !seen.has(b.design_face_a)) {
-                      seen.add(b.design_face_a);
-                      images.push({ url: b.design_face_a, face: 'a' });
-                    }
-                    if (b.design_face_b && !seen.has(b.design_face_b)) {
-                      seen.add(b.design_face_b);
-                      images.push({ url: b.design_face_b, face: 'b' });
-                    }
-                  });
-                }
-              }
             }
           }
         }

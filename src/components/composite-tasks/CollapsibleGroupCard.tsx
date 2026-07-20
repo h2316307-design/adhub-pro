@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown, ChevronUp, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { fetchContractDesignUrls } from '@/lib/contractDesignUtils';
 
 interface GroupedTasks {
   contractId: number;
@@ -36,66 +37,18 @@ export const CollapsibleGroupCard: React.FC<CollapsibleGroupCardProps> = ({
   const [dominantColor, setDominantColor] = useState<string | null>(null);
   const imgRef = useRef<HTMLImageElement>(null);
 
-  // جلب صورة التصميم الأولى للعقد
+  // جلب صورة التصميم الأولى للعقد بنفس آلية ContractCard
   useEffect(() => {
     const fetchDesignImage = async () => {
       try {
-        const firstTask = group.tasks[0];
-        if (!firstTask?.installation_task_id) {
-          // جلب من اللوحات مباشرة
-          const { data: billboards } = await supabase
-            .from('billboards')
-            .select('design_face_a, design_face_b')
-            .eq('Contract_Number', group.contractId)
-            .limit(1);
-          
-          if (billboards && billboards.length > 0) {
-            setDesignImage(billboards[0].design_face_a || billboards[0].design_face_b || null);
-          }
-          return;
-        }
-
-        // 1. أولاً: جلب من جدول task_designs (المصدر الرئيسي لتصاميم التركيب)
-        const { data: taskDesigns } = await supabase
-          .from('task_designs')
-          .select('design_face_a_url, design_face_b_url')
-          .eq('task_id', firstTask.installation_task_id)
-          .limit(1);
-
-        if (taskDesigns && taskDesigns.length > 0) {
-          const d = taskDesigns[0];
-          if (d.design_face_a_url || d.design_face_b_url) {
-            setDesignImage(d.design_face_a_url || d.design_face_b_url || null);
-            return;
-          }
-        }
-
-        // 2. ثانياً: جلب من عناصر المهمة installation_task_items
-        const { data: taskItems } = await supabase
-          .from('installation_task_items')
-          .select('design_face_a, design_face_b, billboard_id')
-          .eq('task_id', firstTask.installation_task_id)
-          .limit(1);
-
-        if (taskItems && taskItems.length > 0) {
-          const item = taskItems[0];
-          if (item.design_face_a || item.design_face_b) {
-            setDesignImage(item.design_face_a || item.design_face_b);
-            return;
-          }
-          
-          // فولباك من اللوحة
-          if (item.billboard_id) {
-            const { data: billboard } = await supabase
-              .from('billboards')
-              .select('design_face_a, design_face_b')
-              .eq('ID', item.billboard_id)
-              .single();
-            
-            if (billboard) {
-              setDesignImage(billboard.design_face_a || billboard.design_face_b || null);
-            }
-          }
+        const contractNumber = Number(group.contractId);
+        if (!Number.isFinite(contractNumber)) return;
+        
+        const urls = await fetchContractDesignUrls(contractNumber);
+        if (urls && urls.length > 0) {
+          setDesignImage(urls[0]);
+        } else {
+          setDesignImage(null);
         }
       } catch (error) {
         console.error('Error fetching design image:', error);
@@ -103,7 +56,7 @@ export const CollapsibleGroupCard: React.FC<CollapsibleGroupCardProps> = ({
     };
 
     fetchDesignImage();
-  }, [group.contractId, group.tasks]);
+  }, [group.contractId]);
 
   // استخراج اللون السائد من الصورة
   useEffect(() => {

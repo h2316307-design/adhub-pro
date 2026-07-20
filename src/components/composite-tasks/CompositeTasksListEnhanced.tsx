@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
+import { fetchContractDesignUrls } from '@/lib/contractDesignUtils';
 import {
   Search, ArrowUpDown, ArrowUp, ArrowDown,
   CheckCircle2, Clock, Package, Users,
@@ -230,6 +231,22 @@ const TaskCardRow = ({
 }) => {
   const [dominantColor, setDominantColor] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [localDesignUrls, setLocalDesignUrls] = useState<string[]>(task.designUrls || []);
+
+  useEffect(() => {
+    if (task.designUrls && task.designUrls.length > 0) {
+      setLocalDesignUrls(task.designUrls);
+    } else if (task.contract_id) {
+      const contractNo = Number(task.contract_id);
+      if (Number.isFinite(contractNo)) {
+        fetchContractDesignUrls(contractNo).then(urls => {
+          if (urls && urls.length > 0) {
+            setLocalDesignUrls(urls);
+          }
+        });
+      }
+    }
+  }, [task.designUrls, task.contract_id]);
 
   const cfg = STATUS_CONFIG[task.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.pending;
   const hasCutouts = task.customer_cutout_cost > 0 || task.company_cutout_cost > 0;
@@ -280,10 +297,10 @@ const TaskCardRow = ({
       <div className="hidden md:flex h-full items-stretch">
         {/* Design panel */}
         <div className="w-[160px] lg:w-[180px] shrink-0 overflow-hidden relative" onClick={e => e.stopPropagation()}>
-          <DesignPanel urls={task.designUrls} accent={task.accent} onColorExtracted={setDominantColor} />
-          {task.designUrls && task.designUrls.length > 1 && (
+          <DesignPanel urls={localDesignUrls} accent={task.accent} onColorExtracted={setDominantColor} />
+          {localDesignUrls && localDesignUrls.length > 1 && (
             <div className="absolute bottom-2.5 right-2.5 z-30 bg-black/60 backdrop-blur-sm text-white px-2 py-0.5 rounded-lg text-[9px] font-bold border border-white/10">
-              {task.designUrls.length} تصاميم
+              {localDesignUrls.length} تصاميم
             </div>
           )}
         </div>
@@ -1026,17 +1043,38 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         });
       }
 
+      // 1. PRIMARY: Fetch contract design URLs using the exact ContractCard algorithm
+      const contractDesignMap = new Map<number, string[]>();
+      await Promise.all(
+        contractIds.map(async (cId) => {
+          const urls = await fetchContractDesignUrls(Number(cId));
+          if (urls && urls.length > 0) {
+            contractDesignMap.set(Number(cId), urls);
+          }
+        })
+      );
+
       compositeTasks.forEach(task => {
         const seen = new Set<string>();
         const urls: string[] = [];
 
+        const contractUrls = contractDesignMap.get(Number(task.contract_id)) || [];
+        contractUrls.forEach(u => {
+          if (!seen.has(u)) {
+            seen.add(u);
+            urls.push(u);
+          }
+        });
+
         // PRIMARY: From task_designs table (main design source)
-        taskDesignsData
-          .filter(d => (d.task_id && task.installation_task_id && String(d.task_id) === String(task.installation_task_id)) || (d.contract_id && task.contract_id && Number(d.contract_id) === Number(task.contract_id)))
-          .forEach(d => {
-            if (d.design_face_a_url && !seen.has(d.design_face_a_url)) { seen.add(d.design_face_a_url); urls.push(d.design_face_a_url); }
-            if (d.design_face_b_url && !seen.has(d.design_face_b_url)) { seen.add(d.design_face_b_url); urls.push(d.design_face_b_url); }
-          });
+        if (urls.length === 0) {
+          taskDesignsData
+            .filter(d => (d.task_id && task.installation_task_id && String(d.task_id) === String(task.installation_task_id)) || (d.contract_id && task.contract_id && Number(d.contract_id) === Number(task.contract_id)))
+            .forEach(d => {
+              if (d.design_face_a_url && !seen.has(d.design_face_a_url)) { seen.add(d.design_face_a_url); urls.push(d.design_face_a_url); }
+              if (d.design_face_b_url && !seen.has(d.design_face_b_url)) { seen.add(d.design_face_b_url); urls.push(d.design_face_b_url); }
+            });
+        }
 
         // From print task items
         if (urls.length === 0) {
