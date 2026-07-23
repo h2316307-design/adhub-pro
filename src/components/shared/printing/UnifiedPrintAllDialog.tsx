@@ -44,12 +44,14 @@ export interface UnifiedPrintAllDialogProps {
   contextType: PrintContextType;
   contextNumber: number | string;
   customerName: string;
+  companyName?: string;
   adType?: string;
   items: BillboardPrintItem[];
   billboards: Record<number, any>;
   teams?: Record<string, any>;
   showTeamFilter?: boolean;
   title?: string;
+  customerPhone?: string;
 }
 
 export function UnifiedPrintAllDialog({
@@ -58,12 +60,14 @@ export function UnifiedPrintAllDialog({
   contextType,
   contextNumber,
   customerName,
+  companyName = '',
   adType = '',
   items,
   billboards,
   teams = {},
   showTeamFilter = false,
-  title
+  title,
+  customerPhone = ''
 }: UnifiedPrintAllDialogProps) {
   const PDF_PORTRAIT_WIDTH_PX = 2480;
   const PDF_PORTRAIT_HEIGHT_PX = 3508;
@@ -71,6 +75,9 @@ export function UnifiedPrintAllDialog({
   const PDF_LANDSCAPE_HEIGHT_PX = 2480;
 
   const [includeDesigns, setIncludeDesigns] = useState(true);
+  const [showDesignName, setShowDesignName] = useState(false);
+  const [showTeamName, setShowTeamName] = useState(true);
+  const [hideCustomerName, setHideCustomerName] = useState(true);
   const [hideInstallDate, setHideInstallDate] = useState(true);
   const [printType, setPrintType] = useState<'client' | 'installation'>('client');
   const [printMode, setPrintMode] = useState<'cards' | 'table'>('cards');
@@ -85,8 +92,9 @@ export function UnifiedPrintAllDialog({
   const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
   const [tableSettingsDialogOpen, setTableSettingsDialogOpen] = useState(false);
   const [maintenanceStatusesMap, setMaintenanceStatusesMap] = useState<Record<string, { label: string; color: string }>>({});
-  const [showBillboardStatusOpt, setShowBillboardStatusOpt] = useState(true);
+  const [showBillboardStatusOpt, setShowBillboardStatusOpt] = useState(false);
   const [printCityInsteadOfMunicipality, setPrintCityInsteadOfMunicipality] = useState(false);
+  const [showBackgroundOptions, setShowBackgroundOptions] = useState(false);
   
   const { settings: customSettings, loading: settingsLoading } = usePrintCustomization();
   const { 
@@ -260,6 +268,53 @@ export function UnifiedPrintAllDialog({
     }
   };
 
+  const getCleanDocumentTitle = () => {
+    const label = getContextLabel();
+    let rawCust = (customerName || '').trim();
+    let rawCompany = (companyName || '').trim();
+    const allTeamNames = Object.values(teams || {}).map(t => t?.team_name).filter(Boolean);
+
+    // حساب اسم الفريق المختار
+    let selectedTeamStr = '';
+    if (showTeamName) {
+      if (selectedTeamIds.size > 0) {
+        selectedTeamStr = Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ');
+      } else {
+        const isTeam = allTeamNames.some(tn => tn === rawCust);
+        if (isTeam) {
+          selectedTeamStr = rawCust;
+        } else {
+          const firstTeamId = items.find(i => i.team_id)?.team_id;
+          if (firstTeamId && teams[firstTeamId]?.team_name) {
+            selectedTeamStr = teams[firstTeamId].team_name;
+          }
+        }
+      }
+    }
+
+    // تجهيز اسم الزبون والشركة (إذا لم يكن الإخفاء مفعلاً)
+    let customerDisplay = '';
+    if (!hideCustomerName) {
+      const isTeam = allTeamNames.some(tn => tn === rawCust);
+      if (!isTeam) {
+        customerDisplay = [rawCust, rawCompany].filter(Boolean).join(' - ');
+      }
+    }
+
+    const isTeamContext = allTeamNames.some(tn => tn === rawCust);
+    const displayNum = (contextNumber && !isTeamContext) ? `#${contextNumber}` : '';
+
+    const parts = [
+      printMode === 'table' ? `جدول ${label}` : `مهام ${label}`,
+      displayNum,
+      customerDisplay,
+      selectedTeamStr ? `[فريق ${selectedTeamStr}]` : '',
+      `${filteredItems.length} لوحة`
+    ].filter(Boolean);
+
+    return parts.join(' - ');
+  };
+
   const generatePrintHTML = async () => {
     const sortedItems = await sortBillboardsBySize(filteredItems);
     const pages: string[] = [];
@@ -336,7 +391,7 @@ export function UnifiedPrintAllDialog({
       // نص حالة اللوحة (يظهر أسفل الاسم)
       const mStatusKey = (billboard.maintenance_status || '').toString().trim();
       const showBillboardStatus = showBillboardStatusOpt
-        && (s as any).billboard_status_enabled !== 'false'
+        && (s as any).billboard_status_enabled === 'true'
         && mStatusKey;
       const mStatusInfo = mStatusKey ? maintenanceStatusesMap[mStatusKey] : undefined;
       const billboardStatusLabel = mStatusInfo?.label || mStatusKey;
@@ -344,19 +399,21 @@ export function UnifiedPrintAllDialog({
       const billboardStatusFontSize = (s as any).billboard_status_font_size || '14px';
       const billboardStatusOffsetY = (s as any).billboard_status_offset_y || '6mm';
 
-      const selectedTeamNames = showTeamFilter 
+      const itemTeamName = item.team_id && teams[item.team_id]?.team_name ? teams[item.team_id].team_name : '';
+      const displayTeamNames = itemTeamName || (showTeamFilter 
         ? Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ')
-        : '';
+        : '');
 
       const itemContractNumber = item.contract_number || contextNumber;
       const itemAdType = item.ad_type || adType;
+      const customerCompanyText = !hideCustomerName ? [customerName, companyName].filter(Boolean).join(' - ') : '';
       const contractInfoText = itemContractNumber 
-        ? `${getContextLabel()} رقم: ${itemContractNumber}${itemAdType ? ' - نوع الإعلان: ' + itemAdType : ''}`
-        : (itemAdType ? `نوع الإعلان: ${itemAdType}` : '');
+        ? `${getContextLabel()} رقم: ${itemContractNumber}${customerCompanyText ? ' - الزبون: ' + customerCompanyText : ''}${itemAdType ? ' - نوع الإعلان: ' + itemAdType : ''}`
+        : (itemAdType ? `${customerCompanyText ? 'الزبون: ' + customerCompanyText + ' - ' : ''}نوع الإعلان: ${itemAdType}` : customerCompanyText ? `الزبون: ${customerCompanyText}` : '');
 
       // تحديد الصورة الرئيسية: صورة اللوحة أو صورة الدبوس (الدبوس فقط في تنظيم البلديات)
       const hasMainImage = !!mainImage;
-      const showPinFallback = contextType !== 'contract' && contextType !== 'offer' && contextType !== 'removal';
+      const showPinFallback = contextType !== 'contract' && contextType !== 'offer' && contextType !== 'installation' && contextType !== 'removal';
       const imageSection = hasMainImage
         ? `<img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />`
         : (showPinFallback
@@ -373,7 +430,7 @@ export function UnifiedPrintAllDialog({
         <div class="page">
           <div class="background"><img src="${customBackgroundUrl}" alt="" /></div>
 
-          ${contextType !== 'contract' && contextType !== 'offer' && contextType !== 'removal' ? `
+          ${contextType !== 'contract' && contextType !== 'offer' && contextType !== 'installation' && contextType !== 'removal' ? `
           <div class="absolute-field pin-badge">
             <img src="${pinSvgDataUrl}" alt="دبوس" style="width: 60px; height: auto;" />
           </div>
@@ -407,9 +464,9 @@ export function UnifiedPrintAllDialog({
             ${item.has_cutout ? 'مجسم - ' : ''}عدد ${facesCount} ${facesCount === 1 ? 'وجه' : 'أوجه'}
           </div>
 
-          ${printType === 'installation' && selectedTeamNames ? `
+          ${printType === 'installation' && showTeamName && displayTeamNames ? `
             <div class="absolute-field print-type" style="top: ${s.team_name_top}; right: ${s.team_name_right}; font-size: ${s.team_name_font_size}; color: ${s.team_name_color || '#000'}; font-weight: ${s.team_name_font_weight}; text-align: ${s.team_name_alignment}; ${s.team_name_offset_x && s.team_name_offset_x !== '0mm' ? `margin-right: ${s.team_name_offset_x};` : ''}">
-               ${contextType === 'removal' ? 'فريق الإزالة' : 'فريق التركيب'}: ${selectedTeamNames}
+               ${contextType === 'removal' ? 'فريق الإزالة' : 'فريق التركيب'}: ${displayTeamNames}
             </div>
           ` : ''}
 
@@ -454,13 +511,13 @@ export function UnifiedPrintAllDialog({
             <div class="absolute-field designs-section" style="top: ${toCssLength(s.designs_top)}; left: ${s.designs_left}; width: ${s.designs_width}; display: flex; gap: ${s.designs_gap}; align-items: flex-start;">
               ${designFaceA ? `
                 <div class="design-item">
-                  <div class="design-label">تصميم الوجه الأمامي</div>
+                  <div class="design-label">${showDesignName && itemAdType ? itemAdType : 'تصميم الوجه الأمامي'}</div>
                   <img src="${designFaceA}" alt="تصميم الوجه الأمامي" class="design-image" style="max-height: ${s.design_image_height};" />
                 </div>
               ` : ''}
               ${designFaceB ? `
                 <div class="design-item">
-                  <div class="design-label">تصميم الوجه الخلفي</div>
+                  <div class="design-label">${showDesignName && itemAdType ? itemAdType : 'تصميم الوجه الخلفي'}</div>
                   <img src="${designFaceB}" alt="تصميم الوجه الخلفي" class="design-image" style="max-height: ${s.design_image_height};" />
                 </div>
               ` : ''}
@@ -477,7 +534,7 @@ export function UnifiedPrintAllDialog({
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8" />
-        <title>${getContextLabel()} #${contextNumber} - ${customerName} - ${filteredItems.length} لوحة</title>
+        <title>${getCleanDocumentTitle()}</title>
         <style>
           @font-face {
             font-family: 'Manrope';
@@ -800,9 +857,10 @@ export function UnifiedPrintAllDialog({
         return `<th class="header-cell" style="${headerStyle}">${col.label}</th>`;
       });
 
+      const customerCompanyText = !hideCustomerName ? [customerName, companyName].filter(Boolean).join(' - ') : '';
       pages.push(`
         <div class="info-bar">
-          <span>${getContextLabel()} رقم: ${contextNumber} | ${customerName}${adType ? ' | ' + adType : ''}${selectedTeamNames ? ' | الفريق: ' + selectedTeamNames : ''} | صفحة ${pageIndex + 1} من ${Math.ceil(sortedItems.length / rowsPerPage)}</span>
+          <span>${getContextLabel()} رقم: ${contextNumber}${customerCompanyText ? ' | ' + customerCompanyText : ''}${adType ? ' | ' + adType : ''}${printType === 'installation' && showTeamName && selectedTeamNames ? ' | الفريق: ' + selectedTeamNames : ''} | صفحة ${pageIndex + 1} من ${Math.ceil(sortedItems.length / rowsPerPage)}</span>
         </div>
         <table>
           <thead><tr>${headerCells.join('')}</tr></thead>
@@ -822,7 +880,7 @@ export function UnifiedPrintAllDialog({
       <html dir="rtl" lang="ar">
       <head>
         <meta charset="UTF-8" />
-        <title>جدول ${getContextLabel()} #${contextNumber} - ${customerName}</title>
+        <title>${getCleanDocumentTitle()}</title>
         <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
         <style>
           @font-face { font-family: 'Doran'; src: url('${baseUrl}/Doran-Medium.otf') format('opentype'); font-weight: 500; }
@@ -916,6 +974,7 @@ export function UnifiedPrintAllDialog({
       const printWindow = window.open('', '_blank');
       if (printWindow) {
         printWindow.document.write(html);
+        printWindow.document.title = getCleanDocumentTitle();
         printWindow.document.close();
         toast.success(`تم تحضير ${filteredItems.length} ${printMode === 'table' ? 'صف' : 'صفحة'} للطباعة`);
         
@@ -1120,7 +1179,7 @@ export function UnifiedPrintAllDialog({
       const isTableLandscape = printMode === 'table' && tableSettings.page_orientation === 'landscape';
       const html = printMode === 'table' ? await generateTablePrintHTML() : await generatePrintHTML();
       const pdfBlob = await buildPdfBlobFromHtml(html, isTableLandscape);
-      const pdfFileName = `لوحات_${contextNumber}_${filteredItems.length}لوحة.pdf`;
+      const pdfFileName = `${getCleanDocumentTitle().replace(/[#\/\\]/g, '').replace(/\s+/g, '_')}.pdf`;
       downloadPdfBlob(pdfBlob, pdfFileName);
       toast.success('تم تحميل ملف PDF بنجاح');
       onOpenChange(false);
@@ -1152,7 +1211,7 @@ export function UnifiedPrintAllDialog({
       const { uploadFileToGoogleDrive } = await import('@/services/imageUploadService');
 
       const driveFolder = contextType === 'installation' ? 'installation-tasks' : contextType === 'removal' ? 'removal-tasks' : 'contracts';
-      const pdfFileName = `${getContextLabel()}_${contextNumber}${adType ? '_' + adType : ''}_${filteredItems.length}لوحة.pdf`;
+      const pdfFileName = `${getCleanDocumentTitle().replace(/[#\/\\]/g, '').replace(/\s+/g, '_')}.pdf`;
       const pdfUrl = await uploadFileToGoogleDrive(base64Data, pdfFileName, 'application/pdf', driveFolder, false, progress);
 
       const cleanPhone = phone.replace(/[^0-9+]/g, '').replace(/^\+/, '');
@@ -1299,58 +1358,87 @@ export function UnifiedPrintAllDialog({
             </div>
           </div>
 
-          {/* إعدادات البطاقات */}
-          {printMode === 'cards' && (
-            <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
-              <div className="flex items-center justify-between">
-                <BackgroundSelector
-                  value={customBackgroundUrl}
-                  onChange={setCustomBackgroundUrl}
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCustomizationDialogOpen(true)}
-                  className="flex items-center gap-2"
-                >
-                  <Settings2 className="h-4 w-4" />
-                  إعدادات طباعة اللوحات
-                </Button>
+          {/* قسم مطوي: اختيار قالب الخلفية والشعار والإعدادات المتقدمة */}
+          <div className="rounded-2xl border border-slate-800 bg-slate-900/60 overflow-hidden shadow-md">
+            <button
+              type="button"
+              onClick={() => setShowBackgroundOptions(!showBackgroundOptions)}
+              className="w-full p-3.5 flex items-center justify-between bg-slate-900/90 text-right hover:bg-slate-850 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-amber-400" />
+                <span className="text-xs font-black text-slate-200">
+                  خيارات قالب الخلفية والشعار والإعدادات المتقدمة {showBackgroundOptions ? '' : '(مطوية)'}
+                </span>
               </div>
-            </div>
-          )}
+              <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                {showBackgroundOptions ? 'إخفاء الخيارات' : 'إظهار والتعديل'}
+              </Badge>
+            </button>
 
-          {/* إعدادات الجدول */}
-          {printMode === 'table' && (
-            <div className="p-4 bg-muted/50 rounded-xl border space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-muted-foreground">
-                  جدول يحتوي على جميع اللوحات مع الصور والتفاصيل
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setTableSettingsDialogOpen(true)}
-                  className="flex items-center gap-2"
-                >
-                  <Settings2 className="h-4 w-4" />
-                  إعدادات الجدول
-                </Button>
+            {showBackgroundOptions && (
+              <div className="p-4 border-t border-slate-800/80 space-y-3.5 bg-slate-950/60">
+                {printMode === 'cards' && (
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <BackgroundSelector
+                      value={customBackgroundUrl}
+                      onChange={setCustomBackgroundUrl}
+                    />
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCustomizationDialogOpen(true)}
+                      className="flex items-center gap-2 rounded-xl text-xs font-bold border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                    >
+                      <Settings2 className="h-4 w-4 text-amber-400" />
+                      إعدادات الغلاف والطباعة
+                    </Button>
+                  </div>
+                )}
+
+                {printMode === 'table' && (
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="text-xs text-slate-400">
+                      تعديل ألوان وتصميم وأعمدة جدول طباعة اللوحات
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setTableSettingsDialogOpen(true)}
+                      className="flex items-center gap-2 rounded-xl text-xs font-bold border-slate-700 bg-slate-900 text-slate-200 hover:bg-slate-800"
+                    >
+                      <Settings2 className="h-4 w-4 text-amber-400" />
+                      إعدادات مظهر الجدول
+                    </Button>
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* خيارات الطباعة */}
           <div className="space-y-3">
             {printMode === 'cards' && (
-              <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
-                <Checkbox
-                  id="includeDesigns"
-                  checked={includeDesigns}
-                  onCheckedChange={(c) => setIncludeDesigns(!!c)}
-                />
-                <Label htmlFor="includeDesigns" className="cursor-pointer flex-1">تضمين التصاميم</Label>
-              </div>
+              <>
+                <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <Checkbox
+                    id="includeDesigns"
+                    checked={includeDesigns}
+                    onCheckedChange={(c) => setIncludeDesigns(!!c)}
+                  />
+                  <Label htmlFor="includeDesigns" className="cursor-pointer flex-1">تضمين التصاميم</Label>
+                </div>
+                {includeDesigns && (
+                  <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors mr-6">
+                    <Checkbox
+                      id="showDesignName"
+                      checked={showDesignName}
+                      onCheckedChange={(c) => setShowDesignName(!!c)}
+                    />
+                    <Label htmlFor="showDesignName" className="cursor-pointer flex-1 text-xs">إظهار اسم التصميم بدلاً من كلمة "التصميم"</Label>
+                  </div>
+                )}
+              </>
             )}
 
             <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
@@ -1370,6 +1458,28 @@ export function UnifiedPrintAllDialog({
               />
               <Label htmlFor="hideInstallDate" className="cursor-pointer flex-1">
                 إخفاء تاريخ التركيب
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+              <Checkbox
+                id="hideCustomerName"
+                checked={hideCustomerName}
+                onCheckedChange={(c) => setHideCustomerName(!!c)}
+              />
+              <Label htmlFor="hideCustomerName" className="cursor-pointer flex-1">
+                إخفاء اسم الزبون (مفعل افتراضياً)
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+              <Checkbox
+                id="showTeamName"
+                checked={showTeamName}
+                onCheckedChange={(c) => setShowTeamName(!!c)}
+              />
+              <Label htmlFor="showTeamName" className="cursor-pointer flex-1">
+                إظهار اسم الفريق المختار
               </Label>
             </div>
 
@@ -1401,14 +1511,14 @@ export function UnifiedPrintAllDialog({
               <Button
                 variant={printType === 'client' ? 'default' : 'outline'}
                 onClick={() => setPrintType('client')}
-                className="flex-1"
+                className="flex-1 cursor-pointer"
               >
                 نسخة العميل
               </Button>
               <Button
                 variant={printType === 'installation' ? 'default' : 'outline'}
                 onClick={() => setPrintType('installation')}
-                className="flex-1"
+                className="flex-1 cursor-pointer"
               >
                 نسخة {contextType === 'removal' ? 'فريق الإزالة' : 'فريق التركيب'}
               </Button>
@@ -1416,14 +1526,14 @@ export function UnifiedPrintAllDialog({
           </div>
 
           {/* أزرار التحكم */}
-          <div className="flex gap-2 pt-4 border-t">
-            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
+          <div className="flex gap-2 pt-4 border-t flex-wrap">
+            <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1 min-w-[80px] cursor-pointer">
               إلغاء
             </Button>
             <Button 
               onClick={handlePrint} 
-              disabled={loading || settingsLoading || tableSettingsLoading || filteredItems.length === 0} 
-              className="flex-1"
+              disabled={loading || settingsLoading || (printMode === 'table' && tableSettingsLoading) || filteredItems.length === 0} 
+              className="flex-1 min-w-[80px] cursor-pointer"
             >
               <Printer className="h-4 w-4 ml-2" />
               طباعة {printMode === 'table' ? 'جدول' : 'بطاقات'}
@@ -1432,7 +1542,7 @@ export function UnifiedPrintAllDialog({
               onClick={handleDownloadPDF} 
               disabled={loading || settingsLoading || filteredItems.length === 0} 
               variant="secondary" 
-              className="flex-1"
+              className="flex-1 min-w-[80px] cursor-pointer"
             >
               <FileDown className="h-4 w-4 ml-2" />
               PDF
@@ -1445,7 +1555,7 @@ export function UnifiedPrintAllDialog({
               const savedPhone = firstTeam?.phone_number || firstTeam?.phone;
               
               return (
-                <div className="flex-1 flex flex-col gap-2">
+                <div className="flex-1 min-w-[120px] flex flex-col gap-2">
                   {showWhatsAppInput && !savedPhone ? (
                     <div className="flex gap-2">
                       <Input
@@ -1466,7 +1576,7 @@ export function UnifiedPrintAllDialog({
                           }
                         }}
                         variant="outline"
-                        className="gap-2 border-green-500/40 text-green-600 hover:bg-green-500/10"
+                        className="gap-2 border-green-500/40 text-green-600 hover:bg-green-500/10 cursor-pointer"
                         disabled={loading || filteredItems.length === 0}
                       >
                         <MessageCircle className="h-4 w-4" />
@@ -1483,7 +1593,7 @@ export function UnifiedPrintAllDialog({
                         }
                       }}
                       variant="outline"
-                      className="w-full gap-2 border-green-500/40 text-green-600 hover:bg-green-500/10"
+                      className="w-full gap-2 border-green-500/40 text-green-600 hover:bg-green-500/10 cursor-pointer"
                       disabled={loading || filteredItems.length === 0}
                     >
                       <MessageCircle className="h-4 w-4" />
@@ -1493,6 +1603,17 @@ export function UnifiedPrintAllDialog({
                 </div>
               );
             })()}
+            {customerPhone && (
+              <Button
+                onClick={() => handleSendWhatsAppUpload(customerPhone)}
+                variant="outline"
+                className="flex-1 min-w-[120px] gap-2 border-blue-500/40 text-blue-600 hover:bg-blue-500/10 cursor-pointer"
+                disabled={loading || filteredItems.length === 0}
+              >
+                <MessageCircle className="h-4 w-4" />
+                واتساب العميل
+              </Button>
+            )}
           </div>
         </div>
       </DialogContent>

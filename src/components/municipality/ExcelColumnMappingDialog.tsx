@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -155,6 +155,9 @@ export const ExcelColumnMappingDialog: React.FC<ExcelColumnMappingDialogProps> =
             <FileSpreadsheet className="h-5 w-5 text-emerald-600" />
             تحديد أعمدة الملف
           </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+            قم بمطابقة أعمدة ملف Excel مع حقول بيانات اللوحات في النظام
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">

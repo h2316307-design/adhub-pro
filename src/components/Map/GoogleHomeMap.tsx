@@ -1,7 +1,8 @@
 /// <reference types="google.maps" />
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { toast } from 'sonner';
-import { Map as MapIcon, Globe, MapPin, Camera, X, ExternalLink, CheckSquare, Download, Route, ImageOff, Loader2, Calendar, User, Tag, MapPinned, FileText, Wallet, Trash2, Zap, Plus, PenTool, Pencil } from 'lucide-react';
+import { Map as MapIcon, Globe, MapPin, Camera, X, ExternalLink, CheckSquare, Download, Route, ImageOff, Loader2, Calendar, User, Tag, MapPinned, FileText, Wallet, Trash2, Zap, Plus, PenTool, Pencil, HelpCircle, Info, Lock, Unlock } from 'lucide-react';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { MarkerClusterer } from '@googlemaps/markerclusterer';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -54,6 +55,7 @@ interface GoogleHomeMapProps {
   showStatsOverlay?: boolean;
   calcMetersByFaces?: boolean;
   externalSelectedIds?: Set<number>;
+  onLocationChange?: (billboardId: number | string, newLat: number, newLng: number) => void;
 }
 
 import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
@@ -81,7 +83,8 @@ export default function GoogleHomeMap({
   onDeleteSelected,
   showStatsOverlay = false,
   calcMetersByFaces = false,
-  externalSelectedIds
+  externalSelectedIds,
+  onLocationChange
 }: GoogleHomeMapProps) {
 
 
@@ -103,7 +106,9 @@ export default function GoogleHomeMap({
   const prevFilterKeyRef = useRef<string>('');
   const hasFitBoundsRef = useRef(false);
   
-  // Field photos refs
+  const [isDraggingPin, setIsDraggingPin] = useState(false);
+  const [draggingPinName, setDraggingPinName] = useState('');
+  const [isPinDragEnabled, setIsPinDragEnabled] = useState(false); // ✅ قفل المواقع افتراضياً لمنع التحريك بالخطأ
   const googlePhotoMarkersRef = useRef<google.maps.Marker[]>([]);
   const googlePhotoCirclesRef = useRef<google.maps.Circle[]>([]);
   const googlePhotoArrowsRef = useRef<google.maps.Polyline[]>([]);
@@ -1516,7 +1521,21 @@ export default function GoogleHomeMap({
         popupAnchor: [0, -pinData.anchorY]
       });
 
-      const marker = L.marker([coords.lat, coords.lng], { icon });
+      const marker = L.marker([coords.lat, coords.lng], { icon, draggable: isPinDragEnabled });
+
+      let pressTimer: any = null;
+      marker.on('mousedown touchstart', () => {
+        pressTimer = setTimeout(() => {
+          if (!isPinDragEnabled) {
+            setIsPinDragEnabled(true);
+            const name = (b as any).Billboard_Name || (b as any).location_text || `لوحة #${billboardId}`;
+            toast.info(`🔓 تم تفعيل وضع السحب والتحريك للوحة: "${name}"`, { duration: 3000 });
+          }
+        }, 1500);
+      });
+      marker.on('mouseup mouseleave touchend touchcancel dragstart', () => {
+        if (pressTimer) clearTimeout(pressTimer);
+      });
 
       marker.on('click', (e) => {
         L.DomEvent.stopPropagation(e);
@@ -1530,6 +1549,56 @@ export default function GoogleHomeMap({
         toggleBillboardSelection(billboardId);
       });
 
+      marker.on('dragstart', () => {
+        setIsDraggingPin(true);
+        const name = (b as any).Billboard_Name || (b as any).location_text || `لوحة #${billboardId}`;
+        setDraggingPinName(name);
+      });
+
+      marker.on('dragend', async (e: any) => {
+        setIsDraggingPin(false);
+        const latLng = e.target.getLatLng();
+        const newLat = Number(latLng.lat.toFixed(6));
+        const newLng = Number(latLng.lng.toFixed(6));
+        const name = (b as any).Billboard_Name || (b as any).location_text || `لوحة #${billboardId}`;
+        const coordsStr = `${newLat}, ${newLng}`;
+
+        // ✅ تحديث الإحداثيات محلياً على الكائن المباشر فوراً لمنع العودة للمكان القديم
+        (b as any).GPS_Coordinates = coordsStr;
+        (b as any).coordinates = coordsStr;
+        (b as any).GPS_Link = `https://www.google.com/maps?q=${coordsStr}`;
+
+        // ✅ تحديث موضع الماركر والمجموعات (Clusters) فوراً على خريطة OSM
+        e.target.setLatLng([newLat, newLng]);
+        if (leafletClusterRef.current) {
+          leafletClusterRef.current.refreshClusters(e.target);
+        }
+
+        // ✅ حفظ فوري ومباشر للإحداثيات الجديدة في قاعدة البيانات
+        try {
+          const { error } = await supabase
+            .from('billboards')
+            .update({
+              GPS_Coordinates: coordsStr,
+              GPS_Link: `https://www.google.com/maps?q=${coordsStr}`
+            })
+            .eq('ID', Number(billboardId));
+
+          if (error) {
+            console.error('Failed to update billboard position in DB:', error);
+            toast.error(`فشل حفظ الموقع الجديد للوحة "${name}"`);
+          } else {
+            toast.success(`تم حفظ موقع "${name}" الجديد بنجاح: (${newLat}, ${newLng})`);
+          }
+        } catch (dbErr) {
+          console.error('DB update error on marker drag:', dbErr);
+        }
+
+        if (onLocationChange) {
+          onLocationChange(billboardId, newLat, newLng);
+        }
+      });
+
       leafletClusterRef.current?.addLayer(marker);
 
       bounds.extend([coords.lat, coords.lng]);
@@ -1541,7 +1610,7 @@ export default function GoogleHomeMap({
       hasFitBoundsRef.current = true;
       leafletMapInstanceRef.current.fitBounds(bounds, { padding: [60, 60], maxZoom: 13 });
     }
-  }, [filteredBillboards, mapProvider, onBillboardClick, createPinWithLabel, passedBillboardIds, tornSet, selectedBillboardForCard, zoomLevel]);
+  }, [filteredBillboards, mapProvider, onBillboardClick, createPinWithLabel, passedBillboardIds, tornSet, selectedBillboardForCard, zoomLevel, isPinDragEnabled]);
 
   // Leaflet: User/Live location markers
   useEffect(() => {
@@ -1944,7 +2013,8 @@ export default function GoogleHomeMap({
           scaledSize: new google.maps.Size(pinData.width, pinData.height),
           anchor: new google.maps.Point(pinData.anchorX, pinData.anchorY)
         },
-        optimized: true
+        draggable: true,
+        optimized: false
       });
 
       // Store billboard data on the marker
@@ -1969,6 +2039,58 @@ export default function GoogleHomeMap({
           scaledSize: new google.maps.Size(updatedPin.width, updatedPin.height),
           anchor: new google.maps.Point(updatedPin.anchorX, updatedPin.anchorY)
         });
+      });
+
+      marker.addListener('dragstart', () => {
+        setIsDraggingPin(true);
+        const currentB = marker.get('billboardData') || b;
+        const name = (currentB as any).Billboard_Name || (currentB as any).location_text || `لوحة #${billboardId}`;
+        setDraggingPinName(name);
+      });
+
+      marker.addListener('dragend', async (e: google.maps.MapMouseEvent) => {
+        setIsDraggingPin(false);
+        if (!e.latLng) return;
+        const newLat = Number(e.latLng.lat().toFixed(6));
+        const newLng = Number(e.latLng.lng().toFixed(6));
+        const currentB = marker.get('billboardData') || b;
+        const name = (currentB as any).Billboard_Name || (currentB as any).location_text || `لوحة #${billboardId}`;
+        const coordsStr = `${newLat}, ${newLng}`;
+
+        // ✅ تحديث الإحداثيات محلياً على كائن اللوحة وماركر الخريطة فوراً لمنع العودة للمكان القديم عند التحريك أو التكبير
+        (b as any).GPS_Coordinates = coordsStr;
+        (b as any).coordinates = coordsStr;
+        (b as any).GPS_Link = `https://www.google.com/maps?q=${coordsStr}`;
+        if (currentB) {
+          (currentB as any).GPS_Coordinates = coordsStr;
+          (currentB as any).coordinates = coordsStr;
+          (currentB as any).GPS_Link = `https://www.google.com/maps?q=${coordsStr}`;
+          marker.set('billboardData', { ...currentB, GPS_Coordinates: coordsStr, coordinates: coordsStr, GPS_Link: `https://www.google.com/maps?q=${coordsStr}` });
+        }
+
+        // ✅ حفظ فوري ومباشر للإحداثيات الجديدة في قاعدة البيانات
+        try {
+          const { error } = await supabase
+            .from('billboards')
+            .update({
+              GPS_Coordinates: coordsStr,
+              GPS_Link: `https://www.google.com/maps?q=${coordsStr}`
+            })
+            .eq('ID', Number(billboardId));
+
+          if (error) {
+            console.error('Failed to update billboard position in DB:', error);
+            toast.error(`فشل حفظ الموقع الجديد للوحة "${name}"`);
+          } else {
+            toast.success(`تم حفظ موقع "${name}" الجديد بنجاح: (${newLat}, ${newLng})`);
+          }
+        } catch (dbErr) {
+          console.error('DB update error on marker drag:', dbErr);
+        }
+
+        if (onLocationChange) {
+          onLocationChange(billboardId, newLat, newLng);
+        }
       });
 
       googleMarkerMapRef.current.set(id, marker);
@@ -2659,155 +2781,233 @@ export default function GoogleHomeMap({
         @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
       `}</style>
 
-      {/* Top Controller Bar - Unified for Mobile, Elegant for Desktop */}
+      {/* ─────────────────────────────────────────────────────────────────
+          TOP CONTROLLER BAR
+          Desktop: 3-column grid — left hint | center search | right actions
+          Mobile:  stacked column inside a pill container
+      ──────────────────────────────────────────────────────────────────── */}
       {!isTracking && (!isMobile || !selectedBillboardForCard) && (
-        <div className={`absolute z-[1000] pointer-events-auto ${
-          isMobile 
-            ? 'top-2.5 left-2.5 right-2.5 flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 rounded-2xl p-2 shadow-xl' 
-            : 'top-4 left-4 right-4 flex items-center justify-between pointer-events-none'
+        <div className={`absolute z-[1000] pointer-events-none ${
+          isMobile
+            ? 'top-2.5 left-2.5 right-2.5'
+            : 'top-4 left-4 right-4'
         }`}>
-          {/* Search bar wrapper */}
-          {!externalSearchQuery && (
-            <div className={`flex flex-col gap-1.5 ${
-              isMobile 
-                ? 'w-full pointer-events-auto' 
-                : 'absolute left-1/2 transform -translate-x-1/2 w-[340px] max-w-[50vw] pointer-events-auto'
-            }`}>
-              <MapSearchBar 
-                value={searchQuery}
-                onChange={setSearchQuery}
-                onRequestLocation={isMobile ? undefined : requestUserLocation}
-                billboards={billboards}
-                onSelectBillboard={focusOnBillboard}
-                onNavigateToCoords={navigateToCoords}
-                placeholder={isMobile ? 'بحث...' : 'ابحث عن لوحة، منطقة، إحداثيات...'}
-              />
-              
-              {/* Status Filter Chips */}
-              <div className="flex items-center justify-start md:justify-center gap-1.5 overflow-x-auto py-1 no-scrollbar w-full px-1">
-                {nearbyCount > 0 && (
-                  <span className="px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-green-500/10 border border-green-500/20 text-green-400 animate-pulse flex items-center gap-1 shrink-0">
-                    <span className="w-1 h-1 rounded-full bg-green-400" />
-                    {nearbyCount} قريبة
-                  </span>
-                )}
-                {[
-                  { key: 'available', label: 'متاح', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-                  { key: 'rented', label: 'مؤجر', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-                  { key: 'reserved', label: 'محجوز', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
-                  { key: 'maintenance', label: 'صيانة', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
-                ].map(chip => {
-                  const isActive = localStatusFilter.includes(chip.key);
-                  return (
-                    <button
-                      key={chip.key}
-                      onClick={() => {
-                        setLocalStatusFilter(prev => 
-                          prev.includes(chip.key)
-                            ? prev.filter(k => k !== chip.key)
-                            : [...prev, chip.key]
-                        );
-                      }}
-                      className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all duration-200 cursor-pointer shrink-0 ${
-                        isActive
-                          ? 'bg-amber-600 border-amber-500 text-white shadow-md'
-                          : `${chip.color} hover:bg-white/5`
-                      }`}
-                      style={{ fontFamily: 'Tajawal, sans-serif' }}
-                    >
-                      {chip.label}
-                    </button>
-                  );
-                })}
-                {localStatusFilter.length > 0 && (
-                  <button
-                    onClick={() => setLocalStatusFilter([])}
-                    className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white transition-colors cursor-pointer shrink-0"
-                    style={{ fontFamily: 'Tajawal, sans-serif' }}
-                  >
-                    إلغاء
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
- 
-          {/* Left / Center Actions (Desktop only) */}
-          {!isMobile && (
-            <div className="flex items-center gap-2 pointer-events-auto">
-              {!isMultiSelectMode && (
-                <div className="bg-slate-950/85 backdrop-blur-xl border border-amber-500/25 rounded-2xl px-4 py-2.5 shadow-xl flex items-center gap-3 text-[11px] text-slate-300 font-bold" style={{ fontFamily: 'Tajawal, sans-serif' }}>
-                  <span className="text-amber-500 font-extrabold">طريقة الاستخدام:</span>
-                  <span className="bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">نقرة: تفاصيل</span>
-                  <span className="bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">نقرتين: تحديد</span>
-                  <span className="bg-white/5 px-2 py-0.5 rounded-lg border border-white/5">نقرتين على الخريطة: إضافة</span>
-                </div>
+          {/* ── Mobile wrapper ── */}
+          {isMobile ? (
+            <div className="flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 rounded-2xl p-2 shadow-xl pointer-events-auto">
+              {!externalSearchQuery && (
+                <>
+                  <MapSearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    billboards={billboards}
+                    onSelectBillboard={focusOnBillboard}
+                    onNavigateToCoords={navigateToCoords}
+                    placeholder="بحث..."
+                  />
+                  <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
+                    {nearbyCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-green-500/10 border border-green-500/20 text-green-400 animate-pulse flex items-center gap-1 shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-green-400" />
+                        {nearbyCount} قريبة
+                      </span>
+                    )}
+                    {[
+                      { key: 'available', label: 'متاح', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+                      { key: 'rented',    label: 'مؤجر', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+                      { key: 'reserved',  label: 'محجوز', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+                      { key: 'maintenance',label:'صيانة', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+                    ].map(chip => {
+                      const isActive = localStatusFilter.includes(chip.key);
+                      return (
+                        <button key={chip.key}
+                          onClick={() => setLocalStatusFilter(prev => prev.includes(chip.key) ? prev.filter(k => k !== chip.key) : [...prev, chip.key])}
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all shrink-0 ${ isActive ? 'bg-amber-600 border-amber-500 text-white' : `${chip.color} hover:bg-white/5` }`}
+                          style={{ fontFamily: 'Tajawal, sans-serif' }}
+                        >{chip.label}</button>
+                      );
+                    })}
+                    {localStatusFilter.length > 0 && (
+                      <button onClick={() => setLocalStatusFilter([])}
+                        className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white shrink-0"
+                        style={{ fontFamily: 'Tajawal, sans-serif' }}
+                      >إلغاء</button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
-          )}
- 
-          {/* Right Side Controls (Desktop only) */}
-          {!isMobile && (
-            <div className="flex items-center gap-2 pointer-events-auto mr-auto">
-              {/* Multi-select toggle button */}
-              <button
-                onClick={() => {
-                  setIsMultiSelectMode(!isMultiSelectMode);
-                  if (isMultiSelectMode) {
-                    setSelectedBillboardIds(new Set());
-                    setIsDrawingMode(false);
-                    setDrawingPoints([]);
-                  }
-                }}
-                className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold ${
-                  isMultiSelectMode
-                    ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
-                    : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-500'
-                }`}
-                style={{ fontFamily: 'Tajawal, sans-serif' }}
-                title="تحديد متعدد للوحات"
-              >
-                <CheckSquare className="w-4 h-4" />
-                تحديد متعدد
-              </button>
- 
-              {/* Pen selection drawing tool button */}
-              <button
-                onClick={() => {
-                  if (isDrawingMode) {
-                    setIsDrawingMode(false);
-                    setDrawingPoints([]);
-                  } else {
-                    setIsDrawingMode(true);
-                    setDrawingPoints([]);
-                    setIsMultiSelectMode(true);
-                  }
-                }}
-                className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold ${
-                  isDrawingMode
-                    ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
-                    : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-500'
-                }`}
-                style={{ fontFamily: 'Tajawal, sans-serif' }}
-                title="تحديد اللوحات بالرسم (بن تول)"
-              >
-                <PenTool className="w-4 h-4" />
-                تحديد بالرسم
-              </button>
- 
-              {/* Billboard Count / Header */}
-              <MapHeader billboardCount={filteredBillboards.length} compact={false} />
+          ) : (
+            /* ── Desktop 3-column grid ── */
+            <div className="grid pointer-events-none" style={{ gridTemplateColumns: '1fr auto 1fr', alignItems: 'start', gap: '8px' }}>
+              {isDraggingPin && (
+                <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white font-extrabold px-6 py-3 rounded-2xl shadow-2xl border-2 border-amber-300 backdrop-blur-xl flex items-center gap-3 animate-pulse pointer-events-none">
+                  <MapPin className="h-6 w-6 text-amber-200 animate-bounce" />
+                  <span className="text-sm">جاري تحريك وسحب الدبوس ({draggingPinName}) للموقع الجديد...</span>
+                </div>
+              )}
+
+              {/* Col-1 LEFT: hint popover */}
+              <div className="flex items-start pointer-events-auto">
+                {!isMultiSelectMode && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button
+                        className="bg-slate-950/85 backdrop-blur-xl border border-amber-500/30 text-amber-400 hover:text-amber-300 hover:border-amber-500 rounded-2xl px-3.5 py-2.5 shadow-xl flex items-center gap-2 text-xs font-extrabold transition-all cursor-pointer hover:bg-slate-900/90 active:scale-95"
+                        style={{ fontFamily: 'Tajawal, sans-serif' }}
+                      >
+                        <HelpCircle className="w-4 h-4 text-amber-500" />
+                        <span>طريقة الاستخدام</span>
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 bg-slate-950/95 backdrop-blur-2xl border border-amber-500/30 text-slate-100 p-3.5 rounded-2xl shadow-2xl space-y-2 text-right z-[9999]" dir="rtl">
+                      <div className="font-extrabold text-amber-500 text-xs border-b border-white/10 pb-1.5 flex items-center gap-2">
+                        <Info className="w-4 h-4 text-amber-500" />
+                        <span style={{ fontFamily: 'Tajawal, sans-serif' }}>تعليمات التحكم في الخريطة</span>
+                      </div>
+                      <div className="space-y-1.5 text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
+                        <div className="flex items-center justify-between py-1 border-b border-white/5">
+                          <span className="text-slate-400 font-medium">عرض التفاصيل والكرت</span>
+                          <span className="font-bold text-white bg-white/5 px-2 py-0.5 rounded-md border border-white/10">نقرة واحدة</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-white/5">
+                          <span className="text-slate-400 font-medium">تحديد متعدد للوحة</span>
+                          <span className="font-bold text-white bg-white/5 px-2 py-0.5 rounded-md border border-white/10">نقرتان متتاليتان</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1 border-b border-white/5">
+                          <span className="text-slate-400 font-medium">تغيير موقع اللوحة</span>
+                          <span className="font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">سحب وإفلات الدبوس</span>
+                        </div>
+                        <div className="flex items-center justify-between py-1">
+                          <span className="text-slate-400 font-medium">إضافة لوحة جديدة</span>
+                          <span className="font-bold text-white bg-white/5 px-2 py-0.5 rounded-md border border-white/10">نقرتان على الخريطة</span>
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                )}
+              </div>
+
+              {/* Col-2 CENTER: search + chips */}
+              {!externalSearchQuery && (
+                <div className="flex flex-col gap-1.5 pointer-events-auto min-w-[280px] max-w-[380px] w-full">
+                  <MapSearchBar
+                    value={searchQuery}
+                    onChange={setSearchQuery}
+                    onRequestLocation={requestUserLocation}
+                    billboards={billboards}
+                    onSelectBillboard={focusOnBillboard}
+                    onNavigateToCoords={navigateToCoords}
+                    placeholder="ابحث عن لوحة، منطقة، إحداثيات..."
+                  />
+                  <div className="flex items-center justify-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
+                    {nearbyCount > 0 && (
+                      <span className="px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-green-500/10 border border-green-500/20 text-green-400 animate-pulse flex items-center gap-1 shrink-0">
+                        <span className="w-1 h-1 rounded-full bg-green-400" />
+                        {nearbyCount} قريبة
+                      </span>
+                    )}
+                    {[
+                      { key: 'available',   label: 'متاح',  color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+                      { key: 'rented',      label: 'مؤجر',  color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+                      { key: 'reserved',    label: 'محجوز', color: 'bg-amber-500/20 text-amber-400 border-amber-500/30' },
+                      { key: 'maintenance', label: 'صيانة', color: 'bg-red-500/20 text-red-400 border-red-500/30' },
+                    ].map(chip => {
+                      const isActive = localStatusFilter.includes(chip.key);
+                      return (
+                        <button key={chip.key}
+                          onClick={() => setLocalStatusFilter(prev => prev.includes(chip.key) ? prev.filter(k => k !== chip.key) : [...prev, chip.key])}
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all shrink-0 ${ isActive ? 'bg-amber-600 border-amber-500 text-white shadow-md' : `${chip.color} hover:bg-white/5` }`}
+                          style={{ fontFamily: 'Tajawal, sans-serif' }}
+                        >{chip.label}</button>
+                      );
+                    })}
+                    {localStatusFilter.length > 0 && (
+                      <button onClick={() => setLocalStatusFilter([])}
+                        className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white shrink-0"
+                        style={{ fontFamily: 'Tajawal, sans-serif' }}
+                      >إلغاء</button>
+                    )}
+                  </div>
+                </div>
+              )}
+              {externalSearchQuery && <div />/* spacer col-2 */}
+
+              {/* Col-3 RIGHT: action buttons */}
+              <div className="flex items-start justify-end gap-2 pointer-events-auto">
+                {/* Pin Lock/Unlock toggle for movement protection */}
+                <button
+                  onClick={() => {
+                    const next = !isPinDragEnabled;
+                    setIsPinDragEnabled(next);
+                    if (next) {
+                      toast.info('🔓 تم تفعيل وضع تحريك اللوحات — يمكنك سحب وإفلات الدبابيس الآن', { duration: 4000 });
+                    } else {
+                      toast.success('🔒 تم قفل تحريك اللوحات — المواقع آمنة الآن من أي سحب غير مقصود');
+                    }
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold whitespace-nowrap cursor-pointer ${
+                    isPinDragEnabled
+                      ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-pulse'
+                      : 'bg-slate-950/85 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-400'
+                  }`}
+                  style={{ fontFamily: 'Tajawal, sans-serif' }}
+                  title={isPinDragEnabled ? 'انقر لقفل حركة الدبابيس' : 'انقر لتفعيل تحريك وسحب الدبابيس'}
+                >
+                  {isPinDragEnabled ? <Unlock className="w-4 h-4 text-white" /> : <Lock className="w-4 h-4 text-amber-500" />}
+                  <span>{isPinDragEnabled ? 'تعديل المواقع مفعّل' : 'قفل المواقع'}</span>
+                </button>
+
+                {/* Multi-select toggle */}
+                <button
+                  onClick={() => {
+                    setIsMultiSelectMode(!isMultiSelectMode);
+                    if (isMultiSelectMode) { setSelectedBillboardIds(new Set()); setIsDrawingMode(false); setDrawingPoints([]); }
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold whitespace-nowrap ${
+                    isMultiSelectMode
+                      ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
+                      : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-500'
+                  }`}
+                  style={{ fontFamily: 'Tajawal, sans-serif' }}
+                  title="تحديد متعدد للوحات"
+                >
+                  <CheckSquare className="w-4 h-4" />
+                  تحديد متعدد
+                </button>
+
+                {/* Pen selection drawing tool button */}
+                <button
+                  onClick={() => {
+                    if (isDrawingMode) { setIsDrawingMode(false); setDrawingPoints([]); }
+                    else { setIsDrawingMode(true); setDrawingPoints([]); setIsMultiSelectMode(true); }
+                  }}
+                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold whitespace-nowrap ${
+                    isDrawingMode
+                      ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
+                      : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-500'
+                  }`}
+                  style={{ fontFamily: 'Tajawal, sans-serif' }}
+                  title="تحديد بالرسم"
+                >
+                  <PenTool className="w-4 h-4" />
+                  تحديد بالرسم
+                </button>
+
+                {/* Billboard count badge */}
+                <MapHeader billboardCount={filteredBillboards.length} compact={false} />
+              </div>
             </div>
           )}
         </div>
       )}
 
-      {/* Filter info - when external search or filter is active */}
+      {/* Filter info banner — appears below top bar without overlapping */}
       {!isTracking && (externalSearchQuery || (externalStatusFilter && externalStatusFilter.length > 0) || (externalCityFilter && externalCityFilter.length > 0) || (externalSizeFilter && externalSizeFilter.length > 0) || (externalMunicipalityFilter && externalMunicipalityFilter.length > 0)) && (
-        <div className={`absolute z-[1000] bg-amber-600/95 backdrop-blur-md border border-amber-500/30 text-white shadow-xl pointer-events-none ${
-          isMobile 
-            ? 'top-[68px] left-2.5 right-2.5 rounded-xl px-3 py-2 text-center' 
-            : 'top-20 left-1/2 transform -translate-x-1/2 rounded-xl px-4 py-2'
+        <div className={`absolute z-[990] bg-amber-600/95 backdrop-blur-md border border-amber-500/30 text-white shadow-xl pointer-events-none ${
+          isMobile
+            ? 'top-[110px] left-2.5 right-2.5 rounded-xl px-3 py-2 text-center'
+            : 'top-[72px] left-1/2 -translate-x-1/2 rounded-xl px-4 py-2'
         }`} style={{ fontFamily: 'Tajawal, sans-serif' }}>
           <p className={`font-bold ${isMobile ? 'text-[10px]' : 'text-xs'}`}>
             تم تفعيل فلاتر خارجية: {filteredBillboards.length} لوحة مطابقة
@@ -2815,10 +3015,10 @@ export default function GoogleHomeMap({
         </div>
       )}
 
-      {/* Drawing instruction (Pen selection) */}
+      {/* Drawing instruction — below top bar */}
       {isDrawingMode && (
         <div className={`absolute z-[2000] pointer-events-auto ${
-          isMobile ? 'top-[68px] left-2.5 right-2.5' : 'top-20 left-4'
+          isMobile ? 'top-[110px] left-2.5 right-2.5' : 'top-[72px] left-4 right-auto'
         }`}>
           <div className="flex items-center justify-between gap-3 bg-slate-950/95 backdrop-blur-md border border-indigo-500/30 rounded-xl px-4 py-2.5 shadow-lg">
             <span className="text-white font-bold text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -2831,35 +3031,21 @@ export default function GoogleHomeMap({
                     toast.error('يرجى تحديد 3 نقاط على الأقل للرسم');
                     return;
                   }
-                  
                   const closedPoints = [...drawingPoints];
                   const selectedIds = new Set<number>();
-                  
                   billboards.forEach(b => {
                     let lat: number | null = null;
                     let lng: number | null = null;
-                    
-                    if (b.latitude && b.longitude) {
-                      lat = Number(b.latitude);
-                      lng = Number(b.longitude);
-                    } else if (b.lat && b.lng) {
-                      lat = Number(b.lat);
-                      lng = Number(b.lng);
-                    } else if (b.GPS_Coordinates) {
+                    if (b.latitude && b.longitude) { lat = Number(b.latitude); lng = Number(b.longitude); }
+                    else if (b.lat && b.lng) { lat = Number(b.lat); lng = Number(b.lng); }
+                    else if (b.GPS_Coordinates) {
                       const parts = b.GPS_Coordinates.split(',').map((c: string) => parseFloat(c.trim()));
-                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) {
-                        lat = parts[0];
-                        lng = parts[1];
-                      }
+                      if (parts.length === 2 && !isNaN(parts[0]) && !isNaN(parts[1])) { lat = parts[0]; lng = parts[1]; }
                     }
-                    
-                    if (lat !== null && lng !== null) {
-                      if (isPointInPolygon({ lat, lng }, closedPoints)) {
-                        selectedIds.add((b as any).ID || (b as any).id);
-                      }
+                    if (lat !== null && lng !== null && isPointInPolygon({ lat, lng }, closedPoints)) {
+                      selectedIds.add((b as any).ID || (b as any).id);
                     }
                   });
-                  
                   setSelectedBillboardIds(selectedIds);
                   setIsDrawingMode(false);
                   setDrawingPoints([]);
@@ -2868,29 +3054,23 @@ export default function GoogleHomeMap({
                 disabled={drawingPoints.length < 3}
                 className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
                 style={{ fontFamily: 'Tajawal, sans-serif' }}
-              >
-                تأكيد التحديد
-              </button>
+              >تأكيد التحديد</button>
               <button
-                onClick={() => {
-                  setDrawingPoints([]);
-                }}
+                onClick={() => setDrawingPoints([])}
                 className="bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg px-2.5 py-1 text-xs font-bold transition-all"
                 style={{ fontFamily: 'Tajawal, sans-serif' }}
-              >
-                مسح النقاط
-              </button>
+              >مسح النقاط</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Multi-select instruction */}
+      {/* Multi-select instruction banner */}
       {isMultiSelectMode && !isDrawingMode && (
         <div className={`absolute z-[1000] pointer-events-none ${
-          isMobile ? 'top-[68px] left-2.5 right-2.5' : 'top-20 left-4'
+          isMobile ? 'top-[110px] left-2.5 right-2.5' : 'top-[72px] left-4 right-auto'
         }`}>
-          <div className="bg-amber-600/95 backdrop-blur-md border border-amber-500/30 rounded-xl px-4 py-2 text-center shadow-lg">
+          <div className="bg-amber-600/95 backdrop-blur-md border border-amber-500/30 rounded-xl px-4 py-2 shadow-lg">
             <p className="text-white font-bold text-xs" style={{ fontFamily: 'Tajawal, sans-serif' }}>
               اضغط على الدبابيس لتحديدها • {selectedBillboardIds.size} لوحة محددة حالياً
             </p>
@@ -2900,8 +3080,12 @@ export default function GoogleHomeMap({
 
       {/* Stats Overlay Panel inside Map */}
       {showStatsOverlay && (
-        <div className={`absolute z-[1000] pointer-events-auto bg-slate-950/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl max-h-[200px] overflow-y-auto max-w-[260px] text-right ${
-          isMobile ? 'bottom-24 left-2.5 right-2.5 max-w-none' : (selectedBillboardIds.size > 0 ? 'bottom-[80px] left-4' : 'bottom-4 left-4')
+        <div className={`absolute z-[1000] pointer-events-auto bg-slate-950/90 backdrop-blur-xl border border-white/10 rounded-2xl p-4 shadow-2xl overflow-y-auto text-right ${
+          isMobile
+            ? 'bottom-[60px] left-2.5 right-2.5 max-w-none max-h-[140px]'
+            : (isMultiSelectMode && selectedBillboardIds.size > 0
+                ? 'bottom-[130px] left-4 max-w-[280px] max-h-[200px]'
+                : 'bottom-[70px] left-4 max-w-[280px] max-h-[200px]')
         }`} style={{ fontFamily: 'Tajawal, sans-serif' }}>
           {selectedBillboardIds.size > 0 ? (
             <div>
@@ -2951,10 +3135,12 @@ export default function GoogleHomeMap({
         </div>
       )}
 
-      {/* Multi-select floating action bar (Docked Bar) */}
+      {/* Multi-select floating action bar */}
       {isMultiSelectMode && selectedBillboardIds.size > 0 && (
         <div className={`absolute z-[2000] pointer-events-auto ${
-          isMobile ? 'bottom-20 left-2.5 right-2.5' : 'bottom-16 left-1/2 transform -translate-x-1/2'
+          isMobile
+            ? 'bottom-[160px] left-2.5 right-2.5'
+            : 'bottom-4 left-1/2 -translate-x-1/2'
         }`}>
           <div className="flex items-center justify-between gap-3 bg-slate-950/90 backdrop-blur-xl border border-amber-500/30 rounded-2xl px-4 py-3 shadow-2xl">
             <span className="text-xs font-bold text-amber-500 whitespace-nowrap" style={{ fontFamily: 'Tajawal, sans-serif' }}>
@@ -3002,9 +3188,9 @@ export default function GoogleHomeMap({
       {/* Right Control Buttons */}
       {(!isMobile || !selectedBillboardForCard) && (
         <div className={`absolute z-[1000] pointer-events-auto ${
-          isMobile 
-            ? 'bottom-20 right-2.5' 
-            : isFullscreen ? 'top-20 right-5' : 'top-20 right-4'
+          isMobile
+            ? 'bottom-[160px] right-2.5'
+            : isFullscreen ? 'top-[88px] right-5' : 'top-[88px] right-4'
         }`}>
           <div className={`flex flex-col gap-1.5 bg-slate-950/80 backdrop-blur-md border border-amber-500/20 shadow-2xl ${
             isMobile ? 'rounded-2xl p-1.5' : 'rounded-2xl p-1.5'
@@ -3493,34 +3679,15 @@ export default function GoogleHomeMap({
           <div className={`flex items-center bg-slate-950/80 backdrop-blur-md border border-amber-500/20 shadow-2xl ${
             isMobile ? 'gap-0 rounded-xl p-0.5' : 'gap-1 rounded-2xl p-1.5'
           }`}>
-            <button
-              onClick={() => setMapProvider('openstreetmap')}
-              className={`flex items-center gap-0.5 font-bold transition-all duration-300 ${
+            <div
+              className={`flex items-center gap-1 font-bold bg-amber-600 text-white shadow-md font-extrabold ${
                 isMobile ? 'px-2 py-1.5 rounded-lg text-[9px]' : 'px-4 py-2.5 rounded-xl text-sm gap-2'
-              } ${
-                mapProvider === 'openstreetmap' 
-                  ? 'bg-amber-600 text-white shadow-md font-extrabold' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
               }`}
               style={{ fontFamily: 'Tajawal, sans-serif' }}
             >
               <Globe className={isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
-              <span>OSM</span>
-            </button>
-            <button
-              onClick={() => setMapProvider('google')}
-              className={`flex items-center gap-0.5 font-bold transition-all duration-300 ${
-                isMobile ? 'px-2 py-1.5 rounded-lg text-[9px]' : 'px-4 py-2.5 rounded-xl text-sm gap-2'
-              } ${
-                mapProvider === 'google' 
-                  ? 'bg-amber-600 text-white shadow-md font-extrabold' 
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'
-              }`}
-              style={{ fontFamily: 'Tajawal, sans-serif' }}
-            >
-              <MapIcon className={isMobile ? 'w-3.5 h-3.5' : 'w-4 h-4'} />
-              <span>Google</span>
-            </button>
+              <span>خريطة OSM الحية</span>
+            </div>
           </div>
         </div>
       )}

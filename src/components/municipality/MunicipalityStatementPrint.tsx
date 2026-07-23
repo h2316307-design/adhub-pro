@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Printer } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
@@ -319,6 +319,7 @@ const MunicipalityStatementPrint = ({ municipalityName, contractGroups, stats }:
         <DialogContent className="sm:max-w-sm" dir="rtl">
           <DialogHeader>
             <DialogTitle>طباعة كشف بلدية {municipalityName}</DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">تحديد الخيارات المطلوبة لطباعة كشف اللوحات للبلدية</DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
             <label className="flex items-center gap-2 cursor-pointer">

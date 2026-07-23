@@ -63,10 +63,10 @@ export async function extractExifData(file: File): Promise<ExifData> {
     const arrayBuffer = await file.arrayBuffer();
     const tags = ExifReader.load(arrayBuffer, { expanded: true });
 
-    // GPS coordinates
+    // GPS coordinates (rounded to 6 decimal places for concise format ~10cm precision)
     if (tags.gps?.Latitude !== undefined && tags.gps?.Longitude !== undefined) {
-      result.lat = tags.gps.Latitude;
-      result.lng = tags.gps.Longitude;
+      result.lat = Number(tags.gps.Latitude.toFixed(6));
+      result.lng = Number(tags.gps.Longitude.toFixed(6));
     }
 
     // Date/Time

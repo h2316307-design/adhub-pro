@@ -57,7 +57,7 @@ import { TaskTotalCostSummary } from '@/components/tasks/TaskTotalCostSummary';
 import { MergeTeamTasksDialog } from '@/components/tasks/MergeTeamTasksDialog';
 import { EditTaskTypeDialog } from '@/components/tasks/EditTaskTypeDialog';
 import { TransferBillboardsDialog } from '@/components/tasks/TransferBillboardsDialog';
-import { PrintAllContractBillboardsDialog } from '@/components/tasks/PrintAllContractBillboardsDialog';
+import { UnifiedPrintAllDialog, BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
 import { TaskCardWrapper } from '@/components/tasks/TaskCardWrapper';
 import { EnhancedAddInstallationTaskDialog } from '@/components/installation/EnhancedAddInstallationTaskDialog';
@@ -3227,33 +3227,51 @@ export default function InstallationTasks() {
       )}
 
       {/* Print All Contract Billboards Dialog */}
-      {selectedContractForPrint && (
-        <PrintAllContractBillboardsDialog
-          open={printAllDialogOpen}
-          onOpenChange={setPrintAllDialogOpen}
-          contractNumber={selectedContractForPrint.contractNumber}
-          customerName={selectedContractForPrint.customerName}
-          allTaskItems={allTaskItems.filter(item => {
-            // جلب جميع عناصر المهام لنفس العقد (كل الفرق)
-            const itemTask = tasks.find(t => t.id === item.task_id);
-            if (!itemTask) return false;
-            return itemTask.contract_id === selectedContractForPrint.contractNumber || 
-                   (itemTask.contract_ids && itemTask.contract_ids.includes(selectedContractForPrint.contractNumber));
-          })}
-          tasks={tasks.filter(t => 
-            t.contract_id === selectedContractForPrint.contractNumber || 
-            (t.contract_ids && t.contract_ids.includes(selectedContractForPrint.contractNumber))
-          )}
-          billboards={billboardById}
-          teams={teamById}
-          designsByTask={designsByTask}
-          taskId={selectedContractForPrint.taskId}
-          customerPhone={(() => {
-            const contract = contractById[selectedContractForPrint.contractNumber];
-            return contract?.customer_id ? (customerPhones as Record<string, string>)[contract.customer_id] || '' : '';
-          })()}
-        />
-      )}
+      {selectedContractForPrint && (() => {
+        const contractTaskItems = allTaskItems.filter(item => {
+          const itemTask = tasks.find(t => t.id === item.task_id);
+          if (!itemTask) return false;
+          return itemTask.contract_id === selectedContractForPrint.contractNumber || 
+                 (itemTask.contract_ids && itemTask.contract_ids.includes(selectedContractForPrint.contractNumber));
+        });
+        const bulkPrintItems: BillboardPrintItem[] = contractTaskItems.map(item => {
+          const itemTask = tasks.find(t => t.id === item.task_id);
+          const taskDesigns = item.task_id ? designsByTask[item.task_id] : null;
+          const designA = item.design_face_a || (taskDesigns && taskDesigns[0]?.design_face_a);
+          const designB = item.design_face_b || (taskDesigns && taskDesigns[0]?.design_face_b);
+          return {
+            id: item.id,
+            billboard_id: item.billboard_id,
+            design_face_a: designA,
+            design_face_b: designB,
+            installed_image_face_a_url: item.installed_image_face_a_url,
+            installed_image_face_b_url: item.installed_image_face_b_url,
+            installation_date: item.installation_date,
+            team_id: itemTask?.team_id,
+            has_cutout: item.has_cutout,
+            contract_number: itemTask?.contract_id,
+            ad_type: selectedContractForPrint.adType,
+          };
+        });
+        const contractObj = contractById[selectedContractForPrint.contractNumber];
+        const custPhone = contractObj?.customer_id ? (customerPhones as Record<string, string>)[contractObj.customer_id] || '' : '';
+
+        return (
+          <UnifiedPrintAllDialog
+            open={printAllDialogOpen}
+            onOpenChange={setPrintAllDialogOpen}
+            contextType="installation"
+            contextNumber={selectedContractForPrint.contractNumber}
+            customerName={selectedContractForPrint.customerName}
+            adType={selectedContractForPrint.adType}
+            items={bulkPrintItems}
+            billboards={billboardById}
+            teams={teamById}
+            showTeamFilter={true}
+            customerPhone={custPhone}
+          />
+        );
+      })()}
 
       {/* Create Composite Task Dialog for Installation Only */}
       <Dialog open={createCompositeDialogOpen} onOpenChange={setCreateCompositeDialogOpen}>
@@ -3316,23 +3334,38 @@ export default function InstallationTasks() {
 
       {/* Multi-Task Print Dialog - طباعة المهام المحددة */}
       {multiTaskPrintDialogOpen && selectedTasksForPrint.size > 0 && (() => {
-        // جمع جميع اللوحات من المهام المحددة
         const selectedTasks = tasks.filter(t => selectedTasksForPrint.has(t.id));
         const selectedItems = allTaskItems.filter(item => 
           selectedTasks.some(t => t.id === item.task_id)
         );
-        
-        // الحصول على معلومات الفريق (أول فريق)
         const firstTask = selectedTasks[0];
-        const team = teamById[firstTask?.team_id];
-        
-        // جمع أسماء الزبائن
         const customerNames = [...new Set(
           selectedTasks.map(t => contractById[t.contract_id]?.['Customer Name'] || 'غير محدد')
         )].join(' - ');
         
+        const multiPrintItems: BillboardPrintItem[] = selectedItems.map(item => {
+          const itemTask = tasks.find(t => t.id === item.task_id);
+          const taskDesigns = item.task_id ? designsByTask[item.task_id] : null;
+          const designA = item.design_face_a || (taskDesigns && taskDesigns[0]?.design_face_a);
+          const designB = item.design_face_b || (taskDesigns && taskDesigns[0]?.design_face_b);
+          return {
+            id: item.id,
+            billboard_id: item.billboard_id,
+            design_face_a: designA,
+            design_face_b: designB,
+            installed_image_face_a_url: item.installed_image_face_a_url,
+            installed_image_face_b_url: item.installed_image_face_b_url,
+            installation_date: item.installation_date,
+            team_id: itemTask?.team_id,
+            has_cutout: item.has_cutout,
+            contract_number: itemTask?.contract_id,
+          };
+        });
+        const contractObj = contractById[firstTask?.contract_id];
+        const custPhone = contractObj?.customer_id ? (customerPhones as Record<string, string>)[contractObj.customer_id] || '' : '';
+
         return (
-          <PrintAllContractBillboardsDialog
+          <UnifiedPrintAllDialog
             open={multiTaskPrintDialogOpen}
             onOpenChange={(open) => {
               setMultiTaskPrintDialogOpen(open);
@@ -3340,17 +3373,15 @@ export default function InstallationTasks() {
                 setSelectedTasksForPrint(new Set());
               }
             }}
-            contractNumber={firstTask?.contract_id || 0}
+            contextType="installation"
+            contextNumber={firstTask?.contract_id || 0}
             customerName={customerNames}
-            allTaskItems={selectedItems}
-            tasks={selectedTasks}
+            items={multiPrintItems}
             billboards={billboardById}
             teams={teamById}
-            designsByTask={designsByTask}
-            customerPhone={(() => {
-              const contract = contractById[firstTask?.contract_id];
-              return contract?.customer_id ? (customerPhones as Record<string, string>)[contract.customer_id] || '' : '';
-            })()}
+            showTeamFilter={true}
+            customerPhone={custPhone}
+            title={`طباعة ${selectedTasksForPrint.size} مهمة (${multiPrintItems.length} لوحة)`}
           />
         );
       })()}

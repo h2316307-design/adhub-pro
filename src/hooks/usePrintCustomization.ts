@@ -292,7 +292,7 @@ const defaultSettings: PrintCustomizationSettings = {
   status_badges_show: 'true',
 
   // إعدادات نص حالة اللوحة
-  billboard_status_enabled: 'true',
+  billboard_status_enabled: 'false',
   billboard_status_font_size: '14px',
   billboard_status_offset_y: '6mm',
 
@@ -302,14 +302,14 @@ const defaultSettings: PrintCustomizationSettings = {
   cover_phrase: 'لوحات',
   cover_phrase_font_size: '28px',
   cover_municipality_font_size: '36px',
-  cover_logo_size: '200px',
-  cover_logo_top: '',
+  cover_logo_size: '220px',
+  cover_logo_top: '90mm',
   cover_logo_left: '50%',
   cover_logo_align: 'center',
-  cover_phrase_top: '',
+  cover_phrase_top: '138mm',
   cover_phrase_left: '50%',
   cover_phrase_align: 'center',
-  cover_municipality_top: '',
+  cover_municipality_top: '152mm',
   cover_municipality_left: '50%',
   cover_municipality_align: 'center',
   cover_background_enabled: 'true',

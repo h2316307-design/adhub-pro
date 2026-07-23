@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import StickerSettingsPanel from './StickerSettingsPanel';
@@ -257,6 +257,8 @@ export default function MunicipalityStickerSettings({ open, onOpenChange, onSett
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-6xl h-[90vh] p-0 gap-0 overflow-hidden" dir="rtl">
+        <DialogTitle className="sr-only">إعدادات ملصقات الشارع واللوحات</DialogTitle>
+        <DialogDescription className="sr-only">تعديل أبعاد وتنسيقات ملصقات الطباعة</DialogDescription>
         <div className="flex h-full">
           {/* Control panel */}
           <div className="w-[380px] border-l border-border shrink-0 flex flex-col overflow-hidden">

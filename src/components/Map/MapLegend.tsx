@@ -22,7 +22,7 @@ const STATUS_ITEMS = [
 const MapLegend = memo(function MapLegend({ 
   billboards, 
   className = '', 
-  collapsed: initialCollapsed = false,
+  collapsed: initialCollapsed = true,
   activeStatuses,
   onToggleStatus
 }: MapLegendProps) {
@@ -53,15 +53,18 @@ const MapLegend = memo(function MapLegend({
     return billboards.some(b => (b as any).isComparison || (b as any).isFaded);
   }, [billboards]);
 
-  // النسخة المطوية - أنيقة للغاية وبشكل دائري زجاجي للهواتف
+  // النسخة المطوية - أنيقة للغاية وبشكل زر ذهبي زجاجي
   if (isCollapsed) {
     return (
       <button 
         onClick={() => setIsCollapsed(false)}
-        className={`bg-slate-950/80 backdrop-blur-md border border-amber-500/30 rounded-2xl shadow-xl p-2.5 flex items-center gap-1.5 hover:bg-slate-900/90 transition-all hover:border-amber-500 active:scale-95 ${className}`}
+        className={`bg-slate-950/90 backdrop-blur-xl border border-amber-500/30 text-slate-200 hover:text-white hover:border-amber-500 rounded-2xl shadow-2xl px-3.5 py-2 flex items-center gap-2 transition-all active:scale-95 text-xs font-extrabold cursor-pointer ${className}`}
+        style={{ fontFamily: 'Tajawal, sans-serif' }}
         title="عرض دليل الخريطة"
       >
-        <div className="flex gap-1">
+        <Building2 className="w-4 h-4 text-amber-500" />
+        <span>دليل الخريطة</span>
+        <div className="flex gap-1 mr-1">
           {STATUS_ITEMS.slice(0, 3).map((item) => (
             <div 
               key={item.label}
@@ -72,14 +75,8 @@ const MapLegend = memo(function MapLegend({
               }}
             />
           ))}
-          {hasComparison && (
-            <div 
-              className="w-2 h-2 rounded-full bg-slate-400 opacity-40 animate-pulse" 
-              title="لوحات المقارنة متوفرة"
-            />
-          )}
         </div>
-        <ChevronUp className="w-3.5 h-3.5 text-amber-500" />
+        <ChevronUp className="w-3.5 h-3.5 text-amber-500 mr-0.5" />
       </button>
     );
   }

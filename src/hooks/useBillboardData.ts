@@ -78,10 +78,11 @@ export const useBillboardData = () => {
     }
   }, []);
 
-  // ✅ FIXED: Memoize sortBillboardsBySize to prevent recreation
   const sortBillboardsBySize = useCallback(async (billboards: any[]): Promise<any[]> => {
-    const sizeOrderMap = await getSizeOrderFromDB();
-    const municipalityOrderMap = await getMunicipalityOrderFromDB();
+    const [sizeOrderMap, municipalityOrderMap] = await Promise.all([
+      getSizeOrderFromDB(),
+      getMunicipalityOrderFromDB()
+    ]);
 
     return [...billboards].sort((a, b) => {
       const sizeA = a.Size || a.size || '';
@@ -119,7 +120,7 @@ export const useBillboardData = () => {
       const result = await fetchWithRetry<any[]>(async () => {
         const res = await supabase
           .from('Contract')
-          .select('*')
+          .select('id, Contract_Number, customer_name, ad_type, customer_id')
           .order('id', { ascending: false });
         return res;
       }, { maxRetries: 3, timeout: 45000 });
@@ -268,17 +269,55 @@ export const useBillboardData = () => {
         return;
       }
 
-      // ✅ NEW: Load all contracts to match with billboards (with retry)
+      // ✅ NEW: Load contracts to match with billboards (optimizing columns selected)
       const contractsResult = await fetchWithRetry<any[]>(async () => {
         const res = await supabase
           .from('Contract')
-          .select('*')
+          .select('id, Contract_Number, billboard_ids, billboard_id, customer_name, customer_id, ad_type, start_date, end_date, billboard_prices, design_data')
           .order('id', { ascending: false });
         return res;
       }, { maxRetries: 2, timeout: 30000 });
 
       const contractsData = contractsResult.data as any[] || [];
       console.log('✅ Contracts loaded for matching:', contractsData?.length || 0);
+
+      // ✅ Pre-build fast O(1) maps for contract matching
+      const billboardToContractsMap = new Map<string, any[]>();
+      const contractNumberToContractMap = new Map<string, any>();
+
+      contractsData.forEach((contract: any) => {
+        const cNum = contract.Contract_Number ?? contract.id;
+        if (cNum != null) {
+          contractNumberToContractMap.set(String(cNum), contract);
+        }
+        const bIds = contract.billboard_ids;
+        if (bIds) {
+          String(bIds).split(',').forEach(idStr => {
+            const cleanId = idStr.trim();
+            if (cleanId) {
+              let list = billboardToContractsMap.get(cleanId);
+              if (!list) {
+                list = [];
+                billboardToContractsMap.set(cleanId, list);
+              }
+              list.push(contract);
+            }
+          });
+        }
+        if (contract.billboard_id) {
+          const cleanId = String(contract.billboard_id).trim();
+          if (cleanId) {
+            let list = billboardToContractsMap.get(cleanId);
+            if (!list) {
+              list = [];
+              billboardToContractsMap.set(cleanId, list);
+            }
+            if (!list.includes(contract)) {
+              list.push(contract);
+            }
+          }
+        }
+      });
 
       // ✅ NEW: Load latest installation task items for design images
       const installationTasksResult = await fetchWithRetry<any[]>(async () => {
@@ -311,35 +350,19 @@ export const useBillboardData = () => {
         }
       });
 
-      // ✅ ENHANCED: Process billboards with contract matching
+      // ✅ ENHANCED: Process billboards with O(1) contract matching
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
       const processedBillboards = billboardsData.map(billboard => {
         const billboardId = String(billboard.ID);
 
-        // Find contracts that include this billboard ID
-        let matchingContracts = contractsData?.filter((contract: any) => {
-          // Check billboard_ids field (comma-separated string)
-          const billboardIds = contract.billboard_ids;
-          if (billboardIds) {
-            const idsArray = String(billboardIds).split(',').map(id => id.trim());
-            return idsArray.includes(billboardId);
-          }
-
-          // Also check billboard_id field (single ID)
-          if (contract.billboard_id && String(contract.billboard_id) === billboardId) {
-            return true;
-          }
-
-          return false;
-        }) || [];
+        // O(1) map lookup for matching contracts
+        let matchingContracts = billboardToContractsMap.get(billboardId) || [];
 
         // ✅ NEW: إذا لم نجد عقد عبر billboard_ids، نبحث باستخدام Contract_Number من اللوحة
         if (matchingContracts.length === 0 && billboard.Contract_Number) {
-          const contractByNumber = contractsData?.find((contract: any) =>
-            contract.Contract_Number === billboard.Contract_Number
-          );
+          const contractByNumber = contractNumberToContractMap.get(String(billboard.Contract_Number));
           if (contractByNumber) {
             matchingContracts = [contractByNumber];
           }
@@ -348,7 +371,7 @@ export const useBillboardData = () => {
         // ✅ FIXED: اختيار العقد النشط (غير المنتهي) أولاً، ثم العقد الأحدث
         // فلترة العقود النشطة (تاريخ الانتهاء >= اليوم)
         const activeContracts = matchingContracts.filter((contract: any) => {
-          const endDate = contract['End Date'];
+          const endDate = contract.end_date || contract['End Date'];
           if (!endDate) return false;
           try {
             const contractEndDate = new Date(endDate);
@@ -361,8 +384,8 @@ export const useBillboardData = () => {
 
         // ترتيب العقود النشطة حسب تاريخ البداية (الأحدث أولاً)
         activeContracts.sort((a: any, b: any) => {
-          const dateA = new Date(a['Contract Date'] || 0);
-          const dateB = new Date(b['Contract Date'] || 0);
+          const dateA = new Date(a.start_date || a['Contract Date'] || 0);
+          const dateB = new Date(b.start_date || b['Contract Date'] || 0);
           return dateB.getTime() - dateA.getTime();
         });
 
@@ -377,8 +400,8 @@ export const useBillboardData = () => {
             activeContract: activeContract ? {
               id: activeContract.id,
               Contract_Number: activeContract.Contract_Number,
-              'Ad Type': activeContract['Ad Type'],
-              'Customer Name': activeContract['Customer Name']
+              'Ad Type': activeContract.ad_type || activeContract['Ad Type'],
+              'Customer Name': activeContract.customer_name || activeContract['Customer Name']
             } : null
           });
         }
@@ -438,17 +461,26 @@ export const useBillboardData = () => {
           } catch {}
         }
 
+        const matchedCustomerName = activeContract?.customer_name || activeContract?.['Customer Name'] || billboard.Customer_Name || '';
+        const matchedAdType = activeContract?.ad_type || activeContract?.['Ad Type'] || billboard.Ad_Type || '';
+        const matchedStartDate = customStartDate || activeContract?.start_date || activeContract?.['Contract Date'] || billboard.Rent_Start_Date || null;
+        const matchedEndDate = customEndDate || activeContract?.end_date || activeContract?.['End Date'] || billboard.Rent_End_Date || null;
+
         return {
           ...billboard,
           // ✅ ENHANCED: Better contract field mapping
           Contract_Number: activeContract?.Contract_Number || billboard.Contract_Number || '',
           contractNumber: activeContract?.Contract_Number || billboard.Contract_Number || '',
-          Customer_Name: activeContract?.['Customer Name'] || billboard.Customer_Name || '',
-          clientName: activeContract?.['Customer Name'] || billboard.Customer_Name || '',
-          Ad_Type: activeContract?.['Ad Type'] || billboard.Ad_Type || '',
-          adType: activeContract?.['Ad Type'] || billboard.Ad_Type || '',
-          Rent_Start_Date: customStartDate || activeContract?.['Contract Date'] || billboard.Rent_Start_Date || null,
-          Rent_End_Date: customEndDate || activeContract?.['End Date'] || billboard.Rent_End_Date || null,
+          Customer_Name: matchedCustomerName,
+          clientName: matchedCustomerName,
+          customer_name: matchedCustomerName,
+          Ad_Type: matchedAdType,
+          adType: matchedAdType,
+          ad_type: matchedAdType,
+          Rent_Start_Date: matchedStartDate,
+          Rent_End_Date: matchedEndDate,
+          rent_start_date: matchedStartDate,
+          rent_end_date: matchedEndDate,
           ContractStatus: billboard.Status || null,
           // ✅ FIXED: Map faces count correctly from database column
           Faces: billboard.Faces_Count || 1,
@@ -468,10 +500,10 @@ export const useBillboardData = () => {
           installed_design_face_b: installedImageB || designFaceB,
           contract: activeContract ? {
             id: activeContract.Contract_Number,
-            customer_name: activeContract['Customer Name'],
-            ad_type: activeContract['Ad Type'],
-            start_date: customStartDate || activeContract['Contract Date'],
-            end_date: customEndDate || activeContract['End Date'],
+            customer_name: matchedCustomerName,
+            ad_type: matchedAdType,
+            start_date: matchedStartDate,
+            end_date: matchedEndDate,
             rent_cost: billboardRentPrice,
             rent_cost_gross: billboardRentPriceGross
           } : null
@@ -486,11 +518,25 @@ export const useBillboardData = () => {
         setBillboards(sortedBillboards);
       });
 
-      // Load contracts data for filters
-      const { adTypes, customers, contractNumbers } = await loadContractsData();
-      setDbAdTypes(adTypes);
-      setDbCustomers(customers);
-      setDbContractNumbers(contractNumbers);
+      // Extract filter options directly from loaded contractsData
+      const customerNames = new Set<string>();
+      const adTypes = new Set<string>();
+      const contractNumbers = new Set<string>();
+
+      contractsData.forEach((contract: any) => {
+        const cName = contract.customer_name || contract['Customer Name'] || contract.Customer_Name;
+        if (cName && String(cName).trim()) customerNames.add(String(cName).trim());
+
+        const aType = contract.ad_type || contract['Ad Type'] || contract.Ad_Type;
+        if (aType && String(aType).trim() && String(aType).trim() !== 'null') adTypes.add(String(aType).trim());
+
+        const cNum = contract.Contract_Number || contract['Contract Number'] || contract.id;
+        if (cNum && String(cNum).trim() && String(cNum).trim() !== '0') contractNumbers.add(String(cNum).trim());
+      });
+
+      setDbAdTypes(Array.from(adTypes).sort());
+      setDbCustomers(Array.from(customerNames).sort());
+      setDbContractNumbers(Array.from(contractNumbers).sort((a, b) => (parseInt(b) || 0) - (parseInt(a) || 0)));
 
       // Extract unique values for filters from billboards
       const cities = [...new Set(processedBillboards
@@ -535,9 +581,9 @@ export const useBillboardData = () => {
       console.log('- Cities:', cities.length);
       console.log('- Sizes (sorted):', sortedSizes.length, sortedSizes);
       console.log('- Municipalities:', municipalities.length);
-      console.log('- Ad types (from contracts):', adTypes.length);
-      console.log('- Customers (from contracts):', customers.length);
-      console.log('- Contract numbers:', contractNumbers.length);
+      console.log('- Ad types (from contracts):', adTypes.size);
+      console.log('- Customers (from contracts):', customerNames.size);
+      console.log('- Contract numbers:', contractNumbers.size);
 
     } catch (error: any) {
       console.error('❌ Error loading billboards:', error);
@@ -687,10 +733,9 @@ export const useBillboardData = () => {
         loadLevels(),
         loadFaces(),
         loadBillboardTypes(),
-        loadCities()
+        loadCities(),
+        loadBillboards()
       ]);
-      // Load billboards last to ensure all form data is ready
-      await loadBillboards();
     };
 
     initializeData();

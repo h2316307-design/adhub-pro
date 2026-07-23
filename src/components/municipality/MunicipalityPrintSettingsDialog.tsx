@@ -4,7 +4,7 @@
  */
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -236,7 +236,7 @@ const settingGroups: SettingGroup[] = [
         { value: 'false', label: 'معطّل' },
       ]},
       { key: 'cover_logo_url', label: 'رابط شعار الغلاف', type: 'text' },
-      { key: 'cover_logo_size', label: 'عرض الشعار', type: 'px', min: 50, max: 2000, step: 10 },
+      { key: 'cover_logo_size', label: 'عرض الشعار', type: 'px', min: 100, max: 2000, step: 10 },
       { key: 'cover_logo_top' as any, label: 'موقع الشعار (أعلى)', type: 'mm', min: 0, max: 280, step: 1 },
       { key: 'cover_logo_left' as any, label: 'موقع الشعار (يسار)', type: 'percent', min: 0, max: 100, step: 0.5 },
       { key: 'cover_phrase', label: 'العبارة الافتتاحية', type: 'text' },
@@ -436,11 +436,11 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
     return `
       <div style="position:relative;width:210mm;height:297mm;background-color:#fff;background-image:url('${backgroundUrl}');background-size:210mm 297mm;background-repeat:no-repeat;font-family:'Doran',Arial,sans-serif;direction:rtl;overflow:hidden;">
         <style>
-          .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; }
-          .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
-          .print-dim-label { font-size: 0.45em; font-weight: 700; opacity: 0.65; margin-bottom: 2px; letter-spacing: 0.5px; color: ${s.size_color || '#333'}; }
-          .print-dim-value { font-size: 1em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; }
-          .print-dim-separator { font-size: 0.65em; opacity: 0.45; margin-top: 0.25em; font-weight: 700; color: ${s.size_color || '#333'}; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; }
+          .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; color: inherit; }
+          .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: inherit; }
+          .print-dim-label { font-size: 0.45em; font-weight: 700; opacity: 1; margin-bottom: 2px; letter-spacing: 0.5px; color: inherit; }
+          .print-dim-value { font-size: 1em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; color: inherit; }
+          .print-dim-separator { font-size: 0.65em; opacity: 1; margin-top: 0.25em; font-weight: 700; color: inherit; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; }
         </style>
         ${statusHeader}
         <!-- الترقيم -->
@@ -518,39 +518,61 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
   // Cover page preview
   const coverPreviewHtml = useMemo(() => {
     const s = localSettings;
-    const coverLogoUrl = (s as any).cover_logo_url || '/logofaresgold.svg';
+    let coverLogoUrl = (s as any).cover_logo_url || '/logofaresgold.svg';
+    if (backgroundUrl) {
+      if (backgroundUrl.includes('1qgKLCpd9b14m51mVxUMJ09SyzzfagMqB') || backgroundUrl.toLowerCase().includes('gold')) {
+        coverLogoUrl = '/logofaresgold.svg';
+      } else if (backgroundUrl.includes('1VnWV0LpSkrPADcF4oOV6MgvLNbDN5ctd') || backgroundUrl.toLowerCase().includes('without')) {
+        coverLogoUrl = '/logofaresgold.svg';
+      } else if (backgroundUrl.includes('ipg.svg') || backgroundUrl.includes('default')) {
+        coverLogoUrl = '/logofares2.svg';
+      }
+    }
     const coverPhrase = (s as any).cover_phrase || 'لوحات';
-    const coverLogoSize = (s as any).cover_logo_size || '200px';
-    const coverPhraseFontSize = (s as any).cover_phrase_font_size || '28px';
-    const coverMunicipalityFontSize = (s as any).cover_municipality_font_size || '36px';
+    const formatCssSize = (val: any, fallback: string) => {
+      if (!val) return fallback;
+      const str = String(val).trim();
+      if (/^\d+(\.\d+)?$/.test(str)) {
+        const num = parseFloat(str);
+        if (num <= 180) return `${num}mm`;
+        return `${num}px`;
+      }
+      return str;
+    };
+    const coverLogoSize = formatCssSize((s as any).cover_logo_size, '220px');
+    const coverPhraseFontSize = formatCssSize((s as any).cover_phrase_font_size, '28px');
+    const coverMunicipalityFontSize = formatCssSize((s as any).cover_municipality_font_size, '36px');
     const municipalityName = sb.municipality || 'طرابلس المركز';
 
-    const logoTop = (s as any).cover_logo_top || '';
+    const logoTop = (s as any).cover_logo_top || '65mm';
     const logoLeft = (s as any).cover_logo_left || '50%';
-    const phraseTop = (s as any).cover_phrase_top || '';
+    const phraseTop = (s as any).cover_phrase_top || '138mm';
     const phraseLeft = (s as any).cover_phrase_left || '50%';
-    const muniTop = (s as any).cover_municipality_top || '';
+    const muniTop = (s as any).cover_municipality_top || '154mm';
     const muniLeft = (s as any).cover_municipality_left || '50%';
 
     const coverBgEnabled = (s as any).cover_background_enabled !== 'false';
     const coverBgUrl = (s as any).cover_background_url || backgroundUrl;
     const bgStyle = coverBgEnabled ? `background-image:url('${coverBgUrl}');background-size:210mm 297mm;background-repeat:no-repeat;` : '';
 
-    const posStyle = (left: string, extraWidth?: string) => {
-      const w = extraWidth ? `width:${extraWidth};` : '';
-      return `left:${left};transform:translateX(-50%);text-align:center;${w}`;
+    const posStyle = (left: string) => {
+      return `left:${left};transform:translateX(-50%);text-align:center;`;
     };
 
     return `
       <div style="position:relative;width:210mm;height:297mm;background-color:#fff;${bgStyle}font-family:'Doran',Arial,sans-serif;direction:rtl;overflow:visible;">
-        <div style="position:absolute;${posStyle(logoLeft, coverLogoSize)}top:${logoTop || '100mm'};z-index:5;">
-          <img src="${coverLogoUrl}" alt="شعار" style="width:100%;height:auto;object-fit:contain;" onerror="this.style.display='none'" />
-        </div>
-        <div style="position:absolute;${posStyle(phraseLeft)}top:${phraseTop || '180mm'};font-size:${coverPhraseFontSize};font-weight:500;z-index:5;">
-          ${coverPhrase}
-        </div>
-        <div style="position:absolute;${posStyle(muniLeft)}top:${muniTop || '200mm'};font-size:${coverMunicipalityFontSize};font-weight:700;z-index:5;">
-          ${municipalityName}
+        <div style="position:absolute;top:${logoTop};left:50%;transform:translateX(-50%);width:92%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:20px;text-align:center;z-index:5;">
+          <div style="display:flex;align-items:center;justify-content:center;width:100%;">
+            <img src="${coverLogoUrl}" alt="شعار" style="width:${coverLogoSize};max-width:100%;height:auto;object-fit:contain;display:inline-block;" onerror="this.style.display='none'" />
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;width:100%;">
+            <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;line-height:1.2;">
+              ${coverPhrase}
+            </div>
+            <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;line-height:1.2;">
+              ${municipalityName}
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -559,6 +581,8 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[1100px] p-0 overflow-hidden h-[90vh] rounded-3xl border border-white/10 shadow-2xl bg-slate-950/80 backdrop-blur-2xl">
+        <DialogTitle className="sr-only">إعدادات الطباعة</DialogTitle>
+        <DialogDescription className="sr-only">تعديل مواضع وتصميم لوحة البلدية</DialogDescription>
         <div className="flex h-full overflow-hidden">
           
           {/* Settings Sidebar Panel */}

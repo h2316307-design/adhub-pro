@@ -73,7 +73,16 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
   const label = shortLabelFor(billboard);
   
   // Decide top badge content: in organizer show sequence number (e.g. "#1"), in normal mode show ad type
-  const adTypeStr = String(billboard?.Ad_Type || billboard?.ad_type || billboard?.adType || billboard?.AdType || billboard?.contracts?.[0]?.['Ad Type'] || '').trim();
+  const adTypeStr = String(
+    billboard?.Ad_Type ||
+    billboard?.ad_type ||
+    billboard?.adType ||
+    billboard?.AdType ||
+    billboard?.contract?.ad_type ||
+    billboard?.contract?.['Ad Type'] ||
+    (Array.isArray(billboard?.contracts) && (billboard.contracts[0]?.ad_type || billboard.contracts[0]?.['Ad Type'])) ||
+    ''
+  ).trim();
   const topBadgeText = showSeq ? `#${billboard.sequence_number}` : adTypeStr;
   const showTopBadge = showSeq ? true : !!adTypeStr;
   const displayTopBadge = topBadgeText.length > 14 ? topBadgeText.slice(0, 12) + '..' : topBadgeText;

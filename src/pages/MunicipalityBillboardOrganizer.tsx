@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -20,9 +20,17 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Slider } from '@/components/ui/slider';
+import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet, Camera, ImageIcon, Loader2, CheckCircle2, AlertTriangle, Sparkles, X as XIcon, X as XIcon2, Info, RefreshCw, Eye, Check, SlidersHorizontal, ChevronDown, Wrench, Clock, Ban } from 'lucide-react';
+import { extractExifData } from '@/utils/exifExtractor';
+import { uploadImage } from '@/services/imageUploadService';
+import { compressLossless } from '@/utils/imageCompressor';
+import { reverseGeocode } from '@/utils/geocoding';
+import BillboardPhotoOverlayEditor, { BillboardOverlayConfig } from '@/components/municipality/BillboardPhotoOverlayEditor';
 import QRCode from 'qrcode';
 import MunicipalityStickerSettings, { useStickerSettings } from '@/components/municipality/MunicipalityStickerSettings';
+import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
 import { printStickers } from '@/components/municipality/MunicipalityStickerPrint';
 import { usePrintCustomization } from '@/hooks/usePrintCustomization';
 import { BackgroundSelector } from '@/components/billboard-print/BackgroundSelector';
@@ -33,7 +41,7 @@ import { createPinSvgUrl } from '@/hooks/useMapMarkers';
 import MunicipalityPrintSettingsDialog from '@/components/municipality/MunicipalityPrintSettingsDialog';
 import { ExcelColumnMappingDialog, ColumnMapping } from '@/components/municipality/ExcelColumnMappingDialog';
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
-import { X as XIcon } from 'lucide-react';
+
 import { Switch } from '@/components/ui/switch';
 import { calculateDistance } from '@/hooks/useMapNavigation';
 // Google Maps is loaded live in the print window - no static generator needed
@@ -55,6 +63,7 @@ interface CollectionItem {
   image_url?: string | null;
   municipality?: string;
   status?: string;
+  overlay_config?: BillboardOverlayConfig;
 }
 
 interface Collection {
@@ -67,14 +76,59 @@ interface Collection {
 
 const parseDimensions = (sizeStr: string) => {
   if (!sizeStr) return { length: '', width: '', height: '' };
-  // Replace ×, X or * with x to normalize
-  const normalized = sizeStr.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
-  const parts = normalized.split('x').map(p => p.trim());
-  return {
-    length: parts[0] || '',
-    width: parts[1] || '',
-    height: parts[2] || ''
-  };
+  
+  const normalized = sizeStr.trim();
+  const lower = normalized.toLowerCase();
+
+  // Specific preset mapping for non-numeric labels
+  if (lower.includes('سوسيت') || lower.includes('soussette') || lower.includes('mupi')) {
+    return { length: '2', width: '1.2', height: '' };
+  }
+
+  // Split by 'x' or 'X' or '×' or '*'
+  const parts = normalized.replace(/×/g, 'x').replace(/\*/g, 'x').split(/x/i).map(p => p.trim());
+
+  if (parts.length >= 2) {
+    const cleanNum = (str: string) => {
+      const match = str.match(/([0-9]+(?:\.[0-9]+)?)/);
+      return match ? match[1] : '';
+    };
+
+    const d1 = cleanNum(parts[0]);
+    const d2 = cleanNum(parts[1]);
+    const d3 = parts[2] ? cleanNum(parts[2]) : '';
+
+    if (d1 && d2) {
+      const num1 = parseFloat(d1);
+      const num2 = parseFloat(d2);
+      const length = Math.max(num1, num2).toString();
+      const width = Math.min(num1, num2).toString();
+      return { length, width, height: d3 };
+    }
+  }
+
+  // Fallback regex match for any 2 numbers in string
+  const nums = normalized.match(/([0-9]+(?:\.[0-9]+)?)/g);
+  if (nums && nums.length >= 2) {
+    const n1 = parseFloat(nums[0]);
+    const n2 = parseFloat(nums[1]);
+    return {
+      length: Math.max(n1, n2).toString(),
+      width: Math.min(n1, n2).toString(),
+      height: nums[2] || ''
+    };
+  }
+
+  return { length: '', width: '', height: '' };
+};
+
+// Same as parseDimensions but returns numeric values + ratio (used in print overlay)
+const parseSizeDimensions = (sizeStr: string) => {
+  const dims = parseDimensions(sizeStr);
+  const l = parseFloat(dims.length) || 8;
+  const w = parseFloat(dims.width) || 3;
+  const h = parseFloat(dims.height) || 0;
+  return { length: l, width: w, height: h, ratio: l > 0 && w > 0 ? l / w : 2.67 };
 };
 
 const formatDimensions = (length: string, width: string, height: string) => {
@@ -124,17 +178,113 @@ const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean) => {
   `;
 };
 
-// Unified custom 3D Dimension input component
-const DimensionInput = ({
+// Status preset options with color themes and icons
+const STATUS_PRESETS = [
+  { value: 'تم التركيب', label: 'تم التركيب', color: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30', dot: 'bg-emerald-500' },
+  { value: 'لم يتم التركيب', label: 'لم يتم التركيب', color: 'bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/30', dot: 'bg-amber-500' },
+];
+
+const StatusQuickSelector = ({
   value,
   onChange,
-  className = ''
+  className = '',
 }: {
   value: string;
   onChange: (v: string) => void;
   className?: string;
 }) => {
+  const currentPreset = STATUS_PRESETS.find(p => p.value === value) || {
+    value: value || 'تم التركيب',
+    label: value || 'تم التركيب',
+    color: 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+    dot: 'bg-emerald-500',
+  };
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center justify-between gap-1.5 px-2.5 py-1 rounded-xl text-xs font-black border transition-all hover:scale-105 shadow-xs cursor-pointer ${currentPreset.color} ${className}`}
+        >
+          <span className="flex items-center gap-1.5 truncate">
+            <span className={`w-2 h-2 rounded-full shrink-0 ${currentPreset.dot} animate-pulse`} />
+            <span className="truncate">{currentPreset.label}</span>
+          </span>
+          <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-56 p-2.5 rounded-2xl border border-border bg-popover/98 backdrop-blur-xl shadow-2xl space-y-2 dir-rtl" align="center">
+        <div className="text-[11px] font-black text-muted-foreground px-1 pb-1 border-b border-border/10 flex items-center justify-between">
+          <span>اختر حالة اللوحة:</span>
+        </div>
+        <div className="grid grid-cols-1 gap-1">
+          {STATUS_PRESETS.map((preset) => (
+            <button
+              key={preset.value}
+              type="button"
+              onClick={() => onChange(preset.value)}
+              className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                value === preset.value
+                  ? `${preset.color} font-black shadow-xs`
+                  : 'hover:bg-muted/60 text-foreground'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full ${preset.dot}`} />
+                <span>{preset.label}</span>
+              </span>
+              {value === preset.value && <Check className="h-3.5 w-3.5" />}
+            </button>
+          ))}
+        </div>
+        <div className="pt-1.5 border-t border-border/10 space-y-1">
+          <span className="text-[10px] font-bold text-muted-foreground px-1">حالة مخصصة:</span>
+          <Input
+            value={value || ''}
+            onChange={(e) => onChange(e.target.value)}
+            placeholder="أدخل حالة مخصصة..."
+            className="h-8 text-xs font-bold rounded-xl bg-background border-border/30"
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+};
+
+const SIZE_PRESETS = [
+  '8x3',
+  '10x4',
+  '12x4',
+  '6x3',
+  '14x4',
+  '15x5',
+  '4x3',
+  '5x3',
+  '2x1',
+  '3x2',
+  '8x3x3',
+  '12x4x3',
+];
+
+// Unified custom Dimension input component with Sliders and Presets
+const DimensionInput = ({
+  value,
+  onChange,
+  availableSizes = [],
+  className = ''
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  availableSizes?: string[];
+  className?: string;
+}) => {
   const { length, width, height } = parseDimensions(value);
+
+  const numLength = parseFloat(String(length)) || 8;
+  const numWidth = parseFloat(String(width)) || 3;
+
+  const activePresets = availableSizes && availableSizes.length > 0 ? availableSizes : SIZE_PRESETS;
 
   const handleChange = (field: 'length' | 'width' | 'height', val: string) => {
     const newDims = { length, width, height };
@@ -142,41 +292,143 @@ const DimensionInput = ({
     onChange(formatDimensions(newDims.length, newDims.width, newDims.height));
   };
 
+  const handleSliderLength = (val: number) => {
+    onChange(formatDimensions(String(val), String(width), String(height)));
+  };
+
+  const handleSliderWidth = (val: number) => {
+    onChange(formatDimensions(String(length), String(val), String(height)));
+  };
+
+  const formattedDisplay = value ? value : 'حدد المقاس';
+  const parsedValue = parseDimensions(value);
+  const numericBadge = parsedValue.length && parsedValue.width ? `${parsedValue.length}×${parsedValue.width}م` : '';
+
   return (
-    <div className={`inline-flex items-center gap-1.5 bg-muted/40 dark:bg-muted/10 p-1.5 rounded-xl border border-border/10 justify-center ${className}`}>
-      <div className="flex flex-col items-center gap-0.5">
-        <span className="text-[10px] text-muted-foreground font-bold tracking-wider">طول</span>
-        <Input
-          type="text"
-          value={length}
-          onChange={e => handleChange('length', e.target.value)}
-          className="w-12 h-8 text-xs text-center rounded-lg bg-background/80 border-border/15 focus-visible:ring-indigo-500 font-bold p-1"
-          placeholder="طول"
-        />
-      </div>
-      <span className="text-muted-foreground/40 text-[10px] mt-4 font-bold">×</span>
-      <div className="flex flex-col items-center gap-0.5">
-        <span className="text-[10px] text-muted-foreground font-bold tracking-wider">عرض</span>
-        <Input
-          type="text"
-          value={width}
-          onChange={e => handleChange('width', e.target.value)}
-          className="w-12 h-8 text-xs text-center rounded-lg bg-background/80 border-border/15 focus-visible:ring-indigo-500 font-bold p-1"
-          placeholder="عرض"
-        />
-      </div>
-      <span className="text-muted-foreground/40 text-[10px] mt-4 font-bold">×</span>
-      <div className="flex flex-col items-center gap-0.5">
-        <span className="text-[10px] text-muted-foreground font-bold tracking-wider">ارتفاع</span>
-        <Input
-          type="text"
-          value={height}
-          onChange={e => handleChange('height', e.target.value)}
-          className="w-12 h-8 text-xs text-center rounded-lg bg-background/80 border-border/15 focus-visible:ring-indigo-500 font-bold p-1"
-          placeholder="ارتفاع"
-        />
-      </div>
-    </div>
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={`inline-flex items-center justify-between gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black border border-indigo-500/20 bg-indigo-500/5 hover:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 transition-all hover:scale-105 shadow-xs cursor-pointer ${className}`}
+        >
+          <span className="flex items-center gap-1.5 font-mono">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-indigo-500 shrink-0" />
+            <span className="font-bold">{formattedDisplay}</span>
+            {numericBadge && (
+              <span className="text-[10px] opacity-75 font-normal bg-indigo-500/10 px-1.5 py-0.5 rounded-md dir-ltr">
+                ({numericBadge})
+              </span>
+            )}
+          </span>
+          <ChevronDown className="h-3 w-3 opacity-60 shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-3.5 rounded-2xl border border-border bg-popover/98 backdrop-blur-xl shadow-2xl space-y-3 dir-rtl" align="center">
+        <div className="flex items-center justify-between border-b border-border/10 pb-2">
+          <span className="text-xs font-black text-foreground flex items-center gap-1.5">
+            <SlidersHorizontal className="h-3.5 w-3.5 text-indigo-500" /> اختيار المقاس
+          </span>
+          <Badge className="bg-indigo-500/15 text-indigo-600 dark:text-indigo-400 text-[10px] font-mono font-extrabold px-2 py-0.5">
+            {formattedDisplay} {numericBadge ? `(${numericBadge})` : ''}
+          </Badge>
+        </div>
+
+        {/* Quick Presets Grid from Settings */}
+        <div className="space-y-1">
+          <span className="text-[10px] font-bold text-muted-foreground">مقاسات ونماذج الإعدادات:</span>
+          <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-0.5">
+            {activePresets.map((preset) => {
+              const isSelected = value?.trim().toLowerCase() === preset.toLowerCase();
+              const pDims = parseDimensions(preset);
+              const pDimStr = pDims.length && pDims.width ? `${pDims.length}×${pDims.width}م` : '';
+
+              return (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => onChange(preset)}
+                  className={`py-1.5 px-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center justify-between border ${
+                    isSelected
+                      ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                      : 'bg-muted/40 border-border/15 text-foreground hover:bg-muted'
+                  }`}
+                >
+                  <span className="font-extrabold truncate max-w-[110px]">{preset}</span>
+                  {pDimStr && (
+                    <span className={`text-[10px] font-mono px-1.5 py-0.5 rounded-md ${isSelected ? 'text-indigo-100 bg-white/20' : 'text-muted-foreground bg-muted/60'}`}>
+                      {pDimStr}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Interactive Sliders Section */}
+        <div className="space-y-2.5 pt-1.5 border-t border-border/10">
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold">
+              <span className="text-muted-foreground">الطول:</span>
+              <span className="font-mono text-indigo-600 dark:text-indigo-400">{numLength} م</span>
+            </div>
+            <Slider
+              value={[numLength]}
+              min={1}
+              max={25}
+              step={0.5}
+              onValueChange={([v]) => handleSliderLength(v)}
+              className="py-1"
+            />
+          </div>
+
+          <div className="space-y-1">
+            <div className="flex items-center justify-between text-[11px] font-bold">
+              <span className="text-muted-foreground">العرض:</span>
+              <span className="font-mono text-indigo-600 dark:text-indigo-400">{numWidth} م</span>
+            </div>
+            <Slider
+              value={[numWidth]}
+              min={1}
+              max={12}
+              step={0.5}
+              onValueChange={([v]) => handleSliderWidth(v)}
+              className="py-1"
+            />
+          </div>
+        </div>
+
+        {/* Custom 3D Inputs */}
+        <div className="pt-2 border-t border-border/10 space-y-1">
+          <span className="text-[10px] font-bold text-muted-foreground">تخصيص يدوي (طول × عرض × ارتفاع):</span>
+          <div className="flex items-center gap-1.5 justify-between bg-muted/40 p-1.5 rounded-xl border border-border/15">
+            <Input
+              type="text"
+              value={length}
+              onChange={e => handleChange('length', e.target.value)}
+              className="w-16 h-7.5 text-xs text-center font-bold rounded-lg bg-background border-border/15"
+              placeholder="طول"
+            />
+            <span className="text-xs font-bold text-muted-foreground">×</span>
+            <Input
+              type="text"
+              value={width}
+              onChange={e => handleChange('width', e.target.value)}
+              className="w-16 h-7.5 text-xs text-center font-bold rounded-lg bg-background border-border/15"
+              placeholder="عرض"
+            />
+            <span className="text-xs font-bold text-muted-foreground">×</span>
+            <Input
+              type="text"
+              value={height}
+              onChange={e => handleChange('height', e.target.value)}
+              className="w-16 h-7.5 text-xs text-center font-bold rounded-lg bg-background border-border/15"
+              placeholder="ارتفاع"
+            />
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };
 
@@ -210,10 +462,18 @@ export default function MunicipalityBillboardOrganizer() {
   const [showCollectionsDialog, setShowCollectionsDialog] = useState(false);
   const [showPrintDialog, setShowPrintDialog] = useState(false);
   const [editingItem, setEditingItem] = useState<CollectionItem | null>(null);
+  const [showBatchImportDialog, setShowBatchImportDialog] = useState(false);
+  const [batchImportFiles, setBatchImportFiles] = useState<File[]>([]);
+  const [batchUnifiedSize, setBatchUnifiedSize] = useState<string>('');
+  const [batchFacesCount, setBatchFacesCount] = useState<string>('وجهين');
+  const [batchUnifiedStatus, setBatchUnifiedStatus] = useState<string>('تم التركيب');
+  const [batchImporting, setBatchImporting] = useState(false);
+  const [batchProgressMsg, setBatchProgressMsg] = useState('');
   const [allBillboards, setAllBillboards] = useState<any[]>([]);
   const [searchBillboard, setSearchBillboard] = useState('');
   const [selectedBillboardIds, setSelectedBillboardIds] = useState<Set<number>>(new Set());
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
+  const [printBackgrounds, setPrintBackgrounds] = useState<any[]>([]);
   const [printLoading, setPrintLoading] = useState(false);
   const { settings: customSettings, updateStatusOverride, saveSettings, refetch } = usePrintCustomization('municipality');
   const [selectedItems, setSelectedItems] = useState<Set<number>>(new Set());
@@ -332,7 +592,7 @@ export default function MunicipalityBillboardOrganizer() {
   };
   const [showBulkStatusDialog, setShowBulkStatusDialog] = useState(false);
   const [bulkStatusTarget, setBulkStatusTarget] = useState<'all' | 'selected'>('all');
-  const [bulkStatusValue, setBulkStatusValue] = useState('متاحة');
+  const [bulkStatusValue, setBulkStatusValue] = useState('تم التركيب');
   const [bulkStatusCustom, setBulkStatusCustom] = useState('');
   const [bulkSize, setBulkSize] = useState('');
   const [searchItems, setSearchItems] = useState('');
@@ -360,6 +620,18 @@ export default function MunicipalityBillboardOrganizer() {
       localStorage.setItem('mun_show_height_in_print', String(showHeightInPrint));
     } catch {}
   }, [showHeightInPrint]);
+
+  useEffect(() => {
+    const fetchBgs = async () => {
+      try {
+        const { data } = await supabase.from('print_backgrounds').select('*');
+        if (data) setPrintBackgrounds(data);
+      } catch (err) {
+        console.error('Failed to fetch backgrounds:', err);
+      }
+    };
+    fetchBgs();
+  }, [showPrintDialog]);
 
   const handleDimChange = (sequenceNumber: number, field: 'length' | 'width' | 'height', value: string) => {
     setCurrentCollection(prev => ({
@@ -461,11 +733,81 @@ export default function MunicipalityBillboardOrganizer() {
     item_type: 'new',
   });
 
+  // Photo import states
+  const [photoImportState, setPhotoImportState] = useState<'idle' | 'compressing' | 'uploading' | 'geocoding' | 'done' | 'error'>('idle');
+  const [photoImportProgress, setPhotoImportProgress] = useState(0);
+  const [pendingImageUrl, setPendingImageUrl] = useState<string | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [photoExifStatus, setPhotoExifStatus] = useState<'none' | 'found' | 'missing'>('none');
+  const photoDropRef = useRef<HTMLInputElement>(null);
+  const batchPhotoInputRef = useRef<HTMLInputElement>(null);
+
+  // Photo Overlay Editor state
+  const [showOverlayEditor, setShowOverlayEditor] = useState(false);
+  const [overlayEditorIndex, setOverlayEditorIndex] = useState(0);
+  const [sizeCutoutMap, setSizeCutoutMap] = useState<Record<string, string>>({});
+
+  const handleSaveItemOverlay = async (seq: number, overlayConfig: BillboardOverlayConfig) => {
+    // Update local state immediately
+    setCurrentCollection(prev => ({
+      ...prev,
+      items: prev.items.map(it => it.sequence_number === seq ? { ...it, overlay_config: overlayConfig } : it),
+    }));
+
+    // Persist to DB: find the item row id and update overlay_config
+    const collId = currentCollection.id;
+    if (!collId) return; // collection not yet saved to DB
+    try {
+      const { error } = await supabase
+        .from('municipality_collection_items')
+        .update({ overlay_config: overlayConfig })
+        .eq('collection_id', collId)
+        .eq('sequence_number', seq);
+      if (error) {
+        console.error('[overlay] DB update error:', error.message);
+        toast.error('فشل حفظ إعدادات التراكب في قاعدة البيانات');
+      }
+    } catch (e: any) {
+      console.error('[overlay] DB update exception:', e?.message);
+    }
+  };
+
+  const handleBillboardLocationChange = (id: number | string, newLat: number, newLng: number) => {
+    setCurrentCollection(prev => ({
+      ...prev,
+      items: prev.items.map(it =>
+        it.sequence_number === Number(id) || (it as any).id === id
+          ? { ...it, latitude: newLat, longitude: newLng }
+          : it
+      ),
+    }));
+  };
+
+  const loadSizeCutoutImages = async () => {
+    try {
+      const { data } = await supabase.from('sizes').select('name, width, height, image_url');
+      if (data) {
+        const map: Record<string, string> = {};
+        data.forEach(s => {
+          if (s.image_url) {
+            if (s.name) map[s.name.trim()] = s.image_url;
+            if (s.width && s.height) {
+              map[`${s.width}x${s.height}`] = s.image_url;
+              map[`${s.height}x${s.width}`] = s.image_url;
+            }
+          }
+        });
+        setSizeCutoutMap(map);
+      }
+    } catch {}
+  };
+
   // Load saved collections
   useEffect(() => {
     loadCollections();
     loadAllBillboards();
     loadSizes();
+    loadSizeCutoutImages();
     try {
       const savedId = localStorage.getItem('last_municipality_collection_id');
       if (savedId) {
@@ -632,7 +974,8 @@ export default function MunicipalityBillboardOrganizer() {
             design_face_b: item.design_face_b,
             image_url: item.image_url,
             municipality: item.municipality || '',
-            status: item.status || 'متاحة',
+            status: item.status || 'تم التركيب',
+            overlay_config: item.overlay_config ?? undefined,
           };
         });
 
@@ -703,7 +1046,8 @@ export default function MunicipalityBillboardOrganizer() {
         design_face_a: item.design_face_a || null,
         design_face_b: item.design_face_b || null,
         image_url: item.image_url || null,
-        status: item.status || 'متاحة',
+        status: item.status || 'تم التركيب',
+        overlay_config: item.overlay_config ? item.overlay_config : null,
       }));
 
       await supabase.from('municipality_collection_items').insert(itemsToInsert);
@@ -742,7 +1086,179 @@ export default function MunicipalityBillboardOrganizer() {
       longitude: null,
       item_type: 'new',
     });
+    setPhotoImportState('idle');
+    setPhotoImportProgress(0);
+    setPendingImageUrl(null);
+    setPhotoPreviewUrl(null);
+    setPhotoExifStatus('none');
     setShowAddDialog(true);
+  };
+
+  const handlePhotoImport = async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('يرجى اختيار ملف صورة');
+      return;
+    }
+
+    // Show preview immediately
+    const previewUrl = URL.createObjectURL(file);
+    setPhotoPreviewUrl(previewUrl);
+    setPendingImageUrl(null);
+    setPhotoExifStatus('none');
+    setPhotoImportState('compressing');
+    setPhotoImportProgress(5);
+
+    try {
+      // 1. Extract EXIF BEFORE compression (preserveExifData keeps it, but safer to read first)
+      const exif = await extractExifData(file);
+      const hasGps = exif.lat !== null && exif.lng !== null;
+      setPhotoExifStatus(hasGps ? 'found' : 'missing');
+
+      if (hasGps && exif.lat !== null && exif.lng !== null) {
+        const cleanLat = Number(exif.lat.toFixed(6));
+        const cleanLng = Number(exif.lng.toFixed(6));
+        setNewItem(prev => ({ ...prev, latitude: cleanLat, longitude: cleanLng }));
+      }
+      setPhotoImportProgress(20);
+
+      // 2. Lossless compression (WebWorker, GPS preserved)
+      const compressed = await compressLossless(file, (pct) => {
+        setPhotoImportProgress(20 + Math.round(pct * 0.4));
+      });
+      setPhotoImportProgress(60);
+
+      // 3. Upload to default provider
+      setPhotoImportState('uploading');
+      const imgName = `mun-photo-${Date.now()}-${file.name.replace(/[^\w.-]/g, '_').slice(0, 40)}`;
+      const folder = `municipality-billboards/${(municipalityName || 'general').replace(/[^\w\u0600-\u06FF-]/g, '_')}`;
+      const imageUrl = await uploadImage(compressed, imgName, folder);
+      setPendingImageUrl(imageUrl);
+      setPhotoImportProgress(80);
+
+      // 4. Reverse Geocoding if we have coords
+      if (hasGps && exif.lat && exif.lng) {
+        setPhotoImportState('geocoding');
+        const geo = await reverseGeocode(exif.lat, exif.lng);
+        if (geo) {
+          setNewItem(prev => ({
+            ...prev,
+            location_text: prev.location_text || geo.location_text,
+            nearest_landmark: prev.nearest_landmark || geo.nearest_landmark,
+          }));
+        }
+      }
+      setPhotoImportProgress(100);
+      setPhotoImportState('done');
+      toast.success('تم رفع الصورة واستخراج الإحداثيات');
+    } catch (err: any) {
+      console.error('Photo import error:', err);
+      setPhotoImportState('error');
+      toast.error('فشل رفع الصورة: ' + (err?.message || 'خطأ غير معروف'));
+    }
+  };
+
+  const handleDropOrSelectFiles = (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (fileList.length === 0) {
+      toast.error('يرجى اختيار ملفات صور صالحة');
+      return;
+    }
+
+    if (fileList.length === 1) {
+      handlePhotoImport(fileList[0]);
+    } else {
+      setBatchImportFiles(fileList);
+      setBatchUnifiedSize(defaultSize || dbSizes[0] || '');
+      setBatchFacesCount('وجهين');
+      setBatchUnifiedStatus('تم التركيب');
+      setBatchProgressMsg('');
+      setShowBatchImportDialog(true);
+    }
+  };
+
+  const handleBatchPhotoImport = async () => {
+    if (batchImportFiles.length === 0) return;
+    const sizeToUse = batchUnifiedSize.trim();
+    if (!sizeToUse) {
+      toast.error('يرجى اختيار مقاس موحد للوحات');
+      return;
+    }
+
+    setBatchImporting(true);
+    let successCount = 0;
+    const newItemsList: CollectionItem[] = [];
+    let startSeq = currentCollection.items.length + 1;
+
+    for (let i = 0; i < batchImportFiles.length; i++) {
+      const file = batchImportFiles[i];
+      setBatchProgressMsg(`جاري معالجة ورفع صورة ${i + 1} من ${batchImportFiles.length} (${file.name})...`);
+
+      try {
+        // 1. EXIF Coordinates extraction
+        const exif = await extractExifData(file);
+        const hasGps = exif.lat !== null && exif.lng !== null;
+        const lat = hasGps ? Number(exif.lat!.toFixed(6)) : null;
+        const lng = hasGps ? Number(exif.lng!.toFixed(6)) : null;
+
+        // 2. Compression
+        const compressed = await compressLossless(file, () => {});
+
+        // 3. Upload to cloud/storage
+        const imgName = `mun-photo-${Date.now()}-${file.name.replace(/[^\w.-]/g, '_').slice(0, 40)}`;
+        const folder = `municipality-billboards/${(municipalityName || 'general').replace(/[^\w\u0600-\u06FF-]/g, '_')}`;
+        const imageUrl = await uploadImage(compressed, imgName, folder);
+
+        // 4. Geocode to label
+        let locText = '';
+        let landmark = '';
+        if (hasGps && lat && lng) {
+          const geo = await reverseGeocode(lat, lng);
+          if (geo) {
+            locText = geo.location_text || '';
+            landmark = geo.nearest_landmark || '';
+          }
+        }
+
+        const seq = startSeq++;
+        const item: CollectionItem = {
+          sequence_number: seq,
+          size: sizeToUse,
+          faces_count: batchFacesCount || 'وجهين',
+          location_text: locText || `موقع مستورد ${seq}`,
+          nearest_landmark: landmark,
+          latitude: lat,
+          longitude: lng,
+          item_type: 'new',
+          billboard_name: locText || `لوحة مستوردة ${seq}`,
+          municipality: municipalityName || '',
+          status: batchUnifiedStatus || 'تم التركيب',
+          image_url: imageUrl || undefined,
+        };
+
+        newItemsList.push(item);
+        successCount++;
+      } catch (err) {
+        console.error(`Batch import failed for file ${file.name}:`, err);
+      }
+    }
+
+    if (newItemsList.length > 0) {
+      setCurrentCollection(prev => ({
+        ...prev,
+        items: [...prev.items, ...newItemsList]
+      }));
+    }
+
+    setBatchImporting(false);
+    setShowBatchImportDialog(false);
+    setBatchImportFiles([]);
+    
+    if (successCount > 0) {
+      toast.success(`تم استيراد ${successCount} لوحة بنجاح بمقاس موحد ${sizeToUse}`);
+    } else {
+      toast.error('فشل استيراد الصور المحددة');
+    }
   };
 
   const addNewItem = () => {
@@ -763,10 +1279,14 @@ export default function MunicipalityBillboardOrganizer() {
       item_type: 'new',
       billboard_name: newItem.location_text || `لوحة جديدة ${nextSeq}`,
       municipality: municipalityName || '',
-      status: 'متاحة',
+      status: newItem.status || 'تم التركيب',
+      image_url: pendingImageUrl || undefined,
     };
     setCurrentCollection(prev => ({ ...prev, items: [...prev.items, item] }));
     setNewItem({ size: defaultSize || '', faces_count: 'وجهين', location_text: '', nearest_landmark: '', latitude: null, longitude: null, item_type: 'new' });
+    setPendingImageUrl(null);
+    setPhotoPreviewUrl(null);
+    setPhotoImportState('idle');
     setShowAddDialog(false);
     toast.success(`تمت إضافة لوحة رقم ${nextSeq}`);
   };
@@ -924,12 +1444,44 @@ export default function MunicipalityBillboardOrganizer() {
     setMoveTargetSeq('');
   };
 
-  // Update item
+  // Update item (Enhanced to apply changes to all items with the same size or selected items)
   const updateItem = (seq: number, updates: Partial<CollectionItem>) => {
-    setCurrentCollection(prev => ({
-      ...prev,
-      items: prev.items.map(item => item.sequence_number === seq ? { ...item, ...updates } : item),
-    }));
+    setCurrentCollection(prev => {
+      const targetItem = prev.items.find(item => item.sequence_number === seq);
+      const oldSize = targetItem ? targetItem.size : '';
+      const isSelected = selectedItems.has(seq);
+
+      return {
+        ...prev,
+        items: prev.items.map(item => {
+          // If this is the direct target item
+          if (item.sequence_number === seq) {
+            return { ...item, ...updates };
+          }
+
+          // If size is updated
+          if (updates.size !== undefined) {
+            // Apply to other selected items
+            if (isSelected && selectedItems.has(item.sequence_number)) {
+              return { ...item, size: updates.size };
+            }
+            // Apply to all items sharing the exact same old size
+            if (oldSize && item.size === oldSize) {
+              return { ...item, size: updates.size };
+            }
+          }
+
+          // If status is updated
+          if (updates.status !== undefined) {
+            if (isSelected && selectedItems.has(item.sequence_number)) {
+              return { ...item, status: updates.status };
+            }
+          }
+
+          return item;
+        }),
+      };
+    });
   };
 
   const clearAllItems = () => {
@@ -1609,19 +2161,36 @@ export default function MunicipalityBillboardOrganizer() {
       // ✅ صفحة الغلاف
       const coverEnabled = (s as any).cover_page_enabled !== 'false';
       if (coverEnabled && displayMunicipality) {
-        const coverLogoUrl = (s as any).cover_logo_url || '/logofaresgold.svg';
+        const matchingBg = printBackgrounds.find(bg => bg.url === customBackgroundUrl);
+        let coverLogoUrl = matchingBg?.logo_url || (s as any).cover_logo_url || '/logofaresgold.svg';
         const coverPhrase = (s as any).cover_phrase || 'لوحات';
-        const coverLogoSize = (s as any).cover_logo_size || '200px';
-        const coverPhraseFontSize = (s as any).cover_phrase_font_size || '28px';
-        const coverMunicipalityFontSize = (s as any).cover_municipality_font_size || '36px';
+
+        const formatCssSize = (val: any, fallback: string) => {
+          if (!val) return fallback;
+          const str = String(val).trim();
+          const num = parseFloat(str);
+          if (!isNaN(num) && num > 0) {
+            if (str.endsWith('mm')) return `${num}mm`;
+            if (str.endsWith('%')) return `${num}%`;
+            // Convert px to mm relative to A4 page width (794px = 210mm)
+            const mm = (num / 794) * 210;
+            return `${mm.toFixed(1)}mm`;
+          }
+          return str;
+        };
+
+        const rawLogoSize = matchingBg?.logo_size || (s as any).cover_logo_size || '220px';
+        const coverLogoSize = formatCssSize(rawLogoSize, '220px');
+        const coverPhraseFontSize = formatCssSize((s as any).cover_phrase_font_size, '28px');
+        const coverMunicipalityFontSize = formatCssSize((s as any).cover_municipality_font_size, '36px');
         
-        const logoTop = (s as any).cover_logo_top || '';
+        const logoTop = (s as any).cover_logo_top || '65mm';
         const logoLeft = (s as any).cover_logo_left || '50%';
         const logoAlign = (s as any).cover_logo_align || 'center';
-        const phraseTop = (s as any).cover_phrase_top || '';
+        const phraseTop = (s as any).cover_phrase_top || '138mm';
         const phraseLeft = (s as any).cover_phrase_left || '50%';
         const phraseAlign = (s as any).cover_phrase_align || 'center';
-        const muniTop = (s as any).cover_municipality_top || '';
+        const muniTop = (s as any).cover_municipality_top || '154mm';
         const muniLeft = (s as any).cover_municipality_left || '50%';
         const muniAlign = (s as any).cover_municipality_align || 'center';
 
@@ -1630,22 +2199,25 @@ export default function MunicipalityBillboardOrganizer() {
         const coverBgClass = coverBgEnabled ? (coverBgUrl ? '' : '<div class="background"></div>') : '';
         const coverBgInline = coverBgEnabled && coverBgUrl ? `background-image:url('${coverBgUrl}');background-size:210mm 297mm;background-repeat:no-repeat;` : '';
 
-        const posStyle = (align: string, left: string, extraWidth?: string) => {
-          const w = extraWidth ? `width:${extraWidth};` : '';
-          return `left:${left};transform:translateX(-50%);text-align:${align};${w}`;
+        const posStyle = (align: string, left: string) => {
+          return `left:${left};transform:translateX(-50%);text-align:${align};`;
         };
 
         pages.push(`
             <div class="page" style="${coverBgInline}">
               ${coverBgClass}
-              <div style="position:absolute;${posStyle(logoAlign, logoLeft, coverLogoSize)}top:${logoTop || '100mm'};z-index:5;">
-                <img src="${coverLogoUrl}" alt="شعار" style="width:100%;height:auto;object-fit:contain;" onerror="this.style.display='none'" />
-              </div>
-              <div style="position:absolute;${posStyle(phraseAlign, phraseLeft)}top:${phraseTop || '180mm'};z-index:5;font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;">
-                ${coverPhrase}
-              </div>
-              <div style="position:absolute;${posStyle(muniAlign, muniLeft)}top:${muniTop || '195mm'};z-index:5;font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;">
-                ${displayMunicipality}
+              <div style="position:absolute;top:${logoTop};left:50%;transform:translateX(-50%);width:92%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:20px;text-align:center;z-index:5;">
+                <div style="display:flex;align-items:center;justify-content:center;width:100%;">
+                  <img src="${normalizeGoogleImageUrl(coverLogoUrl)}" alt="شعار" style="width:${coverLogoSize};max-width:100%;height:auto;object-fit:contain;display:inline-block;" crossorigin="anonymous" onerror="this.style.display='none'" />
+                </div>
+                <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;width:100%;">
+                  <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;line-height:1.2;">
+                    ${coverPhrase}
+                  </div>
+                  <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;line-height:1.2;">
+                    ${displayMunicipality}
+                  </div>
+                </div>
               </div>
             </div>
           `);
@@ -1735,12 +2307,12 @@ export default function MunicipalityBillboardOrganizer() {
         let locWidth: number, coordsWidth: number, statusWidth: number, landmarkWidth: number;
         if (showStatusInPrint) {
           locWidth = 32;
-          coordsWidth = 28;
+          coordsWidth = 38;
           statusWidth = 18;
           landmarkWidth = remainingWidth - (locWidth + coordsWidth + statusWidth);
         } else {
           locWidth = 36;
-          coordsWidth = 32;
+          coordsWidth = 42;
           landmarkWidth = remainingWidth - (locWidth + coordsWidth);
           statusWidth = 0;
         }
@@ -1840,7 +2412,7 @@ export default function MunicipalityBillboardOrganizer() {
               .summary-table tbody td:first-child { border-right:none; }
               .summary-table tbody td.loc { text-align:right; padding-right:10px; padding-left:10px; word-break:break-word; }
               .summary-table tbody td.num { font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-weight: 600; }
-              .summary-table tbody td.coords { direction:ltr; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-size:${compactSummary ? '9.5px' : '11px'}; letter-spacing:0.2px; white-space:nowrap; font-weight: 600; }
+              .summary-table tbody td.coords { direction:ltr; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-size:${compactSummary ? '9px' : '10px'}; letter-spacing:0.1px; word-break:break-all; white-space:normal; font-weight: 600; line-height:1.4; }
               .summary-table tbody td.qr-col-cell { width: ${rowHeight} !important; height: ${rowHeight} !important; padding: 0 !important; vertical-align: middle; text-align: center; }
               .summary-table tbody tr:nth-child(even) { background:#f0f0f0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
               .summary-table tbody tr:nth-child(even) td { background:#f0f0f0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -1855,6 +2427,19 @@ export default function MunicipalityBillboardOrganizer() {
           `);
         }
       }
+
+      // ── Normalize all image URLs for the print popup ──────────────────────
+      // lh3.googleusercontent.com URLs work fine as <img src> but CANNOT be
+      // fetched with credentials (CORS wildcard restriction). The popup window
+      // (about:blank) can load them directly as <img> tags since they are
+      // public URLs — no preloading needed, just ensure normalized form.
+      const _blobUrls: string[] = []; // kept for API compat with cleanup code below
+
+      const resolveImg = (url: string | null | undefined): string => {
+        if (!url) return '';
+        return normalizeGoogleImageUrl(url);
+      };
+      // ─────────────────────────────────────────────────────────────────────
 
       for (const item of printItems) {
         const qrInfo = qrCodes.get(item.sequence_number);
@@ -1901,14 +2486,52 @@ export default function MunicipalityBillboardOrganizer() {
                 overflow: hidden; z-index: 5;
                 display: flex; flex-direction: column;
               ">
-                ${hasUploadedImage ? `
-                  <div style="flex: 1 1 50%; min-height: 0; overflow: hidden; border-bottom: 1px solid #ddd;">
-                    <img src="${item.image_url}" alt="صورة اللوحة" style="width: 100%; height: 100%; object-fit: ${s.main_image_object_fit || 'cover'}; display: block;" />
-                  </div>
-                  <div style="flex: 1 1 50%; min-height: 0; position: relative; overflow: hidden;">
-                    ${mapBlockHtml}
-                  </div>
-                ` : `
+                ${hasUploadedImage ? (() => {
+                  const ov = item.overlay_config;
+                  const sizeKey = item.size?.trim() || '';
+                  const sizeCutoutUrl = sizeCutoutMap[sizeKey] || sizeCutoutMap[sizeKey.replace(/×/g, 'x').replace(/X/g, 'x')] || null;
+                  const activeCutout = ov?.cutout_image_url || sizeCutoutUrl || null;
+                  const isOverlayActive = (ov?.enabled !== false);
+                  const isCutoutPresent = !!activeCutout;
+                  const x = ov?.x_pct ?? 50;
+                  const y = ov?.y_pct ?? 50;
+                  const scale = (ov?.scale_pct ?? 100) / 100;
+                  const rot = ov?.rotation_deg ?? 0;
+                  const dims = parseSizeDimensions(item.size);
+
+                  return `
+                    <div style="position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #fafafa; border-bottom: 1px solid #ddd; flex-shrink: 0;">
+                      <img src="${resolveImg(item.image_url)}" alt="صورة اللوحة" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
+                      ${isOverlayActive ? (isCutoutPresent ? `
+                        <img src="${resolveImg(activeCutout)}" style="
+                          position: absolute;
+                          left: ${x}%;
+                          top: ${y}%;
+                          width: 27.15%;
+                          min-width: 40px;
+                          height: auto;
+                          display: block;
+                          transform: translate(-50%, -50%) scale(${scale}) rotate(${rot}deg);
+                          transform-origin: center center;
+                          filter: drop-shadow(0 10px 25px rgba(0,0,0,0.7));
+                          z-index: 10;
+                        " />
+                      ` : `
+                        <div style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, -50%) scale(${scale}) rotate(${rot}deg); transform-origin: center center; z-index: 10; display: flex; flex-direction: column; align-items: center;">
+                          <div style="background: linear-gradient(135deg, #b45309, #1e293b); border: 2.5px solid #f59e0b; color: #fff; padding: 5px 10px; border-radius: 10px; font-weight: bold; font-size: 10px; text-align: center; box-shadow: 0 8px 20px rgba(0,0,0,0.8); width: ${Math.max(110, 80 * dims.ratio)}px; height: 70px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-family: Tajawal, sans-serif;">
+                            <span style="font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${item.billboard_name || `لوحة #${item.sequence_number}`}</span>
+                            <span style="font-size: 8px; color: #f59e0b; margin-top: 2px;">${item.size}</span>
+                          </div>
+                          <div style="width: 6px; height: 40px; background: linear-gradient(to bottom, #cbd5e1, #475569); box-shadow: 0 4px 8px rgba(0,0,0,0.4);" />
+                          <div style="width: 24px; height: 2px; background: #0f172a;" />
+                        </div>
+                      `) : ''}
+                    </div>
+                    <div style="flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden;">
+                      ${mapBlockHtml}
+                    </div>
+                  `;
+                })() : `
                   <div style="flex: 1 1 auto; min-height: 0; position: relative; overflow: hidden;">
                     ${mapBlockHtml}
                   </div>
@@ -2018,13 +2641,13 @@ export default function MunicipalityBillboardOrganizer() {
                 ${item.design_face_a ? `
                   <div style="flex: 1; text-align: center;">
                     <div style="font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #333;">التصميم - الوجه الأمامي</div>
-                    <img src="${item.design_face_a}" alt="" style="width: 100%; max-height: ${s.design_image_height}; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;" />
+                    <img src="${resolveImg(item.design_face_a)}" alt="" style="width: 100%; max-height: ${s.design_image_height}; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;" />
                   </div>
                 ` : ''}
                 ${item.design_face_b ? `
                   <div style="flex: 1; text-align: center;">
                     <div style="font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #333;">التصميم - الوجه الخلفي</div>
-                    <img src="${item.design_face_b}" alt="" style="width: 100%; max-height: ${s.design_image_height}; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;" />
+                    <img src="${resolveImg(item.design_face_b)}" alt="" style="width: 100%; max-height: ${s.design_image_height}; object-fit: contain; border: 1px solid #ddd; border-radius: 4px;" />
                   </div>
                 ` : ''}
               </div>
@@ -2051,11 +2674,11 @@ export default function MunicipalityBillboardOrganizer() {
             .page:last-child { page-break-after: auto; }
             .background { position: absolute; top: 0; left: 0; width: 210mm; height: 297mm; background-image: url('${customBackgroundUrl}'); background-size: 210mm 297mm; background-repeat: no-repeat; z-index: 0; }
             .absolute-field { position: absolute; color: #000; }
-            .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; }
-            .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; }
-            .print-dim-label { font-size: 0.45em; font-weight: 500; opacity: 0.6; margin-bottom: 2px; letter-spacing: 0.5px; }
-            .print-dim-value { font-size: 1em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; }
-            .print-dim-separator { font-size: 0.65em; opacity: 0.45; margin-top: 0.25em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; }
+            .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; color: inherit; }
+            .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: inherit; }
+            .print-dim-label { font-size: 0.45em; font-weight: 700; opacity: 1; margin-bottom: 2px; letter-spacing: 0.5px; color: inherit; }
+            .print-dim-value { font-size: 1em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; color: inherit; }
+            .print-dim-separator { font-size: 0.65em; opacity: 1; margin-top: 0.25em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; color: inherit; }
             @page { size: 210mm 297mm; margin: 0; }
             @media print {
               html, body { width: 210mm !important; margin: 0 !important; padding: 0 !important; background: white !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
@@ -2068,9 +2691,34 @@ export default function MunicipalityBillboardOrganizer() {
         </head>
         <body>${pages.join('\n')}
         <script>
-          window.addEventListener('load', function() {
-            setTimeout(function() { window.print(); }, 500);
-          });
+          function printWhenLoaded() {
+            var images = Array.from(document.querySelectorAll('img'));
+            var loaded = 0;
+            var total = images.length;
+            if (total === 0) {
+              setTimeout(function() { window.print(); }, 300);
+              return;
+            }
+            function onDone() {
+              loaded++;
+              if (loaded >= total) {
+                setTimeout(function() { window.print(); }, 400);
+              }
+            }
+            images.forEach(function(img) {
+              if (img.complete && img.naturalWidth !== 0) {
+                onDone();
+              } else {
+                img.addEventListener('load', onDone);
+                img.addEventListener('error', onDone);
+              }
+            });
+          }
+          if (document.readyState === 'complete') {
+            printWhenLoaded();
+          } else {
+            window.addEventListener('load', printWhenLoaded);
+          }
         </script></body>
         </html>
       `;
@@ -2080,9 +2728,17 @@ export default function MunicipalityBillboardOrganizer() {
         printWindow.document.write(html);
         printWindow.document.close();
         toast.success(`تم تحضير ${printItems.length} صفحة للطباعة`);
+        // Clean up blob URLs after a delay to allow the popup to load them
+        setTimeout(() => {
+          _blobUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
+        }, 30000);
+      } else {
+        _blobUrls.forEach(u => { try { URL.revokeObjectURL(u); } catch {} });
+        toast.error('لم يتم فتح نافذة الطباعة — يرجى السماح بالنوافذ المنبثقة (Popups) في المتصفح');
       }
-    } catch (e) {
-      toast.error('فشل في الطباعة');
+    } catch (e: any) {
+      console.error('[handlePrint] failed:', e?.message || e);
+      toast.error(`فشل في الطباعة: ${e?.message || 'خطأ غير معروف'}`);
     } finally {
       setPrintLoading(false);
       setShowPrintDialog(false);
@@ -2155,83 +2811,61 @@ export default function MunicipalityBillboardOrganizer() {
       <div className="absolute top-0 right-1/4 w-[500px] h-[500px] bg-indigo-500/5 rounded-full blur-[140px] pointer-events-none" />
       <div className="absolute top-1/3 left-1/4 w-[450px] h-[450px] bg-purple-500/5 rounded-full blur-[130px] pointer-events-none" />
 
-      {/* Header */}
-      <div className="sticky top-0 z-40 w-full border-b border-border/15 bg-background/80 backdrop-blur-md">
-        <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-3.5">
-              <div className="p-3 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl shadow-md text-white shadow-indigo-500/10">
-                <MapPin className="h-6 w-6" />
+      {/* ─── Header ─── */}
+      <div className="sticky top-0 z-40 w-full border-b border-border/10 bg-background/90 backdrop-blur-xl shadow-sm">
+        <div className="w-full px-4 sm:px-6 lg:px-8">
+          {/* Top row: title + save/new/open */}
+          <div className="flex items-center justify-between py-3 gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-violet-600 rounded-xl shadow-lg shadow-indigo-500/20 text-white">
+                <MapPin className="h-5 w-5" />
               </div>
               <div>
-                <h1 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-foreground via-foreground/90 to-foreground/75 bg-clip-text text-transparent">
-                  تنظيم لوحات البلدية
-                </h1>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  ترتيب، تصنيف وطباعة لوحات البلدية بشكل تفاعلي
-                </p>
+                <h1 className="text-lg font-bold tracking-tight">تنظيم لوحات البلدية</h1>
+                <p className="text-[11px] text-muted-foreground leading-none mt-0.5">ترتيب • تصنيف • طباعة</p>
+              </div>
+              {/* live counters */}
+              <div className="hidden sm:flex items-center gap-2 mr-1">
+                <div className="flex items-center gap-1.5 bg-indigo-500/8 border border-indigo-500/15 rounded-lg px-2.5 py-1 text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                  <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
+                  {currentCollection.items.length} لوحة
+                </div>
+                {currentCollection.items.length > 0 && (
+                  <div className="flex items-center gap-1.5 bg-emerald-500/8 border border-emerald-500/15 rounded-lg px-2.5 py-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    {totalAreaMeters.toLocaleString('en-US', { maximumFractionDigits: 1 })} م²
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Quick Actions */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <div className="bg-card/65 backdrop-blur-sm border border-border/15 rounded-xl px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 shadow-sm">
-                <span className="w-1.5 h-1.5 rounded-full bg-indigo-500 animate-pulse" />
-                <span>{currentCollection.items.length} لوحة</span>
-              </div>
-              {currentCollection.items.length > 0 && (
-                <div className="bg-card/65 backdrop-blur-sm border border-border/15 rounded-xl px-3 py-1.5 text-xs font-medium flex items-center gap-3 shadow-sm">
-                  <div className="flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                    <span>إجمالي المساحة: {totalAreaMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²</span>
-                  </div>
-                  <span className="border-r border-border/15 h-3" />
-                  <label className="flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-foreground hover:text-indigo-500 transition-colors">
-                    <Checkbox
-                      checked={customSettings.calc_meters_by_faces === 'true'}
-                      onCheckedChange={async (checked) => {
-                        const val = checked ? 'true' : 'false';
-                        await saveSettings({ 
-                          calc_meters_by_faces: val,
-                          faces_count_show: val
-                        });
-                      }}
-                      className="rounded-md h-3.5 w-3.5"
-                    />
-                    <span>حساب بعدد الأوجه</span>
-                  </label>
-                </div>
-              )}
-              <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={handleNewProject}>
-                <Plus className="h-4 w-4" />
-                مشروع جديد
+            {/* Right actions: file ops + print */}
+            <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              <Button variant="ghost" size="sm" className="h-8 rounded-lg text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={handleNewProject}>
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">جديد</span>
               </Button>
-              <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={() => setShowCollectionsDialog(true)}>
-                <FolderOpen className="h-4 w-4" />
-                المحفوظات
+              <Button variant="ghost" size="sm" className="h-8 rounded-lg text-xs gap-1.5 text-muted-foreground hover:text-foreground" onClick={() => setShowCollectionsDialog(true)}>
+                <FolderOpen className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">المحفوظات</span>
               </Button>
-              <Button variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={saveCollection} disabled={saving}>
-                <Save className="h-4 w-4" />
-                {saving ? 'جاري الحفظ...' : 'حفظ'}
+              <Button variant="outline" size="sm" className="h-8 rounded-lg text-xs gap-1.5 border-border/20" onClick={saveCollection} disabled={saving}>
+                <Save className="h-3.5 w-3.5" />
+                {saving ? 'حفظ...' : 'حفظ'}
               </Button>
-              <Button size="sm" variant="outline" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={() => setShowStickerSettings(true)}>
-                <Settings2 className="h-4 w-4" />
-                إعدادات الملصقات
+              <div className="w-px h-5 bg-border/30 mx-1 hidden sm:block" />
+              <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs gap-1.5 border-amber-500/20 bg-amber-500/8 text-amber-600 dark:text-amber-400 hover:bg-amber-500/15" onClick={() => printStickers(currentCollection.items, stickerSettings, municipalityName)} disabled={currentCollection.items.length === 0}>
+                <Sticker className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">ملصقات</span>
               </Button>
-              <Button size="sm" variant="outline" className="h-9 rounded-xl border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/20 text-amber-600 dark:text-amber-400 gap-1.5" onClick={() => printStickers(currentCollection.items, stickerSettings, municipalityName)} disabled={currentCollection.items.length === 0}>
-                <Sticker className="h-4 w-4" />
-                طباعة ملصقات
+              <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs gap-1.5 border-emerald-500/20 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15" onClick={handleExportExcel} disabled={currentCollection.items.length === 0}>
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Excel</span>
               </Button>
-              <Button size="sm" variant="outline" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-accent hover:text-accent-foreground gap-1.5" onClick={() => setShowPrintSettings(true)}>
-                <Settings2 className="h-4 w-4" />
-                إعدادات الطباعة
+              <Button size="sm" variant="outline" className="h-8 rounded-lg text-xs gap-1 border-border/20" onClick={() => setShowPrintSettings(true)}>
+                <Settings2 className="h-3.5 w-3.5" />
               </Button>
-              <Button size="sm" variant="outline" className="h-9 rounded-xl border-emerald-500/20 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 gap-1.5" onClick={handleExportExcel} disabled={currentCollection.items.length === 0}>
-                <FileSpreadsheet className="h-4 w-4" />
-                تنزيل Excel
-              </Button>
-              <Button size="sm" className="h-9 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white shadow-md shadow-indigo-600/10 gap-1.5" onClick={() => { setPrintImageSource('map_pin'); setShowPrintDialog(true); }} disabled={currentCollection.items.length === 0}>
-                <Printer className="h-4 w-4" />
+              <Button size="sm" className="h-8 rounded-lg text-xs gap-1.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow shadow-indigo-600/20" onClick={() => { setPrintImageSource('map_pin'); setShowPrintDialog(true); }} disabled={currentCollection.items.length === 0}>
+                <Printer className="h-3.5 w-3.5" />
                 طباعة الكل
               </Button>
             </div>
@@ -2239,7 +2873,7 @@ export default function MunicipalityBillboardOrganizer() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8 space-y-6 relative z-10">
+      <div className="w-full px-4 sm:px-6 lg:px-8 py-6 space-y-6 relative z-10">
         {/* Collection name & Binding (Municipality + City + Default Size) */}
         <Card className="border border-border/15 bg-gradient-to-br from-card/60 to-card/30 backdrop-blur-md rounded-2xl shadow-sm overflow-hidden relative group">
           <div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-indigo-500/40 via-purple-500/40 to-transparent opacity-70" />
@@ -2400,29 +3034,85 @@ export default function MunicipalityBillboardOrganizer() {
           </div>
         )}
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <Button onClick={() => setShowImportDialog(true)} variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-indigo-500/5 hover:border-indigo-500/30 gap-1.5 transition-all">
-            <Search className="h-4 w-4 text-indigo-500" />
-            جلب لوحات موجودة
-          </Button>
-          <Button onClick={() => setShowMunicipalityImportDialog(true)} variant="outline" size="sm" className="h-9 rounded-xl border-border/20 bg-card/45 backdrop-blur-sm hover:bg-indigo-500/5 hover:border-indigo-500/30 gap-1.5 transition-all">
-            <Building2 className="h-4 w-4 text-indigo-500" />
-            جلب لوحات بلدية كاملة
-          </Button>
-          <label className="cursor-pointer inline-flex">
-            <span className="inline-flex items-center gap-1.5 h-9 px-3.5 rounded-xl border border-border/20 bg-card/45 backdrop-blur-sm text-xs font-medium hover:bg-indigo-500/5 hover:border-indigo-500/30 cursor-pointer transition-all">
-              <Upload className="h-4 w-4 text-indigo-500" />
-              استيراد من Excel
-            </span>
-            <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelImport} />
-          </label>
-          <Button onClick={openAddDialog} size="sm" className="h-9 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5">
-            <Plus className="h-4 w-4" />
-            إضافة لوحة جديدة
-          </Button>
-          <Button onClick={clearAllItems} variant="destructive" size="sm" className="h-9 rounded-xl gap-1.5 shadow-sm shadow-destructive/10">
-            <Trash2 className="h-4 w-4" />
+        {/* ─── Action Toolbar ─── */}
+        <div className="flex items-center gap-2 flex-wrap p-3 rounded-2xl bg-card/40 border border-border/10 backdrop-blur-md shadow-sm">
+          {/* Group: Add/Import */}
+          <div className="flex items-center gap-1.5">
+            {/* Primary: Add new with photo */}
+            <Button
+              onClick={openAddDialog}
+              size="sm"
+              className="h-9 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow shadow-indigo-600/20 gap-2 font-semibold"
+            >
+              <Plus className="h-4 w-4" />
+              إضافة لوحة
+            </Button>
+            {/* Camera: photo import shortcut */}
+            <input
+              ref={batchPhotoInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={e => { handleDropOrSelectFiles(e.target.files); e.target.value = ''; }}
+            />
+            <Button
+              onClick={() => batchPhotoInputRef.current?.click()}
+              size="sm"
+              variant="outline"
+              className="h-9 rounded-xl border-violet-500/25 bg-violet-500/8 text-violet-600 dark:text-violet-400 hover:bg-violet-500/15 hover:border-violet-500/40 gap-1.5 font-medium"
+              title="استيراد صورة ميدانية واستخراج إحداثياتها تلقائياً"
+            >
+              <Camera className="h-4 w-4" />
+              من صورة
+            </Button>
+            {/* Overlay Editor shortcut */}
+            <Button
+              onClick={() => {
+                if (currentCollection.items.length === 0) {
+                  toast.error('أضف لوحات أولاً لفتح محرر التراكب والسكيل');
+                  return;
+                }
+                setOverlayEditorIndex(0);
+                setShowOverlayEditor(true);
+              }}
+              size="sm"
+              variant="outline"
+              className="h-9 rounded-xl border-amber-500/25 bg-amber-500/8 text-amber-600 dark:text-amber-400 hover:bg-amber-500/15 hover:border-amber-500/40 gap-1.5 font-semibold"
+              title="فتح محرر التراكب الواقعي والمقياس المرجعي لصور اللوحات"
+            >
+              <Sparkles className="h-4 w-4" />
+              تراكب ومقياس اللوحات
+            </Button>
+          </div>
+
+          <div className="w-px h-6 bg-border/30" />
+
+          {/* Group: System import */}
+          <div className="flex items-center gap-1.5">
+            <Button onClick={() => setShowImportDialog(true)} variant="outline" size="sm" className="h-9 rounded-xl border-border/15 bg-background/50 hover:bg-indigo-500/5 hover:border-indigo-500/20 gap-1.5 text-xs">
+              <Search className="h-3.5 w-3.5 text-indigo-500" />
+              جلب لوحات موجودة
+            </Button>
+            <Button onClick={() => setShowMunicipalityImportDialog(true)} variant="outline" size="sm" className="h-9 rounded-xl border-border/15 bg-background/50 hover:bg-indigo-500/5 hover:border-indigo-500/20 gap-1.5 text-xs">
+              <Building2 className="h-3.5 w-3.5 text-indigo-500" />
+              جلب بلدية كاملة
+            </Button>
+            <label className="cursor-pointer">
+              <span className="inline-flex items-center gap-1.5 h-9 px-3 rounded-xl border border-border/15 bg-background/50 text-xs font-medium hover:bg-indigo-500/5 hover:border-indigo-500/20 cursor-pointer transition-colors">
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-500" />
+                Excel
+              </span>
+              <input type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleExcelImport} />
+            </label>
+          </div>
+
+          {/* Spacer */}
+          <div className="flex-1" />
+
+          {/* Group: Danger */}
+          <Button onClick={clearAllItems} variant="outline" size="sm" className="h-9 rounded-xl border-destructive/20 bg-destructive/5 text-destructive hover:bg-destructive/10 gap-1.5 text-xs">
+            <Trash2 className="h-3.5 w-3.5" />
             مسح الكل
           </Button>
         </div>
@@ -2679,18 +3369,17 @@ export default function MunicipalityBillboardOrganizer() {
                           <DimensionInput
                             value={item.size}
                             onChange={newSize => updateItem(item.sequence_number, { size: newSize })}
+                            availableSizes={dbSizes}
                           />
                         </td>
                         <td className="p-3 text-center text-xs font-medium text-foreground/80">{item.faces_count}</td>
                         <td className="p-3 text-center text-[10px] font-mono text-muted-foreground" dir="ltr">
-                          {item.latitude && item.longitude ? `${item.latitude?.toFixed(5)}, ${item.longitude?.toFixed(5)}` : '—'}
+                          {item.latitude && item.longitude ? `${item.latitude?.toFixed(6)}, ${item.longitude?.toFixed(6)}` : '—'}
                         </td>
                         <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
-                          <Input
-                            value={item.status || ''}
-                            onChange={e => updateItem(item.sequence_number, { status: e.target.value })}
-                            placeholder="متاحة"
-                            className="h-7.5 w-28 text-center text-xs mx-auto rounded-lg bg-background/50 border-border/15 focus-visible:ring-indigo-500 font-medium"
+                          <StatusQuickSelector
+                            value={item.status || 'متاحة'}
+                            onChange={newStatus => updateItem(item.sequence_number, { status: newStatus })}
                           />
                         </td>
                         <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
@@ -2739,6 +3428,13 @@ export default function MunicipalityBillboardOrganizer() {
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => { setMoveSourceSeqs([item.sequence_number]); setMoveTargetSeq(''); setMovePosition('above'); setShowMoveDialog(true); }} title="نقل اللوحة">
                               <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
+                            </Button>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-amber-500/10 text-amber-500" onClick={() => {
+                              const idx = currentCollection.items.findIndex(i => i.sequence_number === item.sequence_number);
+                              setOverlayEditorIndex(Math.max(0, idx));
+                              setShowOverlayEditor(true);
+                            }} title="تراكي وتناسب اللوحة">
+                              <Sparkles className="h-3.5 w-3.5" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => setEditingItem(item)} title="تعديل">
                               <Edit2 className="h-3.5 w-3.5 text-slate-500" />
@@ -2850,7 +3546,7 @@ export default function MunicipalityBillboardOrganizer() {
                         <div className="flex flex-wrap gap-1.5">
                           {item.latitude && item.longitude && (
                             <Badge variant="outline" className="text-[9px] rounded-lg px-1.5 font-mono border-border/15 bg-background/40">
-                              {item.latitude?.toFixed(4)}, {item.longitude?.toFixed(4)}
+                              {item.latitude?.toFixed(6)}, {item.longitude?.toFixed(6)}
                             </Badge>
                           )}
                         </div>
@@ -2861,6 +3557,7 @@ export default function MunicipalityBillboardOrganizer() {
                           <DimensionInput
                             value={item.size}
                             onChange={newSize => updateItem(item.sequence_number, { size: newSize })}
+                            availableSizes={dbSizes}
                             className="w-full bg-background/30"
                           />
                         </div>
@@ -2879,11 +3576,10 @@ export default function MunicipalityBillboardOrganizer() {
                           </div>
                           <div className="space-y-1">
                             <span className="text-[10px] text-muted-foreground font-semibold">الحالة</span>
-                            <Input
-                              value={item.status || ''}
-                              onChange={e => updateItem(item.sequence_number, { status: e.target.value })}
-                              placeholder="متاحة"
-                              className="h-7.5 text-center text-xs rounded-lg bg-background/40 border-border/15 focus-visible:ring-indigo-500 font-medium"
+                            <StatusQuickSelector
+                              value={item.status || 'متاحة'}
+                              onChange={newStatus => updateItem(item.sequence_number, { status: newStatus })}
+                              className="w-full justify-between h-7.5"
                             />
                           </div>
                         </div>
@@ -2966,7 +3662,7 @@ export default function MunicipalityBillboardOrganizer() {
             </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div style={{ height: '600px' }} className="rounded-b-[20px] overflow-hidden relative">
+            <div style={{ height: '780px' }} className="rounded-b-[20px] overflow-hidden relative">
               <GoogleHomeMap
                 billboards={mapBillboards}
                 onMapRightClick={(lat, lng) => {
@@ -2989,6 +3685,7 @@ export default function MunicipalityBillboardOrganizer() {
                 externalSelectedIds={selectedItems}
                 showStatsOverlay={true}
                 calcMetersByFaces={customSettings.calc_meters_by_faces === 'true'}
+                onLocationChange={handleBillboardLocationChange}
                 onDeleteSelected={() => {
                   setCurrentCollection(prev => {
                     const filtered = prev.items.filter(i => !selectedItems.has(i.sequence_number));
@@ -3006,70 +3703,364 @@ export default function MunicipalityBillboardOrganizer() {
 
       {/* ===== DIALOGS ===== */}
 
+      {/* Interactive Photo Overlay & Scale Editor */}
+      <BillboardPhotoOverlayEditor
+        open={showOverlayEditor}
+        onOpenChange={setShowOverlayEditor}
+        items={currentCollection.items}
+        initialIndex={overlayEditorIndex}
+        onSaveItemOverlay={handleSaveItemOverlay}
+        sizeCutoutMap={sizeCutoutMap}
+      />
+
+      {/* Batch Photos Import Dialog */}
+      <Dialog open={showBatchImportDialog} onOpenChange={setShowBatchImportDialog}>
+        <DialogContent className="max-w-md border-border/10 rounded-3xl bg-background/98 backdrop-blur-xl shadow-2xl p-0 overflow-hidden">
+          <div className="px-6 pt-5 pb-4 border-b border-border/10 bg-gradient-to-r from-amber-500/5 to-amber-600/5">
+            <DialogTitle className="font-extrabold text-base flex items-center gap-2">
+              <div className="p-1.5 bg-amber-500/10 rounded-lg">
+                <Camera className="h-4 w-4 text-amber-500" />
+              </div>
+              <span>استيراد جماعي للصور الميدانية</span>
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground mt-1">
+              تم تحديد ({batchImportFiles.length}) صورة للرفع واستخراج الإحداثيات دفعة واحدة.
+            </DialogDescription>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            {batchImporting ? (
+              <div className="py-6 text-center space-y-3">
+                <RefreshCw className="h-10 w-10 text-amber-500 animate-spin mx-auto" />
+                <p className="text-sm font-bold text-foreground">{batchProgressMsg}</p>
+                <div className="w-full bg-muted/60 h-2 rounded-full overflow-hidden">
+                  <div className="bg-amber-500 h-full animate-pulse" style={{ width: '60%' }} />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-muted-foreground">تحديد مقاس موحد لجميع الصور</Label>
+                  <select
+                    value={batchUnifiedSize}
+                    onChange={e => setBatchUnifiedSize(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-border/15 bg-background/50 text-sm font-bold focus:ring-amber-500 outline-none"
+                  >
+                    <option value="">-- اختر المقاس --</option>
+                    {dbSizes.map(sz => (
+                      <option key={sz} value={sz}>{sz}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-muted-foreground">عدد الأوجه الافتراضي</Label>
+                  <select
+                    value={batchFacesCount}
+                    onChange={e => setBatchFacesCount(e.target.value)}
+                    className="w-full h-10 px-3 rounded-xl border border-border/15 bg-background/50 text-sm font-semibold outline-none"
+                  >
+                    <option value="وجهين">وجهين</option>
+                    <option value="وجه واحد">وجه واحد</option>
+                  </select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-muted-foreground">حالة اللوحات المستوردة من الصور</Label>
+                  <StatusQuickSelector
+                    value={batchUnifiedStatus}
+                    onChange={setBatchUnifiedStatus}
+                    className="w-full justify-between h-10 bg-background/50 border-border/15"
+                  />
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3.5 flex items-start gap-2.5">
+                  <Info className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                  <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium leading-relaxed">
+                    سيقوم النظام بقراءة إحداثيات GPS تلقائياً من ملفات EXIF الخاصة بكل صورة لتموضعها على الخريطة، وجلب اسم المنطقة تلقائياً.
+                  </p>
+                </div>
+              </>
+            )}
+          </div>
+
+          <div className="px-6 py-4 border-t border-border/10 flex items-center justify-between gap-3 bg-muted/20">
+            <Button
+              variant="ghost"
+              onClick={() => setShowBatchImportDialog(false)}
+              className="rounded-xl h-10 text-muted-foreground"
+              disabled={batchImporting}
+            >
+              إلغاء
+            </Button>
+            <Button
+              onClick={handleBatchPhotoImport}
+              className="rounded-xl h-10 px-5 bg-amber-500 text-black hover:bg-amber-600 font-bold gap-1.5 text-xs shadow-md"
+              disabled={batchImporting || batchImportFiles.length === 0}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              بدء الاستيراد الجماعي
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Add new billboard dialog */}
-      <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="max-w-md border-border/15 rounded-3xl bg-background/98 backdrop-blur-md">
-          <DialogHeader>
-            <DialogTitle className="font-bold">إضافة لوحة جديدة</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
-                <span>المقاس (طول × عرض × ارتفاع) *</span>
-                {defaultSize && <span className="text-[10px] text-indigo-500 font-normal">(الافتراضي: {defaultSize})</span>}
-              </Label>
-              <div className="flex flex-col gap-2">
-                <Select value={dbSizes.includes(newItem.size || '') ? newItem.size : ''} onValueChange={v => setNewItem(p => ({ ...p, size: v }))}>
-                  <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-10"><SelectValue placeholder="اختر مقاساً جاهزاً (اختياري)" /></SelectTrigger>
+      {/* ─── Add Billboard Dialog (enhanced with photo import) ─── */}
+      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setPhotoPreviewUrl(null); setPendingImageUrl(null); setPhotoImportState('idle'); } setShowAddDialog(open); }}>
+        <DialogContent className="max-w-lg border-border/10 rounded-3xl bg-background/98 backdrop-blur-xl shadow-2xl p-0 overflow-hidden">
+          {/* Dialog header strip */}
+          <div className="px-6 pt-5 pb-4 border-b border-border/10 bg-gradient-to-r from-indigo-500/5 to-violet-500/5">
+            <DialogTitle className="font-bold text-base flex items-center gap-2">
+              <div className="p-1.5 bg-indigo-500/10 rounded-lg">
+                <MapPin className="h-4 w-4 text-indigo-500" />
+              </div>
+              إضافة لوحة جديدة
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground mt-1">ارفع صورة ميدانية لاستخراج الإحداثيات وتسمية الموقع تلقائياً</DialogDescription>
+          </div>
+
+          <div className="overflow-y-auto max-h-[75vh]">
+            <div className="px-6 py-4 space-y-4">
+
+              {/* ── Photo Import Zone ── */}
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Camera className="h-3.5 w-3.5 text-violet-500" />
+                  صورة ميدانية
+                  <span className="text-[10px] font-normal text-muted-foreground/60">(اختياري — يُستخرج منها الإحداثيات تلقائياً)</span>
+                </Label>
+
+                {/* Drop zone */}
+                <div
+                  className={`relative rounded-2xl border-2 border-dashed transition-all duration-200 overflow-hidden cursor-pointer ${
+                    photoImportState === 'done'
+                      ? 'border-emerald-500/40 bg-emerald-500/5'
+                      : photoImportState === 'error'
+                      ? 'border-destructive/40 bg-destructive/5'
+                      : 'border-border/25 bg-muted/20 hover:border-indigo-500/40 hover:bg-indigo-500/5'
+                  }`}
+                  onClick={() => photoDropRef.current?.click()}
+                  onDragOver={e => { e.preventDefault(); }}
+                  onDrop={e => { e.preventDefault(); if (e.dataTransfer.files) handleDropOrSelectFiles(e.dataTransfer.files); }}
+                >
+                  <input
+                    ref={photoDropRef}
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    className="hidden"
+                    onChange={e => { if (e.target.files) handleDropOrSelectFiles(e.target.files); e.target.value = ''; }}
+                  />
+
+                  {photoPreviewUrl ? (
+                    /* Preview + status overlay */
+                    <div className="relative">
+                      <img src={photoPreviewUrl} alt="معاينة" className="w-full h-36 object-cover" />
+                      {/* Status bar over image */}
+                      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2">
+                        {photoImportState === 'compressing' && (
+                          <div className="flex items-center gap-2 text-xs text-white">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span>ضغط الصورة... {photoImportProgress}%</span>
+                          </div>
+                        )}
+                        {photoImportState === 'uploading' && (
+                          <div className="flex items-center gap-2 text-xs text-white">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span>رفع الصورة... {photoImportProgress}%</span>
+                          </div>
+                        )}
+                        {photoImportState === 'geocoding' && (
+                          <div className="flex items-center gap-2 text-xs text-white">
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <span>استخراج اسم الموقع...</span>
+                          </div>
+                        )}
+                        {photoImportState === 'done' && (
+                          <div className="flex items-center gap-2 text-xs text-emerald-300">
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            <span>
+                              {photoExifStatus === 'found' ? 'تم استخراج الإحداثيات والموقع ✓' : 'تم رفع الصورة (بدون GPS)'}
+                            </span>
+                          </div>
+                        )}
+                        {photoImportState === 'error' && (
+                          <div className="flex items-center gap-2 text-xs text-red-300">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span>فشل رفع الصورة — تحقق من الإعدادات</span>
+                          </div>
+                        )}
+                      </div>
+                      {/* Clear button */}
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); setPhotoPreviewUrl(null); setPendingImageUrl(null); setPhotoImportState('idle'); }}
+                        className="absolute top-2 right-2 bg-black/60 hover:bg-black/80 text-white rounded-full h-6 w-6 flex items-center justify-center transition-colors"
+                      >
+                        <XIcon2 className="h-3.5 w-3.5" />
+                      </button>
+                      {/* EXIF badge */}
+                      {photoExifStatus !== 'none' && (
+                        <div className={`absolute top-2 left-2 flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          photoExifStatus === 'found' ? 'bg-emerald-500/90 text-white' : 'bg-amber-500/90 text-white'
+                        }`}>
+                          {photoExifStatus === 'found' ? <CheckCircle2 className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+                          {photoExifStatus === 'found' ? 'GPS موجود' : 'لا GPS'}
+                        </div>
+                      )}
+                      {/* Progress bar */}
+                      {(photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding') && (
+                        <div className="absolute inset-x-0 top-0 h-1 bg-black/20">
+                          <div
+                            className="h-full bg-indigo-400 transition-all duration-300 rounded-full"
+                            style={{ width: `${photoImportProgress}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    /* Empty drop zone */
+                    <div className="flex flex-col items-center justify-center gap-2 py-8 px-4">
+                      <div className="p-3 rounded-2xl bg-violet-500/10 text-violet-500">
+                        <Camera className="h-6 w-6" />
+                      </div>
+                      <div className="text-center">
+                        <p className="text-sm font-medium">اسحب صورة هنا أو اضغط للاختيار</p>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">الصورة تُضغط لossless ثم تُرفع — إذا كانت تحتوي GPS يُعبأ الموقع تلقائياً</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* ── Size ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center justify-between">
+                  <span>المقاس (طول × عرض × ارتفاع) *</span>
+                  {defaultSize && <span className="text-[10px] text-indigo-500 font-normal">الافتراضي: {defaultSize}</span>}
+                </Label>
+                <div className="flex flex-col gap-2">
+                  <Select value={dbSizes.includes(newItem.size || '') ? newItem.size : ''} onValueChange={v => setNewItem(p => ({ ...p, size: v }))}>
+                    <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-10"><SelectValue placeholder="اختر مقاساً جاهزاً (اختياري)" /></SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
+                      {dbSizes.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                    </SelectContent>
+                  </Select>
+                  <DimensionInput
+                    value={newItem.size || ''}
+                    onChange={newSize => setNewItem(p => ({ ...p, size: newSize }))}
+                    availableSizes={dbSizes}
+                    className="w-full bg-background/50"
+                  />
+                </div>
+              </div>
+
+              {/* ── Faces ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">عدد الأوجه</Label>
+                <Select value={newItem.faces_count || 'وجهين'} onValueChange={v => setNewItem(p => ({ ...p, faces_count: v }))}>
+                  <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-10"><SelectValue /></SelectTrigger>
                   <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
-                    {dbSizes.map(s => (<SelectItem key={s} value={s}>{s}</SelectItem>))}
+                    <SelectItem value="وجه">وجه واحد</SelectItem>
+                    <SelectItem value="وجهين">وجهين</SelectItem>
                   </SelectContent>
                 </Select>
-                <DimensionInput
-                  value={newItem.size || ''}
-                  onChange={newSize => setNewItem(p => ({ ...p, size: newSize }))}
-                  className="w-full bg-background/50"
+              </div>
+
+              {/* ── Status ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">حالة اللوحة</Label>
+                <StatusQuickSelector
+                  value={newItem.status || 'تم التركيب'}
+                  onChange={v => setNewItem(p => ({ ...p, status: v }))}
+                  className="w-full justify-between h-10 bg-background/50"
                 />
               </div>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground">عدد الأوجه</Label>
-              <Select value={newItem.faces_count || 'وجهين'} onValueChange={v => setNewItem(p => ({ ...p, faces_count: v }))}>
-                <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-10"><SelectValue /></SelectTrigger>
-                <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
-                  <SelectItem value="وجه">وجه واحد</SelectItem>
-                  <SelectItem value="وجهين">وجهين</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground">موقع اللوحة</Label>
-              <Input value={newItem.location_text || ''} onChange={e => setNewItem(p => ({ ...p, location_text: e.target.value }))} placeholder="مثال: طريق الشط" className="rounded-xl border-border/15 bg-background/50 h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground">أقرب نقطة دالة</Label>
-              <Input value={newItem.nearest_landmark || ''} onChange={e => setNewItem(p => ({ ...p, nearest_landmark: e.target.value }))} placeholder="مثال: وسط جسر القبة الفلكية" className="rounded-xl border-border/15 bg-background/50 h-10" />
-            </div>
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold text-muted-foreground">الإحداثيات (Lat, Lng)</Label>
-              <Input
-                dir="ltr"
-                value={newItem.latitude && newItem.longitude ? `${newItem.latitude},${newItem.longitude}` : ''}
-                onChange={e => {
-                  const parts = e.target.value.split(',').map(c => c.trim());
-                  const lat = parts[0] ? parseFloat(parts[0]) : null;
-                  const lng = parts[1] ? parseFloat(parts[1]) : null;
-                  setNewItem(p => ({ ...p, latitude: isNaN(lat as number) ? null : lat, longitude: isNaN(lng as number) ? null : lng }));
-                }}
-                placeholder="32.901753, 13.217222"
-                className="font-mono text-sm rounded-xl border-border/15 bg-background/50 h-10"
-              />
+
+              {/* ── Location text ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-indigo-500" />
+                  موقع اللوحة
+                  {photoImportState === 'done' && newItem.location_text && (
+                    <span className="mr-auto text-[10px] text-emerald-500 font-normal flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> مُعبَّأ تلقائياً
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  value={newItem.location_text || ''}
+                  onChange={e => setNewItem(p => ({ ...p, location_text: e.target.value }))}
+                  placeholder="مثال: طريق الشط"
+                  className="rounded-xl border-border/15 bg-background/50 h-10"
+                />
+              </div>
+
+              {/* ── Landmark ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                  أقرب نقطة دالة
+                  {photoImportState === 'done' && newItem.nearest_landmark && (
+                    <span className="mr-auto text-[10px] text-emerald-500 font-normal flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> مُعبَّأ تلقائياً
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  value={newItem.nearest_landmark || ''}
+                  onChange={e => setNewItem(p => ({ ...p, nearest_landmark: e.target.value }))}
+                  placeholder="مثال: وسط جسر القبة الفلكية"
+                  className="rounded-xl border-border/15 bg-background/50 h-10"
+                />
+              </div>
+
+              {/* ── Coordinates ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                  الإحداثيات (Lat, Lng)
+                  {photoExifStatus === 'found' && (
+                    <span className="mr-auto text-[10px] text-emerald-500 font-normal flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> من EXIF
+                    </span>
+                  )}
+                </Label>
+                <Input
+                  dir="ltr"
+                  value={newItem.latitude && newItem.longitude ? `${Number(newItem.latitude.toFixed(6))}, ${Number(newItem.longitude.toFixed(6))}` : ''}
+                  onChange={e => {
+                    const parts = e.target.value.split(',').map(c => c.trim());
+                    const parsedLat = parts[0] ? parseFloat(parts[0]) : null;
+                    const parsedLng = parts[1] ? parseFloat(parts[1]) : null;
+                    const lat = parsedLat !== null && !isNaN(parsedLat) ? Number(parsedLat.toFixed(6)) : null;
+                    const lng = parsedLng !== null && !isNaN(parsedLng) ? Number(parsedLng.toFixed(6)) : null;
+                    setNewItem(p => ({ ...p, latitude: lat, longitude: lng }));
+                  }}
+                  placeholder="32.901753, 13.217222"
+                  className={`font-mono text-sm rounded-xl border-border/15 bg-background/50 h-10 ${
+                    photoExifStatus === 'found' ? 'border-emerald-500/30 bg-emerald-500/5' : ''
+                  }`}
+                />
+              </div>
+
             </div>
           </div>
-          <DialogFooter className="gap-2 mt-2">
-            <Button variant="outline" onClick={() => setShowAddDialog(false)} className="rounded-xl h-10">إلغاء</Button>
-            <Button onClick={addNewItem} className="rounded-xl h-10 bg-indigo-600 hover:bg-indigo-700 text-white">إضافة</Button>
-          </DialogFooter>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-border/10 flex items-center justify-between gap-3 bg-muted/20">
+            <Button variant="ghost" onClick={() => setShowAddDialog(false)} className="rounded-xl h-10 text-muted-foreground">إلغاء</Button>
+            <Button
+              onClick={addNewItem}
+              disabled={photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding'}
+              className="rounded-xl h-10 px-6 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white font-semibold shadow shadow-indigo-600/20 gap-2"
+            >
+              {(photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding') ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> جاري المعالجة...</>
+              ) : (
+                <><Plus className="h-4 w-4" /> إضافة اللوحة</>
+              )}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -3081,6 +4072,7 @@ export default function MunicipalityBillboardOrganizer() {
               <Building2 className="h-5 w-5 text-indigo-500" />
               <span>جلب لوحات من النظام</span>
             </DialogTitle>
+            <DialogDescription className="sr-only">اختر اللوحات لجلبها من قاعدة بيانات النظام</DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 py-3 flex-1 overflow-hidden flex flex-col min-h-0">
@@ -3181,6 +4173,7 @@ export default function MunicipalityBillboardOrganizer() {
               <Replace className="h-5 w-5 text-indigo-500" />
               <span>استبدال لوحة رقم {replaceTarget}</span>
             </DialogTitle>
+            <DialogDescription className="sr-only">اختر لوحة بديلة من النظام لتنوب عن اللوحة الحالية</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-3 flex-1 overflow-hidden flex flex-col min-h-0">
             <div className="relative shrink-0">
@@ -3240,6 +4233,7 @@ export default function MunicipalityBillboardOrganizer() {
         <DialogContent className="max-w-md border-border/15 rounded-3xl bg-background/98 backdrop-blur-md">
           <DialogHeader>
             <DialogTitle className="font-bold">تعديل لوحة رقم {editingItem?.sequence_number}</DialogTitle>
+            <DialogDescription className="sr-only">تعديل بيانات اللوحة المحددة</DialogDescription>
           </DialogHeader>
           {editingItem && (
             <div className="space-y-4 py-2">
@@ -3255,6 +4249,7 @@ export default function MunicipalityBillboardOrganizer() {
                   <DimensionInput
                     value={editingItem.size || ''}
                     onChange={newSize => setEditingItem({ ...editingItem, size: newSize })}
+                    availableSizes={dbSizes}
                     className="w-full bg-background/50"
                   />
                 </div>
@@ -3270,6 +4265,14 @@ export default function MunicipalityBillboardOrganizer() {
                 </Select>
               </div>
               <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">حالة اللوحة</Label>
+                <StatusQuickSelector
+                  value={editingItem.status || 'متاحة'}
+                  onChange={v => setEditingItem({ ...editingItem, status: v })}
+                  className="w-full justify-between h-10 bg-background/50"
+                />
+              </div>
+              <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-muted-foreground">موقع اللوحة</Label>
                 <Input value={editingItem.location_text} onChange={e => setEditingItem({ ...editingItem, location_text: e.target.value })} className="rounded-xl border-border/15 bg-background/50 h-10" />
               </div>
@@ -3281,12 +4284,14 @@ export default function MunicipalityBillboardOrganizer() {
                 <Label className="text-xs font-semibold text-muted-foreground">الإحداثيات (Lat, Lng)</Label>
                 <Input
                   dir="ltr"
-                  value={editingItem.latitude && editingItem.longitude ? `${editingItem.latitude},${editingItem.longitude}` : ''}
+                  value={editingItem.latitude && editingItem.longitude ? `${Number(editingItem.latitude.toFixed(6))}, ${Number(editingItem.longitude.toFixed(6))}` : ''}
                   onChange={e => {
                     const parts = e.target.value.split(',').map(c => c.trim());
-                    const lat = parts[0] ? parseFloat(parts[0]) : null;
-                    const lng = parts[1] ? parseFloat(parts[1]) : null;
-                    setEditingItem({ ...editingItem, latitude: isNaN(lat as number) ? null : lat, longitude: isNaN(lng as number) ? null : lng });
+                    const parsedLat = parts[0] ? parseFloat(parts[0]) : null;
+                    const parsedLng = parts[1] ? parseFloat(parts[1]) : null;
+                    const lat = parsedLat !== null && !isNaN(parsedLat) ? Number(parsedLat.toFixed(6)) : null;
+                    const lng = parsedLng !== null && !isNaN(parsedLng) ? Number(parsedLng.toFixed(6)) : null;
+                    setEditingItem({ ...editingItem, latitude: lat, longitude: lng });
                   }}
                   placeholder="32.901753, 13.217222"
                   className="font-mono text-sm rounded-xl border-border/15 bg-background/50 h-10"
@@ -3312,6 +4317,7 @@ export default function MunicipalityBillboardOrganizer() {
         <DialogContent className="max-w-md border-border/15 rounded-3xl bg-background/98 backdrop-blur-md">
           <DialogHeader>
             <DialogTitle className="font-bold">المجموعات المحفوظة</DialogTitle>
+            <DialogDescription className="sr-only">قائمة المجموعات المحفوظة سابقةً لتحديدها أو تحميلها</DialogDescription>
           </DialogHeader>
           <div className="py-2">
             {collections.length === 0 ? (
@@ -3344,131 +4350,249 @@ export default function MunicipalityBillboardOrganizer() {
         </DialogContent>
       </Dialog>
 
-      {/* Print dialog */}
       <Dialog open={showPrintDialog} onOpenChange={setShowPrintDialog}>
-        <DialogContent className="max-w-md border-border/15 rounded-3xl bg-background/98 backdrop-blur-md">
-          <DialogHeader>
-            <DialogTitle className="font-bold flex items-center gap-2">
-              <Printer className="h-5 w-5 text-indigo-500" />
-              <span>تحضير الطباعة الشاملة</span>
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="text-xs text-muted-foreground bg-indigo-500/5 border border-indigo-500/10 rounded-xl p-3 leading-relaxed">
-              سيتم طباعة <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{currentCollection.items.length}</strong> لوحة بترتيبها التسلسلي المسجل (من رقم 1 إلى {currentCollection.items.length}).
-            </div>
-
-            <div className="space-y-2">
-              <Label className="font-bold text-xs text-muted-foreground">مصدر صورة اللوحة في الطباعة</Label>
-              <RadioGroup value={printImageSource} onValueChange={(v) => setPrintImageSource(v as 'actual_image' | 'map_pin' | 'map_only')} className="space-y-2.5">
-                <div className="flex items-start gap-2.5 p-3.5 border border-border/15 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer" onClick={() => setPrintImageSource('actual_image')}>
-                  <RadioGroupItem value="actual_image" id="actual_image" className="mt-0.5" checked={printImageSource === 'actual_image'} />
-                  <label htmlFor="actual_image" className="cursor-pointer flex-1 select-none">
-                    <div className="font-semibold text-sm">الصورة الفعلية للوحة</div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">استخدام صورة اللوحة أو التصميم المرفوع في النظام</div>
-                  </label>
-                </div>
-                <div className="flex items-start gap-2.5 p-3.5 border border-border/15 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer" onClick={() => setPrintImageSource('map_pin')}>
-                  <RadioGroupItem value="map_pin" id="map_pin" className="mt-0.5" checked={printImageSource === 'map_pin'} />
-                  <label htmlFor="map_pin" className="cursor-pointer flex-1 select-none">
-                    <div className="font-semibold text-sm">دبوس الخريطة مع المقاس</div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">عرض شكل الدبوس مع المقاس والإحداثيات بدلاً من الصورة</div>
-                  </label>
-                </div>
-                <div className="flex items-start gap-2.5 p-3.5 border border-border/15 rounded-xl hover:bg-muted/40 transition-colors cursor-pointer" onClick={() => setPrintImageSource('map_only')}>
-                  <RadioGroupItem value="map_only" id="map_only" className="mt-0.5" checked={printImageSource === 'map_only'} />
-                  <label htmlFor="map_only" className="cursor-pointer flex-1 select-none">
-                    <div className="font-semibold text-sm">خريطة ودبوس فقط (بدون صور)</div>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">عرض الخريطة الجغرافية مع الدبوس فقط كخلفية دلالية</div>
-                  </label>
-                </div>
-              </RadioGroup>
-            </div>
-
-            <div className="flex items-center justify-between p-3.5 border border-border/15 rounded-xl">
+        <DialogContent className="max-w-4xl w-[90vw] max-h-[85vh] border-border/30 rounded-3xl bg-background/98 backdrop-blur-xl shadow-2xl p-0 overflow-hidden flex flex-col">
+          {/* Header */}
+          <div className="px-6 py-4 border-b border-border/30 bg-card flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 bg-primary text-primary-foreground rounded-xl shadow-md">
+                <Printer className="h-5 w-5" />
+              </div>
               <div>
-                <Label htmlFor="faces_count_show" className="font-bold text-xs text-muted-foreground">إظهار عدد الأوجه في الطباعة</Label>
-                <div className="text-[11px] text-muted-foreground mt-0.5">إظهار عمود عدد الأوجه في جدول ملخص اللوحات</div>
+                <DialogTitle className="font-extrabold text-base flex items-center gap-2">
+                  <span>استوديو تحضير الطباعة الشاملة</span>
+                </DialogTitle>
+                <DialogDescription className="text-[11px] text-muted-foreground mt-0.5">
+                  تجهيز ومعاينة مستند الطباعة النهائي لعدد ({currentCollection.items.length}) لوحة
+                </DialogDescription>
               </div>
-              <Switch 
-                id="faces_count_show" 
-                checked={customSettings.faces_count_show !== 'false'} 
-                onCheckedChange={async (v) => {
-                  await saveSettings({ faces_count_show: v ? 'true' : 'false' });
-                }} 
-              />
             </div>
-
-            <div className="flex items-center justify-between p-3.5 border border-border/15 rounded-xl">
-              <div>
-                <Label htmlFor="show_status_in_print" className="font-bold text-xs text-muted-foreground">إظهار حالة اللوحة في الطباعة</Label>
-                <div className="text-[11px] text-muted-foreground mt-0.5">تظهر الحالة بجانب رقم اللوحة وفي جدول الملخّص</div>
-              </div>
-              <Switch id="show_status_in_print" checked={showStatusInPrint} onCheckedChange={(v) => updateAndSaveStatusSetting('mun_show_status', v ? 'true' : 'false')} />
-            </div>
-
-            <div className="flex items-center justify-between p-3.5 border border-border/15 rounded-xl">
-              <div>
-                <Label htmlFor="show_height_in_print" className="font-bold text-xs text-muted-foreground">إظهار الارتفاع في الطباعة</Label>
-                <div className="text-[11px] text-muted-foreground mt-0.5">تضمين البُعد الثالث (الارتفاع) في المقاس المطبوع</div>
-              </div>
-              <Switch id="show_height_in_print" checked={showHeightInPrint} onCheckedChange={setShowHeightInPrint} />
-            </div>
-
-            {showStatusInPrint && (
-              <div className="space-y-3 p-3.5 border border-border/15 rounded-xl bg-muted/20 animate-in fade-in duration-200">
-                <div className="space-y-1.5">
-                  <Label className="font-semibold text-xs text-muted-foreground">موقع الحالة في صفحة اللوحة</Label>
-                  <Select value={statusPosition} onValueChange={(v) => updateAndSaveStatusSetting('mun_status_position', v)}>
-                    <SelectTrigger className="h-9 rounded-lg bg-background/50 border-border/15 text-xs"><SelectValue /></SelectTrigger>
-                    <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md text-xs">
-                      <SelectItem value="below_number">تحت رقم اللوحة</SelectItem>
-                      <SelectItem value="above_number">فوق رقم اللوحة</SelectItem>
-                      <SelectItem value="beside_number">بجانب رقم اللوحة</SelectItem>
-                      <SelectItem value="header">في رأس الصفحة</SelectItem>
-                      <SelectItem value="footer">في تذييل الصفحة</SelectItem>
-                      <SelectItem value="custom">موقع مخصص (إحداثيات)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {(statusPosition === 'below_number' || statusPosition === 'above_number' || statusPosition === 'beside_number') && (
-                  <div className="space-y-1">
-                    <Label className="text-[10px] text-muted-foreground">البُعد عن الرقم (مثال: 2mm)</Label>
-                    <Input value={statusGap} onChange={e => updateAndSaveStatusSetting('mun_status_gap', e.target.value)} className="h-8.5 text-xs rounded-lg bg-background/50 border-border/15" />
-                  </div>
-                )}
-                {statusPosition === 'custom' && (
-                  <div className="grid grid-cols-2 gap-2 pt-1">
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Top (مثال: 12mm)</Label>
-                      <Input value={statusTop} onChange={e => updateAndSaveStatusSetting('mun_status_top', e.target.value)} className="h-8.5 text-xs rounded-lg bg-background/50 border-border/15" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">Left (مثال: 50%)</Label>
-                      <Input value={statusLeft} onChange={e => updateAndSaveStatusSetting('mun_status_left', e.target.value)} className="h-8.5 text-xs rounded-lg bg-background/50 border-border/15" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">حجم الخط (مثال: 14px)</Label>
-                      <Input value={statusFontSize} onChange={e => updateAndSaveStatusSetting('mun_status_font_size', e.target.value)} className="h-8.5 text-xs rounded-lg bg-background/50 border-border/15" />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-[10px] text-muted-foreground">اللون</Label>
-                      <Input type="color" value={statusColor} onChange={e => updateAndSaveStatusSetting('mun_status_color', e.target.value)} className="h-8.5 p-1 rounded-lg bg-background/50 border-border/15 w-full cursor-pointer" />
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <BackgroundSelector value={customBackgroundUrl} onChange={setCustomBackgroundUrl} />
           </div>
-          <DialogFooter className="gap-2 mt-2">
-            <Button variant="outline" onClick={() => setShowPrintDialog(false)} className="rounded-xl h-10">إلغاء</Button>
-            <Button onClick={handlePrint} disabled={printLoading} className="rounded-xl h-10 bg-indigo-600 hover:bg-indigo-700 text-white gap-1.5 shadow-sm shadow-indigo-500/10">
-              <Printer className="h-4 w-4" />
-              {printLoading ? 'جاري التجهيز...' : 'بدء الطباعة'}
+
+          {/* Main 2-column Workspace */}
+          <div className="flex-1 grid grid-cols-1 md:grid-cols-12 gap-0 overflow-hidden min-h-0">
+            
+            {/* ── LEFT PANEL: Live Card Blueprint Preview (5 Cols) ── */}
+            <div className="md:col-span-5 bg-muted/30 p-5 flex flex-col justify-center items-center border-l border-border/20 overflow-y-auto">
+              <span className="text-[10px] text-amber-500 font-extrabold mb-3 uppercase tracking-wider flex items-center gap-1">
+                <Eye className="h-3 w-3 animate-pulse" /> معاينة ديناميكية لبطاقة الطباعة
+              </span>
+              
+              {/* Simulated Card Blueprint */}
+              <div className="w-full max-w-[280px] aspect-[1/1.4] bg-white text-black border border-slate-300 rounded-xl shadow-xl p-4 flex flex-col justify-between relative overflow-hidden select-none font-sans">
+                {/* Header info */}
+                <div className="flex items-start justify-between border-b border-slate-100 pb-2">
+                  <div className="space-y-0.5">
+                    <div className="text-[10px] font-extrabold text-slate-700">موقع بلدية طرابلس</div>
+                    <div className="text-[9px] text-slate-400">لوحة رقم #1</div>
+                  </div>
+                  {/* Status badge representation */}
+                  {showStatusInPrint && (
+                    <div className={`px-2 py-0.5 rounded text-[8px] font-black border uppercase ${
+                      statusColor ? '' : 'bg-amber-100 border-amber-300 text-amber-600'
+                    }`} style={{ 
+                      color: statusColor || undefined, 
+                      borderColor: statusColor || undefined,
+                      fontSize: statusFontSize ? `${parseFloat(statusFontSize) * 0.7}px` : undefined 
+                    }}>
+                      متاحة
+                    </div>
+                  )}
+                </div>
+
+                {/* Main Image Block (Split layout or Single layout simulation) */}
+                <div className="flex-1 my-3 rounded-lg overflow-hidden border border-slate-200 bg-slate-50 flex flex-col relative">
+                  {printImageSource === 'actual_image' && (
+                    <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 p-2">
+                      <ImageIcon className="h-8 w-8 mb-1 opacity-40 text-slate-500" />
+                      <span className="text-[9px] font-bold">صورة الموقع الميدانية</span>
+                    </div>
+                  )}
+
+                  {printImageSource === 'map_pin' && (
+                    <div className="w-full h-full flex flex-col">
+                      <div className="flex-1 bg-slate-100 border-b border-slate-200 flex items-center justify-center text-slate-400">
+                        <ImageIcon className="h-6 w-6 opacity-30 text-slate-500" />
+                      </div>
+                      <div className="flex-1 bg-slate-200 flex items-center justify-center text-slate-500 gap-1">
+                        <MapPin className="h-4 w-4 text-amber-500 animate-bounce" />
+                        <span className="text-[8px] font-bold">تحديد الإحداثيات</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {printImageSource === 'map_only' && (
+                    <div className="w-full h-full bg-slate-200 flex flex-col items-center justify-center text-slate-600 p-2 gap-1.5">
+                      <MapPin className="h-6 w-6 text-amber-600 animate-bounce" />
+                      <span className="text-[8px] font-bold">الخريطة الجغرافية فقط</span>
+                    </div>
+                  )}
+
+                  {/* Coords bar */}
+                  <div className="h-5 bg-slate-800 text-white flex items-center justify-center text-[8px] font-mono whitespace-nowrap">
+                    32.8872, 13.1913
+                  </div>
+                </div>
+
+                {/* Bottom details block */}
+                <div className="flex justify-between items-end border-t border-slate-100 pt-2 text-[9px] font-medium text-slate-500">
+                  <div className="space-y-0.5">
+                    <div>المقاس: 8 × 3 {showHeightInPrint ? '× 1.2' : ''}</div>
+                    {customSettings.faces_count_show !== 'false' && <div>الأوجه: وجهين</div>}
+                  </div>
+                  {/* QR placeholder */}
+                  <div className="w-8 h-8 bg-slate-100 border border-slate-200 flex items-center justify-center text-[7px] text-slate-400">
+                    QR
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── RIGHT PANEL: Tabs & Configuration Options (7 Cols) ── */}
+            <div className="md:col-span-7 p-6 overflow-y-auto space-y-5">
+              
+              {/* Tab Selector */}
+              <div className="space-y-4">
+                
+                {/* Section: Layout Config */}
+                <div className="space-y-3.5">
+                  <div className="text-xs font-black text-amber-500 flex items-center gap-1.5 border-b border-border/10 pb-1.5">
+                    <Settings2 className="h-4 w-4" /> تخطيط ومصدر العرض
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label className="font-extrabold text-xs text-muted-foreground">صورة اللوحة في الطباعة</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { id: 'actual_image', title: 'صورة فعلية', desc: 'صورة الموقع' },
+                        { id: 'map_pin', title: 'صورة وخريطة', desc: 'نصفين' },
+                        { id: 'map_only', title: 'خريطة فقط', desc: 'بدون صور' }
+                      ].map(opt => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => setPrintImageSource(opt.id as any)}
+                          className={`p-3 rounded-xl border text-right transition-all flex flex-col justify-between h-20 ${
+                            printImageSource === opt.id
+                              ? 'border-primary bg-primary/8 text-primary ring-2 ring-primary/20'
+                              : 'border-border/15 bg-background/50 hover:bg-muted/40 text-muted-foreground'
+                          }`}
+                        >
+                          <span className="text-xs font-black">{opt.title}</span>
+                          <span className="text-[9px] leading-tight opacity-70">{opt.desc}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                    <div className="flex items-center justify-between p-3 border border-border/15 rounded-xl bg-background/40">
+                      <Label htmlFor="faces_count_show" className="text-xs font-bold text-muted-foreground">عرض الأوجه</Label>
+                      <Switch 
+                        id="faces_count_show" 
+                        checked={customSettings.faces_count_show !== 'false'} 
+                        onCheckedChange={async (v) => {
+                          await saveSettings({ faces_count_show: v ? 'true' : 'false' });
+                        }} 
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 border border-border/15 rounded-xl bg-background/40">
+                      <Label htmlFor="show_status_in_print" className="text-xs font-bold text-muted-foreground">عرض الحالة</Label>
+                      <Switch id="show_status_in_print" checked={showStatusInPrint} onCheckedChange={(v) => updateAndSaveStatusSetting('mun_show_status', v ? 'true' : 'false')} />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 border border-border/15 rounded-xl bg-background/40">
+                      <Label htmlFor="show_height_in_print" className="text-xs font-bold text-muted-foreground">عرض الارتفاع</Label>
+                      <Switch id="show_height_in_print" checked={showHeightInPrint} onCheckedChange={setShowHeightInPrint} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Section: Status Config */}
+                {showStatusInPrint && (
+                  <div className="space-y-3.5 pt-2 animate-in slide-in-from-top-3 duration-250">
+                    <div className="text-xs font-black text-amber-500 flex items-center gap-1.5 border-b border-border/10 pb-1.5">
+                      <Sticker className="h-4 w-4" /> تخصيص موضع وتصميم شارة الحالة
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5 col-span-2">
+                        <Label className="font-bold text-xs text-muted-foreground">الموقع في الصفحة</Label>
+                        <Select value={statusPosition} onValueChange={(v) => updateAndSaveStatusSetting('mun_status_position', v)}>
+                          <SelectTrigger className="h-10 rounded-xl bg-background/50 border-border/15 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md text-xs">
+                            <SelectItem value="below_number">تحت رقم اللوحة</SelectItem>
+                            <SelectItem value="above_number">فوق رقم اللوحة</SelectItem>
+                            <SelectItem value="beside_number">بجانب رقم اللوحة</SelectItem>
+                            <SelectItem value="header">في رأس الصفحة</SelectItem>
+                            <SelectItem value="footer">في تذييل الصفحة</SelectItem>
+                            <SelectItem value="custom">موقع مخصص (إحداثيات)</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {statusPosition === 'custom' ? (
+                        <>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">موضع رأسي (Top mm)</Label>
+                            <Input value={statusTop} onChange={e => updateAndSaveStatusSetting('mun_status_top', e.target.value)} className="h-9 text-xs rounded-xl bg-background/50 border-border/15 font-mono" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">موضع أفقي (Left %)</Label>
+                            <Input value={statusLeft} onChange={e => updateAndSaveStatusSetting('mun_status_left', e.target.value)} className="h-9 text-xs rounded-xl bg-background/50 border-border/15 font-mono" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">حجم الخط (Size px)</Label>
+                            <Input value={statusFontSize} onChange={e => updateAndSaveStatusSetting('mun_status_font_size', e.target.value)} className="h-9 text-xs rounded-xl bg-background/50 border-border/15 font-mono" />
+                          </div>
+                          <div className="space-y-1">
+                            <Label className="text-[10px] text-muted-foreground">لون شارة الحالة</Label>
+                            <Input type="color" value={statusColor} onChange={e => updateAndSaveStatusSetting('mun_status_color', e.target.value)} className="h-9 p-1 rounded-xl bg-background/50 border-border/15 w-full cursor-pointer" />
+                          </div>
+                        </>
+                      ) : (
+                        (statusPosition === 'below_number' || statusPosition === 'above_number' || statusPosition === 'beside_number') && (
+                          <div className="space-y-1 col-span-2">
+                            <Label className="text-[10px] text-muted-foreground">البُعد عن الرقم (Gap mm)</Label>
+                            <Input value={statusGap} onChange={e => updateAndSaveStatusSetting('mun_status_gap', e.target.value)} className="h-9 text-xs rounded-xl bg-background/50 border-border/15 font-mono" />
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Section: Sheet customization */}
+                <div className="space-y-3.5 pt-2">
+                  <div className="text-xs font-black text-amber-500 flex items-center gap-1.5 border-b border-border/10 pb-1.5">
+                    <FileSpreadsheet className="h-4 w-4" /> قالب ورقة الخلفية والهوية
+                  </div>
+                  <BackgroundSelector value={customBackgroundUrl} onChange={setCustomBackgroundUrl} />
+                </div>
+
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-border/30 bg-card flex items-center justify-between gap-3 shrink-0">
+            <Button
+              variant="ghost"
+              onClick={() => setShowPrintDialog(false)}
+              className="rounded-xl h-10 text-muted-foreground"
+            >
+              إلغاء
             </Button>
-          </DialogFooter>
+            <Button
+              onClick={handlePrint}
+              disabled={printLoading}
+              className="rounded-xl h-11 px-6 bg-primary text-primary-foreground hover:bg-primary/95 font-extrabold gap-2 text-sm shadow-md"
+            >
+              <Printer className="h-4.5 w-4.5" />
+              {printLoading ? 'جاري تصدير القوالب...' : 'توليد ملف الطباعة للكل'}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -3479,6 +4603,7 @@ export default function MunicipalityBillboardOrganizer() {
             <DialogTitle className="font-bold">
               {bulkStatusTarget === 'all' ? 'تغيير حالة جميع اللوحات' : `تغيير حالة ${selectedItems.size} لوحة محددة`}
             </DialogTitle>
+            <DialogDescription className="sr-only">تحديد وتحديث الحالة الجماعية للوحات المختارة</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
             <div className="space-y-1.5">
@@ -3486,11 +4611,8 @@ export default function MunicipalityBillboardOrganizer() {
               <Select value={bulkStatusValue} onValueChange={(v) => { setBulkStatusValue(v); setBulkStatusCustom(''); }}>
                 <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-10"><SelectValue /></SelectTrigger>
                 <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
-                  <SelectItem value="متاحة">متاحة</SelectItem>
-                  <SelectItem value="محجوزة">محجوزة</SelectItem>
-                  <SelectItem value="مؤجرة">مؤجرة</SelectItem>
-                  <SelectItem value="صيانة">صيانة</SelectItem>
-                  <SelectItem value="غير صالحة">غير صالحة</SelectItem>
+                  <SelectItem value="تم التركيب">تم التركيب</SelectItem>
+                  <SelectItem value="لم يتم التركيب">لم يتم التركيب</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -3535,6 +4657,7 @@ export default function MunicipalityBillboardOrganizer() {
               <Building2 className="h-5 w-5 text-indigo-500" />
               <span>جلب لوحات بلدية كاملة</span>
             </DialogTitle>
+            <DialogDescription className="sr-only">اختر البلدية لاستيراد كافة اللوحات التابعة لها</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-3 flex-1 overflow-hidden flex flex-col min-h-0">
             <div className="relative shrink-0">
@@ -3593,9 +4716,9 @@ export default function MunicipalityBillboardOrganizer() {
             <DialogTitle className="font-bold">تسمية البلدية المستوردة</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
               تم بنجاح قراءة <strong className="text-indigo-600 dark:text-indigo-400 font-bold">{excelPendingItems.length}</strong> لوحة من الملف المرفوع. الرجاء تحديد اسم البلدية لربط القائمة المستوردة بها.
-            </p>
+            </DialogDescription>
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">اسم البلدية المرتبطة *</Label>
               <Input
@@ -3649,9 +4772,9 @@ export default function MunicipalityBillboardOrganizer() {
           </DialogHeader>
           
           <div className="space-y-4 py-3 flex-1 overflow-hidden flex flex-col min-h-0">
-            <div className="text-xs text-muted-foreground leading-relaxed shrink-0">
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed shrink-0">
               يرجى مراجعة وتعديل مقاسات اللوحات التي سيتم استيرادها. يمكنك الإبقاء على المقاس كما هو، أو تغييره لمقاس آخر (من القائمة أو بالكتابة يدوياً):
-            </div>
+            </DialogDescription>
 
             <div className="flex-1 overflow-hidden border border-border/15 rounded-2xl bg-muted/10 p-1">
               <ScrollArea className="h-full">
@@ -3755,11 +4878,11 @@ export default function MunicipalityBillboardOrganizer() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="text-xs text-muted-foreground leading-relaxed">
+            <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
               {moveSourceSeqs.length === 1 
                 ? `أنت تقوم بنقل اللوحة رقم (${moveSourceSeqs[0]}) إلى موضع جديد في القائمة بدون استبدال.`
                 : `أنت تقوم بنقل (${moveSourceSeqs.length}) لوحة محددة إلى موضع جديد في القائمة دفعة واحدة.`}
-            </div>
+            </DialogDescription>
 
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">رقم اللوحة المستهدفة (المنقول إليها):</Label>

@@ -467,36 +467,33 @@ export default function ContractEdit() {
       try {
         const today = new Date().toISOString().split('T')[0];
         
-        // تحميل اللوحات أولاً
-        const data = await loadBillboards();
+        // تحميل اللوحات والعقود النشطة بالتوازي
+        const [data, activeContractsRes] = await Promise.all([
+          loadBillboards(),
+          supabase
+            .from('Contract')
+            .select('Contract_Number, billboard_ids, "End Date"')
+            .gte('End Date', today)
+        ]);
+
         console.log('[ContractEdit] ✅ تم تحميل', data.length, 'لوحة');
         setBillboards(data);
 
-        // تحميل العقود النشطة بشكل منفصل مع error handling
         const occupied = new Map<number, string>();
-        try {
-          const { data: contractsData, error: contractsError } = await supabase
-            .from('Contract')
-            .select('Contract_Number, billboard_ids, "End Date"')
-            .gte('End Date', today);
-          
-          if (contractsError) {
-            console.warn('[ContractEdit] ⚠️ فشل استعلام العقود النشطة:', contractsError.message);
-          } else if (contractsData) {
-            for (const contract of contractsData) {
-              const ids = (contract as any).billboard_ids;
-              const endDate = (contract as any)['End Date'] || '';
-              if (ids && typeof ids === 'string') {
-                ids.split(',').forEach((id: string) => {
-                  const num = parseInt(id.trim(), 10);
-                  if (!isNaN(num)) occupied.set(num, endDate);
-                });
-              }
+        if (!activeContractsRes.error && activeContractsRes.data) {
+          for (const contract of activeContractsRes.data) {
+            const ids = (contract as any).billboard_ids;
+            const endDate = (contract as any)['End Date'] || '';
+            if (ids && typeof ids === 'string') {
+              ids.split(',').forEach((id: string) => {
+                const num = parseInt(id.trim(), 10);
+                if (!isNaN(num)) occupied.set(num, endDate);
+              });
             }
-            console.log('[ContractEdit] ✅ عدد اللوحات المحجوزة بعقود نشطة:', occupied.size);
           }
-        } catch (contractErr) {
-          console.warn('[ContractEdit] ⚠️ خطأ في تحميل العقود النشطة (تم التجاوز):', contractErr);
+          console.log('[ContractEdit] ✅ عدد اللوحات المحجوزة بعقود نشطة:', occupied.size);
+        } else if (activeContractsRes.error) {
+          console.warn('[ContractEdit] ⚠️ فشل استعلام العقود النشطة:', activeContractsRes.error.message);
         }
         setOccupiedBillboardIds(occupied);
       } catch (e: any) {

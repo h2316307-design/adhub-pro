@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { ChevronDown, ChevronUp, FileText, Image as ImageIcon } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { DesignImageWithBlur } from '@/components/DesignImageWithBlur';
@@ -189,6 +189,7 @@ const MunicipalityContracts = ({ municipalityName }: MunicipalityContractsProps)
         <DialogContent className="max-w-2xl p-2" dir="rtl">
           <DialogHeader>
             <DialogTitle className="text-sm">صورة اللوحة</DialogTitle>
+            <DialogDescription className="sr-only">عرض صورة اللوحة في وضع التكبير</DialogDescription>
           </DialogHeader>
           {imagePreview && (
             <DesignImageWithBlur

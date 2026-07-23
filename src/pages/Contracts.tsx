@@ -143,8 +143,10 @@ export default function Contracts() {
 
   const loadData = async () => {
     try {
-      const contractsData = await getContracts(linkedCustomerId);
-      const billboardsData = await getAvailableBillboards();
+      const [contractsData, billboardsData] = await Promise.all([
+        getContracts(linkedCustomerId),
+        getAvailableBillboards()
+      ]);
       setContracts(contractsData as Contract[]);
       setAvailableBillboards(billboardsData || []);
     } catch (error) {
@@ -157,13 +159,12 @@ export default function Contracts() {
 
   useEffect(() => {
     loadData();
-    // جلب العقود المتأخرة (التي لديها لوحات تأخرت في التركيب أو لم تُركّب بعد)
-    (async () => {
+    // جلب العقود المتأخرة في الخلفية دون تعطيل ظهور العقود الرئيسي
+    const timer = setTimeout(async () => {
       try {
         const MAX_INSTALL_DAYS = 15;
         const today = new Date();
         
-        // جلب كل العناصر التي لها تصميم (سواء رُكّبت أو لا)
         const { data: allItems } = await supabase
           .from('installation_task_items')
           .select(`
@@ -194,12 +195,10 @@ export default function Contracts() {
           expected.setDate(expected.getDate() + MAX_INSTALL_DAYS);
           
           if (item.installation_date) {
-            // لوحة مركّبة: تأخرت إذا تاريخ التركيب بعد الموعد المتوقع
             if (new Date(item.installation_date) > expected && task?.contract_id) {
               delayed.add(task.contract_id);
             }
           } else {
-            // لوحة لم تُركّب بعد: متأخرة إذا تجاوزنا الموعد المتوقع
             if (today > expected && task?.contract_id) {
               delayed.add(task.contract_id);
             }
@@ -209,7 +208,9 @@ export default function Contracts() {
       } catch (e) {
         console.error('Error fetching delayed contracts:', e);
       }
-    })();
+    }, 50);
+
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -800,15 +801,42 @@ export default function Contracts() {
     return order > 0 ? `${order}/${yearShort}` : '';
   };
 
-  // فصل العقود النشطة والمنتهية (للصفحة الحالية فقط)
+  // الأعداد الشاملة لكافة العقود المفلترة
+  const allFilteredActiveContracts = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return filteredContracts.filter(c => {
+      if (!c.end_date) return true;
+      const endDate = new Date(c.end_date);
+      endDate.setHours(23, 59, 59, 999);
+      return today <= endDate;
+    });
+  }, [filteredContracts]);
+
+  const allFilteredExpiredContracts = useMemo(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return filteredContracts.filter(c => {
+      if (!c.end_date) return false;
+      const endDate = new Date(c.end_date);
+      endDate.setHours(23, 59, 59, 999);
+      return today > endDate;
+    });
+  }, [filteredContracts]);
+
+  // فصل العقود النشطة والمنتهية (عناصر الصفحة الحالية لعرض الكروت)
   const activeContracts = paginatedContracts.filter(c => {
     if (!c.end_date) return true;
-    return new Date() <= new Date(c.end_date);
+    const endDate = new Date(c.end_date);
+    endDate.setHours(23, 59, 59, 999);
+    return new Date() <= endDate;
   });
 
   const expiredContracts = paginatedContracts.filter(c => {
     if (!c.end_date) return false;
-    return new Date() > new Date(c.end_date);
+    const endDate = new Date(c.end_date);
+    endDate.setHours(23, 59, 59, 999);
+    return new Date() > endDate;
   });
 
   // تقسيم العقود حسب الحالة
@@ -1289,7 +1317,7 @@ export default function Contracts() {
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent className="mt-4">
-          <ContractStats contracts={contracts} />
+          <ContractStats contracts={filteredContracts} />
         </CollapsibleContent>
       </Collapsible>
 
@@ -1515,7 +1543,7 @@ export default function Contracts() {
               <span>عرض {filteredContracts.length} من {contracts.length} عقد</span>
               {separateExpired && (
                 <span className="text-muted-foreground">
-                  ({activeContracts.length} نشط، {expiredContracts.length} منتهي)
+                  ({allFilteredActiveContracts.length} نشط، {allFilteredExpiredContracts.length} منتهي)
                 </span>
               )}
             </div>
@@ -1658,7 +1686,7 @@ export default function Contracts() {
               <div>
                 <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                   <CheckCircle className="h-5 w-5 text-primary" />
-                  العقود النشطة ({activeContracts.length})
+                  العقود النشطة ({allFilteredActiveContracts.length})
                 </h3>
                 <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
                   {activeContracts.map((contract) => (
@@ -1782,7 +1810,7 @@ export default function Contracts() {
                 <div>
                   <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-destructive">
                     <AlertCircle className="h-5 w-5" />
-                    العقود المنتهية ({expiredContracts.length})
+                    العقود المنتهية ({allFilteredExpiredContracts.length})
                   </h3>
                   <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))' }}>
                     {expiredContracts.map((contract) => (

@@ -190,7 +190,7 @@ export function PrintPreview({
 
     // حالة اللوحة أسفل الاسم
     const mStatusKey = (billboard.maintenance_status || '').toString().trim();
-    const showBillboardStatus = (s as any).billboard_status_enabled !== 'false' && mStatusKey;
+    const showBillboardStatus = (s as any).billboard_status_enabled === 'true' && mStatusKey;
     if (showBillboardStatus) {
       const statusLabel = statusLabels[mStatusKey] || mStatusKey;
       const statusFontSize = (s as any).billboard_status_font_size || '14px';

@@ -1,17 +1,20 @@
 // @ts-nocheck
-import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect, useRef } from 'react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Monitor, Layers, Tag, Save, X, MapPin, RefreshCw, DollarSign, Ruler, Image, Link2, Building } from 'lucide-react';
+import {
+  Plus, Edit, Trash2, Layers, Tag, Save, X, MapPin, RefreshCw, DollarSign, Ruler, Image as ImageIcon,
+  Building, Upload, Sparkles, CheckCircle2, Loader2
+} from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { uploadImage } from '@/services/imageUploadService';
 
 interface BillboardSize {
   id: number;
@@ -21,6 +24,7 @@ interface BillboardSize {
   description?: string;
   installation_price: number;
   sort_order: number;
+  image_url?: string | null;
   created_at: string;
 }
 
@@ -49,145 +53,77 @@ interface Municipality {
   created_at: string;
 }
 
+interface City {
+  id: number;
+  name: string;
+  created_at?: string;
+}
+
 export default function BillboardSettings() {
   const [sizes, setSizes] = useState<BillboardSize[]>([]);
   const [faces, setFaces] = useState<BillboardFaces[]>([]);
   const [types, setTypes] = useState<BillboardType[]>([]);
   const [municipalities, setMunicipalities] = useState<Municipality[]>([]);
-  const [cities, setCities] = useState<any[]>([]);
+  const [cities, setCities] = useState<City[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
-  
+  const [uploadingSizeId, setUploadingSizeId] = useState<number | null>(null);
+
   // Dialog states
   const [sizeDialog, setSizeDialog] = useState(false);
   const [faceDialog, setFaceDialog] = useState(false);
   const [typeDialog, setTypeDialog] = useState(false);
   const [municipalityDialog, setMunicipalityDialog] = useState(false);
   const [cityDialog, setCityDialog] = useState(false);
-  
-  // Form states - Updated to include sort_order
-  const [sizeForm, setSizeForm] = useState({ 
-    id: 0, 
-    name: '', 
-    width: 0, 
-    height: 0, 
-    description: '', 
+
+  // Form states
+  const [sizeForm, setSizeForm] = useState({
+    id: 0,
+    name: '',
+    width: 0,
+    height: 0,
+    description: '',
     installation_price: 0,
-    sort_order: 999
+    sort_order: 999,
+    image_url: '',
   });
   const [faceForm, setFaceForm] = useState({ id: 0, name: '', count: 1, description: '' });
-  const [typeForm, setTypeForm] = useState({ id: 0, name: '', description: '', color: '#3B82F6' });
+  const [typeForm, setTypeForm] = useState({ id: 0, name: '', description: '', color: '#d6ac40' });
   const [municipalityForm, setMunicipalityForm] = useState({ id: 0, name: '', code: '', logo_url: '', sort_order: 999 });
   const [cityForm, setCityForm] = useState({ id: 0, name: '' });
-  const [logoPreviewError, setLogoPreviewError] = useState(false);
-  
   const [editMode, setEditMode] = useState(false);
 
-  // ✅ Check if sort_order is unique for sizes
-  const isSortOrderUnique = async (sortOrder: number, excludeId?: number): Promise<boolean> => {
-    try {
-      let query = supabase
-        .from('sizes')
-        .select('id')
-        .eq('sort_order', sortOrder);
-      
-      if (excludeId) {
-        query = query.neq('id', excludeId);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return !data || data.length === 0;
-    } catch (error) {
-      console.error('Error checking sort order uniqueness:', error);
-      return false;
-    }
-  };
-
-  // Load data
+  // Load all data
   const loadData = async () => {
     try {
       setLoading(true);
-      
-      console.log('🔄 بدء تحميل بيانات إعدادات اللوحات...');
-      
-      // ✅ Load sizes from sizes table with sort_order
-      const { data: sizesData, error: sizesError } = await supabase
-        .from('sizes')
-        .select('*')
-        .order('sort_order', { ascending: true })
-        .order('name', { ascending: true });
 
-      if (sizesError) {
-        console.error('❌ خطأ في تحميل الأحجام من جدول sizes:', sizesError);
-        toast.error('فشل في تحميل أحجام اللوحات');
-      } else {
-        console.log('✅ تم تحميل الأحجام من جدول sizes:', sizesData?.length || 0, 'حجم');
-        setSizes(sizesData || []);
-      }
+      const [sizesRes, facesRes, typesRes, munRes, citiesRes] = await Promise.all([
+        supabase.from('sizes').select('*').order('sort_order', { ascending: true }).order('name', { ascending: true }),
+        supabase.from('billboard_faces').select('*').order('id', { ascending: true }),
+        supabase.from('billboard_types').select('*').order('id', { ascending: true }),
+        supabase.from('municipalities').select('*').order('sort_order', { ascending: true }),
+        supabase.from('cities').select('*').order('name', { ascending: true }),
+      ]);
 
-      // Load faces from billboard_faces table
-      const { data: facesData, error: facesError } = await supabase
-        .from('billboard_faces')
-        .select('*')
-        .order('id', { ascending: true });
+      if (sizesRes.error) toast.error('فشل في تحميل أحجام اللوحات');
+      else setSizes(sizesRes.data || []);
 
-      if (facesError) {
-        console.error('❌ خطأ في تحميل الأوجه:', facesError);
-        toast.error('فشل في تحميل عدد الأوجه');
-      } else {
-        console.log('✅ تم تحميل الأوجه:', facesData?.length || 0, 'نوع');
-        setFaces(facesData || []);
-      }
+      if (facesRes.error) toast.error('فشل في تحميل عدد الأوجه');
+      else setFaces(facesRes.data || []);
 
-      // Load types from billboard_types table
-      const { data: typesData, error: typesError } = await supabase
-        .from('billboard_types')
-        .select('*')
-        .order('id', { ascending: true });
+      if (typesRes.error) toast.error('فشل في تحميل أنواع اللوحات');
+      else setTypes(typesRes.data || []);
 
-      if (typesError) {
-        console.error('❌ خطأ في تحميل الأنواع:', typesError);
-        toast.error('فشل في تحميل أنواع اللوحات');
-      } else {
-        console.log('✅ تم تحميل الأنواع:', typesData?.length || 0, 'نوع');
-        setTypes(typesData || []);
-      }
+      if (munRes.error) toast.error('فشل في تحميل البلديات');
+      else setMunicipalities(munRes.data || []);
 
-      // Load municipalities
-      const { data: municipalitiesData, error: municipalitiesError } = await supabase
-        .from('municipalities')
-        .select('*')
-        .order('sort_order', { ascending: true });
-
-      if (municipalitiesError) {
-        console.error('❌ خطأ في تحميل البلديات:', municipalitiesError);
-        toast.error('فشل في تحميل البلديات');
-      } else {
-        console.log('✅ تم تحميل البلديات:', municipalitiesData?.length || 0, 'بلدية');
-        setMunicipalities(municipalitiesData || []);
-      }
-
-      // Load cities
-      const { data: citiesData, error: citiesError } = await supabase
-        .from('cities')
-        .select('*')
-        .order('name', { ascending: true });
-
-      if (citiesError) {
-        console.error('❌ خطأ في تحميل المدن:', citiesError);
-        toast.error('فشل في تحميل المدن');
-      } else {
-        console.log('✅ تم تحميل المدن:', citiesData?.length || 0, 'مدينة');
-        setCities(citiesData || []);
-      }
-
-      console.log('🎉 تم الانتهاء من تحميل جميع بيانات الإعدادات');
+      if (citiesRes.error) toast.error('فشل في تحميل المدن');
+      else setCities(citiesRes.data || []);
 
     } catch (error) {
-      console.error('💥 خطأ عام في تحميل البيانات:', error);
-      toast.error('حدث خطأ في تحميل البيانات');
+      console.error('Error loading settings data:', error);
+      toast.error('حدث خطأ أثناء تحميل البيانات');
     } finally {
       setLoading(false);
     }
@@ -197,132 +133,88 @@ export default function BillboardSettings() {
     loadData();
   }, []);
 
-  // Sync municipalities from billboards table
-  const syncMunicipalitiesFromBillboards = async () => {
-    setSyncing(true);
+  // Upload Cutout PNG for a size directly
+  const handleDirectSizeImageUpload = async (sizeId: number, file: File) => {
+    if (!file.type.startsWith('image/')) {
+      toast.error('يرجى اختيار صورة مفرغة بصيغة PNG أو SVG');
+      return;
+    }
+    setUploadingSizeId(sizeId);
     try {
-      console.log('Starting sync process...');
-      
-      // Get unique municipalities from billboards
-      const { data: billboardData, error: billboardError } = await supabase
-        .from('billboards')
-        .select('Municipality')
-        .not('Municipality', 'is', null);
+      const imgName = `size-cutout-${sizeId}-${Date.now()}`;
+      const url = await uploadImage(file, imgName, 'billboard-sizes-cutouts');
 
-      if (billboardError) {
-        console.error('Billboard error:', billboardError);
-        throw billboardError;
-      }
+      const { error } = await supabase
+        .from('sizes')
+        .update({ image_url: url })
+        .eq('id', sizeId);
 
-      const uniqueMunicipalities = [...new Set(
-        (billboardData || [])
-          .map((b: any) => b.Municipality)
-          .filter(Boolean)
-          .map((m: string) => m.trim())
-      )];
+      if (error) throw error;
 
-      // Get existing municipalities
-      const { data: existingMunicipalities, error: existingError } = await supabase
-        .from('municipalities')
-        .select('name');
-
-      if (existingError) {
-        throw existingError;
-      }
-
-      const existingNames = new Set((existingMunicipalities || []).map((m: any) => m.name));
-
-      // Find new municipalities to add
-      const newMunicipalities = uniqueMunicipalities.filter(name => !existingNames.has(name));
-
-      if (newMunicipalities.length === 0) {
-        toast.success('جميع البلديات موجودة بالفعل');
-        return;
-      }
-
-      // Add new municipalities
-      const municipalitiesToInsert = newMunicipalities.map((name, index) => ({
-        name: name,
-        code: `AUTO-${String(municipalities.length + index + 1).padStart(3, '0')}`
-      }));
-
-      const { error: insertError } = await supabase
-        .from('municipalities')
-        .insert(municipalitiesToInsert);
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      toast.success(`تم إضافة ${newMunicipalities.length} بلدية جديدة`);
-      await loadData(); // Reload the list
-
-    } catch (error: any) {
-      console.error('Error syncing municipalities:', error);
-      toast.error(`فشل في مزامنة البلديات: ${error?.message || 'خطأ غير معروف'}`);
+      setSizes(prev => prev.map(s => s.id === sizeId ? { ...s, image_url: url } : s));
+      toast.success('تم رفع صورة المقاس المفرغة بنجاح');
+    } catch (err: any) {
+      console.error('Error uploading size PNG:', err);
+      toast.error('فشل رفع صورة المقاس: ' + (err?.message || 'خطأ غير معروف'));
     } finally {
-      setSyncing(false);
+      setUploadingSizeId(null);
     }
   };
 
-  // ✅ Size functions - Updated to include sort_order validation
+  // Check unique sort order for size
+  const isSortOrderUnique = async (sortOrder: number, excludeId?: number): Promise<boolean> => {
+    try {
+      let query = supabase.from('sizes').select('id').eq('sort_order', sortOrder);
+      if (excludeId) query = query.neq('id', excludeId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return !data || data.length === 0;
+    } catch {
+      return false;
+    }
+  };
+
+  // Save Size
   const handleSizeSubmit = async () => {
     try {
       if (!sizeForm.name || sizeForm.width <= 0 || sizeForm.height <= 0) {
-        toast.error('يرجى ملء جميع الحقول المطلوبة');
+        toast.error('يرجى ملء جميع الحقول المطلوبة (اسم الحجم، العرض، والارتفاع)');
         return;
       }
 
-      if (sizeForm.installation_price < 0) {
-        toast.error('سعر التركيب لا يمكن أن يكون سالباً');
-        return;
-      }
-
-      // ✅ Check if sort_order is unique
       const isUnique = await isSortOrderUnique(sizeForm.sort_order, editMode ? sizeForm.id : undefined);
       if (!isUnique) {
         toast.error(`رقم الترتيب ${sizeForm.sort_order} مستخدم بالفعل. يرجى اختيار رقم آخر.`);
         return;
       }
 
-      if (editMode) {
-        const { error } = await supabase
-          .from('sizes')
-          .update({
-            name: sizeForm.name,
-            width: sizeForm.width,
-            height: sizeForm.height,
-            description: sizeForm.description,
-            installation_price: sizeForm.installation_price,
-            sort_order: sizeForm.sort_order
-          })
-          .eq('id', sizeForm.id);
+      const payload = {
+        name: sizeForm.name.trim(),
+        width: sizeForm.width,
+        height: sizeForm.height,
+        description: sizeForm.description,
+        installation_price: sizeForm.installation_price,
+        sort_order: sizeForm.sort_order,
+        image_url: sizeForm.image_url || null,
+      };
 
+      if (editMode) {
+        const { error } = await supabase.from('sizes').update(payload).eq('id', sizeForm.id);
         if (error) throw error;
         toast.success('تم تحديث الحجم بنجاح');
       } else {
-        const { error } = await supabase
-          .from('sizes')
-          .insert({
-            name: sizeForm.name,
-            width: sizeForm.width,
-            height: sizeForm.height,
-            description: sizeForm.description,
-            installation_price: sizeForm.installation_price,
-            sort_order: sizeForm.sort_order
-          });
-
+        const { error } = await supabase.from('sizes').insert(payload);
         if (error) throw error;
         toast.success('تم إضافة الحجم بنجاح');
       }
 
       setSizeDialog(false);
-      setSizeForm({ id: 0, name: '', width: 0, height: 0, description: '', installation_price: 0, sort_order: 999 });
+      setSizeForm({ id: 0, name: '', width: 0, height: 0, description: '', installation_price: 0, sort_order: 999, image_url: '' });
       setEditMode(false);
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving size:', error);
-      toast.error('حدث خطأ في حفظ الحجم');
+      toast.error('حدث خطأ في حفظ الحجم: ' + (error?.message || ''));
     }
   };
 
@@ -334,7 +226,8 @@ export default function BillboardSettings() {
       height: size.height,
       description: size.description || '',
       installation_price: size.installation_price || 0,
-      sort_order: size.sort_order || 999
+      sort_order: size.sort_order || 999,
+      image_url: size.image_url || '',
     });
     setEditMode(true);
     setSizeDialog(true);
@@ -342,11 +235,7 @@ export default function BillboardSettings() {
 
   const handleSizeDelete = async (id: number) => {
     try {
-      const { error } = await supabase
-        .from('sizes')
-        .delete()
-        .eq('id', id);
-
+      const { error } = await supabase.from('sizes').delete().eq('id', id);
       if (error) throw error;
       toast.success('تم حذف الحجم بنجاح');
       loadData();
@@ -356,1215 +245,649 @@ export default function BillboardSettings() {
     }
   };
 
-  // Face functions
-  const handleFaceSubmit = async () => {
+  // Sync municipalities from billboards
+  const syncMunicipalitiesFromBillboards = async () => {
+    setSyncing(true);
     try {
-      if (!faceForm.name || faceForm.count <= 0) {
-        toast.error('يرجى ملء جميع الحقول المطلوبة');
+      const { data: billboardData, error: billboardError } = await supabase
+        .from('billboards')
+        .select('Municipality')
+        .not('Municipality', 'is', null);
+
+      if (billboardError) throw billboardError;
+
+      const uniqueMunicipalities = [...new Set((billboardData || []).map((b: any) => b.Municipality).filter(Boolean).map((m: string) => m.trim()))];
+      const { data: existingMunicipalities } = await supabase.from('municipalities').select('name');
+      const existingNames = new Set((existingMunicipalities || []).map((m: any) => m.name));
+      const newMunicipalities = uniqueMunicipalities.filter(name => !existingNames.has(name));
+
+      if (newMunicipalities.length === 0) {
+        toast.info('جميع البلديات مضافة بالفعل');
         return;
       }
 
-      if (editMode) {
-        const { error } = await supabase
-          .from('billboard_faces')
-          .update({
-            name: faceForm.name,
-            count: faceForm.count,
-            description: faceForm.description
-          })
-          .eq('id', faceForm.id);
+      const toInsert = newMunicipalities.map((name, idx) => ({
+        name,
+        code: `AUTO-${String(municipalities.length + idx + 1).padStart(3, '0')}`,
+        sort_order: municipalities.length + idx + 1,
+      }));
 
-        if (error) throw error;
-        toast.success('تم تحديث عدد الأوجه بنجاح');
-      } else {
-        const { error } = await supabase
-          .from('billboard_faces')
-          .insert({
-            name: faceForm.name,
-            count: faceForm.count,
-            description: faceForm.description
-          });
+      const { error: insertError } = await supabase.from('municipalities').insert(toInsert);
+      if (insertError) throw insertError;
 
-        if (error) throw error;
-        toast.success('تم إضافة عدد الأوجه بنجاح');
-      }
-
-      setFaceDialog(false);
-      setFaceForm({ id: 0, name: '', count: 1, description: '' });
-      setEditMode(false);
+      toast.success(`تم إضافة ${newMunicipalities.length} بلدية جديدة تلقائياً`);
       loadData();
-    } catch (error) {
-      console.error('Error saving face:', error);
-      toast.error('حدث خطأ في حفظ عدد الأوجه');
+    } catch (err: any) {
+      toast.error('فشل المزامنة: ' + (err?.message || ''));
+    } finally {
+      setSyncing(false);
     }
   };
 
-  const handleFaceEdit = (face: BillboardFaces) => {
-    setFaceForm({
-      id: face.id,
-      name: face.name,
-      count: face.count,
-      description: face.description || ''
-    });
-    setEditMode(true);
-    setFaceDialog(true);
+  // Face handlers
+  const handleFaceSubmit = async () => {
+    if (!faceForm.name || faceForm.count <= 0) {
+      toast.error('يرجى ملء الحقول المطلوبة');
+      return;
+    }
+    const payload = { name: faceForm.name, count: faceForm.count, description: faceForm.description };
+    if (editMode) await supabase.from('billboard_faces').update(payload).eq('id', faceForm.id);
+    else await supabase.from('billboard_faces').insert(payload);
+    setFaceDialog(false);
+    loadData();
   };
 
   const handleFaceDelete = async (id: number) => {
-    try {
-      const { error } = await supabase
-        .from('billboard_faces')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success('تم حذف عدد الأوجه بنجاح');
-      loadData();
-    } catch (error) {
-      console.error('Error deleting face:', error);
-      toast.error('حدث خطأ في حذف عدد الأوجه');
-    }
+    await supabase.from('billboard_faces').delete().eq('id', id);
+    loadData();
   };
 
-  // Type functions
+  // Type handlers
   const handleTypeSubmit = async () => {
-    try {
-      if (!typeForm.name) {
-        toast.error('يرجى ملء جميع الحقول المطلوبة');
-        return;
-      }
-
-      if (editMode) {
-        const { error } = await supabase
-          .from('billboard_types')
-          .update({
-            name: typeForm.name,
-            description: typeForm.description,
-            color: typeForm.color
-          })
-          .eq('id', typeForm.id);
-
-        if (error) throw error;
-        toast.success('تم تحديث النوع بنجاح');
-      } else {
-        const { error } = await supabase
-          .from('billboard_types')
-          .insert({
-            name: typeForm.name,
-            description: typeForm.description,
-            color: typeForm.color
-          });
-
-        if (error) throw error;
-        toast.success('تم إضافة النوع بنجاح');
-      }
-
-      setTypeDialog(false);
-      setTypeForm({ id: 0, name: '', description: '', color: '#3B82F6' });
-      setEditMode(false);
-      loadData();
-    } catch (error) {
-      console.error('Error saving type:', error);
-      toast.error('حدث خطأ في حفظ النوع');
+    if (!typeForm.name) {
+      toast.error('يرجى ملء الاسم');
+      return;
     }
-  };
-
-  const handleTypeEdit = (type: BillboardType) => {
-    setTypeForm({
-      id: type.id,
-      name: type.name,
-      description: type.description || '',
-      color: type.color || '#3B82F6'
-    });
-    setEditMode(true);
-    setTypeDialog(true);
+    const payload = { name: typeForm.name, description: typeForm.description, color: typeForm.color };
+    if (editMode) await supabase.from('billboard_types').update(payload).eq('id', typeForm.id);
+    else await supabase.from('billboard_types').insert(payload);
+    setTypeDialog(false);
+    loadData();
   };
 
   const handleTypeDelete = async (id: number) => {
-    try {
-      const { error } = await supabase
-        .from('billboard_types')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success('تم حذف النوع بنجاح');
-      loadData();
-    } catch (error) {
-      console.error('Error deleting type:', error);
-      toast.error('حدث خطأ في حذف النوع');
-    }
+    await supabase.from('billboard_types').delete().eq('id', id);
+    loadData();
   };
 
-  // Municipality functions
-  const isMunicipalitySortOrderUnique = async (sortOrder: number, excludeId?: number): Promise<boolean> => {
-    try {
-      let query = supabase
-        .from('municipalities')
-        .select('id')
-        .eq('sort_order', sortOrder);
-      
-      if (excludeId) {
-        query = query.neq('id', excludeId);
-      }
-      
-      const { data, error } = await query;
-      
-      if (error) throw error;
-      return !data || data.length === 0;
-    } catch (error) {
-      console.error('Error checking municipality sort order uniqueness:', error);
-      return false;
-    }
-  };
-
-  // City functions
-  const handleCitySubmit = async () => {
-    try {
-      if (!cityForm.name.trim()) {
-        toast.error('يرجى إدخال اسم المدينة');
-        return;
-      }
-
-      if (editMode) {
-        const { error } = await supabase
-          .from('cities')
-          .update({ name: cityForm.name.trim() })
-          .eq('id', cityForm.id);
-
-        if (error) throw error;
-        toast.success('تم تحديث المدينة بنجاح');
-      } else {
-        const { error } = await supabase
-          .from('cities')
-          .insert({ name: cityForm.name.trim() });
-
-        if (error) throw error;
-        toast.success('تم إضافة المدينة بنجاح');
-      }
-
-      setCityDialog(false);
-      setCityForm({ id: 0, name: '' });
-      setEditMode(false);
-      loadData();
-    } catch (error: any) {
-      console.error('Error saving city:', error);
-      toast.error(`حدث خطأ في حفظ المدينة: ${error.message || 'خطأ غير معروف'}`);
-    }
-  };
-
-  const handleCityEdit = (city: any) => {
-    setCityForm({ id: city.id, name: city.name });
-    setEditMode(true);
-    setCityDialog(true);
-  };
-
-  const handleCityDelete = async (id: number) => {
-    try {
-      const { error } = await supabase
-        .from('cities')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-      toast.success('تم حذف المدينة بنجاح');
-      loadData();
-    } catch (error: any) {
-      console.error('Error deleting city:', error);
-      toast.error(`فشل في حذف المدينة: ${error.message || 'خطأ غير معروف'}`);
-    }
-  };
-
+  // Municipality handlers
   const handleMunicipalitySubmit = async () => {
-    try {
-      if (!municipalityForm.name.trim() || !municipalityForm.code.trim()) {
-        toast.error('يرجى إدخال اسم البلدية والكود');
-        return;
-      }
-
-      // التحقق من عدم تكرار الترتيب
-      const isUnique = await isMunicipalitySortOrderUnique(municipalityForm.sort_order, editMode ? municipalityForm.id : undefined);
-      if (!isUnique) {
-        toast.error(`رقم الترتيب ${municipalityForm.sort_order} مستخدم بالفعل. يرجى اختيار رقم آخر.`);
-        return;
-      }
-
-      if (editMode) {
-        const { error } = await supabase
-          .from('municipalities')
-          .update({
-            name: municipalityForm.name.trim(),
-            code: municipalityForm.code.trim(),
-            logo_url: municipalityForm.logo_url.trim() || null,
-            sort_order: municipalityForm.sort_order
-          })
-          .eq('id', municipalityForm.id);
-
-        if (error) throw error;
-        toast.success('تم تحديث البلدية بنجاح');
-      } else {
-        const { error } = await supabase
-          .from('municipalities')
-          .insert({
-            name: municipalityForm.name.trim(),
-            code: municipalityForm.code.trim(),
-            logo_url: municipalityForm.logo_url.trim() || null,
-            sort_order: municipalityForm.sort_order
-          });
-
-        if (error) throw error;
-        toast.success('تم إضافة البلدية بنجاح');
-      }
-
-      setMunicipalityDialog(false);
-      setMunicipalityForm({ id: 0, name: '', code: '', logo_url: '', sort_order: 999 });
-      setLogoPreviewError(false);
-      setEditMode(false);
-      loadData();
-    } catch (error: any) {
-      console.error('Error saving municipality:', error);
-      toast.error(`فشل في حفظ البلدية: ${error?.message || 'خطأ غير معروف'}`);
+    if (!municipalityForm.name || !municipalityForm.code) {
+      toast.error('يرجى ملء الاسم والكود');
+      return;
     }
-  };
-
-  const handleMunicipalityEdit = (municipality: Municipality) => {
-    setMunicipalityForm({
-      id: municipality.id,
-      name: municipality.name,
-      code: municipality.code,
-      logo_url: municipality.logo_url || '',
-      sort_order: municipality.sort_order || 999
-    });
-    setLogoPreviewError(false);
-    setEditMode(true);
-    setMunicipalityDialog(true);
+    const payload = {
+      name: municipalityForm.name.trim(),
+      code: municipalityForm.code.trim(),
+      logo_url: municipalityForm.logo_url.trim() || null,
+      sort_order: municipalityForm.sort_order,
+    };
+    if (editMode) await supabase.from('municipalities').update(payload).eq('id', municipalityForm.id);
+    else await supabase.from('municipalities').insert(payload);
+    setMunicipalityDialog(false);
+    loadData();
   };
 
   const handleMunicipalityDelete = async (id: number) => {
-    try {
-      const { error } = await supabase
-        .from('municipalities')
-        .delete()
-        .eq('id', id);
+    await supabase.from('municipalities').delete().eq('id', id);
+    loadData();
+  };
 
-      if (error) throw error;
-      toast.success('تم حذف البلدية بنجاح');
-      loadData();
-    } catch (error: any) {
-      console.error('Error deleting municipality:', error);
-      toast.error(`فشل في حذف البلدية: ${error?.message || 'خطأ غير معروف'}`);
-    }
+  // City handlers
+  const handleCitySubmit = async () => {
+    if (!cityForm.name.trim()) return;
+    if (editMode) await supabase.from('cities').update({ name: cityForm.name.trim() }).eq('id', cityForm.id);
+    else await supabase.from('cities').insert({ name: cityForm.name.trim() });
+    setCityDialog(false);
+    loadData();
+  };
+
+  const handleCityDelete = async (id: number) => {
+    await supabase.from('cities').delete().eq('id', id);
+    loadData();
   };
 
   if (loading) {
     return (
-      <div className="expenses-loading">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4"></div>
-          <p className="text-muted-foreground">جاري تحميل إعدادات اللوحات...</p>
-        </div>
+      <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 text-center">
+        <Loader2 className="h-10 w-10 text-primary animate-spin mb-4" />
+        <p className="text-sm font-medium text-muted-foreground">جاري تحميل إعدادات اللوحات والبلديات...</p>
       </div>
     );
   }
 
   return (
-    <div className="expenses-container">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="section-header">إعدادات اللوحات الإعلانية</h1>
-          <p className="text-muted">إدارة أحجام وأنواع وأوجه اللوحات الإعلانية والبلديات مع ترتيب المقاسات</p>
+    <div className="min-h-screen bg-background text-foreground p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto select-none">
+      {/* ── Page Header ── */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 rounded-3xl bg-card border border-border/40 backdrop-blur-xl shadow-sm relative overflow-hidden">
+        <div className="flex items-center gap-4">
+          <div className="p-3.5 bg-primary text-primary-foreground rounded-2xl shadow-md">
+            <Ruler className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight">إدارة إعدادات اللوحات والبلديات</h1>
+            <p className="text-xs text-muted-foreground mt-1">
+              تحديد المقاسات الـ 11، صور PNG المفرغة، عدد الأوجه، أنواع اللوحات، والبلديات المرتبطة
+            </p>
+          </div>
         </div>
-        <Button onClick={loadData} variant="outline">
-          تحديث البيانات
-        </Button>
+
+        {/* Quick Badges + Actions */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 bg-primary/10 border border-primary/20 px-3 py-1.5 rounded-xl text-xs font-bold text-primary">
+            <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+            <span>{sizes.length} أحجام مسجلة</span>
+          </div>
+          <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl text-xs font-bold text-amber-600 dark:text-amber-400">
+            <span>{municipalities.length} بلديات</span>
+          </div>
+          <Button variant="outline" size="sm" onClick={loadData} className="h-9 rounded-xl border-border gap-1.5 text-xs">
+            <RefreshCw className="h-3.5 w-3.5" />
+            تحديث البيانات
+          </Button>
+        </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs defaultValue="sizes" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 sm:grid-cols-5 gap-2 mb-6 h-auto bg-transparent">
-          <TabsTrigger value="sizes" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
+      {/* ── Main Tabs Dashboard ── */}
+      <Tabs defaultValue="sizes" className="w-full space-y-6">
+        <TabsList className="flex items-center justify-start gap-2 bg-muted/40 backdrop-blur-md border border-border/30 p-1.5 rounded-2xl overflow-x-auto no-scrollbar w-full sm:w-auto">
+          <TabsTrigger value="sizes" className="rounded-xl px-4 py-2.5 text-xs font-bold gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
             <Ruler className="h-4 w-4" />
-            أحجام اللوحات ({sizes.length})
+            <span>أحجام اللوحات ({sizes.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="faces" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
+          <TabsTrigger value="faces" className="rounded-xl px-4 py-2.5 text-xs font-bold gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
             <Layers className="h-4 w-4" />
-            عدد الأوجه ({faces.length})
+            <span>عدد الأوجه ({faces.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="types" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
+          <TabsTrigger value="types" className="rounded-xl px-4 py-2.5 text-xs font-bold gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
             <Tag className="h-4 w-4" />
-            أنواع اللوحات ({types.length})
+            <span>أنواع اللوحات ({types.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="municipalities" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
+          <TabsTrigger value="municipalities" className="rounded-xl px-4 py-2.5 text-xs font-bold gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
             <MapPin className="h-4 w-4" />
-            البلديات ({municipalities.length})
+            <span>البلديات ({municipalities.length})</span>
           </TabsTrigger>
-          <TabsTrigger value="cities" className="flex items-center gap-2 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground border rounded-lg transition-all duration-200">
+          <TabsTrigger value="cities" className="rounded-xl px-4 py-2.5 text-xs font-bold gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground transition-all">
             <Building className="h-4 w-4" />
-            المدن ({cities.length})
+            <span>المدن ({cities.length})</span>
           </TabsTrigger>
         </TabsList>
 
-        {/* ✅ Sizes Tab - Updated with sort_order */}
-        <TabsContent value="sizes">
-          <Card className="expenses-preview-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="expenses-preview-title">
-                  <Ruler className="inline-block ml-2 h-5 w-5" />
-                  إدارة أحجام اللوحات ({sizes.length} حجم)
-                </CardTitle>
+        {/* ─── TAB 1: SIZES (11 Sizes with PNG Cutout Image Upload) ─── */}
+        <TabsContent value="sizes" className="space-y-6">
+          <Card className="border border-border/40 bg-card rounded-3xl shadow-sm overflow-hidden">
+            <CardHeader className="pb-4 pt-6 border-b border-border/30">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <CardTitle className="text-base font-bold flex items-center gap-2">
+                    <Ruler className="h-5 w-5 text-primary" />
+                    <span>إدارة أحجام اللوحات والـ PNG المفرغة ({sizes.length} مقاس)</span>
+                  </CardTitle>
+                  <CardDescription className="text-xs mt-1">
+                    قم بتعديل المقاسات، ترتيبها، ورفع صورة PNG بدون خلفية لكل مقاس لدمجها تلقائياً في السكيل الواقعي
+                  </CardDescription>
+                </div>
                 <Dialog open={sizeDialog} onOpenChange={setSizeDialog}>
                   <DialogTrigger asChild>
-                    <Button 
+                    <Button
                       onClick={() => {
-                        setSizeForm({ id: 0, name: '', width: 0, height: 0, description: '', installation_price: 0, sort_order: 999 });
+                        setSizeForm({ id: 0, name: '', width: 0, height: 0, description: '', installation_price: 0, sort_order: sizes.length + 1, image_url: '' });
                         setEditMode(false);
                       }}
-                      className="btn-primary"
+                      className="rounded-xl bg-primary text-primary-foreground font-semibold shadow gap-2 h-10 px-5"
                     >
-                      <Plus className="h-4 w-4 ml-1" />
-                      إضافة حجم جديد
+                      <Plus className="h-4 w-4" />
+                      إضافة مقاس جديد
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="expenses-dialog-content">
+                  <DialogContent className="max-w-lg border-border rounded-3xl bg-background">
                     <DialogHeader>
-                      <DialogTitle>
-                        {editMode ? 'تعديل الحجم' : 'إضافة حجم جديد'}
+                      <DialogTitle className="font-bold text-base flex items-center gap-2">
+                        <Ruler className="h-5 w-5 text-primary" />
+                        {editMode ? 'تعديل بيانات المقاس' : 'إضافة مقاس جديد'}
                       </DialogTitle>
                     </DialogHeader>
-                    <div className="expenses-dialog-form">
-                      <div>
-                        <Label className="expenses-form-label">اسم الحجم *</Label>
+
+                    <div className="space-y-4 py-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">اسم المقاس *</Label>
                         <Input
                           value={sizeForm.name}
-                          onChange={(e) => setSizeForm({ ...sizeForm, name: e.target.value })}
-                          placeholder="مثال: 13x5، 12x4، 10x4"
+                          onChange={e => setSizeForm(p => ({ ...p, name: e.target.value }))}
+                          placeholder="مثال: 12x4 أو 13x5"
+                          className="rounded-xl border-border bg-background h-10 font-bold"
                         />
                       </div>
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label className="expenses-form-label">العرض (متر) *</Label>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">العرض (متر) *</Label>
                           <Input
                             type="number"
                             step="0.1"
                             value={sizeForm.width || ''}
-                            onChange={(e) => setSizeForm({ ...sizeForm, width: parseFloat(e.target.value) || 0 })}
-                            placeholder="3.0"
+                            onChange={e => setSizeForm(p => ({ ...p, width: parseFloat(e.target.value) || 0 }))}
+                            placeholder="12.0"
+                            className="rounded-xl border-border bg-background h-10"
                           />
                         </div>
-                        <div>
-                          <Label className="expenses-form-label">الارتفاع (متر) *</Label>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">الارتفاع (متر) *</Label>
                           <Input
                             type="number"
                             step="0.1"
                             value={sizeForm.height || ''}
-                            onChange={(e) => setSizeForm({ ...sizeForm, height: parseFloat(e.target.value) || 0 })}
+                            onChange={e => setSizeForm(p => ({ ...p, height: parseFloat(e.target.value) || 0 }))}
                             placeholder="4.0"
+                            className="rounded-xl border-border bg-background h-10"
                           />
                         </div>
                       </div>
-                      <div>
-                        <Label className="expenses-form-label">
-                          ترتيب المقاس *
-                          <span className="text-xs text-muted-foreground block mt-1">
-                            رقم الترتيب يجب أن يكون فريد (لا يمكن تكراره)
-                          </span>
-                        </Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="999"
-                          value={sizeForm.sort_order}
-                          onChange={(e) => setSizeForm({ ...sizeForm, sort_order: parseInt(e.target.value) || 999 })}
-                          placeholder="رقم الترتيب (1-999)"
-                        />
-                      </div>
-                      <div>
-                        <Label className="expenses-form-label">سعر التركيب (د.ل)</Label>
-                        <div className="relative">
-                          <DollarSign className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">ترتيب العرض *</Label>
                           <Input
                             type="number"
-                            step="0.01"
-                            min="0"
+                            value={sizeForm.sort_order}
+                            onChange={e => setSizeForm(p => ({ ...p, sort_order: parseInt(e.target.value) || 999 }))}
+                            className="rounded-xl border-border bg-background h-10"
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold">سعر التركيب (د.ل)</Label>
+                          <Input
+                            type="number"
                             value={sizeForm.installation_price || ''}
-                            onChange={(e) => setSizeForm({ ...sizeForm, installation_price: parseFloat(e.target.value) || 0 })}
+                            onChange={e => setSizeForm(p => ({ ...p, installation_price: parseFloat(e.target.value) || 0 }))}
                             placeholder="0.00"
-                            className="pl-10"
+                            className="rounded-xl border-border bg-background h-10"
                           />
                         </div>
                       </div>
-                      <div>
-                        <Label className="expenses-form-label">الوصف</Label>
+
+                      {/* PNG Cutout Image URL or File Upload */}
+                      <div className="space-y-2 pt-2 border-t border-border">
+                        <Label className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center justify-between">
+                          <span>صورة PNG مفرغة بدون خلفية للمقاس</span>
+                          <Sparkles className="h-3.5 w-3.5" />
+                        </Label>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={sizeForm.image_url}
+                            onChange={e => setSizeForm(p => ({ ...p, image_url: e.target.value }))}
+                            placeholder="رابط الصورة PNG أو ارفع ملف من الزر..."
+                            className="rounded-xl border-border bg-background text-xs h-10 flex-1"
+                          />
+                          <label className="cursor-pointer">
+                            <span className="inline-flex items-center gap-1.5 h-10 px-3.5 rounded-xl border border-primary/30 bg-primary/10 text-primary text-xs font-bold hover:bg-primary/20 transition-colors">
+                              <Upload className="h-4 w-4" />
+                              رفع PNG
+                            </span>
+                            <input
+                              type="file"
+                              accept="image/png,image/svg+xml,image/webp"
+                              className="hidden"
+                              onChange={async e => {
+                                const f = e.target.files?.[0];
+                                if (!f) return;
+                                try {
+                                  const url = await uploadImage(f, `size-${sizeForm.name || 'cutout'}-${Date.now()}`, 'billboard-sizes-cutouts');
+                                  setSizeForm(p => ({ ...p, image_url: url }));
+                                  toast.success('تم رفع الصورة بنجاح');
+                                } catch (err: any) {
+                                  toast.error('فشل رفع الصورة: ' + (err?.message || ''));
+                                }
+                              }}
+                            />
+                          </label>
+                        </div>
+                        {sizeForm.image_url && (
+                          <div className="relative p-2 rounded-xl bg-muted/30 border border-border flex items-center justify-between">
+                            <img src={sizeForm.image_url} alt="معاينة" className="h-12 object-contain" />
+                            <Button variant="ghost" size="sm" onClick={() => setSizeForm(p => ({ ...p, image_url: '' }))} className="text-destructive text-xs">
+                              إزالة
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-semibold">الوصف / ملاحظات</Label>
                         <Input
                           value={sizeForm.description}
-                          onChange={(e) => setSizeForm({ ...sizeForm, description: e.target.value })}
-                          placeholder="وصف اختياري للحجم"
+                          onChange={e => setSizeForm(p => ({ ...p, description: e.target.value }))}
+                          placeholder="وصف اختياري..."
+                          className="rounded-xl border-border bg-background h-10"
                         />
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <Button onClick={handleSizeSubmit} className="flex-1">
-                          <Save className="h-4 w-4 ml-1" />
-                          {editMode ? 'تحديث' : 'إضافة'}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setSizeDialog(false)}
-                          className="flex-1"
-                        >
-                          <X className="h-4 w-4 ml-1" />
-                          إلغاء
-                        </Button>
                       </div>
                     </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {sizes.length === 0 ? (
-                <div className="expenses-empty-state">
-                  <p>لا توجد أحجام مضافة</p>
-                </div>
-              ) : (
-                <div className="expenses-table-container">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">الترتيب</TableHead>
-                        <TableHead className="text-right">اسم الحجم</TableHead>
-                        <TableHead className="text-right">الأبعاد</TableHead>
-                        <TableHead className="text-right">المساحة</TableHead>
-                        <TableHead className="text-right">سعر التركيب</TableHead>
-                        <TableHead className="text-right">الوصف</TableHead>
-                        <TableHead className="text-right">الإجراءات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {sizes.map((size) => (
-                        <TableRow key={size.id}>
-                          <TableCell>
-                            <Badge variant="outline" className="font-bold text-blue">
-                              {size.sort_order}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-medium">{size.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">
-                              {size.width} × {size.height} متر
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">
-                              {(size.width * size.height).toFixed(1)} م²
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant="default" className="bg-green-100 text-green-800">
-                              {(size.installation_price || 0).toLocaleString('ar-LY')} د.ل
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {size.description || '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="expenses-actions-cell">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleSizeEdit(size)}
-                                className="card-hover"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      هل أنت متأكد من حذف الحجم "{size.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleSizeDelete(size.id)}
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      حذف
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
 
-        {/* Faces Tab */}
-        <TabsContent value="faces">
-          <Card className="expenses-preview-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="expenses-preview-title">
-                  <Layers className="inline-block ml-2 h-5 w-5" />
-                  إدارة عدد الأوجه ({faces.length} نوع)
-                </CardTitle>
-                <Dialog open={faceDialog} onOpenChange={setFaceDialog}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      onClick={() => {
-                        setFaceForm({ id: 0, name: '', count: 1, description: '' });
-                        setEditMode(false);
-                      }}
-                      className="btn-primary"
-                    >
-                      <Plus className="h-4 w-4 ml-1" />
-                      إضافة عدد أوجه جديد
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="expenses-dialog-content">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {editMode ? 'تعديل عدد الأوجه' : 'إضافة عدد أوجه جديد'}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="expenses-dialog-form">
-                      <div>
-                        <Label className="expenses-form-label">اسم النوع *</Label>
-                        <Input
-                          value={faceForm.name}
-                          onChange={(e) => setFaceForm({ ...faceForm, name: e.target.value })}
-                          placeholder="مثال: وجه واحد، وجهين، ثلاثة أوجه"
-                        />
-                      </div>
-                      <div>
-                        <Label className="expenses-form-label">عدد الأوجه *</Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          value={faceForm.count || ''}
-                          onChange={(e) => setFaceForm({ ...faceForm, count: parseInt(e.target.value) || 1 })}
-                          placeholder="1"
-                        />
-                      </div>
-                      <div>
-                        <Label className="expenses-form-label">الوصف</Label>
-                        <Input
-                          value={faceForm.description}
-                          onChange={(e) => setFaceForm({ ...faceForm, description: e.target.value })}
-                          placeholder="وصف اختياري لعدد الأوجه"
-                        />
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <Button onClick={handleFaceSubmit} className="flex-1">
-                          <Save className="h-4 w-4 ml-1" />
-                          {editMode ? 'تحديث' : 'إضافة'}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setFaceDialog(false)}
-                          className="flex-1"
-                        >
-                          <X className="h-4 w-4 ml-1" />
-                          إلغاء
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {faces.length === 0 ? (
-                <div className="expenses-empty-state">
-                  <p>لا توجد أنواع أوجه مضافة</p>
-                </div>
-              ) : (
-                <div className="expenses-table-container">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">اسم النوع</TableHead>
-                        <TableHead className="text-right">عدد الأوجه</TableHead>
-                        <TableHead className="text-right">الوصف</TableHead>
-                        <TableHead className="text-right">الإجراءات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {faces.map((face) => (
-                        <TableRow key={face.id}>
-                          <TableCell className="font-medium">{face.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="default">
-                              {face.count} {face.count === 1 ? 'وجه' : face.count === 2 ? 'وجهين' : 'أوجه'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {face.description || '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="expenses-actions-cell">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleFaceEdit(face)}
-                                className="card-hover"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      هل أنت متأكد من حذف نوع الأوجه "{face.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleFaceDelete(face.id)}
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      حذف
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Types Tab */}
-        <TabsContent value="types">
-          <Card className="expenses-preview-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="expenses-preview-title">
-                  <Tag className="inline-block ml-2 h-5 w-5" />
-                  إدارة أنواع اللوحات ({types.length} نوع)
-                </CardTitle>
-                <Dialog open={typeDialog} onOpenChange={setTypeDialog}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      onClick={() => {
-                        setTypeForm({ id: 0, name: '', description: '', color: '#3B82F6' });
-                        setEditMode(false);
-                      }}
-                      className="btn-primary"
-                    >
-                      <Plus className="h-4 w-4 ml-1" />
-                      إضافة نوع جديد
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="expenses-dialog-content">
-                    <DialogHeader>
-                      <DialogTitle>
-                        {editMode ? 'تعديل النوع' : 'إضافة نوع جديد'}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="expenses-dialog-form">
-                      <div>
-                        <Label className="expenses-form-label">اسم النوع *</Label>
-                        <Input
-                          value={typeForm.name}
-                          onChange={(e) => setTypeForm({ ...typeForm, name: e.target.value })}
-                          placeholder="مثال: LED، تقليدي، رقمي"
-                        />
-                      </div>
-                      <div>
-                        <Label className="expenses-form-label">لون التمييز</Label>
-                        <Input
-                          type="color"
-                          value={typeForm.color}
-                          onChange={(e) => setTypeForm({ ...typeForm, color: e.target.value })}
-                        />
-                      </div>
-                      <div>
-                        <Label className="expenses-form-label">الوصف</Label>
-                        <Input
-                          value={typeForm.description}
-                          onChange={(e) => setTypeForm({ ...typeForm, description: e.target.value })}
-                          placeholder="وصف اختياري للنوع"
-                        />
-                      </div>
-                      <div className="flex gap-2 pt-4">
-                        <Button onClick={handleTypeSubmit} className="flex-1">
-                          <Save className="h-4 w-4 ml-1" />
-                          {editMode ? 'تحديث' : 'إضافة'}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setTypeDialog(false)}
-                          className="flex-1"
-                        >
-                          <X className="h-4 w-4 ml-1" />
-                          إلغاء
-                        </Button>
-                      </div>
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {types.length === 0 ? (
-                <div className="expenses-empty-state">
-                  <p>لا توجد أنواع مضافة</p>
-                </div>
-              ) : (
-                <div className="expenses-table-container">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right">اسم النوع</TableHead>
-                        <TableHead className="text-right">اللون</TableHead>
-                        <TableHead className="text-right">الوصف</TableHead>
-                        <TableHead className="text-right">الإجراءات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {types.map((type) => (
-                        <TableRow key={type.id}>
-                          <TableCell className="font-medium">{type.name}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <div 
-                                className="w-4 h-4 rounded-full border"
-                                style={{ backgroundColor: type.color }}
-                              />
-                              <Badge 
-                                variant="outline"
-                                style={{ 
-                                  borderColor: type.color,
-                                  color: type.color 
-                                }}
-                              >
-                                {type.name}
-                              </Badge>
-                            </div>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {type.description || '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="expenses-actions-cell">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleTypeEdit(type)}
-                                className="card-hover"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      هل أنت متأكد من حذف النوع "{type.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleTypeDelete(type.id)}
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      حذف
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Municipalities Tab */}
-        <TabsContent value="municipalities">
-          <Card className="expenses-preview-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="expenses-preview-title">
-                  <MapPin className="inline-block ml-2 h-5 w-5" />
-                  إدارة البلديات ({municipalities.length} بلدية)
-                </CardTitle>
-                <div className="flex gap-2">
-                  <Button 
-                    onClick={syncMunicipalitiesFromBillboards}
-                    disabled={syncing}
-                    variant="outline"
-                    className="bg-blue-600 hover:bg-blue-700 text-white"
-                  >
-                    <RefreshCw className={`h-4 w-4 ml-2 ${syncing ? 'animate-spin' : ''}`} />
-                    {syncing ? 'جاري المزامنة...' : 'مزامنة من اللوحات'}
-                  </Button>
-                  <Dialog open={municipalityDialog} onOpenChange={setMunicipalityDialog}>
-                    <DialogTrigger asChild>
-                      <Button 
-                        onClick={() => {
-                          setMunicipalityForm({ id: 0, name: '', code: '', logo_url: '', sort_order: municipalities.length + 1 });
-                          setLogoPreviewError(false);
-                          setEditMode(false);
-                        }}
-                        className="btn-primary"
-                      >
-                        <Plus className="h-4 w-4 ml-1" />
-                        إضافة بلدية جديدة
+                    <DialogFooter className="gap-2">
+                      <Button variant="outline" onClick={() => setSizeDialog(false)} className="rounded-xl h-10">إلغاء</Button>
+                      <Button onClick={handleSizeSubmit} className="rounded-xl h-10 bg-primary text-primary-foreground font-semibold">
+                        {editMode ? 'تحديث المقاس' : 'إضافة المقاس'}
                       </Button>
-                    </DialogTrigger>
-                    <DialogContent className="expenses-dialog-content">
-                      <DialogHeader>
-                        <DialogTitle>
-                          {editMode ? 'تعديل البلدية' : 'إضافة بلدية جديدة'}
-                        </DialogTitle>
-                      </DialogHeader>
-                      <div className="expenses-dialog-form space-y-4">
-                        <div>
-                          <Label className="expenses-form-label">اسم البلدية *</Label>
-                          <Input
-                            value={municipalityForm.name}
-                            onChange={(e) => setMunicipalityForm({ ...municipalityForm, name: e.target.value })}
-                            placeholder="مثال: الرياض، جدة، الدمام"
-                          />
-                        </div>
-                        <div>
-                          <Label className="expenses-form-label">كود البلدية *</Label>
-                          <Input
-                            value={municipalityForm.code}
-                            onChange={(e) => setMunicipalityForm({ ...municipalityForm, code: e.target.value })}
-                            placeholder="مثال: RYD، JED، DMM"
-                          />
-                        </div>
-                        <div>
-                          <Label className="expenses-form-label">الترتيب *</Label>
-                          <Input
-                            type="number"
-                            value={municipalityForm.sort_order}
-                            onChange={(e) => setMunicipalityForm({ ...municipalityForm, sort_order: parseInt(e.target.value) || 999 })}
-                            placeholder="مثال: 1، 2، 3"
-                            min={1}
-                          />
-                          <p className="text-xs text-muted-foreground mt-1">
-                            الترتيبات المستخدمة: {municipalities.filter(m => m.id !== municipalityForm.id).map(m => m.sort_order).sort((a,b) => a-b).slice(0, 10).join(', ')}{municipalities.length > 10 ? '...' : ''}
-                          </p>
-                        </div>
-                        <div>
-                          <Label className="expenses-form-label flex items-center gap-2">
-                            <Link2 className="h-4 w-4" />
-                            رابط شعار البلدية
-                          </Label>
-                          <Input
-                            value={municipalityForm.logo_url}
-                            onChange={(e) => {
-                              setMunicipalityForm({ ...municipalityForm, logo_url: e.target.value });
-                              setLogoPreviewError(false);
-                            }}
-                            placeholder="https://example.com/logo.svg أو .png أو .jpg"
-                            className="text-left dir-ltr"
-                          />
-                          {municipalityForm.logo_url && (
-                            <div className="mt-3 p-3 border rounded-lg bg-muted/30">
-                              <Label className="text-xs text-muted-foreground mb-2 block">معاينة الشعار:</Label>
-                              {logoPreviewError ? (
-                                <div className="flex items-center justify-center h-16 text-destructive text-sm">
-                                  <X className="h-4 w-4 ml-1" />
-                                  فشل تحميل الصورة - تأكد من صحة الرابط
-                                </div>
-                              ) : (
-                                <div className="flex items-center justify-center">
-                                  <img
-                                    src={municipalityForm.logo_url}
-                                    alt="معاينة الشعار"
-                                    className="max-h-16 max-w-full object-contain"
-                                    onError={() => setLogoPreviewError(true)}
-                                  />
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex gap-2 pt-4">
-                          <Button onClick={handleMunicipalitySubmit} className="flex-1">
-                            <Save className="h-4 w-4 ml-1" />
-                            {editMode ? 'تحديث' : 'إضافة'}
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            onClick={() => setMunicipalityDialog(false)}
-                            className="flex-1"
-                          >
-                            <X className="h-4 w-4 ml-1" />
-                            إلغاء
-                          </Button>
-                        </div>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {municipalities.length === 0 ? (
-                <div className="expenses-empty-state">
-                  <p>لا توجد بلديات مضافة. استخدم زر المزامنة لإضافة البلديات من اللوحات الموجودة.</p>
-                </div>
-              ) : (
-                <div className="expenses-table-container">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-center w-16">الترتيب</TableHead>
-                        <TableHead className="text-right">الشعار</TableHead>
-                        <TableHead className="text-right">اسم البلدية</TableHead>
-                        <TableHead className="text-right">الكود</TableHead>
-                        <TableHead className="text-right">تاريخ الإضافة</TableHead>
-                        <TableHead className="text-right">الإجراءات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {municipalities.map((municipality) => (
-                        <TableRow key={municipality.id}>
-                          <TableCell className="font-bold text-primary text-center">
-                            {municipality.sort_order}
-                          </TableCell>
-                          <TableCell>
-                            {municipality.logo_url ? (
-                              <div className="w-10 h-10 rounded-md border bg-background flex items-center justify-center overflow-hidden">
-                                <img
-                                  src={municipality.logo_url}
-                                  alt={`شعار ${municipality.name}`}
-                                  className="max-w-full max-h-full object-contain"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).style.display = 'none';
-                                    (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden');
-                                  }}
-                                />
-                                <Image className="h-5 w-5 text-muted-foreground hidden" />
-                              </div>
-                            ) : (
-                              <div className="w-10 h-10 rounded-md border bg-muted/50 flex items-center justify-center">
-                                <Image className="h-5 w-5 text-muted-foreground" />
-                              </div>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-medium">{municipality.name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{municipality.code}</Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {new Date(municipality.created_at).toLocaleDateString('ar-SA')}
-                          </TableCell>
-                          <TableCell>
-                            <div className="expenses-actions-cell">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleMunicipalityEdit(municipality)}
-                                className="card-hover"
-                              >
-                                <Edit className="h-4 w-4" />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>تأكيد الحذف</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      هل أنت متأكد من حذف البلدية "{municipality.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                                    <AlertDialogAction
-                                      onClick={() => handleMunicipalityDelete(municipality.id)}
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      حذف
-                                    </AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-         {/* Cities Tab */}
-        <TabsContent value="cities">
-          <Card className="expenses-preview-card">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="expenses-preview-title">
-                  <Building className="inline-block ml-2 h-5 w-5" />
-                  إدارة المدن ({cities.length} مدينة)
-                </CardTitle>
-                <Dialog open={cityDialog} onOpenChange={setCityDialog}>
-                  <DialogTrigger asChild>
-                    <Button 
-                      onClick={() => {
-                        setCityForm({ id: 0, name: '' });
-                        setEditMode(false);
-                      }}
-                      className="btn-primary"
-                    >
-                      <Plus className="h-4 w-4 ml-1" />
-                      إضافة مدينة جديدة
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="expenses-dialog-content">
-                    <DialogHeader>
-                      <DialogTitle className="text-right">
-                        {editMode ? 'تعديل المدينة' : 'إضافة مدينة جديدة'}
-                      </DialogTitle>
-                    </DialogHeader>
-                    <div className="expenses-dialog-form space-y-4 text-right" dir="rtl">
-                      <div>
-                        <Label className="expenses-form-label">اسم المدينة *</Label>
-                        <Input
-                          value={cityForm.name}
-                          onChange={(e) => setCityForm({ ...cityForm, name: e.target.value })}
-                          placeholder="مثال: طرابلس، بنغازي، مصراتة"
-                          className="text-right"
-                        />
-                      </div>
-                      <div className="flex gap-2 pt-4 justify-start flex-row-reverse">
-                        <Button onClick={handleCitySubmit} className="flex-1">
-                          <Save className="h-4 w-4 ml-1" />
-                          {editMode ? 'تحديث' : 'إضافة'}
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          onClick={() => setCityDialog(false)}
-                          className="flex-1"
-                        >
-                          <X className="h-4 w-4 ml-1" />
-                          إلغاء
-                        </Button>
-                      </div>
-                    </div>
+                    </DialogFooter>
                   </DialogContent>
                 </Dialog>
               </div>
             </CardHeader>
-            <CardContent>
-              {cities.length === 0 ? (
-                <div className="expenses-empty-state">
-                  <p>لا توجد مدن مضافة بعد</p>
-                </div>
-              ) : (
-                <div className="expenses-table-container">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="text-right w-16">الرقم</TableHead>
-                        <TableHead className="text-right">اسم المدينة</TableHead>
-                        <TableHead className="text-right">الإجراءات</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {cities.map((city, index) => (
-                        <TableRow key={city.id}>
-                          <TableCell className="font-bold text-muted-foreground w-16">
-                            {index + 1}
-                          </TableCell>
-                          <TableCell className="font-medium">{city.name}</TableCell>
-                          <TableCell>
-                            <div className="expenses-actions-cell">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleCityEdit(city)}
-                                className="card-hover"
-                              >
-                                <Edit className="h-4 w-4" />
+
+            <CardContent className="p-4 sm:p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {sizes.map((size) => {
+                  const area = (size.width * size.height).toFixed(1);
+                  const isUploadingThis = uploadingSizeId === size.id;
+
+                  return (
+                    <div
+                      key={size.id}
+                      className="group relative rounded-2xl border border-border/40 bg-card p-4 space-y-3 transition-all duration-300 hover:shadow-md hover:border-primary/50 flex flex-col justify-between"
+                    >
+                      {/* Top bar: Sort badge + Action buttons */}
+                      <div className="flex items-center justify-between">
+                        <Badge className="bg-primary/10 text-primary border border-primary/20 text-xs font-bold rounded-lg px-2.5 py-0.5">
+                          ترتيب #{size.sort_order}
+                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => handleSizeEdit(size)}
+                            className="h-7 w-7 rounded-lg hover:bg-muted text-muted-foreground hover:text-foreground"
+                            title="تعديل"
+                          >
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button size="icon" variant="ghost" className="h-7 w-7 rounded-lg text-destructive hover:bg-destructive/10" title="حذف">
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <Button size="sm" variant="destructive">
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle className="text-right">تأكيد الحذف</AlertDialogTitle>
-                                    <AlertDialogDescription className="text-right">
-                                      هل أنت متأكد من حذف المدينة "{city.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter className="justify-start flex-row-reverse gap-2">
-                                    <AlertDialogAction
-                                      onClick={() => handleCityDelete(city.id)}
-                                      className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                      حذف
-                                    </AlertDialogAction>
-                                    <AlertDialogCancel>إلغاء</AlertDialogCancel>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent className="rounded-3xl border-border">
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>تأكيد حذف المقاس</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  هل أنت متأكد من حذف المقاس "{size.name}"؟ لا يمكن التراجع عن هذا القرار.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel className="rounded-xl">إلغاء</AlertDialogCancel>
+                                <AlertDialogAction onClick={() => handleSizeDelete(size.id)} className="rounded-xl bg-destructive text-destructive-foreground">
+                                  حذف
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
+                      </div>
+
+                      {/* PNG Cutout Preview Box */}
+                      <div className="relative rounded-xl border border-dashed border-border/40 bg-muted/20 p-3 h-28 flex flex-col items-center justify-center overflow-hidden group-hover:border-primary/40 transition-colors">
+                        {size.image_url ? (
+                          <>
+                            <img
+                              src={size.image_url}
+                              alt={`مفرغة ${size.name}`}
+                              className="max-h-20 w-auto object-contain transition-transform duration-300 group-hover:scale-105"
+                            />
+                            <div className="absolute inset-0 bg-background/80 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <label className="cursor-pointer">
+                                <span className="p-1.5 rounded-lg bg-primary text-primary-foreground text-[10px] font-bold flex items-center gap-1 shadow">
+                                  <Upload className="h-3 w-3" /> تغيير
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/png,image/svg+xml,image/webp"
+                                  className="hidden"
+                                  onChange={e => { const f = e.target.files?.[0]; if (f) handleDirectSizeImageUpload(size.id, f); }}
+                                />
+                              </label>
                             </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
+                          </>
+                        ) : (
+                          <label className="cursor-pointer text-center space-y-1">
+                            {isUploadingThis ? (
+                              <Loader2 className="h-6 w-6 text-primary animate-spin mx-auto" />
+                            ) : (
+                              <>
+                                <ImageIcon className="h-7 w-7 text-muted-foreground/40 mx-auto group-hover:text-primary transition-colors" />
+                                <p className="text-[11px] text-muted-foreground font-medium">اضغط لرفع صورة PNG مفرغة</p>
+                              </>
+                            )}
+                            <input
+                              type="file"
+                              accept="image/png,image/svg+xml,image/webp"
+                              className="hidden"
+                              onChange={e => { const f = e.target.files?.[0]; if (f) handleDirectSizeImageUpload(size.id, f); }}
+                            />
+                          </label>
+                        )}
+                      </div>
+
+                      {/* Info Details */}
+                      <div className="space-y-1.5 pt-1">
+                        <div className="flex items-center justify-between">
+                          <span className="font-extrabold text-base text-foreground">{size.name}</span>
+                          <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20 text-xs font-mono">
+                            {area} م²
+                          </Badge>
+                        </div>
+                        <div className="flex items-center justify-between text-xs text-muted-foreground">
+                          <span>الأبعاد: {size.width} × {size.height} م</span>
+                          <span>التركيب: {size.installation_price ? `${size.installation_price} د.ل` : 'مجاني'}</span>
+                        </div>
+                        {size.description && (
+                          <p className="text-[11px] text-muted-foreground/70 truncate">{size.description}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB 2: FACES ─── */}
+        <TabsContent value="faces">
+          <Card className="border border-border/40 bg-card rounded-3xl">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Layers className="h-5 w-5 text-primary" />
+                <span>إدارة عدد الأوجه ({faces.length} نوع)</span>
+              </CardTitle>
+              <Button onClick={() => { setFaceForm({ id: 0, name: '', count: 1, description: '' }); setEditMode(false); setFaceDialog(true); }} className="rounded-xl bg-primary text-primary-foreground gap-2">
+                <Plus className="h-4 w-4" /> إضافة عدد أوجه
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {faces.map(f => (
+                  <div key={f.id} className="p-4 rounded-2xl border border-border/30 bg-muted/20 flex items-center justify-between">
+                    <div>
+                      <h4 className="font-bold text-sm">{f.name}</h4>
+                      <p className="text-xs text-muted-foreground">{f.count} وجه {f.description ? `• ${f.description}` : ''}</p>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => { setFaceForm(f); setEditMode(true); setFaceDialog(true); }}><Edit className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleFaceDelete(f.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB 3: TYPES ─── */}
+        <TabsContent value="types">
+          <Card className="border border-border/40 bg-card rounded-3xl">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Tag className="h-5 w-5 text-primary" />
+                <span>أنواع اللوحات الإعلانية ({types.length} نوع)</span>
+              </CardTitle>
+              <Button onClick={() => { setTypeForm({ id: 0, name: '', description: '', color: '#d6ac40' }); setEditMode(false); setTypeDialog(true); }} className="rounded-xl bg-primary text-primary-foreground gap-2">
+                <Plus className="h-4 w-4" /> إضافة نوع جديد
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {types.map(t => (
+                  <div key={t.id} className="p-4 rounded-2xl border border-border/30 bg-muted/20 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="w-4 h-4 rounded-full" style={{ backgroundColor: t.color || '#d6ac40' }} />
+                      <div>
+                        <h4 className="font-bold text-sm">{t.name}</h4>
+                        {t.description && <p className="text-xs text-muted-foreground">{t.description}</p>}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => { setTypeForm(t); setEditMode(true); setTypeDialog(true); }}><Edit className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleTypeDelete(t.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB 4: MUNICIPALITIES ─── */}
+        <TabsContent value="municipalities">
+          <Card className="border border-border/40 bg-card rounded-3xl">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <CardTitle className="text-base font-bold flex items-center gap-2">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <span>البلديات المسجلة ({municipalities.length} بلدية)</span>
+                </CardTitle>
+                <CardDescription className="text-xs mt-1">قائمة البلديات المتاحة مع الشعار والكود والترتيب</CardDescription>
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={syncMunicipalitiesFromBillboards} disabled={syncing} className="rounded-xl border-border text-xs gap-1.5">
+                  <RefreshCw className={`h-3.5 w-3.5 ${syncing ? 'animate-spin' : ''}`} />
+                  مزامنة من اللوحات
+                </Button>
+                <Button onClick={() => { setMunicipalityForm({ id: 0, name: '', code: '', logo_url: '', sort_order: municipalities.length + 1 }); setEditMode(false); setMunicipalityDialog(true); }} className="rounded-xl bg-primary text-primary-foreground text-xs gap-1.5 h-9">
+                  <Plus className="h-4 w-4" /> إضافة بلدية
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                {municipalities.map(m => (
+                  <div key={m.id} className="p-4 rounded-2xl border border-border/30 bg-muted/20 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      {m.logo_url ? (
+                        <img src={m.logo_url} alt={m.name} className="w-10 h-10 object-contain rounded-lg border border-border" />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                          {m.name.slice(0, 2)}
+                        </div>
+                      )}
+                      <div>
+                        <h4 className="font-bold text-sm">{m.name}</h4>
+                        <span className="text-[10px] text-muted-foreground font-mono">{m.code}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" onClick={() => { setMunicipalityForm(m); setEditMode(true); setMunicipalityDialog(true); }}><Edit className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => handleMunicipalityDelete(m.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ─── TAB 5: CITIES ─── */}
+        <TabsContent value="cities">
+          <Card className="border border-border/40 bg-card rounded-3xl">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <CardTitle className="text-base font-bold flex items-center gap-2">
+                <Building className="h-5 w-5 text-primary" />
+                <span>المدن والدوائر ({cities.length} مدينة)</span>
+              </CardTitle>
+              <Button onClick={() => { setCityForm({ id: 0, name: '' }); setEditMode(false); setCityDialog(true); }} className="rounded-xl bg-primary text-primary-foreground gap-2">
+                <Plus className="h-4 w-4" /> إضافة مدينة
+              </Button>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                {cities.map(c => (
+                  <div key={c.id} className="p-3 rounded-xl border border-border/30 bg-muted/20 flex items-center justify-between text-xs">
+                    <span className="font-bold">{c.name}</span>
+                    <div className="flex items-center gap-1">
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setCityForm(c); setEditMode(true); setCityDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleCityDelete(c.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* ─── DIALOGS FOR FACES, TYPES, MUNICIPALITIES, CITIES ─── */}
+      <Dialog open={faceDialog} onOpenChange={setFaceDialog}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>{editMode ? 'تعديل عدد الأوجه' : 'إضافة عدد أوجه جديد'}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div><Label className="text-xs font-bold">اسم النوع *</Label><Input value={faceForm.name} onChange={e => setFaceForm(p => ({ ...p, name: e.target.value }))} placeholder="وجهين / وجه واحد" className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">العدد *</Label><Input type="number" value={faceForm.count} onChange={e => setFaceForm(p => ({ ...p, count: parseInt(e.target.value) || 1 }))} className="rounded-xl h-10" /></div>
+          </div>
+          <DialogFooter><Button onClick={handleFaceSubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={typeDialog} onOpenChange={setTypeDialog}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>{editMode ? 'تعديل نوع اللوحة' : 'إضافة نوع جديد'}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div><Label className="text-xs font-bold">اسم النوع *</Label><Input value={typeForm.name} onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))} placeholder="ميجالاين / يوني بول" className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">اللون المميز</Label><Input type="color" value={typeForm.color} onChange={e => setTypeForm(p => ({ ...p, color: e.target.value }))} className="rounded-xl h-10 p-1 cursor-pointer" /></div>
+          </div>
+          <DialogFooter><Button onClick={handleTypeSubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={municipalityDialog} onOpenChange={setMunicipalityDialog}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>{editMode ? 'تعديل البلدية' : 'إضافة بلدية جديدة'}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div><Label className="text-xs font-bold">اسم البلدية *</Label><Input value={municipalityForm.name} onChange={e => setMunicipalityForm(p => ({ ...p, name: e.target.value }))} className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">الكود *</Label><Input value={municipalityForm.code} onChange={e => setMunicipalityForm(p => ({ ...p, code: e.target.value }))} className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">رابط الشعار</Label><Input value={municipalityForm.logo_url} onChange={e => setMunicipalityForm(p => ({ ...p, logo_url: e.target.value }))} className="rounded-xl h-10" /></div>
+          </div>
+          <DialogFooter><Button onClick={handleMunicipalitySubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={cityDialog} onOpenChange={setCityDialog}>
+        <DialogContent className="max-w-md rounded-3xl">
+          <DialogHeader><DialogTitle>{editMode ? 'تعديل المدينة' : 'إضافة مدينة جديدة'}</DialogTitle></DialogHeader>
+          <div className="space-y-3 py-2">
+            <div><Label className="text-xs font-bold">اسم المدينة *</Label><Input value={cityForm.name} onChange={e => setCityForm(p => ({ ...p, name: e.target.value }))} className="rounded-xl h-10" /></div>
+          </div>
+          <DialogFooter><Button onClick={handleCitySubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

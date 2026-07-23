@@ -2744,7 +2744,7 @@ export default function BillboardPrintSettings() {
                       <Printer className="h-5 w-5 text-primary" />
                     </div>
                     <span className="text-base">
-                      {modeFromUrl === 'removal' ? 'إزالة' : 'تركيب'} - عقد #{taskDetails?.contract?.Contract_Number || '---'} - {selectedTask?.customer_name || ''} - {selectedTask?.ad_type || ''} - {selectedBillboardsForPrint.length}/{taskDetails?.billboards?.length || 0} لوحة{bulkPrintMode === 'team' ? ` [${selectedTeamForPrint === 'all' ? 'جميع الفرق' : (taskDetails?.teamsWithTasks?.find((t: any) => t.id === selectedTeamForPrint)?.team_name || selectedTask?.team_name || '')}]` : ''}
+                      {modeFromUrl === 'removal' ? 'إزالة' : 'تركيب'} - عقد #{taskDetails?.contract?.Contract_Number || '---'} - {selectedTask?.customer_name || ''} - {selectedTask?.ad_type || ''} - {selectedBillboardsForPrint.length}/{taskDetails?.billboards?.length || 0} لوحة
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 text-sm font-normal text-muted-foreground mr-9">

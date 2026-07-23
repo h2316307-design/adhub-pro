@@ -89,7 +89,7 @@ export default function Billboards() {
 
   // Collapsible states
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [mapOpen, setMapOpen] = useState(false); // ✅ مطوية افتراضياً لتحسين الأداء
+  const [mapOpen, setMapOpen] = useState(true); // ✅ مفتوحة افتراضياً لعرض الخريطة الجديدة فوراً
 
   // Print filters
   const [printFiltersOpen, setPrintFiltersOpen] = useState(false);
@@ -1465,8 +1465,8 @@ export default function Billboards() {
                       Faces_Count: (b as any).Faces_Count || '1',
                       Municipality: (b as any).Municipality || '',
                       Rent_End_Date: (b as any).Rent_End_Date || null,
-                      Customer_Name: (b as any).Customer_Name || (b as any).clientName || (b as any).customer_name || ((b as any).contracts && (b as any).contracts[0]?.['Customer Name']) || '',
-                      Ad_Type: (b as any).Ad_Type || (b as any).adType || (b as any).ad_type || (b as any).AdType || ((b as any).contracts && (b as any).contracts[0]?.['Ad Type']) || '',
+                      Customer_Name: (b as any).Customer_Name || (b as any).clientName || (b as any).customer_name || (b as any).contract?.customer_name || (b as any).contract?.['Customer Name'] || ((b as any).contracts && ((b as any).contracts[0]?.customer_name || (b as any).contracts[0]?.['Customer Name'])) || '',
+                      Ad_Type: (b as any).Ad_Type || (b as any).adType || (b as any).ad_type || (b as any).AdType || (b as any).contract?.ad_type || (b as any).contract?.['Ad Type'] || ((b as any).contracts && ((b as any).contracts[0]?.ad_type || (b as any).contracts[0]?.['Ad Type'])) || '',
                       Contract_Number: (b as any).Contract_Number || (b as any).contract_number || (b as any).contractNumber || ((b as any).contracts && ((b as any).contracts[0]?.Contract_Number || (b as any).contracts[0]?.contract_number || (b as any).contracts[0]?.['Contract Number'] || (b as any).contracts[0]?.id)) || null,
                       is_visible_in_available: (b as any).is_visible_in_available,
                       design_face_a: (b as any).design_face_a || '',
@@ -1490,6 +1490,14 @@ export default function Billboards() {
                 onShowSocietChange={setShowSociet}
                 enableQuickAdd={true}
                 onMapRightClick={handleMapRightClick}
+                onLocationChange={(bId, lat, lng) => {
+                  const coordsStr = `${lat}, ${lng}`;
+                  updateBillboardLocal(bId, {
+                    GPS_Coordinates: coordsStr,
+                    coordinates: coordsStr,
+                    GPS_Link: `https://www.google.com/maps?q=${coordsStr}`
+                  });
+                }}
               />
             </Suspense>
           </CollapsibleContent>

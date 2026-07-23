@@ -178,6 +178,7 @@ export default function RemovalTasks() {
     items: BillboardPrintItem[];
     billboards: Record<number, any>;
     teams: Record<string, any>;
+    customerPhone?: string;
   } | null>(null);
   
   // Legacy print all options
@@ -2483,6 +2484,7 @@ export default function RemovalTasks() {
           billboards={unifiedPrintData.billboards}
           teams={unifiedPrintData.teams}
           showTeamFilter={true}
+          customerPhone={unifiedPrintData.customerPhone}
           title={`طباعة لوحات الإزالة - ${unifiedPrintData.teamName}`}
         />
       )}

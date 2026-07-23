@@ -456,8 +456,8 @@ export default function Customers() {
         fcRes,
         cutRes
       ] = await Promise.all([
-        supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes, method, reference').order('paid_at', { ascending: false }).range(0, 9999),
-        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, installments_data, billboards_count, billboard_ids, print_cost, installation_cost').range(0, 9999),
+        supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes').order('paid_at', { ascending: false }).range(0, 9999),
+        supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, billboard_ids, print_cost, installation_cost').range(0, 9999),
         supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id, pricing_category').order('name', { ascending: true }).range(0, 9999),
         supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 9999),
         supabase.from('printed_invoices').select('id, customer_id, total_amount, invoice_type, included_in_contract').range(0, 9999),

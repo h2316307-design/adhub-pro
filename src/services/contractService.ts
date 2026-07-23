@@ -523,40 +523,19 @@ export async function getContracts(linkedCustomerId?: string | null) {
 // جلب عقد مع اللوحات المرتبطة به
 export async function getContractWithBillboards(contractId: string): Promise<any> {
   try {
-    let contractResult: any = null;
-    let contractError: any = null;
+    const numId = Number(contractId);
+    const [contractResult, billboardResult, contractTasksResult] = await Promise.all([
+      supabase.from('Contract').select('*').eq('Contract_Number', numId).maybeSingle(),
+      supabase.from('billboards').select('*').eq('Contract_Number', numId),
+      supabase.from('installation_tasks').select('id').eq('contract_id', numId)
+    ]);
 
-    // محاولة جلب من جدول Contract
-    try {
-      const result = await supabase
-        .from('Contract')
-        .select('*')
-        .eq('Contract_Number', Number(contractId))
-        .single();
-
-      contractResult = result;
-      contractError = result.error;
-    } catch (e) {
-      contractError = e;
+    if (contractResult.error || !contractResult.data) {
+      throw contractResult.error || new Error('Contract not found');
     }
-
-    if (contractError || !contractResult?.data) {
-      throw contractError || new Error('Contract not found');
-    }
-
-    // جلب اللوحات المرتبطة حالياً من جدول billboards
-    const billboardResult = await supabase
-      .from('billboards')
-      .select('*')
-      .eq('Contract_Number', Number(contractId));
 
     const c = contractResult.data || {};
-
-    // ✅ جلب مهام التركيب للعقد
-    const { data: contractTasks } = await supabase
-      .from('installation_tasks')
-      .select('id')
-      .eq('contract_id', Number(contractId));
+    const contractTasks = contractTasksResult.data || [];
 
     // ✅ جلب عناصر مهام التركيب (صور التركيب والتصاميم)
     let installationItemsMap = new Map<number, any>();

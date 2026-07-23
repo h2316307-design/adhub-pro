@@ -425,7 +425,7 @@ export default function BillboardPrintSettingsDialog({
     }
 
     // Build print window title
-    const printWindowTitle = `${mode === 'removal' ? 'إزالة' : 'تركيب'} - عقد #${taskDetails?.contract?.Contract_Number || '---'} - ${selectedTask?.customer_name || ''} - ${selectedTask?.ad_type || ''} - ${selectedBillboardsForPrint.length} لوحة${bulkPrintMode === 'team' && selectedTask?.team_name ? ` [${selectedTask.team_name}]` : bulkPrintMode === 'customer' ? ' - نسخة العميل' : ''}`;
+    const printWindowTitle = `${mode === 'removal' ? 'إزالة' : 'تركيب'} - عقد #${taskDetails?.contract?.Contract_Number || '---'} - ${selectedTask?.customer_name || ''} - ${selectedTask?.ad_type || ''} - ${selectedBillboardsForPrint.length} لوحة${bulkPrintMode === 'customer' ? ' - نسخة العميل' : ''}`;
 
     const content = `
       <!DOCTYPE html>
@@ -496,11 +496,6 @@ export default function BillboardPrintSettingsDialog({
     // عدد اللوحات
     if (taskDetails?.billboards?.length) {
       parts.push(`${selectedBillboardsForPrint.length}/${taskDetails.billboards.length} لوحة`);
-    }
-    
-    // اسم الفرقة للنسخة الخاصة بالفرقة
-    if (bulkPrintMode === 'team' && selectedTask?.team_name) {
-      parts.push(`[${selectedTask.team_name}]`);
     }
     
     return parts.join(' - ');
