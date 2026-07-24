@@ -7,7 +7,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Edit, Link, Unlink, Trash2, ExternalLink, Camera, Wrench, Settings, AlertTriangle } from 'lucide-react';
+import { MoreVertical, Edit, Link, Unlink, Trash2, ExternalLink, Camera, Wrench, Settings, AlertTriangle, Sparkles } from 'lucide-react';
 import { Billboard } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -23,6 +23,7 @@ interface BillboardCardActionsProps {
   onMaintenance: (billboard: Billboard) => void;
   onUpdate: () => void;
   onLocalUpdate?: (id: number | string, updates: Record<string, any>) => void;
+  onOpenOverlayEditor?: (billboard: Billboard) => void;
 }
 
 export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
@@ -35,6 +36,7 @@ export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
   onMaintenance,
   onUpdate,
   onLocalUpdate,
+  onOpenOverlayEditor,
 }) => {
   const billboardId = (billboard as any).ID || (billboard as any).id;
 
@@ -90,9 +92,15 @@ export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
           <Settings className="h-4 w-4 transition-transform duration-500 hover:rotate-90" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-56">
         {canEdit && (
           <>
+            {onOpenOverlayEditor && (
+              <DropdownMenuItem onClick={() => onOpenOverlayEditor(billboard)} className="cursor-pointer gap-2 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 focus:bg-amber-500/20">
+                <Sparkles className="h-4 w-4 text-amber-500" />
+                محرر التراكب والواقعية
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => onEdit(billboard)} className="cursor-pointer gap-2">
               <Edit className="h-4 w-4 text-blue-500" />
               تعديل

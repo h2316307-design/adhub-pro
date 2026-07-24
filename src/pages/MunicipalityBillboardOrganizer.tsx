@@ -2569,6 +2569,7 @@ export default function MunicipalityBillboardOrganizer() {
                   const y = ov?.y_pct ?? 50;
                   const scale = (ov?.scale_pct ?? 100) / 100;
                   const rot = ov?.rotation_deg ?? 0;
+                  const cropBottom = ov?.crop_bottom_pct || 0;
                   const dims = parseSizeDimensions(item.size);
                   const isV2 = ov?.anchor_version === 'v2';
                   const translateY = isV2 ? '-100%' : '-50%';
@@ -2588,10 +2589,12 @@ export default function MunicipalityBillboardOrganizer() {
                           display: block;
                           transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg);
                           transform-origin: ${transformOrigin};
+                          clip-path: inset(0 0 ${cropBottom}% 0);
+                          -webkit-clip-path: inset(0 0 ${cropBottom}% 0);
                           z-index: 10;
                         " />
                       ` : `
-                        <div class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg); transform-origin: ${transformOrigin}; z-index: 10; display: flex; flex-direction: column; align-items: center;">
+                        <div class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg); transform-origin: ${transformOrigin}; clip-path: inset(0 0 ${cropBottom}% 0); -webkit-clip-path: inset(0 0 ${cropBottom}% 0); z-index: 10; display: flex; flex-direction: column; align-items: center;">
                           <div style="background: linear-gradient(135deg, #b45309, #1e293b); border: 2.5px solid #f59e0b; color: #fff; padding: 5px 10px; border-radius: 10px; font-weight: bold; font-size: 10px; text-align: center; box-shadow: 0 8px 20px rgba(0,0,0,0.8); width: ${Math.max(110, 80 * dims.ratio)}px; height: 70px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-family: Tajawal, sans-serif;">
                             <span style="font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${item.billboard_name || `لوحة #${item.sequence_number}`}</span>
                             <span style="font-size: 8px; color: #f59e0b; margin-top: 2px;">${item.size}</span>

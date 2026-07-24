@@ -485,6 +485,7 @@ export function UnifiedPrintAllDialog({
         const y = ov?.y_pct ?? 50;
         const scale = (ov?.scale_pct ?? 100) / 100;
         const rot = ov?.rotation_deg ?? 0;
+        const cropBottom = ov?.crop_bottom_pct || 0;
         const isV2 = ov?.anchor_version === 'v2';
         const translateY = isV2 ? '-100%' : '-50%';
         const transformOrigin = isV2 ? 'bottom center' : 'center center';
@@ -502,6 +503,8 @@ export function UnifiedPrintAllDialog({
                 display: block;
                 transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg);
                 transform-origin: ${transformOrigin};
+                clip-path: inset(0 0 ${cropBottom}% 0);
+                -webkit-clip-path: inset(0 0 ${cropBottom}% 0);
                 z-index: 10;
               " />
             ` : ''}

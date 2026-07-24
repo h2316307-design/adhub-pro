@@ -752,8 +752,8 @@ export const useBillboardExport = () => {
           const contractDates = await getContractDates(billboard);
           const billboardName = billboard.Billboard_Name || billboard.name || '';
           const imageFileName = billboardName ? `${billboardName}.jpg` : (billboard.image_name || '');
-          const isForcedVisible = billboard.is_visible_in_available === true;
           const hasActive = hasActiveContractForExport(billboard, isContractExpired);
+          const isForcedVisible = (billboard.is_visible_in_available === true) && !hasActive;
           const endDateDisplay = isForcedVisible ? '' : (hasActive ? (contractDates.endDate || '') : '');
           
           return {
@@ -911,7 +911,7 @@ export const useBillboardExport = () => {
         const billboardId = String(billboard.ID || billboard.id);
         const isFromContract = contractBillboardIds.includes(billboardId);
         const isAvailableNow = isAvailableForAvailableExports(billboard);
-        const isForcedVisible = billboard.is_visible_in_available === true;
+        const isForcedVisible = (billboard.is_visible_in_available === true) && isAvailableNow;
         
         // Get end date for this billboard's contract
         let endDateDisplay = '';
@@ -1065,7 +1065,7 @@ export const useBillboardExport = () => {
           const billboardId = String(billboard.ID || billboard.id);
           const isFromContract = contractBillboardIds.includes(billboardId);
           const isAvailableNow = isAvailableForAvailableExports(billboard);
-          const isForcedVisible = billboard.is_visible_in_available === true;
+          const isForcedVisible = (billboard.is_visible_in_available === true) && isAvailableNow;
           
           // Get contract dates
           let endDateDisplay = '';
@@ -1199,8 +1199,6 @@ export const useBillboardExport = () => {
   ): boolean {
     if (isExcludedBillboard(billboard)) return false;
     if (billboard.is_visible_in_available === false) return false;
-    // override يدوي: المستخدم فعّل الظهور صراحة لهذه اللوحة
-    if (billboard.is_visible_in_available === true) return true;
 
     const activeInfo = getActiveContractForBillboard(billboard);
     const effectiveEndDate = activeInfo?.endDate
@@ -1489,8 +1487,8 @@ export const useBillboardExport = () => {
           const contractDates = await getContractDates(billboard);
           const billboardName = billboard.Billboard_Name || billboard.name || '';
           const imageFileName = billboardName ? `${billboardName}.jpg` : (billboard.image_name || '');
-          const isForcedVisible = billboard.is_visible_in_available === true;
           const hasActive = hasActiveContractForExport(billboard, isContractExpired);
+          const isForcedVisible = (billboard.is_visible_in_available === true) && !hasActive;
           const endDateDisplay = isForcedVisible ? '' : (hasActive ? (contractDates.endDate || '') : '');
           
           return {

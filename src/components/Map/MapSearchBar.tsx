@@ -102,12 +102,15 @@ function levenshteinDistance(a: string, b: string): number {
 }
 
 const GOOGLE_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || 'AIzaSyC7PTwYyPrIHL9njC3l-2PfpoTuN0-NTu4';
+let searchGoogleCooldownUntil = 0;
 
 /**
  * Search Google Places API (New: v1/places:searchText) for live verified Google Maps landmarks & places in Libya
  */
 const searchGooglePlaces = async (query: string): Promise<SearchSuggestion[]> => {
   if (!query || query.trim().length < 2 || !GOOGLE_API_KEY) return [];
+  if (Date.now() < searchGoogleCooldownUntil) return [];
+
   const cleanQ = query.trim();
   const searchQ = cleanQ.includes('ليبيا') ? cleanQ : `${cleanQ} ليبيا`;
 
@@ -125,8 +128,13 @@ const searchGooglePlaces = async (query: string): Promise<SearchSuggestion[]> =>
         languageCode: 'ar',
         regionCode: 'ly'
       })
-    });
+    }).catch(() => null);
 
+    if (!res) return [];
+    if (res.status === 429) {
+      searchGoogleCooldownUntil = Date.now() + 5 * 60 * 1000;
+      return [];
+    }
     if (!res.ok) return [];
 
     const data = await res.json();
@@ -138,38 +146,18 @@ const searchGooglePlaces = async (query: string): Promise<SearchSuggestion[]> =>
     for (const place of data.places) {
       const title = place.displayName?.text || cleanQ;
       const addr = place.formattedAddress || 'معلم تجاري مسجل بـ Google Maps';
-      const lat = place.location?.latitude;
-      const lng = place.location?.longitude;
 
-      if (typeof lat !== 'number' || typeof lng !== 'number') continue;
-
-      // Extract street/road matching from address (e.g. "شارع الشايب، زليتن")
-      if (addr.includes('شارع') || addr.includes('طريق')) {
-        const addrParts = addr.split('،').map((p: string) => p.trim());
-        const streetPart = addrParts.find((p: string) => p.includes('شارع') || p.includes('طريق')) || addrParts[0];
-        const cityPart = addrParts.find((p: string) => p !== streetPart) || '';
-
-        const streetLabel = cityPart ? `${streetPart} - ${cityPart}` : streetPart;
-        if (!addedLabels.has(streetLabel.toLowerCase())) {
-          addedLabels.add(streetLabel.toLowerCase());
-          results.push({
-            type: 'place',
-            label: streetLabel,
-            sublabel: `Google Maps 🗺️ • ${addr}`,
-            coords: { lat, lng },
-            score: 110,
-          });
-        }
-      }
-
-      if (!addedLabels.has(title.toLowerCase())) {
-        addedLabels.add(title.toLowerCase());
+      if (!addedLabels.has(title)) {
+        addedLabels.add(title);
         results.push({
           type: 'place',
           label: title,
-          sublabel: `Google Maps 🗺️ • ${addr}`,
-          coords: { lat, lng },
-          score: 100,
+          sublabel: addr,
+          coords: {
+            lat: place.location?.latitude || 32.8872,
+            lng: place.location?.longitude || 13.1913
+          },
+          score: 98
         });
       }
     }
@@ -188,15 +176,15 @@ const searchNominatim = async (query: string): Promise<SearchSuggestion[]> => {
   try {
     // المحاولة الأولى: بحث مباشر مع تحديد ليبيا والدول العربية
     let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQ)}&format=json&limit=6&accept-language=ar&countrycodes=ly,sa,eg,ae,tn,dz,ma&addressdetails=1`;
-    let res = await fetch(url, { headers: { 'User-Agent': 'GoldenKnightBillboardsApp/2.0' } });
-    let data = res.ok ? await res.json() : [];
+    let res = await fetch(url, { signal: AbortSignal.timeout(3500) }).catch(() => null);
+    let data = (res && res.ok) ? await res.json().catch(() => []) : [];
 
     // إذا لم يجد أي نتائج وكانت كلمة البحث قصيرة أو بدون تحديد دولة، نجرب إضافة "ليبيا" تلقائياً
     if ((!data || data.length === 0) && !cleanQ.includes('ليبيا')) {
       const lyUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(cleanQ + ' ليبيا')}&format=json&limit=5&accept-language=ar`;
-      const lyRes = await fetch(lyUrl, { headers: { 'User-Agent': 'GoldenKnightBillboardsApp/2.0' } });
-      if (lyRes.ok) {
-        data = await lyRes.json();
+      const lyRes = await fetch(lyUrl, { signal: AbortSignal.timeout(3500) }).catch(() => null);
+      if (lyRes && lyRes.ok) {
+        data = await lyRes.json().catch(() => []);
       }
     }
 

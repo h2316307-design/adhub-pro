@@ -270,12 +270,22 @@ export function getLandmarksFromMemory(lat: number, lng: number): string[] {
   }
 }
 
+// Circuit breaker & cool-down trackers to prevent repeated 429 rate limit errors & CORS noise
+let googlePlacesCooldownUntil = 0;
+let nominatimCooldownUntil = 0;
+const INFLIGHT_REQUESTS = new Map<string, Promise<GeocodingResult | null>>();
+
 /**
  * Helper to query Official Google Maps Places API (New: searchNearby + Focused Multi-Category searchText) using VITE_GOOGLE_MAPS_API_KEY.
- * Highly optimized with quota protection & graceful error handling.
+ * Highly optimized with quota protection & graceful 429 cool-down backoff.
  */
 async function fetchGoogleOfficialGeocode(lat: number, lng: number): Promise<{ location_text?: string; landmarks: string[] }> {
   if (!GOOGLE_API_KEY) return { landmarks: [] };
+
+  // If Google Places is currently in 429 cool-down backoff, skip to prevent repetitive 429 console errors
+  if (Date.now() < googlePlacesCooldownUntil) {
+    return { landmarks: [] };
+  }
 
   try {
     const landmarks: string[] = [];
@@ -303,55 +313,68 @@ async function fetchGoogleOfficialGeocode(lat: number, lng: number): Promise<{ l
       signal: AbortSignal.timeout(3500)
     }).catch(() => null);
 
-    if (placesRes && placesRes.ok) {
-      const placesData = await placesRes.json();
-      if (placesData.places && Array.isArray(placesData.places)) {
-        for (const place of placesData.places) {
-          const name = place.displayName?.text?.trim();
-          if (name && name.length >= 2 && !isGenericLocationName(name) && !landmarks.includes(name)) {
-            landmarks.push(name);
+    if (placesRes) {
+      if (placesRes.status === 429) {
+        // Activate 5-minute cool-down for Google Places API to avoid repeated 429 errors
+        googlePlacesCooldownUntil = Date.now() + 5 * 60 * 1000;
+      } else if (placesRes.ok) {
+        try {
+          const placesData = await placesRes.json();
+          if (placesData.places && Array.isArray(placesData.places)) {
+            for (const place of placesData.places) {
+              const name = place.displayName?.text?.trim();
+              if (name && name.length >= 2 && !isGenericLocationName(name) && !landmarks.includes(name)) {
+                landmarks.push(name);
+              }
+            }
           }
-        }
+        } catch {}
       }
     }
 
     // 2. Official Google Geocoding API for address components (road / suburb)
     const geocodeUrl = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&language=ar&key=${GOOGLE_API_KEY}`;
     const geoRes = await fetch(geocodeUrl, { signal: AbortSignal.timeout(3000) }).catch(() => null);
-    if (geoRes && geoRes.ok) {
-      const data = await geoRes.json();
-      if (data.results && data.results.length > 0) {
-        for (const resItem of data.results) {
-          if (!location_text && resItem.address_components) {
-            let road = '';
-            let suburb = '';
-            for (const comp of resItem.address_components) {
-              if (comp.types.includes('route')) road = comp.long_name;
-              if (comp.types.includes('sublocality') || comp.types.includes('neighborhood')) suburb = comp.long_name;
-            }
-            if (road || suburb) {
-              location_text = cleanLocationText(road, suburb, '', '');
+    if (geoRes) {
+      if (geoRes.status === 429) {
+        googlePlacesCooldownUntil = Date.now() + 5 * 60 * 1000;
+      } else if (geoRes.ok) {
+        try {
+          const data = await geoRes.json();
+          if (data.results && data.results.length > 0) {
+            for (const resItem of data.results) {
+              if (!location_text && resItem.address_components) {
+                let road = '';
+                let suburb = '';
+                for (const comp of resItem.address_components) {
+                  if (comp.types.includes('route')) road = comp.long_name;
+                  if (comp.types.includes('sublocality') || comp.types.includes('neighborhood')) suburb = comp.long_name;
+                }
+                if (road || suburb) {
+                  location_text = cleanLocationText(road, suburb, '', '');
+                }
+              }
             }
           }
-        }
+        } catch {}
       }
     }
 
     return { location_text, landmarks };
-  } catch (e) {
-    console.warn('[google-geocode] Google Places API fetch failed:', e);
+  } catch {
     return { landmarks: [] };
   }
 }
 
 /**
  * Helper to fetch reverse geocoded POIs and place names directly from Esri World Geocoding API.
+ * High-Reliability Native CORS support.
  */
 async function fetchEsriReverseGeocode(lat: number, lng: number): Promise<{ location_text?: string; landmarks: string[] }> {
   try {
     const esriUrl = `https://geocode.arcgis.com/arcgis/rest/services/World/GeocodeServer/reverseGeocode?location=${lng},${lat}&langCode=ar&f=json`;
-    const res = await fetch(esriUrl, { signal: AbortSignal.timeout(3000) });
-    if (!res.ok) return { landmarks: [] };
+    const res = await fetch(esriUrl, { signal: AbortSignal.timeout(3000) }).catch(() => null);
+    if (!res || !res.ok) return { landmarks: [] };
 
     const data = await res.json();
     const addr = data.address || {};
@@ -376,16 +399,25 @@ async function fetchEsriReverseGeocode(lat: number, lng: number): Promise<{ loca
 }
 
 /**
- * Helper to fetch nearby POIs using Nominatim OSM API with 1000m radius
+ * Helper to fetch nearby POIs using Nominatim OSM API
  */
 async function fetchNominatimReverseGeocode(lat: number, lng: number): Promise<{ location_text?: string; landmarks: string[] }> {
+  if (Date.now() < nominatimCooldownUntil) {
+    return { landmarks: [] };
+  }
+
   try {
     const nominatimUrl = `${NOMINATIM_BASE}/reverse?lat=${lat}&lon=${lng}&format=json&accept-language=ar&zoom=18&addressdetails=1&extratags=1&namedetails=1`;
+    // Do NOT pass forbidden browser 'User-Agent' header to prevent CORS preflight blocks
     const res = await fetch(nominatimUrl, {
-      headers: { 'User-Agent': 'AlFaresAdHub/1.0' },
       signal: AbortSignal.timeout(3500),
-    });
-    if (!res.ok) return { landmarks: [] };
+    }).catch(() => null);
+
+    if (!res || !res.ok) {
+      // Cool down Nominatim on CORS or failure
+      nominatimCooldownUntil = Date.now() + 10 * 60 * 1000;
+      return { landmarks: [] };
+    }
 
     const data = await res.json();
     const addr = data.address || {};
@@ -421,6 +453,7 @@ async function fetchNominatimReverseGeocode(lat: number, lng: number): Promise<{
 
     return { location_text, landmarks };
   } catch {
+    nominatimCooldownUntil = Date.now() + 10 * 60 * 1000;
     return { landmarks: [] };
   }
 }
@@ -441,61 +474,74 @@ export async function reverseGeocode(lat: number, lng: number): Promise<Geocodin
     return cached.result;
   }
 
-  try {
-    // 1. Fetch Libyan Coordinate Registry & Local Saved Memory (Always 100% Available)
-    const memoryLandmarks = getLandmarksFromMemory(lat, lng);
-
-    // 2. Execute parallel multi-engine fetch with failover protection
-    const [googleData, esriData, nominatimData] = await Promise.all([
-      fetchGoogleOfficialGeocode(lat, lng),
-      fetchEsriReverseGeocode(lat, lng),
-      fetchNominatimReverseGeocode(lat, lng)
-    ]);
-
-    const road = googleData.location_text || esriData.location_text || nominatimData.location_text || '';
-    const location_text = cleanLocationText(road, '', '', '');
-
-    // Combine: Memory Landmarks FIRST -> Google Places API POIs -> Esri POIs -> Nominatim POIs
-    const rawCombinedLandmarks = Array.from(
-      new Set([
-        ...memoryLandmarks,
-        ...googleData.landmarks,
-        ...esriData.landmarks,
-        ...nominatimData.landmarks
-      ])
-    ).filter(item => Boolean(item) && !isGenericLocationName(item) && !isStreetOrAddressName(item, road, '', location_text));
-
-    // Smart Priority Ranking & Filtering: Security Centers, Companies, Mosques, Nurseries, Factories, Gas Stations & Workshops first!
-    const combinedLandmarks = rankAndFilterLandmarks(rawCombinedLandmarks);
-
-    let nearest_landmark = '';
-    if (combinedLandmarks.length > 0) {
-      const topName = combinedLandmarks[0];
-      nearest_landmark = (topName.startsWith('بجوار') || topName.startsWith('بالقرب') || topName.startsWith('مقابل'))
-        ? topName
-        : `بالقرب من ${topName}`;
-    } else {
-      nearest_landmark = location_text ? `بالقرب من ${location_text}` : 'بالقرب من الموقع';
-    }
-
-    const result: GeocodingResult = {
-      road,
-      suburb: '',
-      city: 'طرابلس',
-      display_name: location_text || nearest_landmark,
-      location_text,
-      nearest_landmark,
-      nearby_landmarks: combinedLandmarks,
-    };
-
-    GEOCODE_CACHE.set(cacheKey, { result, timestamp: now });
-    if (GEOCODE_CACHE.size > 150) {
-      const firstKey = GEOCODE_CACHE.keys().next().value;
-      if (firstKey) GEOCODE_CACHE.delete(firstKey);
-    }
-
-    return result;
-  } catch {
-    return null;
+  // Deduplicate in-flight concurrent requests for identical coordinates
+  if (INFLIGHT_REQUESTS.has(cacheKey)) {
+    return INFLIGHT_REQUESTS.get(cacheKey)!;
   }
+
+  const executionPromise = (async (): Promise<GeocodingResult | null> => {
+    try {
+      // 1. Fetch Libyan Coordinate Registry & Local Saved Memory (Always 100% Available)
+      const memoryLandmarks = getLandmarksFromMemory(lat, lng);
+
+      // 2. Execute failover multi-engine fetch with safety protection
+      const [googleData, esriData, nominatimData] = await Promise.all([
+        fetchGoogleOfficialGeocode(lat, lng),
+        fetchEsriReverseGeocode(lat, lng),
+        fetchNominatimReverseGeocode(lat, lng)
+      ]);
+
+      const road = googleData.location_text || esriData.location_text || nominatimData.location_text || '';
+      const location_text = cleanLocationText(road, '', '', '');
+
+      // Combine: Memory Landmarks FIRST -> Google Places API POIs -> Esri POIs -> Nominatim POIs
+      const rawCombinedLandmarks = Array.from(
+        new Set([
+          ...memoryLandmarks,
+          ...googleData.landmarks,
+          ...esriData.landmarks,
+          ...nominatimData.landmarks
+        ])
+      ).filter(item => Boolean(item) && !isGenericLocationName(item) && !isStreetOrAddressName(item, road, '', location_text));
+
+      // Smart Priority Ranking & Filtering: Security Centers, Companies, Mosques, Nurseries, Factories, Gas Stations & Workshops first!
+      const combinedLandmarks = rankAndFilterLandmarks(rawCombinedLandmarks);
+
+      let nearest_landmark = '';
+      if (combinedLandmarks.length > 0) {
+        const topName = combinedLandmarks[0];
+        nearest_landmark = (topName.startsWith('بجوار') || topName.startsWith('بالقرب') || topName.startsWith('مقابل'))
+          ? topName
+          : `بالقرب من ${topName}`;
+      } else {
+        nearest_landmark = location_text ? `بالقرب من ${location_text}` : 'بالقرب من الموقع';
+      }
+
+      const result: GeocodingResult = {
+        road,
+        suburb: '',
+        city: 'طرابلس',
+        display_name: location_text || nearest_landmark,
+        location_text,
+        nearest_landmark,
+        nearby_landmarks: combinedLandmarks,
+      };
+
+      GEOCODE_CACHE.set(cacheKey, { result, timestamp: Date.now() });
+      if (GEOCODE_CACHE.size > 150) {
+        const firstKey = GEOCODE_CACHE.keys().next().value;
+        if (firstKey) GEOCODE_CACHE.delete(firstKey);
+      }
+
+      return result;
+    } catch {
+      return null;
+    } finally {
+      INFLIGHT_REQUESTS.delete(cacheKey);
+    }
+  })();
+
+  INFLIGHT_REQUESTS.set(cacheKey, executionPromise);
+  return executionPromise;
 }
+

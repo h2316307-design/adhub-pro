@@ -192,21 +192,21 @@ export default function SelectableGoogleHomeMap({
       try {
         const res = await fetch(
           `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(val)}&format=json&limit=5&accept-language=ar&countrycodes=ly,sa,eg,ae,tn,dz,ma`,
-          { headers: { 'User-Agent': 'BillboardApp/1.0' } }
-        );
-        if (res.ok) {
-          const data = await res.json();
-          const places = data.map((item: any) => ({
-            type: 'place',
-            value: item.display_name,
-            label: `🌍 ${item.display_name?.split(',').slice(0, 2).join(',') || item.display_name}`,
-            coords: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) }
-          }));
-          setPlaceSuggestions(places);
+          { signal: AbortSignal.timeout(3500) }
+        ).catch(() => null);
+        if (res && res.ok) {
+          const data = await res.json().catch(() => []);
+          if (Array.isArray(data)) {
+            const places = data.map((item: any) => ({
+              type: 'place',
+              value: item.display_name,
+              label: `🌍 ${item.display_name?.split(',').slice(0, 2).join(',') || item.display_name}`,
+              coords: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) }
+            }));
+            setPlaceSuggestions(places);
+          }
         }
-      } catch (err) {
-        console.error('Nominatim search error:', err);
-      }
+      } catch {}
     }, 400);
   }, []);
 

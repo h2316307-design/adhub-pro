@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, ChevronDown, ChevronUp, BarChart3, Map as MapIcon, Zap, Loader2 } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronUp, BarChart3, Map as MapIcon, Zap, Loader2, Sparkles, Camera } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,8 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/component
 import { PrintFiltersDialog } from '@/components/billboards/PrintFiltersDialog';
 import { BillboardPrintWithSelection } from '@/components/billboards/BillboardPrintWithSelection';
 import { BillboardSelectionBar } from '@/components/billboards/BillboardSelectionBar';
+import BillboardPhotoOverlayEditor, { BillboardOverlayConfig, CollectionItemForOverlay, sanitizeOverlayConfig } from '@/components/municipality/BillboardPhotoOverlayEditor';
+import { BillboardOverlaySelectorDialog } from '@/components/billboards/BillboardOverlaySelectorDialog';
 import { useBillboardData } from '@/hooks/useBillboardData';
 import { useBillboardForm } from '@/hooks/useBillboardForm';
 import { useBillboardActions } from '@/hooks/useBillboardActions';
@@ -864,6 +866,134 @@ export default function Billboards() {
     });
   }, [filteredBillboards, sizeRankMap, municipalityRankMap]);
 
+  // Billboard Photo Overlay Editor state & helpers
+  const [overlayEditorOpen, setOverlayEditorOpen] = useState(false);
+  const [overlaySelectorOpen, setOverlaySelectorOpen] = useState(false);
+  const [overlayInitialIndex, setOverlayInitialIndex] = useState(0);
+
+  const sizeCutoutMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    if (sizes && Array.isArray(sizes)) {
+      sizes.forEach((s: any) => {
+        const url = s.cutout_image_url || s.image_url;
+        if (s.name && url) {
+          const rawName = s.name.trim();
+          const normalized = rawName.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
+          map[rawName] = url;
+          map[normalized] = url;
+          map[normalized.toLowerCase()] = url;
+          map[normalized.toUpperCase()] = url;
+          map[normalized.replace(/x/g, '×')] = url;
+          map[normalized.replace(/x/g, '*')] = url;
+        }
+      });
+    }
+    return map;
+  }, [sizes]);
+
+  const overlayItems: CollectionItemForOverlay[] = useMemo(() => {
+    return sortedFilteredBillboards.map(b => ({
+      sequence_number: Number(b.ID || (b as any).sequence_number || 0),
+      billboard_name: b.Name || (b as any).billboard_name || `لوحة #${b.ID}`,
+      location_text: b.Location || (b as any).location_text || '',
+      nearest_landmark: b.Nearest_Landmark || (b as any).nearest_landmark || '',
+      size: b.Size || (b as any).size || '4x3',
+      faces_count: String(b.Faces || (b as any).faces_count || '1'),
+      image_url: b.Image_URL || (b as any).image_url || null,
+      municipality: b.Municipality || (b as any).municipality || '',
+      latitude: b.Latitude || (b.GPS_Coordinates ? parseFloat(String(b.GPS_Coordinates).split(',')[0]) : null),
+      longitude: b.Longitude || (b.GPS_Coordinates ? parseFloat(String(b.GPS_Coordinates).split(',')[1]) : null),
+      overlay_config: (b as any).overlay_config,
+    }));
+  }, [sortedFilteredBillboards]);
+
+  const handleSaveOverlayConfigInBillboards = async (sequenceNumber: number, rawConfig: BillboardOverlayConfig) => {
+    try {
+      const target = billboards.find(b => Number(b.ID || (b as any).sequence_number) === sequenceNumber);
+      if (!target) return;
+
+      const cleanConfig = sanitizeOverlayConfig(rawConfig);
+      const targetId = Number(target.ID);
+
+      const { error } = await supabase
+        .from('billboards')
+        .update({ overlay_config: cleanConfig as any })
+        .eq('ID', targetId);
+
+      if (!error) {
+        updateBillboardLocal(targetId, { overlay_config: cleanConfig });
+        toast.success(`تم حفظ إعدادات التراكب البصري والتناسب الواقعي للوحة #${sequenceNumber} بنجاح! 🚀`);
+      } else {
+        console.error('[save-overlay-error]', error);
+        toast.error(`حدث خطأ أثناء حفظ التراكب: ${error.message}`);
+      }
+    } catch (e: any) {
+      console.error('Failed to save overlay config in Billboards:', e);
+      toast.error('تعذر حفظ إعدادات التراكب');
+    }
+  };
+
+  const handleSaveCoordinatesInBillboards = async (sequenceNumber: number, lat: number, lng: number) => {
+    try {
+      const target = billboards.find(b => Number(b.ID || (b as any).sequence_number) === sequenceNumber);
+      if (!target) return;
+
+      const targetId = Number(target.ID);
+      const coordsStr = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      const { error } = await supabase
+        .from('billboards')
+        .update({
+          GPS_Coordinates: coordsStr,
+          coordinates: coordsStr,
+          GPS_Link: `https://www.google.com/maps?q=${coordsStr}`
+        })
+        .eq('ID', targetId);
+
+      if (!error) {
+        updateBillboardLocal(targetId, {
+          GPS_Coordinates: coordsStr,
+          coordinates: coordsStr,
+          GPS_Link: `https://www.google.com/maps?q=${coordsStr}`
+        });
+      }
+    } catch (e) {
+      console.error('Error saving coordinates:', e);
+    }
+  };
+
+  const handleUpdateItemDetailsInBillboards = async (sequenceNumber: number, details: Partial<CollectionItemForOverlay>) => {
+    try {
+      const target = billboards.find(b => Number(b.ID || (b as any).sequence_number) === sequenceNumber);
+      if (!target) return;
+
+      const targetId = Number(target.ID);
+      const updates: any = {};
+      if (details.size) updates.Size = details.size;
+      if (details.location_text) updates.Location = details.location_text;
+      if (details.nearest_landmark) updates.Nearest_Landmark = details.nearest_landmark;
+
+      if (Object.keys(updates).length > 0) {
+        const { error } = await supabase
+          .from('billboards')
+          .update(updates)
+          .eq('ID', targetId);
+
+        if (!error) {
+          updateBillboardLocal(targetId, updates);
+        }
+      }
+    } catch (e) {
+      console.error('Error updating details:', e);
+    }
+  };
+
+  const handleOpenOverlayForBillboard = (billboard: any) => {
+    const seq = Number(billboard.ID || billboard.sequence_number);
+    const foundIdx = overlayItems.findIndex(it => it.sequence_number === seq);
+    setOverlayInitialIndex(foundIdx >= 0 ? foundIdx : 0);
+    setOverlayEditorOpen(true);
+  };
+
   // ✅ NEW: Map billboards memo - shows maintenance and removal by default unless filtered
   const mapBillboards = useMemo(() => {
     const searched = enhancedSearchBillboards(billboards, searchQuery);
@@ -1254,7 +1384,14 @@ export default function Billboards() {
               </div>
               <div className="h-0.5 w-12 bg-primary rounded-full mt-2" />
             </div>
-            <div className="hidden sm:block">
+            <div className="hidden sm:flex items-center gap-2">
+              <Button
+                onClick={() => setOverlaySelectorOpen(true)}
+                className="h-10 rounded-2xl gap-2 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-slate-950 font-extrabold shadow-md text-xs px-4"
+              >
+                <Sparkles className="h-4 w-4" />
+                محرر التراكب والواقعية
+              </Button>
               <BillboardActions
                 exportToExcel={() => billboardExport.exportToExcel(billboards)}
                 exportAvailableToExcel={() => billboardExport.exportAvailableToExcel(billboards, isContractExpired)}
@@ -1575,6 +1712,7 @@ export default function Billboards() {
                 setIsMaintenanceDialogOpen(true);
               }}
               hasActiveContractCheck={hasActiveContract}
+              onOpenOverlayEditor={handleOpenOverlayForBillboard}
             />
             </div>
           );
@@ -1816,6 +1954,31 @@ export default function Billboards() {
         selectAvailableOnly={selectAvailableOnly}
         onSetSelectAvailableOnly={setSelectAvailableOnly}
       />
+
+      {/* حوار اختيار اللوحة لمحرر التراكب والواقعية */}
+      {overlaySelectorOpen && (
+        <BillboardOverlaySelectorDialog
+          open={overlaySelectorOpen}
+          onOpenChange={setOverlaySelectorOpen}
+          billboards={sortedFilteredBillboards}
+          onSelectBillboard={handleOpenOverlayForBillboard}
+        />
+      )}
+
+      {/* محرر تراكب اللوحة والتناسب الواقعي */}
+      {overlayEditorOpen && (
+        <BillboardPhotoOverlayEditor
+          open={overlayEditorOpen}
+          onOpenChange={setOverlayEditorOpen}
+          items={overlayItems}
+          initialIndex={overlayInitialIndex}
+          onSaveItemOverlay={handleSaveOverlayConfigInBillboards}
+          onSaveCoordinates={handleSaveCoordinatesInBillboards}
+          onUpdateItemDetails={handleUpdateItemDetailsInBillboards}
+          sizeCutoutMap={sizeCutoutMap}
+          availableSizes={sizes}
+        />
+      )}
       </div>
     </div>
   );

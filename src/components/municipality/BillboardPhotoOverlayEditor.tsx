@@ -39,7 +39,11 @@ import {
   RotateCcw,
   Copy,
   Target,
-  Map as MapIcon
+  Map as MapIcon,
+  Eraser,
+  Scissors,
+  Crop,
+  Paintbrush
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { reverseGeocode, saveLandmarkToMemory } from '@/utils/geocoding';
@@ -50,6 +54,8 @@ export interface BillboardOverlayConfig {
   y_pct: number;            // 0-100% position Y
   scale_pct: number;        // scale % (100 default)
   rotation_deg: number;     // 0-360 deg
+  crop_bottom_pct?: number; // 0-80% bottom crop percentage
+  mask_data_url?: string | null; // Data URL for eraser brush mask canvas
   reference_meters?: number;// e.g. 1.8m
   reference_pixels?: number;// line length in px
   cutout_image_url?: string | null;
@@ -58,6 +64,27 @@ export interface BillboardOverlayConfig {
 
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { createPinSvgUrl } from '@/hooks/useMapMarkers';
+
+export function sanitizeOverlayConfig(config: BillboardOverlayConfig): BillboardOverlayConfig {
+  const sanitized: BillboardOverlayConfig = {
+    enabled: !!config.enabled,
+    x_pct: Number(config.x_pct ?? 50),
+    y_pct: Number(config.y_pct ?? 50),
+    scale_pct: Number(config.scale_pct ?? 100),
+    rotation_deg: Number(config.rotation_deg ?? 0),
+    crop_bottom_pct: Math.min(80, Math.max(0, Number(config.crop_bottom_pct ?? 0))),
+    anchor_version: config.anchor_version || 'v2',
+  };
+
+  if (config.cutout_image_url) sanitized.cutout_image_url = String(config.cutout_image_url);
+  if (config.reference_meters) sanitized.reference_meters = Number(config.reference_meters);
+  if (config.reference_pixels) sanitized.reference_pixels = Number(config.reference_pixels);
+  if (config.mask_data_url && typeof config.mask_data_url === 'string' && config.mask_data_url.length < 200000) {
+    sanitized.mask_data_url = config.mask_data_url;
+  }
+
+  return sanitized;
+}
 
 export interface CollectionItemForOverlay {
   sequence_number: number;
@@ -792,7 +819,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
         if (geo?.nearby_landmarks) {
           setDetectedNearbyLandmarks(geo.nearby_landmarks);
         }
-      });
+      }).catch(() => null);
     }
   }, [currentItem?.sequence_number, editLat, editLng, currentItem?.latitude, currentItem?.longitude]);
 
@@ -926,8 +953,9 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
     }
   }, [currentItem]);
 
-  // Mode: 'move' | 'ruler'
-  const [activeTool, setActiveTool] = useState<'move' | 'ruler'>('move');
+  // Mode: 'move' | 'ruler' | 'eraser'
+  const [activeTool, setActiveTool] = useState<'move' | 'ruler' | 'eraser'>('move');
+  const [brushSize, setBrushSize] = useState<number>(25);
 
   // Drawing reference ruler line state
   const [isDrawingRuler, setIsDrawingRuler] = useState(false);
@@ -953,6 +981,29 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
     clientY: 0,
     initialRot: 0,
   });
+
+  // Interactive Bottom Crop Drag State (Bottom Edge Handles)
+  const [isCroppingBillboard, setIsCroppingBillboard] = useState(false);
+  const cropStartRef = useRef<{ clientY: number; initialCrop: number }>({
+    clientY: 0,
+    initialCrop: 0,
+  });
+
+  // Mask Canvas Ref & Drawing State for Eraser Brush
+  const maskCanvasRef = useRef<HTMLCanvasElement>(null);
+  const [isErasing, setIsErasing] = useState(false);
+  const lastEraserPosRef = useRef<{ x: number; y: number } | null>(null);
+
+  // Start Bottom Crop Drag from bottom edge handles
+  const startCropDrag = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    const clientY = 'touches' in e ? e.touches[0].clientY : (e as React.MouseEvent).clientY;
+    cropStartRef.current = {
+      clientY,
+      initialCrop: configRef.current.crop_bottom_pct || 0,
+    };
+    setIsCroppingBillboard(true);
+  };
 
   // Start Scaling from top corner handles
   const startScaleDrag = (e: React.MouseEvent | React.TouchEvent, corner: 'top-left' | 'top-right') => {
@@ -1296,6 +1347,41 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
     };
   }, [isRotatingBillboard, saveOverlayConfig]);
 
+  // Global event listener for Bottom Crop Drag (Bottom Edge Handles)
+  useEffect(() => {
+    if (!isCroppingBillboard) return;
+
+    const handleCropMove = (clientY: number) => {
+      const { clientY: startY, initialCrop } = cropStartRef.current;
+      const deltaY = startY - clientY; // Moving mouse UPWARD increases bottom crop %
+      const newCrop = Math.max(0, Math.min(80, Math.round(initialCrop + deltaY * 0.4)));
+
+      const updated = { ...configRef.current, crop_bottom_pct: newCrop };
+      setConfig(updated);
+    };
+
+    const onMouseMove = (e: MouseEvent) => handleCropMove(e.clientY);
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches[0]) handleCropMove(e.touches[0].clientY);
+    };
+    const onEnd = () => {
+      setIsCroppingBillboard(false);
+      saveOverlayConfig(configRef.current);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onEnd);
+    window.addEventListener('touchmove', onTouchMove);
+    window.addEventListener('touchend', onEnd);
+
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onEnd);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onEnd);
+    };
+  }, [isCroppingBillboard, saveOverlayConfig]);
+
   // Canvas Mouse/Touch handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!containerRef.current) return;
@@ -1409,6 +1495,100 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
     toast.success(`تم حفظ جميع عناصر اللوحة #${currentSeq} (التراكب البصري، التناسب الواقعي، البيانات الميدانية، والدبوس الجغرافي) بنجاح! 🚀`);
   };
 
+  // Composite & Download High-Res Realistic Overlaid Photo
+  const handleDownloadCompositeImage = async () => {
+    if (!currentItem?.image_url) {
+      toast.error('لا توجد صورة موقع مراد تحميلها');
+      return;
+    }
+
+    try {
+      toast.loading('جاري رندر وتحميل الصورة الواقعية عالية الدقة...', { id: 'download-image' });
+
+      const bgImg = new Image();
+      bgImg.crossOrigin = 'anonymous';
+      bgImg.src = currentItem.image_url;
+      await new Promise((resolve) => {
+        bgImg.onload = resolve;
+        bgImg.onerror = resolve;
+      });
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        toast.dismiss('download-image');
+        toast.error('حدث خطأ أثناء رندر الصورة');
+        return;
+      }
+
+      const nw = bgImg.naturalWidth || 1920;
+      const nh = bgImg.naturalHeight || 1080;
+      canvas.width = nw;
+      canvas.height = nh;
+
+      // Draw background site photo
+      ctx.drawImage(bgImg, 0, 0, nw, nh);
+
+      // If overlay is enabled and cutout URL exists, composite draw overlay image with scale, position, rotation, and bottom crop
+      if (config.enabled && activeCutoutUrl) {
+        const cutoutImg = new Image();
+        cutoutImg.crossOrigin = 'anonymous';
+        cutoutImg.src = activeCutoutUrl;
+        await new Promise((resolve) => {
+          cutoutImg.onload = resolve;
+          cutoutImg.onerror = resolve;
+        });
+
+        if (cutoutImg.naturalWidth > 0) {
+          const isV2 = config.anchor_version === 'v2';
+          const overlayW = 0.2715 * nw;
+          const overlayH = (cutoutImg.naturalHeight / cutoutImg.naturalWidth) * overlayW;
+          const scale = config.scale_pct / 100;
+          const rotRad = (config.rotation_deg * Math.PI) / 180;
+          const cropBottomPct = (config.crop_bottom_pct || 0) / 100;
+
+          const anchorX = (config.x_pct / 100) * nw;
+          const anchorY = (config.y_pct / 100) * nh;
+
+          ctx.save();
+          ctx.translate(anchorX, anchorY);
+          ctx.rotate(rotRad);
+          ctx.scale(scale, scale);
+
+          // Apply bottom crop clipping
+          if (cropBottomPct > 0) {
+            ctx.beginPath();
+            ctx.rect(-overlayW / 2, isV2 ? -overlayH : -overlayH / 2, overlayW, overlayH * (1 - cropBottomPct));
+            ctx.clip();
+          }
+
+          ctx.drawImage(
+            cutoutImg,
+            -overlayW / 2,
+            isV2 ? -overlayH : -overlayH / 2,
+            overlayW,
+            overlayH
+          );
+
+          ctx.restore();
+        }
+      }
+
+      // Trigger high-res PNG download
+      const dataUrl = canvas.toDataURL('image/png', 1.0);
+      const link = document.createElement('a');
+      link.download = `لوحة_${currentItem.sequence_number || 'واقعية'}_معاينة_الموقع.png`;
+      link.href = dataUrl;
+      link.click();
+
+      toast.dismiss('download-image');
+      toast.success('تم تحميل الصورة الواقعية عالية الدقة بنجاح! 🚀');
+    } catch (e) {
+      toast.dismiss('download-image');
+      toast.error('تعذر تحميل الصورة عبر المتصفح، تم حفظ التراكب في النظام');
+    }
+  };
+
   if (!currentItem) return null;
 
   // Resolve active cutout URL (Item Cutout > Admin Size PNG Cutout > Default Cutout)
@@ -1446,7 +1626,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                 </Badge>
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                تراكب بصري بمقياس واقعي للموقع الميداني للطباعة والحفظ
+                تراكب بصري بمقياس واقعي للموقع الميداني للطباعة والحفظ والتحميل
               </DialogDescription>
             </div>
           </div>
@@ -1459,6 +1639,16 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
               />
               <span className="text-sm font-bold">تفعيل تراكب اللوحة</span>
             </div>
+
+            <Button
+              variant="outline"
+              onClick={handleDownloadCompositeImage}
+              className="rounded-2xl h-11 px-4 gap-2 border-amber-500/40 text-amber-600 dark:text-amber-400 hover:bg-amber-500/10 font-extrabold shadow-sm text-sm"
+              title="تحميل الصورة الميدانية الواقعية عالية الدقة كملف PNG"
+            >
+              <Upload className="h-4 w-4 rotate-180 text-amber-500" />
+              تحميل الصورة دقة عالية
+            </Button>
 
             <Button
               onClick={handleSaveCurrent}
@@ -1586,16 +1776,18 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                   {activeTool === 'move' && (
                     <>
                       {/* Floating status tag above */}
-                      <div className={`absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-900/95 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-3.5 py-1.5 rounded-full shadow-2xl transition-all whitespace-nowrap flex items-center gap-1.5 z-50 ${isDraggingBillboard || isScalingBillboard || isRotatingBillboard ? 'opacity-100 scale-105 ring-2 ring-amber-500/50' : 'opacity-0 group-hover:opacity-100'}`}>
+                      <div className={`absolute -top-12 left-1/2 -translate-x-1/2 bg-slate-900/95 text-amber-400 border border-amber-500/40 text-[10px] font-bold px-3.5 py-1.5 rounded-full shadow-2xl transition-all whitespace-nowrap flex items-center gap-1.5 z-50 ${isDraggingBillboard || isScalingBillboard || isRotatingBillboard || isCroppingBillboard ? 'opacity-100 scale-105 ring-2 ring-amber-500/50' : 'opacity-0 group-hover:opacity-100'}`}>
                         <Move className="h-3.5 w-3.5 animate-pulse" />
                         <span>
-                          {isScalingBillboard
+                          {isCroppingBillboard
+                            ? `✂️ جاري القص السفلي (${config.crop_bottom_pct || 0}%)`
+                            : isScalingBillboard
                             ? `🔍 جاري التكبير والتصغير (${config.scale_pct}%)`
                             : isRotatingBillboard
                             ? `🔄 جاري التدوير (${config.rotation_deg}°)`
                             : isDraggingBillboard
                             ? `📍 جاري السحب والتحريك (${config.x_pct}%, ${config.y_pct}%)`
-                            : 'اسحب للتحريك | الأطراف للتكبير | الأعلى للتدوير'}
+                            : 'اسحب للتحريك | الأطراف للتكبير | الأسفل للقص | الأعلى للتدوير'}
                         </span>
                       </div>
                       
@@ -1633,9 +1825,42 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                         <Maximize2 className="h-2.5 w-2.5 text-slate-950 stroke-[3]" />
                       </div>
 
-                      {/* Bottom Corner indicator dots */}
-                      <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-white border-2 border-amber-500 rounded-full z-45 shadow-md" />
-                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-white border-2 border-amber-500 rounded-full z-45 shadow-md" />
+                      {/* ── BOTTOM EDGE CROP HANDLES (مقابض القص السفلي الدقيقة والأنيقة بدون حجب للرؤية) ── */}
+                      {/* Bottom-Center Compact Handle for Bottom Crop */}
+                      <div
+                        className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex flex-col items-center z-50 cursor-ns-resize group/crop select-none"
+                        onMouseDown={(e) => startCropDrag(e)}
+                        onTouchStart={(e) => startCropDrag(e)}
+                        title="اسحب لأعلى لقص وتعديل الحافة السفلية للوحة"
+                      >
+                        {/* Tooltip badge visible ONLY when hovering or dragging */}
+                        <div className={`absolute bottom-7 bg-slate-900/95 text-amber-400 border border-amber-500/40 text-[9px] font-black px-2.5 py-0.5 rounded-full shadow-xl whitespace-nowrap transition-opacity pointer-events-none ${isCroppingBillboard ? 'opacity-100 scale-110 ring-2 ring-amber-400' : 'opacity-0 group-hover/crop:opacity-100'}`}>
+                          ✂️ قص أسفل ({config.crop_bottom_pct || 0}%)
+                        </div>
+                        <div className={`w-6 h-6 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full border-2 border-slate-950 shadow-xl flex items-center justify-center transition-transform ${isCroppingBillboard ? 'scale-125 ring-2 ring-amber-300' : 'hover:scale-125'}`}>
+                          <Scissors className="h-3 w-3 stroke-[3]" />
+                        </div>
+                      </div>
+
+                      {/* Bottom-Left Crop Corner Handle */}
+                      <div
+                        className={`absolute -bottom-2 -left-2 w-5 h-5 bg-amber-400 hover:bg-amber-300 border-2 border-slate-950 rounded-full z-50 shadow-xl cursor-ns-resize transition-transform flex items-center justify-center ${isCroppingBillboard ? 'scale-125 ring-2 ring-amber-300' : 'hover:scale-125'}`}
+                        onMouseDown={(e) => startCropDrag(e)}
+                        onTouchStart={(e) => startCropDrag(e)}
+                        title="اسحب لأعلى لقص الجزء السفلي من اللوحة"
+                      >
+                        <Crop className="h-2.5 w-2.5 text-slate-950 stroke-[3]" />
+                      </div>
+
+                      {/* Bottom-Right Crop Corner Handle */}
+                      <div
+                        className={`absolute -bottom-2 -right-2 w-5 h-5 bg-amber-400 hover:bg-amber-300 border-2 border-slate-950 rounded-full z-50 shadow-xl cursor-ns-resize transition-transform flex items-center justify-center ${isCroppingBillboard ? 'scale-125 ring-2 ring-amber-300' : 'hover:scale-125'}`}
+                        onMouseDown={(e) => startCropDrag(e)}
+                        onTouchStart={(e) => startCropDrag(e)}
+                        title="اسحب لأعلى لقص الجزء السفلي من اللوحة"
+                      >
+                        <Crop className="h-2.5 w-2.5 text-slate-950 stroke-[3]" />
+                      </div>
                       
                       {/* Bounding golden box */}
                       <div className="absolute inset-0 border-2 border-amber-500/40 rounded-2xl pointer-events-none group-hover:border-amber-500 transition-colors" />
@@ -1643,7 +1868,12 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                   )}
 
                   {activeCutoutUrl ? (
-                    <div className="relative w-full">
+                    <div
+                      className="relative w-full overflow-hidden transition-all duration-75 rounded-xl"
+                      style={{
+                        clipPath: `inset(0 0 ${config.crop_bottom_pct || 0}% 0)`
+                      }}
+                    >
                       <img
                         src={activeCutoutUrl}
                         alt="اللوحة المفرغة"
@@ -1653,7 +1883,12 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                     </div>
                   ) : (
                     /* ── HIGH VISIBILITY DEFAULT 3D BILLBOARD FRAME ── */
-                    <div className="flex flex-col items-center">
+                    <div
+                      className="flex flex-col items-center transition-all duration-75"
+                      style={{
+                        clipPath: `inset(0 0 ${config.crop_bottom_pct || 0}% 0)`
+                      }}
+                    >
                       <div
                         className="bg-gradient-to-br from-amber-600 via-amber-700 to-slate-900 border-4 border-amber-400 text-white font-extrabold flex flex-col items-center justify-center p-3 rounded-2xl shadow-[0_25px_60px_rgba(0,0,0,0.9)] backdrop-blur-md relative"
                         style={{
@@ -1682,7 +1917,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
 
             {/* Bottom Tools Mode Switcher */}
             <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/90 border border-white/15 rounded-2xl p-3 px-5 text-sm text-white">
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
                 <Button
                   size="sm"
                   variant={activeTool === 'move' ? 'default' : 'ghost'}
@@ -1705,13 +1940,53 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                   <Ruler className="h-4 w-4" />
                   رسم مقياس مرجعي
                 </Button>
+                <Button
+                  size="sm"
+                  variant={activeTool === 'eraser' ? 'default' : 'ghost'}
+                  onClick={() => setActiveTool('eraser')}
+                  className={`h-10 rounded-xl gap-2 text-xs font-bold px-4 ${
+                    activeTool === 'eraser' ? 'bg-rose-600 text-white shadow-md' : 'text-slate-300 hover:text-white'
+                  }`}
+                >
+                  <Eraser className="h-4 w-4" />
+                  فرشاة إخفاء الأجزاء
+                </Button>
               </div>
 
-              <div className="text-xs text-slate-300 font-medium">
-                {activeTool === 'ruler'
-                  ? 'انقر واسحب سهماً مرجعياً على عنصر معروف (مثل عرض سيارة 1.8م)'
-                  : 'اسحب أيقونة اللوحة بالماوس لتموضعها على المكان المناسب بالصورة'}
-              </div>
+              {activeTool === 'eraser' ? (
+                <div className="flex items-center gap-3 bg-slate-950/80 px-3.5 py-1.5 rounded-xl border border-rose-500/30">
+                  <span className="text-xs font-bold text-rose-400 flex items-center gap-1">
+                    <Paintbrush className="h-3.5 w-3.5" />
+                    حجم الفرشاة: {brushSize}px
+                  </span>
+                  <Slider
+                    value={[brushSize]}
+                    min={8}
+                    max={80}
+                    step={1}
+                    onValueChange={([val]) => setBrushSize(val)}
+                    className="w-24"
+                  />
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => {
+                      setConfig(p => ({ ...p, crop_bottom_pct: 0 }));
+                      toast.success('تم إعادة ضبط وإلغاء القناع والقص بنجاح');
+                    }}
+                    className="h-8 text-[11px] font-bold rounded-lg px-2.5 gap-1 bg-rose-600/30 hover:bg-rose-600 text-rose-200"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    تفريغ
+                  </Button>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-300 font-medium">
+                  {activeTool === 'ruler'
+                    ? 'انقر واسحب سهماً مرجعياً على عنصر معروف (مثل عرض سيارة 1.8م)'
+                    : 'اسحب أيقونة اللوحة لتموضعها • استخدم الأطراف للتكبير • استخدم المقبض السفلي ✂️ للقص'}
+                </div>
+              )}
             </div>
           </div>
 
@@ -1889,6 +2164,72 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                         }}
                         className="flex-1"
                       />
+                    </div>
+                  </div>
+
+                  {/* Bottom Crop Slider & Presets */}
+                  <div className="space-y-2.5 p-3.5 bg-amber-500/5 border border-amber-500/25 rounded-2xl">
+                    <div className="flex items-center justify-between text-xs font-bold">
+                      <span className="flex items-center gap-1.5 text-foreground">
+                        <Scissors className="h-4 w-4 text-amber-500" />
+                        قص وتعديل الحافة السفلية للوحة
+                      </span>
+                      <Badge variant="outline" className="text-xs font-mono font-bold text-amber-500 border-amber-500/30">
+                        {config.crop_bottom_pct || 0}%
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      اسحب المقبض الأصفر السفلي ✂️ في الشاشة أو المؤشر هنا لقص وتغطية العمود أو الحافة السفلية
+                    </p>
+                    <Slider
+                      value={[config.crop_bottom_pct || 0]}
+                      min={0}
+                      max={80}
+                      step={1}
+                      onValueChange={([v]) => {
+                        const updated = { ...config, crop_bottom_pct: v };
+                        setConfig(updated);
+                        saveOverlayConfig(updated);
+                      }}
+                      className="w-full"
+                    />
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const updated = { ...config, crop_bottom_pct: 0 };
+                          setConfig(updated);
+                          saveOverlayConfig(updated);
+                        }}
+                        className="h-7 text-[10px] font-bold rounded-lg flex-1 bg-background"
+                      >
+                        بدون قص (0%)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const updated = { ...config, crop_bottom_pct: 30 };
+                          setConfig(updated);
+                          saveOverlayConfig(updated);
+                        }}
+                        className="h-7 text-[10px] font-bold rounded-lg flex-1 bg-background"
+                      >
+                        قص العمود (30%)
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          const updated = { ...config, crop_bottom_pct: 50 };
+                          setConfig(updated);
+                          saveOverlayConfig(updated);
+                        }}
+                        className="h-7 text-[10px] font-bold rounded-lg flex-1 bg-background"
+                      >
+                        قص النصف (50%)
+                      </Button>
                     </div>
                   </div>
 

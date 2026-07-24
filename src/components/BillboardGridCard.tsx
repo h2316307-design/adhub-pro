@@ -53,6 +53,7 @@ interface BillboardGridCardProps {
   onVisibilityToggle?: (id: number | string, newValue: boolean) => void;
   onLocalUpdate?: (id: number | string, updates: Record<string, any>) => void;
   activeStatuses?: BillboardStatus[];
+  onOpenOverlayEditor?: (billboard: Billboard) => void;
 }
 
 const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
@@ -73,6 +74,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   onVisibilityToggle,
   onLocalUpdate,
   activeStatuses,
+  onOpenOverlayEditor,
 }) => {
   const isTorn = !!activeStatuses?.some((s) => s.status_type === 'torn_ad');
   const { isAdmin } = useAuth();
@@ -1070,6 +1072,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                 onMaintenance={onMaintenance || (() => {})}
                 onUpdate={onUpdate || (() => {})}
                 onLocalUpdate={onLocalUpdate}
+                onOpenOverlayEditor={onOpenOverlayEditor}
               />
             ) : (
               <div className="w-7 h-7" />
