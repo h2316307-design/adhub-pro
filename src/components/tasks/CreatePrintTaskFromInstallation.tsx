@@ -1207,7 +1207,7 @@ export function CreatePrintTaskFromInstallation({
                         onClick={() => setUseDistribution(!useDistribution)}
                         className="h-8 rounded-lg text-xs"
                       >
-                        {useDistribution ? '✓ مُفعّل' : 'تفعيل التوزيع'}
+ {useDistribution ? ' مُفعّل' : 'تفعيل التوزيع'}
                       </Button>
                     </div>
 

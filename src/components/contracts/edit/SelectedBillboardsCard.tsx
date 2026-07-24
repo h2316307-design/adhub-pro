@@ -1028,7 +1028,7 @@ export function SelectedBillboardsCard({
                 ))}
               </div>
 
-              {/* ✅ ملخص إجمالي التكاليف */}
+ {/* ملخص إجمالي التكاليف */}
               {costsSummary.hasCosts && (
                 <div className="bg-background/80 backdrop-blur rounded-lg p-4 border border-border mt-4">
                   <h4 className="text-sm font-bold text-foreground mb-3 flex items-center gap-2">
@@ -1309,7 +1309,7 @@ export function SelectedBillboardsCard({
                       </div>
                     </div>
 
-                    {/* 🔵 Strong replacement banner across the top of the card */}
+ {/* Strong replacement banner across the top of the card */}
                     {replacementsMap.has(billboardId) && (() => {
                       const info = replacementsMap.get(billboardId)!;
                       return (
@@ -1663,7 +1663,7 @@ export function SelectedBillboardsCard({
                               <span className="text-sm font-bold text-foreground">لوحة صديقة</span>
                             </div>
                             <Badge variant="secondary" className="text-[10px]">
-                              {friendCostsSaveState === 'saving' ? 'جاري الحفظ...' : friendCostsSaveState === 'saved' ? '✓ محفوظ' : 'سعر مطبّق'}
+ {friendCostsSaveState === 'saving' ? 'جاري الحفظ...' : friendCostsSaveState === 'saved' ? ' محفوظ' : 'سعر مطبّق'}
                             </Badge>
                           </div>
                           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
@@ -1759,7 +1759,7 @@ export function SelectedBillboardsCard({
         </CardContent>
       </Card>
 
-      {/* ✅ NEW: Installation Cost Summary with unique sizes display */}
+ {/* NEW: Installation Cost Summary with unique sizes display */}
       {installationCostSummary && installationCostSummary.totalInstallationCost > 0 && (
         <Card className="bg-card border-border shadow-card">
           <CardHeader>
@@ -1785,7 +1785,7 @@ export function SelectedBillboardsCard({
               </div>
             </div>
 
-            {/* ✅ NEW: Display unique installation costs by size without repetition */}
+ {/* NEW: Display unique installation costs by size without repetition */}
             <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded" dir="rtl">
               <div className="font-medium mb-2">تفاصيل تكلفة التركيب حسب المقاس:</div>
               <div className="space-y-1.5">

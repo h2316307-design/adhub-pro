@@ -63,7 +63,7 @@ export interface PrintSettings {
   direction: DirectionType;
   header_alignment: HeaderAlignmentType;
   header_direction: HeaderDirectionType;
-  header_swap: boolean; // ✅ تبديل نصفي الهيدر (يمين ↔ يسار)
+ header_swap: boolean; // تبديل نصفي الهيدر (يمين يسار)
   logo_position_order: number;
   footer_alignment: AlignmentType;
   

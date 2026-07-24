@@ -69,14 +69,14 @@ const generateTeamPdfBlob = async (
         <div style="padding: 2px 0; padding-right: 16px;">
           <span style="font-weight: 600;">${i + 1}. ${item.billboardName}</span>
           ${item.size ? `<span style="color: #6b7280; margin-right: 4px;">(${item.size})</span>` : ''}
-          ${item.gpsLink ? `<br/><a href="${item.gpsLink}" style="color: #2563eb; font-size: 11px; text-decoration: underline;">📌 الموقع على الخريطة</a>` : ''}
+          ${item.gpsLink ? `<br/><a href="${item.gpsLink}" style="color: #2563eb; font-size: 11px; text-decoration: underline;">الموقع على الخريطة</a>` : ''}
         </div>
       `).join('');
 
       return `
         <div style="border-right: 3px solid #3b82f6; padding-right: 12px; margin-bottom: 8px;">
           <div style="font-weight: 700; font-size: 14px; margin-bottom: 4px;">
-            📍 ${city} <span style="font-size: 11px; color: #6b7280;">(${items.length} لوحة)</span>
+            المدينة: ${city} <span style="font-size: 11px; color: #6b7280;">(${items.length} لوحة)</span>
           </div>
           ${itemsHtml}
         </div>
@@ -301,12 +301,12 @@ export function SendTeamInstallationReportDialog({
       const cities = Object.keys(cGroup.byCity).sort();
       cities.forEach((city) => {
         const items = cGroup.byCity[city];
-        msg += `📍 *${city}*\n`;
+        msg += `*المدينة: ${city}*\n`;
         items.forEach((item, i) => {
           msg += `  ${i + 1}. ${item.billboardName}`;
           if (item.size) msg += ` (${item.size})`;
           msg += '\n';
-          if (item.gpsLink) msg += `     📌 ${item.gpsLink}\n`;
+          if (item.gpsLink) msg += `     الموقع: ${item.gpsLink}\n`;
         });
         msg += '\n';
       });
@@ -387,7 +387,7 @@ export function SendTeamInstallationReportDialog({
       const message = `*مهام التركيب - فريق ${data.teamName}*\n\n` +
         `العقود: ${contractNumbers}\n` +
         `إجمالي اللوحات: ${totalCount}\n\n` +
-        `📄 ملف التفاصيل:\n${pdfUrl}\n\n` +
+ ` ملف التفاصيل:\n${pdfUrl}\n\n` +
         `يرجى مراجعة الملف المرفق للتفاصيل الكاملة.`;
 
       openWhatsApp(phone, message);

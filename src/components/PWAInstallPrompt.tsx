@@ -86,7 +86,7 @@ export function PWAInstallPrompt() {
               <p className="text-xs text-muted-foreground mt-0.5">
                 {showGuide
                   ? isIOS
-                    ? '١. اضغط على زر المشاركة ⎋ أسفل المتصفح\n٢. اختر "إضافة إلى الشاشة الرئيسية"'
+ ? '١. اضغط على زر المشاركة أسفل المتصفح\n٢. اختر "إضافة إلى الشاشة الرئيسية"'
                     : '١. اضغط على ⋮ (القائمة) أعلى المتصفح\n٢. اختر "إضافة إلى الشاشة الرئيسية" أو "تثبيت التطبيق"'
                   : 'أضف التطبيق للشاشة الرئيسية للوصول السريع'}
               </p>
@@ -103,7 +103,7 @@ export function PWAInstallPrompt() {
               <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-3 text-sm">
                 <Share2 className="h-5 w-5 text-primary shrink-0" />
                 <div>
-                  <p className="font-medium text-foreground">١. اضغط زر المشاركة <span className="inline-block">⎋</span></p>
+ <p className="font-medium text-foreground">١. اضغط زر المشاركة <span className="inline-block"></span></p>
                   <p className="text-muted-foreground">٢. مرر للأسفل واختر <strong>"إضافة إلى الشاشة الرئيسية"</strong></p>
                 </div>
               </div>

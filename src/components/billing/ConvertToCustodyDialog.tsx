@@ -296,7 +296,7 @@ export function ConvertToCustodyDialog({
             {Math.abs(remaining) > 0.01 && (
               <div className="p-3 bg-orange-100 dark:bg-orange-950/30 border border-orange-300 dark:border-orange-800 rounded-lg">
                 <p className="text-sm text-orange-700 dark:text-orange-400">
-                  ⚠️ يجب أن يكون إجمالي التوزيع مساوياً للمبلغ الصافي ({formatAmount(netAmount)} د.ل)
+ ️ يجب أن يكون إجمالي التوزيع مساوياً للمبلغ الصافي ({formatAmount(netAmount)} د.ل)
                 </p>
               </div>
             )}

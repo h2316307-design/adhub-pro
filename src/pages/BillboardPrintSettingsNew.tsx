@@ -558,7 +558,7 @@ export default function BillboardPrintSettingsNew() {
               </CardContent>
             </Card>
 
-            {/* ✅ لوحة التحكم الموحدة - نفس الإعدادات المستخدمة في الطباعة الفعلية */}
+ {/* لوحة التحكم الموحدة - نفس الإعدادات المستخدمة في الطباعة الفعلية */}
             <PrintCustomizationPanel
               settings={getSettingsForStatus(previewStatusMode)}
               onSettingChange={(key, value) => {

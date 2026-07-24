@@ -973,7 +973,7 @@ export default function ExpenseManagement() {
       description: e.description || '-',
       category: e.category || '-',
       employee: e.employee_id ? (employees.find(emp => emp.id === e.employee_id)?.name || '-') : '-',
-      status: e.payment_status === 'paid' ? '✓ مسدد' : '✗ غير مسدد',
+ status: e.payment_status === 'paid' ? ' مسدد' : ' غير مسدد',
       source: e.payment_status !== 'unpaid' ? (sourceByExpenseId[e.id] || e.payment_method || '-') : '-',
       amount: `${Number(e.amount).toLocaleString('en-US')} د.ل`,
     }));
@@ -2126,7 +2126,7 @@ export default function ExpenseManagement() {
                 </div>
               </CardHeader>
               <CardContent>
-                {/* ✅ بطاقات ملخّص سريع */}
+ {/* بطاقات ملخّص سريع */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                   <div className="p-3 rounded-lg border bg-card">
                     <div className="text-[11px] text-muted-foreground">عدد المصروفات</div>

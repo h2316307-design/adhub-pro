@@ -670,7 +670,7 @@ export function BillboardBulkPrintDialog({
                     </Select>
                     {activeProfileName && (
                       <p className="text-xs text-green-600 dark:text-green-400">
-                        ✓ البروفايل النشط: {activeProfileName}
+ البروفايل النشط: {activeProfileName}
                       </p>
                     )}
                   </div>

@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS public.period_closures (id bigint PRIMARY KEY DEFAULT
   },
   {
     id: "copy_sql",
-    title: "📋 نسخ ملف SQL الكامل",
+ title: " نسخ ملف SQL الكامل",
     icon: <FileCode className="h-5 w-5" />,
     description: "انسخ ملف database_commands.sql الكامل (يشمل كل الدوال والتريغرات والسياسات) وشغله في Supabase SQL Editor",
     sql: "COPY_FULL_FILE"

@@ -100,10 +100,10 @@ export class ExpiredContractCleanupService {
         try {
           await this.releaseContractBillboards(contract.id);
           success++;
-          details.push(`✅ تم تنظيف العقد ${contract.id} - ${contract.client_name}`);
+ details.push(` تم تنظيف العقد ${contract.id} - ${contract.client_name}`);
         } catch (error) {
           failed++;
-          details.push(`❌ فشل تنظيف العقد ${contract.id} - ${contract.client_name}: ${error}`);
+ details.push(` فشل تنظيف العقد ${contract.id} - ${contract.client_name}: ${error}`);
         }
       }
 
@@ -137,7 +137,7 @@ export class ExpiredContractCleanupService {
       if (error) throw error;
 
       const details = (data || []).map(contract => 
-        `✅ تم إخفاء العقد ${contract.id} - ${contract.client_name}`
+ ` تم إخفاء العقد ${contract.id} - ${contract.client_name}`
       );
 
       return { hidden: data?.length || 0, details };
@@ -199,7 +199,7 @@ export class ExpiredContractCleanupService {
 
           if (!releaseError) {
             billboardsReleased += billboardIds.length;
-            details.push(`🔓 تم تحرير ${billboardIds.length} لوحة من العقد ${contract.id}`);
+ details.push(` تم تحرير ${billboardIds.length} لوحة من العقد ${contract.id}`);
           }
         }
       }
@@ -221,8 +221,8 @@ export class ExpiredContractCleanupService {
 
       const contractsHidden = hiddenContracts?.length || 0;
       
-      details.push(`👻 تم إخفاء ${contractsHidden} عقد منتهي الصلاحية`);
-      details.push(`🔓 تم تحرير ${billboardsReleased} لوحة إجمالي`);
+ details.push(` تم إخفاء ${contractsHidden} عقد منتهي الصلاحية`);
+ details.push(` تم تحرير ${billboardsReleased} لوحة إجمالي`);
 
       return {
         contractsHidden,

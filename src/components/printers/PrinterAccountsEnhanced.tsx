@@ -798,7 +798,7 @@ export function PrinterAccountsEnhanced() {
             {pendingQueue.length > 1 && unifiedInvoiceOpen && (
               <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-3 bg-background border rounded-full shadow-xl px-6 py-3">
                 <span className="text-sm text-muted-foreground">فاتورة {pendingQueueIndex + 1} من {pendingQueue.length}</span>
-                <Button size="sm" onClick={handleNextPendingInvoice}>{pendingQueueIndex + 1 < pendingQueue.length ? 'التالي ←' : 'إنهاء ✓'}</Button>
+ <Button size="sm" onClick={handleNextPendingInvoice}>{pendingQueueIndex + 1 < pendingQueue.length ? 'التالي ←' : 'إنهاء '}</Button>
               </div>
             )}
           </>

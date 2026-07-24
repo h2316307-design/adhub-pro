@@ -179,7 +179,7 @@ export const MaintenanceDialog: React.FC<MaintenanceDialogProps> = ({
                     <Plus className="h-4 w-4" />
                   </Button>
                   <Button size="sm" variant="ghost" className="h-9 px-2" onClick={() => setShowCustomInput(false)}>
-                    ✕
+ 
                   </Button>
                 </div>
               ) : (

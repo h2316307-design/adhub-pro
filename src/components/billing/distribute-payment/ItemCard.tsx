@@ -121,7 +121,7 @@ export const ItemCard = memo(({ item, index, onSelect, onAmountChange, remaining
           </div>
           {poolFull && item.allocatedAmount === 0 && (
             <div className="mt-1 text-[10px] text-red-600 font-semibold">
-              ⛔ تم بلوغ سقف الدفعة — لا يمكن إضافة قيمة
+ تم بلوغ سقف الدفعة — لا يمكن إضافة قيمة
             </div>
           )}
           {item.allocatedAmount > 0 && (

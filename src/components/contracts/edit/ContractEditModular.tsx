@@ -290,7 +290,7 @@ export default function ContractEditModular() {
         const baseRentFromDB = Number(c.base_rent || 0);
         if (baseRentFromDB > 0) {
           setSavedBaseRent(baseRentFromDB);
-          setRentCost(baseRentFromDB); // ✅ Use base_rent as rentCost, NOT Total Rent
+ setRentCost(baseRentFromDB); // Use base_rent as rentCost, NOT Total Rent
           setOriginalTotal(Number(c['Total Rent'] || 0)); // Keep original final total for comparison
           console.log('✅ Loaded base_rent from DB:', baseRentFromDB);
         } else {

@@ -1163,7 +1163,7 @@ export default function AccountOverduePayments() {
                                     )}
                                     {getUrgencyBadge(invoice.daysOverdue)}
                                     
-                                    {/* ✅ اسم الفاتورة والملاحظات */}
+ {/* اسم الفاتورة والملاحظات */}
                                     {(invoice.invoiceName || invoice.notes) && (
                                       <span className="text-xs font-semibold text-foreground/80 border-r pr-2 border-border mr-1">
                                         {invoice.invoiceName || ''}

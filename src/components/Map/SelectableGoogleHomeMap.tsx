@@ -139,7 +139,7 @@ export default function SelectableGoogleHomeMap({
   // State - OSM is the default provider
   const [mapProvider, setMapProvider] = useState<MapProvider>('openstreetmap');
   const [mapType, setMapType] = useState<'roadmap' | 'satellite' | 'styled' | 'detailed'>('satellite');
-  const [showLabels, setShowLabels] = useState(true); // ✅ Labels on by default
+ const [showLabels, setShowLabels] = useState(true); // Labels on by default
   const [searchQuery, setSearchQuery] = useState('');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showLayers, setShowLayers] = useState(false);
@@ -200,7 +200,7 @@ export default function SelectableGoogleHomeMap({
             const places = data.map((item: any) => ({
               type: 'place',
               value: item.display_name,
-              label: `🌍 ${item.display_name?.split(',').slice(0, 2).join(',') || item.display_name}`,
+ label: ` ${item.display_name?.split(',').slice(0, 2).join(',') || item.display_name}`,
               coords: { lat: parseFloat(item.lat), lng: parseFloat(item.lon) }
             }));
             setPlaceSuggestions(places);
@@ -327,7 +327,7 @@ export default function SelectableGoogleHomeMap({
         suggestions.push({ 
           type: 'coords', 
           value: `${lat}, ${lng}`, 
-          label: `📌 انتقل إلى: ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+ label: ` انتقل إلى: ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
           coords: { lat, lng }
         });
       }
@@ -337,7 +337,7 @@ export default function SelectableGoogleHomeMap({
     billboards.forEach(b => {
       const name = (b as any).Billboard_Name || '';
       if (name.toLowerCase().includes(query) && suggestions.length < 5) {
-        suggestions.push({ type: 'billboard', value: name, label: `🎯 ${name}`, coords: parseCoords(b) || undefined });
+        suggestions.push({ type: 'billboard', value: name, label: name, coords: parseCoords(b) || undefined });
       }
     });
     
@@ -353,7 +353,7 @@ export default function SelectableGoogleHomeMap({
         suggestions.push({
           type: 'landmark',
           value: landmark,
-          label: `📍 ${landmark}`,
+          label: landmark,
           coords: count > 0 ? { lat: latSum / count, lng: lngSum / count } : undefined
         });
       }
@@ -371,7 +371,7 @@ export default function SelectableGoogleHomeMap({
         suggestions.push({
           type: 'district',
           value: district,
-          label: `🏘️ ${district} (${matched.length} لوحة)`,
+          label: `${district} (${matched.length} لوحة)`,
           coords: count > 0 ? { lat: latSum / count, lng: lngSum / count } : undefined
         });
       }
@@ -389,7 +389,7 @@ export default function SelectableGoogleHomeMap({
         suggestions.push({
           type: 'municipality',
           value: mun,
-          label: `🏛️ ${mun} (${matched.length} لوحة)`,
+          label: `${mun} (${matched.length} لوحة)`,
           coords: count > 0 ? { lat: latSum / count, lng: lngSum / count } : undefined
         });
       }
@@ -398,21 +398,21 @@ export default function SelectableGoogleHomeMap({
     // Customer names
     customerNames.forEach(name => {
       if (name.toLowerCase().includes(query) && suggestions.length < 14) {
-        suggestions.push({ type: 'customer', value: name, label: `👤 ${name}` });
+        suggestions.push({ type: 'customer', value: name, label: name });
       }
     });
     
     // Cities
     cities.forEach(city => {
       if (city.toLowerCase().includes(query) && suggestions.length < 16) {
-        suggestions.push({ type: 'city', value: city, label: `🌆 ${city}` });
+        suggestions.push({ type: 'city', value: city, label: city });
       }
     });
     
     // Ad types
     adTypes.forEach(adType => {
       if (adType.toLowerCase().includes(query) && suggestions.length < 18) {
-        suggestions.push({ type: 'adType', value: adType, label: `📺 ${adType}` });
+        suggestions.push({ type: 'adType', value: adType, label: adType });
       }
     });
     
@@ -623,14 +623,14 @@ export default function SelectableGoogleHomeMap({
           <div style="position: absolute; top: 6px; left: 6px; background: ${statusBg}; backdrop-filter: blur(4px); padding: 2px 8px; border-radius: 8px; font-size: 9px; font-weight: 700; color: ${statusColor}; display: flex; align-items: center; gap: 4px;">
             <span style="width: 6px; height: 6px; border-radius: 50%; background: ${statusColor}; ${status.label === 'متاحة' ? 'box-shadow: 0 0 6px ' + statusColor + ';' : ''}"></span>${isOccupied ? 'مؤجرة' : status.label}
           </div>
-          ${isSelected ? `<div style="position: absolute; bottom: 6px; left: 6px; background: linear-gradient(135deg, #fbbf24, #f59e0b); padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 800; color: #1a1a2e; box-shadow: 0 2px 8px rgba(251,191,36,0.4);">✓ محددة</div>` : ''}
+ ${isSelected ? `<div style="position: absolute; bottom: 6px; left: 6px; background: linear-gradient(135deg, #fbbf24, #f59e0b); padding: 2px 8px; border-radius: 6px; font-size: 9px; font-weight: 800; color: #1a1a2e; box-shadow: 0 2px 8px rgba(251,191,36,0.4);"> محددة</div>` : ''}
           <div style="position: absolute; bottom: 6px; right: 6px; color: rgba(255,255,255,0.8); font-size: 11px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,0.8);">${name}</div>
         </div>
         
         <div style="padding: 10px;">
           <!-- Location info -->
           <div style="display: flex; align-items: center; gap: 4px; margin-bottom: 6px;">
-            <span style="font-size: 11px;">📍</span>
+            <span style="display:inline-flex;align-items:center;color:#fbbf24;"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></svg></span>
             <p style="color: #aaa; font-size: 10px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;">${location || city || 'موقع غير محدد'}</p>
             ${municipality ? `<span style="color: #666; font-size: 9px;">${municipality}</span>` : ''}
           </div>
@@ -677,7 +677,7 @@ export default function SelectableGoogleHomeMap({
 
           ${(isOccupied || status.label !== 'متاحة') && daysRemaining !== null && daysRemaining > 0 ? `
             <div style="background: rgba(245,158,11,0.08); padding: 4px 8px; border-radius: 6px; margin-bottom: 6px; font-size: 10px; font-weight: 600; color: #f59e0b; border: 1px solid rgba(245,158,11,0.15); display: flex; align-items: center; gap: 4px;">
-              <span>⏱</span> متبقي على الإيجار ${daysRemaining} يوم
+ <span></span> متبقي على الإيجار ${daysRemaining} يوم
             </div>
           ` : ''}
           
@@ -698,7 +698,7 @@ export default function SelectableGoogleHomeMap({
             ` : ''}
             <button onclick="window.dispatchEvent(new CustomEvent('toggleBillboard', {detail: '${billboardId}'}))"
               style="flex: 1; padding: 7px 10px; background: ${isSelected ? 'linear-gradient(135deg, #ef4444, #dc2626)' : 'linear-gradient(135deg, #22c55e, #16a34a)'}; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 700; font-size: 11px; font-family: 'Tajawal', sans-serif; box-shadow: 0 2px 8px ${isSelected ? 'rgba(239,68,68,0.3)' : 'rgba(34,197,94,0.3)'}; transition: transform 0.1s;">
-              ${isSelected ? '✕ إلغاء التحديد' : '✓ تحديد اللوحة'}
+ ${isSelected ? ' إلغاء التحديد' : ' تحديد اللوحة'}
             </button>
           </div>
         </div>
@@ -752,7 +752,7 @@ export default function SelectableGoogleHomeMap({
           mapTypeId: mapTypeId,
           disableDefaultUI: true,
           gestureHandling: 'greedy',
-          disableDoubleClickZoom: true, // ✅ Disable default double-click zoom since we use it for selection
+ disableDoubleClickZoom: true, // Disable default double-click zoom since we use it for selection
           styles: mapStyles.length > 0 ? mapStyles : undefined
         });
         
@@ -1734,7 +1734,7 @@ export default function SelectableGoogleHomeMap({
                     : 'bg-white/5 text-slate-300 hover:bg-white/10'
                 }`}
               >
-                <span>{showLabels ? '✓ مفعّل' : 'ملغى'}</span>
+ <span>{showLabels ? ' مفعّل' : 'ملغى'}</span>
                 <span>المسميات</span>
               </button>
             </>

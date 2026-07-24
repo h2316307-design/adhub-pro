@@ -131,8 +131,8 @@ const searchGooglePlaces = async (query: string): Promise<SearchSuggestion[]> =>
     }).catch(() => null);
 
     if (!res) return [];
-    if (res.status === 429) {
-      searchGoogleCooldownUntil = Date.now() + 5 * 60 * 1000;
+    if (res.status === 429 || res.status === 403) {
+      searchGoogleCooldownUntil = Date.now() + 30 * 60 * 1000;
       return [];
     }
     if (!res.ok) return [];

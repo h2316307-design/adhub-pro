@@ -521,7 +521,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             </div>
           </div>
 
-          {/* ✅ خيار لوحات صديقة */}
+ {/* خيار لوحات صديقة */}
           <div className="flex items-center gap-4 p-3 rounded-lg border bg-muted/30">
             <div className="flex items-center gap-2">
               <Switch
@@ -567,7 +567,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
             </div>
           )}
 
-          {/* ✅ قسم القيم المفقودة مع زر إضافة */}
+ {/* قسم القيم المفقودة مع زر إضافة */}
           {hasMissingValues && (
             <Alert className="border-amber-300 bg-amber-50 dark:bg-amber-950/20">
               <AlertTriangle className="h-4 w-4 text-amber-600" />
@@ -647,7 +647,7 @@ export const ExcelImportDialog: React.FC<ExcelImportDialogProps> = ({
                         </Badge>
                       )}
                     </div>
-                    {/* ✅ عمود الأخطاء التفصيلية */}
+ {/* عمود الأخطاء التفصيلية */}
                     <div className="text-xs text-destructive">
                       {row.errors.length > 0 && (
                         <ul className="list-disc list-inside space-y-0.5">

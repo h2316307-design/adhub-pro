@@ -249,7 +249,7 @@ export function TablePrintSettingsDialog({
               </div>
             </ScrollArea>
             <p className="text-xs text-muted-foreground">
-              💡 هذه معاينة تقريبية. العمود الأول سيظهر ترقيم عناصر الجدول (1، 2، 3...)
+ هذه معاينة تقريبية. العمود الأول سيظهر ترقيم عناصر الجدول (1، 2، 3...)
             </p>
           </TabsContent>
 
@@ -354,8 +354,8 @@ export function TablePrintSettingsDialog({
               {!isBalanced && (
                 <p className="text-xs text-muted-foreground">
                   {widthDifference > 0 
-                    ? `⚠️ يوجد فائض ${widthDifference.toFixed(1)}% - قم بتقليل بعض النسب`
-                    : `⚠️ يوجد نقصان ${Math.abs(widthDifference).toFixed(1)}% - قم بزيادة بعض النسب`
+ ? `️ يوجد فائض ${widthDifference.toFixed(1)}% - قم بتقليل بعض النسب`
+ : `️ يوجد نقصان ${Math.abs(widthDifference).toFixed(1)}% - قم بزيادة بعض النسب`
                   }
                 </p>
               )}

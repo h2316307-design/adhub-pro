@@ -215,7 +215,7 @@ export function SyncMissingBillboardsDialog({
           </div>
         ) : missingBillboards.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
-            جميع اللوحات موجودة بالفعل في المهام ✅
+ جميع اللوحات موجودة بالفعل في المهام 
           </div>
         ) : (
           <>

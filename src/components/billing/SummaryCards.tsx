@@ -179,7 +179,7 @@ export function SummaryCards({
         </CardContent>
       </Card>
 
-      {/* ⚠️ تنبيه الرصيد غير المستعمل */}
+ {/* ️ تنبيه الرصيد غير المستعمل */}
       {unallocatedBalance > 0 && (
         <div className="relative overflow-hidden rounded-2xl border-2 border-red-500/60 bg-gradient-to-r from-red-950/80 via-red-900/50 to-red-950/80 shadow-[0_0_30px_rgba(239,68,68,0.25)]">
           {/* شريط أحمر متوهج على اليمين */}

@@ -108,7 +108,7 @@ export default function GoogleHomeMap({
   
   const [isDraggingPin, setIsDraggingPin] = useState(false);
   const [draggingPinName, setDraggingPinName] = useState('');
-  const [isPinDragEnabled, setIsPinDragEnabled] = useState(false); // ✅ قفل المواقع افتراضياً لمنع التحريك بالخطأ
+ const [isPinDragEnabled, setIsPinDragEnabled] = useState(false); // قفل المواقع افتراضياً لمنع التحريك بالخطأ
   const googlePhotoMarkersRef = useRef<google.maps.Marker[]>([]);
   const googlePhotoCirclesRef = useRef<google.maps.Circle[]>([]);
   const googlePhotoArrowsRef = useRef<google.maps.Polyline[]>([]);
@@ -1347,10 +1347,11 @@ export default function GoogleHomeMap({
           box-shadow: 0 2px 8px rgba(0,0,0,0.4);
         "><div style="
           transform: rotate(45deg);
-          text-align: center;
-          line-height: 26px;
-          font-size: 14px;
-        ">📍</div></div>`,
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+        "><svg width="14" height="14" viewBox="0 0 24 24" fill="#ffffff" stroke="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg></div></div>`,
         iconSize: [32, 32],
         iconAnchor: [16, 32],
       });
@@ -1529,7 +1530,7 @@ export default function GoogleHomeMap({
           if (!isPinDragEnabled) {
             setIsPinDragEnabled(true);
             const name = (b as any).Billboard_Name || (b as any).location_text || `لوحة #${billboardId}`;
-            toast.info(`🔓 تم تفعيل وضع السحب والتحريك للوحة: "${name}"`, { duration: 3000 });
+ toast.info(` تم تفعيل وضع السحب والتحريك للوحة: "${name}"`, { duration: 3000 });
           }
         }, 1500);
       });
@@ -3108,9 +3109,9 @@ export default function GoogleHomeMap({
                     const next = !isPinDragEnabled;
                     setIsPinDragEnabled(next);
                     if (next) {
-                      toast.info('🔓 تم تفعيل وضع تحريك اللوحات — يمكنك سحب وإفلات الدبابيس الآن', { duration: 4000 });
+ toast.info(' تم تفعيل وضع تحريك اللوحات — يمكنك سحب وإفلات الدبابيس الآن', { duration: 4000 });
                     } else {
-                      toast.success('🔒 تم قفل تحريك اللوحات — المواقع آمنة الآن من أي سحب غير مقصود');
+ toast.success(' تم قفل تحريك اللوحات — المواقع آمنة الآن من أي سحب غير مقصود');
                     }
                   }}
                   className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3 py-2 text-xs font-extrabold whitespace-nowrap cursor-pointer ${
@@ -3468,7 +3469,7 @@ export default function GoogleHomeMap({
                     : 'bg-white/5 text-slate-300 hover:bg-white/10'
                 }`}
               >
-                <span>{showLabels ? '✓ مفعّل' : 'ملغى'}</span>
+ <span>{showLabels ? ' مفعّل' : 'ملغى'}</span>
                 <span>المسميات</span>
               </button>
             </>
@@ -3516,7 +3517,7 @@ export default function GoogleHomeMap({
                     : 'bg-white/5 text-slate-300 hover:bg-white/10'
                 }`}
               >
-                <span>{externalShowSociet ? '✓ معروض' : 'مخفي'}</span>
+ <span>{externalShowSociet ? ' معروض' : 'مخفي'}</span>
                 <span>لوحات سوسيت</span>
               </button>
             </>
@@ -3538,7 +3539,7 @@ export default function GoogleHomeMap({
                 : 'bg-white/5 text-slate-300 hover:bg-white/10'
             }`}
           >
-            <span>{showFieldPhotos ? '✓' : ''}</span>
+ <span>{showFieldPhotos ? '' : ''}</span>
             <span className="flex items-center gap-1.5"><Camera className="w-3.5 h-3.5" /> صور ميدانية</span>
           </button>
           <button

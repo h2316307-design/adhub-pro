@@ -224,7 +224,7 @@ export async function calculateInstallationCost(billboards: Billboard[]): Promis
   for (const billboard of billboards) {
     const size = billboard.size || '';
     const billboardName = billboard.name || `لوحة ${billboard.id}`;
-    const faces = billboard.faces || 2; // ✅ FIXED: Default to 2 faces if not specified
+ const faces = billboard.faces || 2; // FIXED: Default to 2 faces if not specified
     
     console.log(`🔄 Processing billboard ${billboard.id} with size: ${size}, faces: ${faces}`);
     
@@ -274,7 +274,7 @@ export async function calculateInstallationCost(billboards: Billboard[]): Promis
       billboardId: billboard.id,
       billboardName,
       size,
-      installationPrice: adjustedPrice, // ✅ FIXED: Use adjusted price for display
+ installationPrice: adjustedPrice, // FIXED: Use adjusted price for display
       faces: faces,
       adjustedPrice: adjustedPrice
     });
@@ -349,7 +349,7 @@ export async function calculateInstallationCostFromIds(billboardIds: string[]): 
         name: b.Billboard_Name || '',
         size: size,
         size_id: null,
-        faces: Number(b.Faces_Count) || 2 // ✅ FIXED: Use Faces_Count column, default to 2
+ faces: Number(b.Faces_Count) || 2 // FIXED: Use Faces_Count column, default to 2
       };
     });
 

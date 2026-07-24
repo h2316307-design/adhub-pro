@@ -117,7 +117,7 @@ export function OfferCard({
                 )}
                 {customerInfo.phone && (
                   <span className="flex items-center gap-1 bg-muted/50 px-2 py-1 rounded-full" dir="ltr">
-                    📞 {customerInfo.phone}
+ {customerInfo.phone}
                   </span>
                 )}
               </div>

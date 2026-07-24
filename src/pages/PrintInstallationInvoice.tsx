@@ -335,7 +335,7 @@ export default function PrintInstallationInvoice() {
       
       const payload = {
         customer_id: customerId || null,
-        customer_name: finalCustomerName, // ✅ Always provide customer_name
+ customer_name: finalCustomerName, // Always provide customer_name
         contract_number: selectedContracts.length === 1 ? parseInt(selectedContracts[0].contractNumber) : null,
         amount: totalAmount,
         method: invoiceMethod,
@@ -427,7 +427,7 @@ export default function PrintInstallationInvoice() {
       font-family: 'Noto Sans Arabic', Arial, sans-serif;
       background: white;
       color: #000;
-      font-size: 16px; /* ✅ Increased from 12px */
+ font-size: 16px; /* Increased from 12px */
       line-height: 1.6;
       direction: rtl;
       text-align: right;
@@ -460,14 +460,14 @@ export default function PrintInstallationInvoice() {
     }
     
     .company-name {
-      font-size: 28px; /* ✅ Increased from 20px */
+ font-size: 28px; /* Increased from 20px */
       font-weight: bold;
       color: #000;
       margin-bottom: 10px;
     }
     
     .company-details {
-      font-size: 16px; /* ✅ Increased from 12px */
+ font-size: 16px; /* Increased from 12px */
       color: #666;
       line-height: 1.8;
     }
@@ -478,14 +478,14 @@ export default function PrintInstallationInvoice() {
     }
     
     .invoice-title {
-      font-size: 32px; /* ✅ Increased from 24px */
+ font-size: 32px; /* Increased from 24px */
       font-weight: bold;
       color: #000;
       margin-bottom: 15px;
     }
     
     .invoice-details {
-      font-size: 16px; /* ✅ Increased from 12px */
+ font-size: 16px; /* Increased from 12px */
       color: #666;
       line-height: 1.8;
     }
@@ -499,14 +499,14 @@ export default function PrintInstallationInvoice() {
     }
     
     .customer-title {
-      font-size: 20px; /* ✅ Increased from 16px */
+ font-size: 20px; /* Increased from 16px */
       font-weight: bold;
       margin-bottom: 15px;
       color: #000;
     }
     
     .customer-details {
-      font-size: 16px; /* ✅ Increased from 13px */
+ font-size: 16px; /* Increased from 13px */
       line-height: 1.8;
     }
     
@@ -514,24 +514,24 @@ export default function PrintInstallationInvoice() {
       width: 100%;
       border-collapse: collapse;
       margin: 30px 0;
-      font-size: 14px; /* ✅ Increased from 10px */
+ font-size: 14px; /* Increased from 10px */
     }
     
     .items-table th {
       background: #000;
       color: white;
-      padding: 15px 10px; /* ✅ Increased padding */
+ padding: 15px 10px; /* Increased padding */
       text-align: center;
       font-weight: bold;
       border: 1px solid #000;
-      font-size: 16px; /* ✅ Increased from 11px */
+ font-size: 16px; /* Increased from 11px */
     }
     
     .items-table td {
-      padding: 12px 10px; /* ✅ Increased padding */
+ padding: 12px 10px; /* Increased padding */
       text-align: center;
       border: 1px solid #ddd;
-      font-size: 14px; /* ✅ Increased from 10px */
+ font-size: 14px; /* Increased from 10px */
       vertical-align: middle;
     }
     
@@ -547,21 +547,21 @@ export default function PrintInstallationInvoice() {
     }
     
     .total-label {
-      font-size: 22px; /* ✅ Increased from 18px */
+ font-size: 22px; /* Increased from 18px */
       color: #000;
       margin-bottom: 15px;
       font-weight: 600;
     }
     
     .total-value {
-      font-size: 36px; /* ✅ Increased from 28px */
+ font-size: 36px; /* Increased from 28px */
       font-weight: bold;
       color: #000;
       margin-bottom: 15px;
     }
     
     .total-words {
-      font-size: 18px; /* ✅ Increased from 14px */
+ font-size: 18px; /* Increased from 14px */
       color: #666;
       font-style: italic;
     }
@@ -575,14 +575,14 @@ export default function PrintInstallationInvoice() {
     }
     
     .notes-title {
-      font-size: 18px; /* ✅ Increased from 14px */
+ font-size: 18px; /* Increased from 14px */
       font-weight: bold;
       margin-bottom: 10px;
       color: #000;
     }
     
     .notes-content {
-      font-size: 16px; /* ✅ Increased from 12px */
+ font-size: 16px; /* Increased from 12px */
       line-height: 1.6;
       color: #333;
     }
@@ -590,7 +590,7 @@ export default function PrintInstallationInvoice() {
     .footer {
       margin-top: 40px;
       text-align: center;
-      font-size: 14px; /* ✅ Increased from 11px */
+ font-size: 14px; /* Increased from 11px */
       color: #666;
       border-top: 2px solid #ddd;
       padding-top: 20px;
@@ -598,7 +598,7 @@ export default function PrintInstallationInvoice() {
     
     @media print {
       body {
-        font-size: 14px; /* ✅ Ensure readable size in print */
+ font-size: 14px; /* Ensure readable size in print */
       }
       
       .invoice-container {
@@ -786,7 +786,7 @@ export default function PrintInstallationInvoice() {
                       <div className="text-right">
                         <div className="text-sm font-bold">{opt.label}</div>
                         <div className="text-[11px] opacity-75">
-                          {isSelected ? 'محددة بالفاتورة ✓' : 'غير محددة'}
+ {isSelected ? 'محددة بالفاتورة ' : 'غير محددة'}
                         </div>
                       </div>
                     </button>

@@ -135,7 +135,7 @@ const BulkWhatsApp = () => {
                   </ol>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  💡 بدلاً من ذلك، يمكنك استخدام <strong>الإرسال اليدوي</strong> من صفحة "تذكيرات المستحقات" التي تفتح واتساب مباشرة.
+ بدلاً من ذلك، يمكنك استخدام <strong>الإرسال اليدوي</strong> من صفحة "تذكيرات المستحقات" التي تفتح واتساب مباشرة.
                 </p>
               </div>
             </div>
@@ -273,8 +273,8 @@ const BulkWhatsApp = () => {
                     </div>
                     <Progress value={progressPercent} />
                     <div className="flex gap-4 text-sm">
-                      <span className="text-green-600">✅ تم: {bulk.progress.sent}</span>
-                      <span className="text-destructive">❌ فشل: {bulk.progress.failed}</span>
+ <span className="text-green-600"> تم: {bulk.progress.sent}</span>
+ <span className="text-destructive"> فشل: {bulk.progress.failed}</span>
                     </div>
                   </div>
 

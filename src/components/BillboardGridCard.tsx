@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Checkbox } from '@/components/ui/checkbox';
-import { MapPin, Calendar, Building, Building2, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History, EyeOff, Wrench, CalendarPlus, Pencil, ImageIcon, Check, ZoomIn, X, Copy, Layers, MapPinned, AlertTriangle, Wallet } from 'lucide-react';
+import { MapPin, Calendar, Building, Building2, Eye, User, FileText, Clock, Camera, ChevronDown, ChevronUp, CheckCircle2, XCircle, History, EyeOff, Wrench, CalendarPlus, Pencil, ImageIcon, Check, ZoomIn, X, Copy, Layers, MapPinned, AlertTriangle, Wallet, Handshake, Zap } from 'lucide-react';
 import { Billboard } from '@/types';
 import { formatGregorianDate, formatLongArabicDate } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -1596,7 +1596,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                 <div className="p-2.5 rounded-xl bg-gradient-to-r from-violet-500/8 via-purple-500/8 to-pink-500/8 border border-violet-500/15 shadow-sm animate-fade-in">
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-[11px] font-semibold text-violet-600 dark:text-violet-400 flex items-center gap-1">
-                      <span>🤝</span> لوحة مشتركة
+                      <Handshake className="w-3.5 h-3.5 text-violet-500" /> لوحة مشتركة
                     </span>
                     <Badge className="bg-gradient-to-r from-violet-500 to-pink-500 text-white text-[9px] h-4.5 border-0 font-bold">
                       شراكة
@@ -2105,7 +2105,14 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                         : 'bg-gradient-to-r from-amber-500 to-orange-500 text-white'
                     }`}
                   >
-                    {isAvailable ? '⚡ حجز' : 'تفريغ'}
+                    {isAvailable ? (
+                      <span className="flex items-center justify-center gap-1">
+                        <Zap className="w-3.5 h-3.5 fill-current" />
+                        حجز
+                      </span>
+                    ) : (
+                      'تفريغ'
+                    )}
                   </Button>
                 )}
 

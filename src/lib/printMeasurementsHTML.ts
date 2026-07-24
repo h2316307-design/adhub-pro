@@ -20,7 +20,7 @@ export interface MeasurementsHTMLOptions {
   paymentDetailsTable?: { label: string; value: string }[];
   customHeaderHtml?: string; // Custom HTML to show at the top before table
   additionalContent?: string; // Custom HTML to append after table
-  headerSwap?: boolean; // ✅ تبديل نصفي الهيدر (يمين ↔ يسار)
+ headerSwap?: boolean; // تبديل نصفي الهيدر (يمين يسار)
 }
 
 /**

@@ -300,7 +300,7 @@ export function SendDebtReportDialog({ open, onOpenChange }: SendDebtReportDialo
                 }`}
               >
                 <DollarSign className="h-4 w-4" />
-                💰 الديون المستحقة
+ الديون المستحقة
               </button>
               <button
                 onClick={() => { setReportType('overdue'); setCustomMessage(''); }}
@@ -310,7 +310,7 @@ export function SendDebtReportDialog({ open, onOpenChange }: SendDebtReportDialo
                     : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
                 }`}
               >
-                ⚠️ الدفعات المتأخرة
+ ️ الدفعات المتأخرة
               </button>
             </div>
           </div>
@@ -328,7 +328,7 @@ export function SendDebtReportDialog({ open, onOpenChange }: SendDebtReportDialo
                       : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  📊 إجمالي فقط
+ إجمالي فقط
                 </button>
                 <button
                   onClick={() => { setDetailMode('detailed'); setCustomMessage(''); }}
@@ -338,7 +338,7 @@ export function SendDebtReportDialog({ open, onOpenChange }: SendDebtReportDialo
                       : 'border-border bg-background text-muted-foreground hover:bg-muted/50'
                   }`}
                 >
-                  📋 مفصل حسب المصدر
+ مفصل حسب المصدر
                 </button>
               </div>
             </div>
@@ -379,7 +379,7 @@ export function SendDebtReportDialog({ open, onOpenChange }: SendDebtReportDialo
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium flex items-center gap-1.5">
                   <DollarSign className="h-4 w-4 text-destructive" />
-                  💰 الديون المستحقة
+ الديون المستحقة
                 </span>
                 <Badge variant="destructive">{debtData.length} عميل</Badge>
               </div>
@@ -401,7 +401,7 @@ export function SendDebtReportDialog({ open, onOpenChange }: SendDebtReportDialo
             <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium flex items-center gap-1.5">
-                  ⚠️ الدفعات المتأخرة
+ ️ الدفعات المتأخرة
                 </span>
                 <Badge className="bg-amber-500 text-white hover:bg-amber-600">
                   {debtData.filter(d => d.overdueCount > 0).length} عميل

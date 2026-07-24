@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { PaintBucket, Plus, Trash2, Image as ImageIcon, Copy, ChevronDown, ChevronUp, ClipboardPaste } from 'lucide-react';
+import { PaintBucket, Plus, Trash2, Image as ImageIcon, Copy, ChevronDown, ChevronUp, ClipboardPaste, MapPin, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -387,8 +387,8 @@ export function DesignManager({ selectedBillboards, designs, onChange, contractI
                                   {billboard.name}
                                 </p>
                                 {billboardLocation && (
-                                  <p className="text-[10px] text-muted-foreground truncate mt-0.5">
-                                    📍 {billboardLocation}
+                                  <p className="text-[10px] text-muted-foreground truncate mt-0.5 flex items-center gap-1">
+                                    <MapPin className="w-3 h-3 text-amber-500 shrink-0" /> {billboardLocation}
                                   </p>
                                 )}
                               </div>
@@ -397,8 +397,8 @@ export function DesignManager({ selectedBillboards, designs, onChange, contractI
                           
                           {isChecked && (
                             <div className="absolute top-2 right-2">
-                              <Badge className="bg-primary text-primary-foreground shadow-lg">
-                                ✓
+                              <Badge className="bg-primary text-primary-foreground shadow-lg p-1">
+                                <Check className="w-3 h-3" />
                               </Badge>
                             </div>
                           )}
@@ -512,7 +512,7 @@ export function DesignManager({ selectedBillboards, designs, onChange, contractI
                 <ul className="text-xs space-y-1">
                   <li>• يمكنك إنشاء تصاميم متعددة وتعيين لوحات مختلفة لكل تصميم</li>
                   <li>• استخدم زر "الكل" لتطبيق تصميم على جميع اللوحات مرة واحدة</li>
-                  <li>• انقر على كارت اللوحة لتبديل اختيار اللوحة - اللوحات المختارة تظهر بعلامة ✓</li>
+                  <li>• انقر على كارت اللوحة لتبديل اختيار اللوحة - اللوحات المختارة تظهر بعلامة اختيار</li>
                   <li>• يمكنك إدخال رابط التصميم أو رفع ملف من جهازك</li>
                   <li>• الملفات المرفوعة تُحفظ في مجلد public/designs/contract-id/</li>
                   <li>• انقر على الصورة لمعاينة التصميم بحجم كامل</li>

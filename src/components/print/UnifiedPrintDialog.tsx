@@ -247,7 +247,7 @@ export function UnifiedPrintDialog({
         fileName,
         driveFolder: folder,
         phone: whatsAppPhone,
-        message: `📄 ${title}\n\n`,
+ message: ` ${title}\n\n`,
       });
       toast.success('تم الإرسال عبر واتساب بنجاح');
       setWhatsAppOpen(false);

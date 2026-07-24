@@ -222,7 +222,7 @@ export default function PricingList() {
   const [newDurationMonths, setNewDurationMonths] = useState<number>(1);
   const [newDurationOrder, setNewDurationOrder] = useState<number>(1);
   const [newDurationDbColumn, setNewDurationDbColumn] = useState('');
-  const [isUpdatingSizeIds, setIsUpdatingSizeIds] = useState(false); // ✅ حالة تحديث size_id
+ const [isUpdatingSizeIds, setIsUpdatingSizeIds] = useState(false); // حالة تحديث size_id
 
   // ✅ دالة تحديث size_id للأسعار التي ليس لديها size_id
   const updateMissingSizeIds = async () => {
@@ -760,7 +760,7 @@ export default function PricingList() {
       // إنشاء سجلات أسعار للمقاس الجديد للفئات الجديدة فقط
       const pricingInserts = newCategories.map(category => ({
         size: sz,
-        size_id: sizeId, // ✅ إضافة size_id
+ size_id: sizeId, // إضافة size_id
         billboard_level: selectedLevel,
         customer_category: category,
         one_month: 0,
@@ -1171,7 +1171,7 @@ export default function PricingList() {
 
       const updateData = {
         [monthOption.dbColumn]: value || 0,
-        size_id: sizeId // ✅ إضافة size_id عند التحديث
+ size_id: sizeId // إضافة size_id عند التحديث
       };
 
       if (existingRow) {
@@ -1197,7 +1197,7 @@ export default function PricingList() {
         // إنشاء سجل جديد مع size_id
         const newRow = {
           size,
-          size_id: sizeId, // ✅ إضافة size_id عند الإنشاء
+ size_id: sizeId, // إضافة size_id عند الإنشاء
           billboard_level: selectedLevel,
           customer_category: customer,
           one_month: monthOption.dbColumn === 'one_month' ? (value || 0) : 0,
@@ -1520,7 +1520,7 @@ export default function PricingList() {
 </head>
 <body>
   ${levelPages}
-  <button class="print-btn" onclick="window.print()">🖨️ طباعة القائمة</button>
+ <button class="print-btn" onclick="window.print()">️ طباعة القائمة</button>
 </body>
 </html>`;
   };
@@ -1694,7 +1694,7 @@ export default function PricingList() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="text-red-500 text-lg mb-4">⚠️ خطأ في الاتصال بقاعدة البيانات</div>
+ <div className="text-red-500 text-lg mb-4">️ خطأ في الاتصال بقاعدة البيانات</div>
           <p className="text-muted-foreground mb-4">{connectionError}</p>
           <Button onClick={loadData} variant="outline">
             إعادة المحاولة
@@ -1708,7 +1708,7 @@ export default function PricingList() {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
-          <div className="text-yellow-600 text-lg mb-4">📊 لا توجد مستويات متاحة</div>
+ <div className="text-yellow-600 text-lg mb-4"> لا توجد مستويات متاحة</div>
           <p className="text-muted-foreground mb-4">لم يتم العثور على أي مستويات في قاعدة البيانات</p>
           <Button onClick={() => setAddLevelOpen(true)} className="mr-2">
             إضافة مستوى جديد
@@ -1813,7 +1813,7 @@ export default function PricingList() {
                   <div className="px-2 pb-2 pt-1">
                     <Input
                       type="text"
-                      placeholder="🔍 بحث..."
+ placeholder=" بحث..."
                       value={categorySearchTerm}
                       onChange={(e) => setCategorySearchTerm(e.target.value)}
                       className="h-7 text-xs"
@@ -2146,7 +2146,7 @@ export default function PricingList() {
             </p>
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
               <p className="text-sm text-red-600 dark:text-red-400">
-                ⚠️ تحذير: سيتم حذف جميع المقاسات والأسعار والفئات المرتبطة بهذا المستوى نهائياً ولا يمكن التراجع عن هذا الإجراء.
+ ️ تحذير: سيتم حذف جميع المقاسات والأسعار والفئات المرتبطة بهذا المستوى نهائياً ولا يمكن التراجع عن هذا الإجراء.
               </p>
             </div>
           </div>
@@ -2172,7 +2172,7 @@ export default function PricingList() {
             </p>
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
               <p className="text-sm text-red-600 dark:text-red-400">
-                ⚠️ تحذير: سيتم حذف جميع الأسعار المرتبطة بهذا المقاس في هذا المستوى نهائياً ولا يمكن التراجع عن هذا الإجراء.
+ ️ تحذير: سيتم حذف جميع الأسعار المرتبطة بهذا المقاس في هذا المستوى نهائياً ولا يمكن التراجع عن هذا الإجراء.
               </p>
             </div>
           </div>
@@ -2202,14 +2202,14 @@ export default function PricingList() {
                   size="sm"
                   onClick={() => setPrintTheme('light')}
                 >
-                  ☀️ فاتح (مناسب للطباعة)
+ ️ فاتح (مناسب للطباعة)
                 </Button>
                 <Button
                   variant={printTheme === 'dark' ? "default" : "outline"}
                   size="sm"
                   onClick={() => setPrintTheme('dark')}
                 >
-                  🌙 غامق
+ غامق
                 </Button>
               </div>
             </div>
@@ -2231,7 +2231,7 @@ export default function PricingList() {
                     {logo.src ? (
                       <img src={logo.src} alt={logo.label} className="h-8 w-auto object-contain" />
                     ) : (
-                      <div className="h-8 flex items-center justify-center text-muted-foreground text-lg">✕</div>
+ <div className="h-8 flex items-center justify-center text-muted-foreground text-lg"></div>
                     )}
                     <span className="text-[10px] text-muted-foreground leading-tight text-center">{logo.label}</span>
                   </button>
@@ -2244,7 +2244,7 @@ export default function PricingList() {
               <label className="text-sm font-medium mb-2 block">الفئة السعرية</label>
               <Input
                 type="text"
-                placeholder="🔍 ابحث عن الفئة..."
+ placeholder=" ابحث عن الفئة..."
                 value={printCategorySearch}
                 onChange={(e) => setPrintCategorySearch(e.target.value)}
                 className="h-8 text-sm mb-2"
@@ -2438,7 +2438,7 @@ export default function PricingList() {
             </p>
             <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
               <p className="text-sm text-red-600 dark:text-red-400">
-                ⚠️ تحذير: سيتم حذف جميع الأسعار المرتبطة بهذه الفئة نهائياً ولا يمكن التراجع عن هذا الإجراء.
+ ️ تحذير: سيتم حذف جميع الأسعار المرتبطة بهذه الفئة نهائياً ولا يمكن التراجع عن هذا الإجراء.
               </p>
             </div>
           </div>
@@ -2679,7 +2679,7 @@ export default function PricingList() {
             </p>
             <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg p-3">
               <p className="text-sm text-amber-600 dark:text-amber-400">
-                ⚠️ ملاحظة: حذف المدة لن يؤثر على البيانات المحفوظة في قاعدة البيانات، لكنها لن تظهر في واجهة الأسعار.
+ ️ ملاحظة: حذف المدة لن يؤثر على البيانات المحفوظة في قاعدة البيانات، لكنها لن تظهر في واجهة الأسعار.
               </p>
             </div>
           </div>

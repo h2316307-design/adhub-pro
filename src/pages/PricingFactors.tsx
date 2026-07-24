@@ -466,7 +466,7 @@ export default function PricingFactors() {
       <div style="color: rgba(212, 175, 55, 0.7);">نظام معاملات التسعير</div>
     </div>
   </div>
-  <button class="print-btn" onclick="window.print()">🖨️ طباعة</button>
+ <button class="print-btn" onclick="window.print()">️ طباعة</button>
 </body>
 </html>`;
   };
@@ -728,7 +728,7 @@ export default function PricingFactors() {
 </head>
 <body>
   ${singlePage}
-  <button class="print-btn" onclick="window.print()">🖨️ طباعة القائمة</button>
+ <button class="print-btn" onclick="window.print()">️ طباعة القائمة</button>
 </body>
 </html>`;
   };

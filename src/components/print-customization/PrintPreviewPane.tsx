@@ -91,7 +91,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
             }}
           >
             <div className="text-center text-muted-foreground">
-              <div className="text-3xl mb-2">📷</div>
+ <div className="text-3xl mb-2"></div>
               <div className="text-sm font-medium">صورة اللوحة الرئيسية</div>
               <div className="text-xs opacity-60">(بدون تصاميم - حجم كبير)</div>
               <div className="text-xs opacity-60 mt-1">{settings.main_image_width} × {settings.main_image_height}</div>
@@ -113,7 +113,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
             }}
           >
             <div className="text-center text-green-700">
-              <div className="text-3xl mb-2">🖼️</div>
+ <div className="text-3xl mb-2">️</div>
               <div className="text-sm font-medium">صورة التركيب</div>
               <div className="text-xs opacity-70">(تحل محل الصورة الافتراضية)</div>
             </div>
@@ -140,7 +140,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
                 style={{ height: settings.installed_image_height }}
               >
                 <div className="text-center text-blue-700 text-xs">
-                  <div className="text-xl">🖼️</div>
+ <div className="text-xl">️</div>
                   <div>صورة تركيب A</div>
                 </div>
               </div>
@@ -149,7 +149,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
                 style={{ height: settings.installed_image_height }}
               >
                 <div className="text-center text-blue-700 text-xs">
-                  <div className="text-xl">🖼️</div>
+ <div className="text-xl">️</div>
                   <div>صورة تركيب B</div>
                 </div>
               </div>
@@ -170,7 +170,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
                 style={{ height: settings.design_image_height }}
               >
                 <div className="text-center text-purple-600 text-xs">
-                  <div>🎨</div>
+ <div></div>
                   <div>التصميم A</div>
                 </div>
               </div>
@@ -179,7 +179,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
                 style={{ height: settings.design_image_height }}
               >
                 <div className="text-center text-purple-600 text-xs">
-                  <div>🎨</div>
+ <div></div>
                   <div>التصميم B</div>
                 </div>
               </div>
@@ -453,7 +453,7 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
             }}
           >
             <div className="text-center text-muted-foreground text-xs">
-              <div className="text-xl">📱</div>
+ <div className="text-xl"></div>
               <div>QR</div>
             </div>
           </div>

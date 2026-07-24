@@ -112,7 +112,7 @@ export function ImageUploadZone({
       const imageUrl = await uploadToImgbb(file, finalName, folder);
       onChange(imageUrl);
       stopSimulatedProgress(true);
-      toast.success('تم رفع الصورة بنجاح ✨');
+ toast.success('تم رفع الصورة بنجاح ');
     } catch (error) {
       console.error('Upload error:', error);
       stopSimulatedProgress(false);
@@ -176,7 +176,7 @@ export function ImageUploadZone({
     phase === 'preparing' ? 'جاري التحضير…' :
     phase === 'uploading' ? 'جاري رفع الصورة…' :
     phase === 'processing' ? 'جاري المعالجة…' :
-    phase === 'done' ? 'اكتمل الرفع ✓' : '';
+ phase === 'done' ? 'اكتمل الرفع ' : '';
 
   return (
     <div className={`space-y-3 ${className}`} onPaste={handlePaste} tabIndex={0}>

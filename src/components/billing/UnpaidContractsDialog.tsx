@@ -105,7 +105,7 @@ export function UnpaidContractsDialog({
                 <div className="text-center">
                   <CheckCircle className="h-12 w-12 text-green-600 mx-auto mb-3" />
                   <p className="text-lg font-semibold text-green-700">
-                    تم تسديد جميع العقود بالكامل 🎉
+ تم تسديد جميع العقود بالكامل 
                   </p>
                 </div>
               </CardContent>

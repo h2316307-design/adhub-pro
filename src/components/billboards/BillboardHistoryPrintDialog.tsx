@@ -177,13 +177,13 @@ export function BillboardHistoryPrintDialog({
           ${showInstallation ? `
             <td style="color:${t.primaryColor};font-weight:bold;" class="num">
               ${record.installation_cost ? Number(record.installation_cost).toLocaleString() : '-'}
-              ${record.include_installation_in_price ? `<span style="color:#10b981;margin-right:2px;">✓</span>` : ''}
+ ${record.include_installation_in_price ? `<span style="color:#10b981;margin-right:2px;"></span>` : ''}
             </td>
           ` : ''}
           ${showPrint ? `
             <td class="num">
               ${record.print_cost ? Number(record.print_cost).toLocaleString() : '-'}
-              ${record.include_print_in_price ? `<span style="color:#10b981;margin-right:2px;">✓</span>` : ''}
+ ${record.include_print_in_price ? `<span style="color:#10b981;margin-right:2px;"></span>` : ''}
             </td>
           ` : ''}
           ${showPrices ? `

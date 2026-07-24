@@ -856,7 +856,7 @@ export function EnhancedAddInstallationTaskDialog({
                             : "border-border text-muted-foreground hover:border-primary hover:text-foreground hover:bg-background"
                         )}
                       >
-                        {showAllContracts ? '✓ تشمل العقود المنتهية' : 'العقود النشطة فقط'}
+ {showAllContracts ? ' تشمل العقود المنتهية' : 'العقود النشطة فقط'}
                       </button>
                     </div>
 

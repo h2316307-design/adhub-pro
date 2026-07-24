@@ -140,8 +140,8 @@ export function ContractDatesForm({
                     </TooltipTrigger>
                     <TooltipContent side="top" className="max-w-xs text-right">
                       <p className="font-semibold mb-1">طريقة الحساب:</p>
-                      <p>✓ مفعل: كل شهر = 30 يوم ثابت</p>
-                      <p>✗ معطل: حسب أيام الشهر الفعلية</p>
+ <p> مفعل: كل شهر = 30 يوم ثابت</p>
+ <p> معطل: حسب أيام الشهر الفعلية</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>

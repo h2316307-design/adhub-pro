@@ -84,8 +84,8 @@ export async function uploadPdfAndSendWhatsApp(options: {
   );
 
   const cleanPhone = options.phone.replace(/[^0-9+]/g, '').replace(/^\+/, '');
-  const baseMsg = options.message || `📄 ${options.fileName}`;
-  const fullMsg = `${baseMsg}\n\n📎 رابط الملف:\n${pdfUrl}`;
+  const baseMsg = options.message || options.fileName;
+  const fullMsg = `${baseMsg}\n\nرابط الملف:\n${pdfUrl}`;
 
   // 3. محاولة إرسال الملف عبر الجسر (wppconnect bridge)
   let bridgeSent = false;
@@ -104,14 +104,14 @@ export async function uploadPdfAndSendWhatsApp(options: {
 
     if (!fileError && fileData?.success !== false) {
       bridgeSent = true;
-      console.log('✅ PDF sent via WhatsApp bridge');
+      console.log('PDF sent via WhatsApp bridge');
       
       // ثانياً: إرسال الرابط كرسالة نصية
       await supabase.functions.invoke('whatsapp-service', {
         body: {
           action: 'send',
           phone: cleanPhone,
-          message: `📎 رابط الملف:\n${pdfUrl}`,
+          message: `رابط الملف:\n${pdfUrl}`,
         }
       });
     }
@@ -154,8 +154,8 @@ export async function uploadPdfBlobAndSendWhatsApp(options: {
   );
 
   const cleanPhone = options.phone.replace(/[^0-9+]/g, '').replace(/^\+/, '');
-  const baseMsg = options.message || `📄 ${options.fileName}`;
-  const fullMsg = `${baseMsg}\n\n📎 رابط الملف:\n${pdfUrl}`;
+  const baseMsg = options.message || options.fileName;
+  const fullMsg = `${baseMsg}\n\nرابط الملف:\n${pdfUrl}`;
 
   let bridgeSent = false;
   try {
@@ -173,7 +173,7 @@ export async function uploadPdfBlobAndSendWhatsApp(options: {
     if (!fileError && fileData?.success !== false) {
       bridgeSent = true;
       await supabase.functions.invoke('whatsapp-service', {
-        body: { action: 'send', phone: cleanPhone, message: `📎 رابط الملف:\n${pdfUrl}` }
+        body: { action: 'send', phone: cleanPhone, message: `رابط الملف:\n${pdfUrl}` }
       });
     }
   } catch (err) {

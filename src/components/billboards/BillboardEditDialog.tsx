@@ -41,7 +41,7 @@ interface BillboardEditDialogProps {
   citiesList: string[];
   faces: any[];
   billboardTypes: string[];
-  billboards: any[]; // ✅ NEW: Add billboards prop for district suggestions
+ billboards: any[]; // NEW: Add billboards prop for district suggestions
   setMunicipalities: (municipalities: any[]) => void;
   setDbMunicipalities: (municipalities: string[]) => void;
   loadBillboards: (options?: { silent?: boolean }) => Promise<void>;
@@ -76,7 +76,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
   citiesList,
   faces,
   billboardTypes,
-  billboards = [], // ✅ NEW: Default empty array
+ billboards = [], // NEW: Default empty array
   setMunicipalities,
   setDbMunicipalities,
   loadBillboards,

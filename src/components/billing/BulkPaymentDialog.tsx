@@ -181,8 +181,8 @@ export function BulkPaymentDialog({
               {amount && Number(amount) !== totalRequired && (
                 <p className="text-xs text-primary">
                   {Number(amount) > totalRequired 
-                    ? `⚠️ المبلغ أكبر من المطلوب (${formatAmount(Number(amount) - totalRequired)} د.ل زيادة)`
-                    : `ℹ️ المبلغ أقل من المطلوب (${formatAmount(totalRequired - Number(amount))} د.ل متبقي)`
+ ? `️ المبلغ أكبر من المطلوب (${formatAmount(Number(amount) - totalRequired)} د.ل زيادة)`
+ : `️ المبلغ أقل من المطلوب (${formatAmount(totalRequired - Number(amount))} د.ل متبقي)`
                   }
                 </p>
               )}
@@ -288,7 +288,7 @@ export function BulkPaymentDialog({
                 </div>
                 {amount && totalDistributed !== Number(amount) && (
                   <p className="text-xs text-red">
-                    ⚠️ المبلغ الموزع لا يساوي المبلغ الإجمالي
+ ️ المبلغ الموزع لا يساوي المبلغ الإجمالي
                     {totalDistributed > Number(amount) 
                       ? ` (زيادة: ${formatAmount(totalDistributed - Number(amount))} د.ل)`
                       : ` (نقص: ${formatAmount(Number(amount) - totalDistributed)} د.ل)`

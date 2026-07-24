@@ -293,7 +293,7 @@ export default function FieldPhotoGallery() {
                     <MapPin className="w-3 h-3" /> {Number(r.lat).toFixed(3)},{Number(r.lng).toFixed(3)}
                   </span>
                 )}
-                {r.bucket_url && <span className="text-blue-500 text-[10px]">رابط ✓</span>}
+ {r.bucket_url && <span className="text-blue-500 text-[10px]">رابط </span>}
               </div>
             ))}
             {importPreview.length > 20 && (

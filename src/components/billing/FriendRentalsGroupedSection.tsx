@@ -42,7 +42,7 @@ interface FriendRentalsGroupedSectionProps {
   onUseAsPayment: (rentals: FriendRentalItem[]) => void;
   contracts?: any[];
   onUpdate?: () => void;
-  customerId?: string; // ✅ أضفنا معرف العميل
+ customerId?: string; // أضفنا معرف العميل
 }
 
 function generateFriendInvoiceSerial(contractNumber: number): string {
@@ -75,7 +75,7 @@ export function FriendRentalsGroupedSection({
   onUseAsPayment,
   contracts,
   onUpdate,
-  customerId, // ✅
+ customerId, // 
 }: FriendRentalsGroupedSectionProps) {
   const [openGroups, setOpenGroups] = useState<Set<number>>(new Set());
   const [zoomedImage, setZoomedImage] = useState<{ url: string; title: string } | null>(null);
@@ -630,7 +630,7 @@ export function FriendRentalsGroupedSection({
                                     </Badge>
                                   </div>
                                 )}
-                                {bb?.Nearest_Landmark && <p className="text-xs text-muted-foreground/80 flex items-center gap-1">📍 {bb.Nearest_Landmark}</p>}
+ {bb?.Nearest_Landmark && <p className="text-xs text-muted-foreground/80 flex items-center gap-1"> {bb.Nearest_Landmark}</p>}
                               </div>
                               <Badge className={`text-xs font-semibold py-0.5 px-2.5 rounded-full ${active ? 'bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 hover:bg-emerald-500/20' : 'bg-muted text-muted-foreground border border-border'}`}>
                                 {active ? 'نشط' : 'منتهي'}

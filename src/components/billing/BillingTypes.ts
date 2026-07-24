@@ -71,10 +71,10 @@ export interface PaymentRow {
   paid_at: string;
   entry_type: 'receipt' | 'invoice' | 'debt' | 'account_payment' | 'payment' | 'sales_invoice' | 'purchase_invoice' | 'printed_invoice' | 'general_debit' | 'general_credit';
   distributed_payment_id?: string | null;
-  printed_invoice_id?: string | null; // ✅ ربط مع فاتورة طباعة
-  sales_invoice_id?: string | null; // ✅ ربط مع فاتورة مبيعات
-  purchase_invoice_id?: string | null; // ✅ ربط مع فاتورة مشتريات
-  composite_task_id?: string | null; // ✅ ربط مع مهمة مجمعة
+ printed_invoice_id?: string | null; // ربط مع فاتورة طباعة
+ sales_invoice_id?: string | null; // ربط مع فاتورة مبيعات
+ purchase_invoice_id?: string | null; // ربط مع فاتورة مشتريات
+ composite_task_id?: string | null; // ربط مع مهمة مجمعة
   collected_via_intermediary?: boolean; // هل تم القبض عن طريق وسيط
   collector_name?: string | null; // اسم المحصل (الذي استلم من الزبون)
   receiver_name?: string | null; // اسم المسلم له (المدير)

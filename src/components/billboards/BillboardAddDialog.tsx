@@ -37,7 +37,7 @@ interface BillboardAddDialogProps {
   citiesList: string[];
   faces: any[];
   billboardTypes: string[];
-  billboards: any[]; // ✅ NEW: Add billboards prop for district suggestions
+ billboards: any[]; // NEW: Add billboards prop for district suggestions
   setMunicipalities: (municipalities: any[]) => void;
   setSizes: (sizes: any[]) => void;
   setLevels: (levels: string[]) => void;
@@ -77,7 +77,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
   citiesList,
   faces,
   billboardTypes,
-  billboards = [], // ✅ NEW: Default empty array
+ billboards = [], // NEW: Default empty array
   setMunicipalities,
   setSizes,
   setLevels,
@@ -360,7 +360,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       GPS_Coordinates: GPS_Coordinates || null,
       Faces_Count: Faces_Count ? parseInt(String(Faces_Count)) : null,
       Size,
-      size_id: sizeId, // ✅ سيتم حفظه بشكل صحيح
+ size_id: sizeId, // سيتم حفظه بشكل صحيح
       Level,
       Image_URL,
       image_name: finalImageName,
@@ -375,7 +375,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
 
     console.log('🔧 Add billboard payload with size_id:', {
       ...payload,
-      size_id_check: sizeId ? '✅ موجود' : '❌ غير موجود'
+ size_id_check: sizeId ? ' موجود' : ' غير موجود'
     });
     
     try {

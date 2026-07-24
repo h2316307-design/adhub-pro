@@ -104,8 +104,8 @@ export function NotificationBar() {
           message: `عقد #${c.Contract_Number}`,
           details: [
             c['Customer Name'] || 'بدون اسم',
-            adType ? `📋 ${adType}` : '',
-            `💰 متبقي: ${remaining.toLocaleString()} د.ل`,
+            adType ? `نوع الإعلان: ${adType}` : '',
+            `متبقي: ${remaining.toLocaleString()} د.ل`,
           ].filter(Boolean),
         });
       }
@@ -116,8 +116,8 @@ export function NotificationBar() {
           message: `عقد #${c.Contract_Number}`,
           details: [
             c['Customer Name'] || 'بدون اسم',
-            adType ? `📋 ${adType}` : '',
-            `⏳ ينتهي بعد ${daysLeft} يوم`,
+            adType ? `نوع الإعلان: ${adType}` : '',
+            `ينتهي بعد ${daysLeft} يوم`,
           ].filter(Boolean),
         });
       }
@@ -127,9 +127,9 @@ export function NotificationBar() {
         alerts.push({ id: `composite-${t.id}`, type: 'info', category: 'مهام مجمعة',
           message: `عقد #${t.contract_id}${adType ? ` - ${adType}` : ''}`,
           details: [
-            `🔧 ${taskLabel}`,
+            `مهمة: ${taskLabel}`,
             t.customer_name || 'بدون اسم',
-            `📌 ${t.status === 'pending' ? 'قيد الانتظار' : 'قيد التنفيذ'}`,
+            `الحالة: ${t.status === 'pending' ? 'قيد الانتظار' : 'قيد التنفيذ'}`,
           ].filter(Boolean),
         });
       }
@@ -138,8 +138,8 @@ export function NotificationBar() {
         alerts.push({ id: `install-${t.id}`, type: 'info', category: 'مهام تركيب',
           message: `عقد #${t.contract_id}`,
           details: [
-            adType ? `📋 ${adType}` : '',
-            `📌 ${t.status === 'pending' ? 'قيد الانتظار' : 'قيد التنفيذ'}`,
+            adType ? `نوع الإعلان: ${adType}` : '',
+            `الحالة: ${t.status === 'pending' ? 'قيد الانتظار' : 'قيد التنفيذ'}`,
           ].filter(Boolean),
         });
       }
@@ -148,8 +148,8 @@ export function NotificationBar() {
         alerts.push({ id: `removal-${t.id}`, type: 'warning', category: 'مهام إزالة',
           message: `عقد #${t.contract_id || '-'}`,
           details: [
-            adType ? `📋 ${adType}` : '',
-            `📌 ${t.status === 'pending' ? 'قيد الانتظار' : 'قيد التنفيذ'}`,
+            adType ? `نوع الإعلان: ${adType}` : '',
+            `الحالة: ${t.status === 'pending' ? 'قيد الانتظار' : 'قيد التنفيذ'}`,
           ].filter(Boolean),
         });
       }
@@ -159,10 +159,10 @@ export function NotificationBar() {
           message: p.customer_name || 'عميل',
           details: [
             `عقد #${p.contract_number || '-'}`,
-            adType ? `📋 ${adType}` : '',
-            `💰 ${Number(p.amount).toLocaleString()} د.ل`,
-            p.method ? `🏦 ${p.method}` : '',
-            `📅 ${p.paid_at?.split('T')[0] || ''}`,
+            adType ? `نوع الإعلان: ${adType}` : '',
+            `المبلغ: ${Number(p.amount).toLocaleString()} د.ل`,
+            p.method ? `الطريقة: ${p.method}` : '',
+            `التاريخ: ${p.paid_at?.split('T')[0] || ''}`,
           ].filter(Boolean),
         });
       }
@@ -170,8 +170,8 @@ export function NotificationBar() {
         alerts.push({ id: `booking-${b.id}`, type: 'warning', category: 'طلبات حجز',
           message: 'طلب حجز جديد',
           details: [
-            `📅 ${b.start_date} → ${b.end_date}`,
-            `💰 ${Number(b.total_price).toLocaleString()} د.ل`,
+            `الفترة: ${b.start_date} ← ${b.end_date}`,
+            `المبلغ: ${Number(b.total_price).toLocaleString()} د.ل`,
           ],
         });
       }
@@ -179,10 +179,10 @@ export function NotificationBar() {
         const adType = (b as any).Ad_Type || '';
         alerts.push({ id: `maintenance-${b.ID}`, type: 'warning', category: 'صيانة',
           message: `لوحة #${b.ID}`,
-          details: [b.Billboard_Name || '', adType ? `📋 ${adType}` : '', '🔧 تحتاج صيانة'].filter(Boolean),
+          details: [b.Billboard_Name || '', adType ? `نوع الإعلان: ${adType}` : '', 'تحتاج صيانة'].filter(Boolean),
         });
       }
-      const actionLabels: Record<string, string> = { create: '➕ إنشاء', update: '✏️ تعديل', delete: '🗑️ حذف' };
+      const actionLabels: Record<string, string> = { create: 'إنشاء', update: 'تعديل', delete: 'حذف' };
       for (const a of activityRes.data || []) {
         const actionLabel = actionLabels[a.action] || a.action;
         const timeStr = new Date(a.created_at).toLocaleTimeString('ar-LY', { hour: '2-digit', minute: '2-digit' });
@@ -192,10 +192,10 @@ export function NotificationBar() {
           details: [
             actionLabel,
             a.contract_number ? `عقد #${a.contract_number}` : '',
-            actAdType ? `📋 ${actAdType}` : '',
+            actAdType ? `نوع الإعلان: ${actAdType}` : '',
             a.customer_name || '',
-            (a.details as any)?.amount ? `💰 ${Number((a.details as any).amount).toLocaleString()} د.ل` : '',
-            `🕐 ${timeStr}`,
+            (a.details as any)?.amount ? `المبلغ: ${Number((a.details as any).amount).toLocaleString()} د.ل` : '',
+            `الوقت: ${timeStr}`,
           ].filter(Boolean),
         });
       }

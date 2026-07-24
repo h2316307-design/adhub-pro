@@ -24,10 +24,10 @@ interface PaymentSectionProps {
   onDeleteDistributedPayment?: (distributedPaymentId: string) => void;
   onEditDistributedPayment?: (distributedPaymentId: string, payments: PaymentRow[]) => void;
   showCollectionDetails?: boolean;
-  totalRemainingDebt?: number; // ✅ المتبقي من إجمالي الديون (اختياري للتوافق مع المكونات القديمة)
+ totalRemainingDebt?: number; // المتبقي من إجمالي الديون (اختياري للتوافق مع المكونات القديمة)
   contracts?: Array<{ Contract_Number: number | string; 'Ad Type'?: string; ad_type?: string }>;
   onRefresh?: () => void | Promise<void>;
-  customerId?: string; // ✅
+ customerId?: string; // 
 }
 
 const getPaymentTypeStyle = (entryType: string): string => {
@@ -154,7 +154,7 @@ export function PaymentSection({
   totalRemainingDebt = 0,
   contracts = [],
   onRefresh,
-  customerId, // ✅
+ customerId, // 
 }: PaymentSectionProps) {
   const [expandedDistributions, setExpandedDistributions] = useState<Set<string>>(new Set());
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
@@ -798,7 +798,7 @@ export function PaymentSection({
                               </Badge>
                               {hasUnlinkedChild && (
                                 <Badge variant="outline" className="bg-red-500/20 text-red-400 border-red-500/40 gap-1.5 font-extrabold animate-pulse">
-                                  ⚠️ يوجد رصيد غير مستعمل: {unlinkedChildSum.toLocaleString('ar-LY')} د.ل
+ ️ يوجد رصيد غير مستعمل: {unlinkedChildSum.toLocaleString('ar-LY')} د.ل
                                 </Badge>
                               )}
                               {/* عرض أرقام العقود/المهام المجمعة */}

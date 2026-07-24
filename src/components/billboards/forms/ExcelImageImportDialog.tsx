@@ -570,7 +570,7 @@ export const ExcelImageImportDialog: React.FC<ExcelImageImportDialogProps> = ({
                         )}
                       </div>
                       <div>
-                        {row.status === 'valid' && <Badge variant="outline" className="text-[10px] border-emerald-500 text-emerald-600">✓ صالح</Badge>}
+ {row.status === 'valid' && <Badge variant="outline" className="text-[10px] border-emerald-500 text-emerald-600"> صالح</Badge>}
                         {row.status === 'invalid' && (
                           <Badge variant="destructive" className="text-[10px]" title={row.errors.join(', ')}>
                             <AlertTriangle className="h-3 w-3 ml-0.5" />خطأ

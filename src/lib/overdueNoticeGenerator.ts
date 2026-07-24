@@ -77,7 +77,7 @@ export async function generateOverdueNoticeHTML(data: OverdueNoticeData): Promis
 
     <!-- Warning box -->
     <div style="background:#fef3c7;border:2px solid #f59e0b;border-radius:8px;padding:16px;margin-top:18px;text-align:center;">
-      <div style="color:#92400e;font-size:15px;font-weight:900;margin-bottom:6px;">⚠️ تنبيه مهم</div>
+ <div style="color:#92400e;font-size:15px;font-weight:900;margin-bottom:6px;">️ تنبيه مهم</div>
       <div style="color:#78350f;font-size:13px;line-height:1.5;">
         يرجى تسوية المبلغ المستحق في أقرب وقت ممكن لتجنب أي إجراءات إضافية.
         <br>في حال وجود أي استفسار، يرجى التواصل مع قسم الحسابات.

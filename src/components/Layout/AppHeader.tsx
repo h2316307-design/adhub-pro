@@ -69,7 +69,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ onToggleSidebar }) => {
             <Search className="h-4 w-4" />
             <span className="hidden md:inline flex-1 text-right">ابحث في كل شيء...</span>
             <kbd className="hidden md:inline-flex items-center gap-1 rounded border border-border/60 bg-background/60 px-1.5 py-0.5 text-[10px] font-mono">
-              ⌘K
+ K
             </kbd>
           </button>
 

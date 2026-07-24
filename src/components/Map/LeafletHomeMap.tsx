@@ -464,9 +464,9 @@ function LeafletHomeMapComponent({
         
         let markerColor = '#d4af37', markerSize = 24, markerLabel = String(index)
         
-        if (isCompleted) { markerColor = '#22c55e'; markerLabel = '✓' }
+ if (isCompleted) { markerColor = '#22c55e'; markerLabel = '' }
         else if (isCurrent) { markerColor = '#f59e0b'; markerSize = 28 }
-        else if (isEnd) { markerColor = '#ef4444'; markerLabel = '🏁' }
+ else if (isEnd) { markerColor = '#ef4444'; markerLabel = '' }
         
         const routeMarkerIcon = L.divIcon({
           className: 'route-point-marker',

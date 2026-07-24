@@ -1726,7 +1726,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
         payments: paymentInstallments,
         currencyInfo: currencyInfo,
         discountInfo: discountInfo,
-        isOffer: isOffer // ✅ Flag to indicate if this is an offer
+ isOffer: isOffer // Flag to indicate if this is an offer
       };
 
       // Get billboards data
@@ -3568,9 +3568,9 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           rentalCost: contractDetails.rentalCost,
           installationCost: contractDetails.installationCost,
           duration: contractDetails.duration,
-          discount: discountInfo ? `بعد خصم ${discountInfo.text}` : '', // ✅ تمرير نص الخصم
-          installationEnabled: installationEnabled, // ✅ تمرير حالة التركيب
-          printCostEnabled: printCostEnabled, // ✅ تمرير حالة الطباعة
+ discount: discountInfo ? `بعد خصم ${discountInfo.text}` : '', // تمرير نص الخصم
+ installationEnabled: installationEnabled, // تمرير حالة التركيب
+ printCostEnabled: printCostEnabled, // تمرير حالة الطباعة
         },
         paymentsHtml: paymentsText, // استخدام النسخة النظيفة بدون HTML للطباعة
       });
@@ -3687,7 +3687,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
                   </div>
                 )}
 
-                {/* ✅ ملخص المقاسات */}
+ {/* ملخص المقاسات */}
                 {sizesSummary.length > 0 && (
                   <div className="rounded-lg bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200/50 dark:border-blue-800/50 p-2.5">
                     <p className="text-xs text-muted-foreground mb-2">المقاسات ({sizesSummary.reduce((sum, s) => sum + s.count, 0)} لوحة)</p>
@@ -3714,11 +3714,11 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
                   </div>
                   <div className="rounded-lg bg-muted/30 p-2 text-center">
                     <p className="text-[10px] text-muted-foreground">التركيب</p>
-                    <p className="text-xs font-bold">{contract?.installation_enabled ? '✓ مشمول' : '✗ غير مشمول'}</p>
+ <p className="text-xs font-bold">{contract?.installation_enabled ? ' مشمول' : ' غير مشمول'}</p>
                   </div>
                   <div className="rounded-lg bg-muted/30 p-2 text-center">
                     <p className="text-[10px] text-muted-foreground">الطباعة</p>
-                    <p className="text-xs font-bold">{contract?.print_cost_enabled === 'yes' ? '✓ مشمول' : '✗ غير مشمول'}</p>
+ <p className="text-xs font-bold">{contract?.print_cost_enabled === 'yes' ? ' مشمول' : ' غير مشمول'}</p>
                   </div>
                 </div>
 

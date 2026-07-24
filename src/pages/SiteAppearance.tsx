@@ -260,7 +260,7 @@ const SiteAppearance = () => {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  💡 سيُطبَّق الخط على الفور في الواجهة. اضغط &ldquo;حفظ التغييرات&rdquo; لحفظه بشكل دائم.
+ سيُطبَّق الخط على الفور في الواجهة. اضغط &ldquo;حفظ التغييرات&rdquo; لحفظه بشكل دائم.
                 </p>
               </div>
 

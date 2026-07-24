@@ -187,7 +187,7 @@ export function InstallationPhotoHistoryDialog({
 
                     {record.notes && (
                       <p className="text-xs font-medium text-amber-700 dark:text-amber-300 bg-white/50 dark:bg-black/20 p-2 rounded-lg">
-                        📝 {record.notes}
+ {record.notes}
                       </p>
                     )}
                   </div>

@@ -2145,10 +2145,10 @@ export default function RemovalTasks() {
           const adType = contract?.['Ad Type'] || '';
           const billboardDetails = items.map((item: any) => {
             const bb = billboardById[item.billboard_id];
-            const gps = bb?.GPS_Coordinates ? `\n  📍 ${bb.GPS_Coordinates}` : '';
+            const gps = bb?.GPS_Coordinates ? `\n  إحداثيات: ${bb.GPS_Coordinates}` : '';
             return `• ${bb?.Billboard_Name || `لوحة #${item.billboard_id}`} - ${bb?.City || ''} ${bb?.District || ''}${gps}`;
           }).join('\n');
-          const message = `🔴 مهمة إزالة\n\nالزبون: ${customerName}\nنوع الإعلان: ${adType}\nعقد رقم: #${task.contract_id}\nعدد اللوحات: ${items.length}\nالفرقة: ${teamName}\n\nاللوحات المطلوب إزالتها:\n${billboardDetails}`;
+          const message = `مهمة إزالة\n\nالزبون: ${customerName}\nنوع الإعلان: ${adType}\nعقد رقم: #${task.contract_id}\nعدد اللوحات: ${items.length}\nالفرقة: ${teamName}\n\nاللوحات المطلوب إزالتها:\n${billboardDetails}`;
           if (teamPhone) {
             const cleanPhone = teamPhone.replace(/[^0-9+]/g, '').replace(/^\+/, '');
             window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -2369,7 +2369,7 @@ export default function RemovalTasks() {
                   });
                   
                   Object.entries(itemsByCity).sort().forEach(([city, bbs]) => {
-                    msg += `📍 *${city}*\n`;
+                    msg += `*المدينة: ${city}*\n`;
                     bbs.forEach((bb: any, i: number) => {
                       const name = bb?.Billboard_Name || `لوحة #${bb?.ID}`;
                       const size = bb?.Size || '';
@@ -2381,7 +2381,7 @@ export default function RemovalTasks() {
                         : (bb?.GPS_Coordinates && bb.GPS_Coordinates !== '0' && bb.GPS_Coordinates !== '')
                           ? `https://www.google.com/maps?q=${bb.GPS_Coordinates}`
                           : '';
-                      if (gpsLink) msg += `     📌 ${gpsLink}\n`;
+                      if (gpsLink) msg += `     الموقع: ${gpsLink}\n`;
                     });
                     msg += '\n';
                   });

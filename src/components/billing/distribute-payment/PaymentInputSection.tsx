@@ -3,7 +3,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { DollarSign, Upload, X, Loader2, Image as ImageIcon, ClipboardPaste, Plus } from 'lucide-react';
+import { DollarSign, Upload, X, Loader2, Image as ImageIcon, ClipboardPaste, Plus, Banknote, FileText, Building2, CreditCard } from 'lucide-react';
 import { uploadImage } from '@/services/imageUploadService';
 import { toast } from 'sonner';
 
@@ -175,10 +175,30 @@ export function PaymentInputSection({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="نقدي">💵 نقدي</SelectItem>
-              <SelectItem value="شيك">📝 شيك</SelectItem>
-              <SelectItem value="تحويل بنكي">🏦 تحويل بنكي</SelectItem>
-              <SelectItem value="بطاقة ائتمان">💳 بطاقة ائتمان</SelectItem>
+              <SelectItem value="نقدي">
+                <span className="flex items-center gap-2">
+                  <Banknote className="w-4 h-4 text-emerald-500" />
+                  نقدي
+                </span>
+              </SelectItem>
+              <SelectItem value="شيك">
+                <span className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-500" />
+                  شيك
+                </span>
+              </SelectItem>
+              <SelectItem value="تحويل بنكي">
+                <span className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-amber-500" />
+                  تحويل بنكي
+                </span>
+              </SelectItem>
+              <SelectItem value="بطاقة ائتمان">
+                <span className="flex items-center gap-2">
+                  <CreditCard className="w-4 h-4 text-purple-500" />
+                  بطاقة ائتمان
+                </span>
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>

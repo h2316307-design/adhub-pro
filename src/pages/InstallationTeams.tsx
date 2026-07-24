@@ -513,7 +513,7 @@ export default function InstallationTeams() {
                 min={0}
               />
               <p className="text-xs text-muted-foreground">
-                💡 الرقم الأعلى = أولوية أعلى. عند تشارك المدينة بين فرق، الفرقة ذات الترتيب الأعلى تحصل على اللوحة
+ الرقم الأعلى = أولوية أعلى. عند تشارك المدينة بين فرق، الفرقة ذات الترتيب الأعلى تحصل على اللوحة
               </p>
             </div>
 
@@ -537,7 +537,7 @@ export default function InstallationTeams() {
                 </SelectContent>
               </Select>
               <p className="text-xs text-muted-foreground">
-                💡 إذا تم ربط الفرقة بشركة صديقة، ستُوزع لوحات تلك الشركة لهذه الفرقة تلقائياً
+ إذا تم ربط الفرقة بشركة صديقة، ستُوزع لوحات تلك الشركة لهذه الفرقة تلقائياً
               </p>
             </div>
 
@@ -573,7 +573,7 @@ export default function InstallationTeams() {
                 )}
               </div>
               <p className="text-xs text-muted-foreground">
-                💡 عند التوزيع، اللوحات المملوكة لشركة محددة هنا ستُسند لهذه الفرقة (الأولوية الأعلى تسبق)
+ عند التوزيع، اللوحات المملوكة لشركة محددة هنا ستُسند لهذه الفرقة (الأولوية الأعلى تسبق)
               </p>
             </div>
 
@@ -678,7 +678,7 @@ export default function InstallationTeams() {
                 </div>
               </ScrollArea>
               <p className="text-xs text-muted-foreground">
-                💡 إذا لم تختر أي مدينة، ستتمكن الفرقة من التركيب في جميع المدن
+ إذا لم تختر أي مدينة، ستتمكن الفرقة من التركيب في جميع المدن
               </p>
             </div>
           </div>

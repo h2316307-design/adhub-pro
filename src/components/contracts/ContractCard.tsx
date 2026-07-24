@@ -1379,7 +1379,9 @@ export const ContractCard: React.FC<ContractCardProps> = ({
               <div className={cn("space-y-1.5 pt-1.5 border-t", borderClass)}>
                 {installationTasks.tasks.map((task) => (
                   <div key={task.id} className="flex items-center justify-between text-[10px]">
-                    <span className={cn("truncate max-w-[65%]", textMutedClass)}>📍 {task.billboard_name}</span>
+                    <span className={cn("truncate max-w-[65%] flex items-center gap-1", textMutedClass)}>
+                      <MapPin className="w-3 h-3 text-amber-500 shrink-0" /> {task.billboard_name}
+                    </span>
                     <Badge 
                       variant="outline" 
                       className={cn(

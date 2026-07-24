@@ -287,7 +287,7 @@ export function BillboardSwapDialog({
         ]);
         const allAdded = [...new Set([...sourceAdded.added, ...targetAdded.added])];
         const taskMsg = allAdded.length > 0 ? `\nتم تحديث: ${allAdded.join('، ')}` : '';
-        toast.success(`تم التبديل بنجاح!\n"${billboardName}" ↔ "${selectedTargetBillboard!.Billboard_Name || '#' + targetBbId}"${taskMsg}`);
+ toast.success(`تم التبديل بنجاح!\n"${billboardName}" "${selectedTargetBillboard!.Billboard_Name || '#' + targetBbId}"${taskMsg}`);
       }
 
       onSwapComplete();
@@ -513,7 +513,7 @@ export function BillboardSwapDialog({
                   <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   <div className="text-xs space-y-1">
                     <p className="font-bold text-destructive">تحذير: المقاسات مختلفة!</p>
-                    <p><strong dir="ltr">{displaySourceSize}</strong> ↔ <strong dir="ltr">{displaySize(selectedTargetBillboard.Size)}</strong></p>
+ <p><strong dir="ltr">{displaySourceSize}</strong> <strong dir="ltr">{displaySize(selectedTargetBillboard.Size)}</strong></p>
                     <p className="text-muted-foreground">المقاسات مختلفة. سيتم التبديل لكن تأكد أن هذا صحيح.</p>
                   </div>
                 </div>
@@ -521,12 +521,12 @@ export function BillboardSwapDialog({
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-2 rounded border bg-muted/30">
-                  <div className="font-semibold mb-1">📤 من العقد #{currentContractNumber}</div>
+ <div className="font-semibold mb-1"> من العقد #{currentContractNumber}</div>
                   <div>{billboardName}</div>
                   <div className="text-muted-foreground" dir="ltr">{displaySourceSize}</div>
                 </div>
                 <div className="p-2 rounded border bg-muted/30">
-                  <div className="font-semibold mb-1">📥 من العقد #{selectedContract?.Contract_Number}</div>
+ <div className="font-semibold mb-1"> من العقد #{selectedContract?.Contract_Number}</div>
                   <div>{selectedTargetBillboard.Billboard_Name || `#${selectedTargetBillboard.ID}`}</div>
                   <div className="text-muted-foreground" dir="ltr">{displaySize(selectedTargetBillboard.Size)}</div>
                 </div>
@@ -534,7 +534,7 @@ export function BillboardSwapDialog({
 
               {(hasAnyLinkedTask || hasAnyTargetLinkedTask) && (
                 <div className="text-xs space-y-1 bg-blue-50/50 dark:bg-blue-950/20 p-2 rounded border border-blue-300/30">
-                  <p className="font-semibold text-blue-700 dark:text-blue-300">📋 سيتم تبديل المهام تلقائياً:</p>
+ <p className="font-semibold text-blue-700 dark:text-blue-300"> سيتم تبديل المهام تلقائياً:</p>
                   <div className="flex flex-wrap gap-1">
                     {taskLabels.filter(t => linkedTasks[t.key] || targetLinkedTasks[t.key]).map(t => (
                       <Badge key={t.key} className="text-[10px] gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
@@ -572,7 +572,7 @@ export function BillboardSwapDialog({
 
               {hasAnyLinkedTask && (
                 <div className="text-xs space-y-1 bg-blue-50/50 dark:bg-blue-950/20 p-2 rounded border border-blue-300/30">
-                  <p className="font-semibold text-blue-700 dark:text-blue-300">📋 سيتم نقل المهام تلقائياً:</p>
+ <p className="font-semibold text-blue-700 dark:text-blue-300"> سيتم نقل المهام تلقائياً:</p>
                   <div className="flex flex-wrap gap-1">
                     {taskLabels.filter(t => linkedTasks[t.key]).map(t => (
                       <Badge key={t.key} className="text-[10px] gap-1 bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-200">
@@ -619,7 +619,7 @@ export function BillboardSwapDialog({
                   ? !selectedContract ? 'اختر العقد المستهدف' : `نقل إلى العقد #${selectedContract.Contract_Number}`
                   : !selectedTargetBillboard
                     ? 'اختر لوحة للتبديل'
-                    : `تبديل ↔ ${selectedTargetBillboard.Billboard_Name || '#' + selectedTargetBillboard.ID}`
+ : `تبديل ${selectedTargetBillboard.Billboard_Name || '#' + selectedTargetBillboard.ID}`
               }
             </Button>
           </DialogFooter>

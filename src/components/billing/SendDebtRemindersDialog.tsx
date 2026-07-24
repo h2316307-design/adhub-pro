@@ -693,7 +693,7 @@ export function SendDebtRemindersDialog({
 
               {/* Manual Tab */}
               <TabsContent value="manual" className="px-6 py-4 mt-0 flex-1 overflow-auto">
-                {/* ✅ خيار نوع الرسالة: مفصل أو مختصر */}
+ {/* خيار نوع الرسالة: مفصل أو مختصر */}
                 <div className="flex items-center gap-3 mb-4">
                   <Label className="text-sm font-semibold shrink-0">نوع الرسالة:</Label>
                   <RadioGroup
@@ -798,7 +798,7 @@ export function SendDebtRemindersDialog({
                     </RadioGroup>
                   </div>
 
-                  {/* ✅ نوع الرسالة في التلقائي */}
+ {/* نوع الرسالة في التلقائي */}
                   {(recipientType === "customers" || recipientType === "both") && (
                     <div className="rounded-lg border p-4">
                       <Label className="text-sm font-semibold mb-3 block">نوع الرسالة</Label>

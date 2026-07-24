@@ -1053,7 +1053,7 @@ export default function CustomerBilling() {
         notes: `${paymentData.notes ? paymentData.notes + ' - ' : ''}دفعة موزعة على ${distributions.length} عقود`,
         paid_at: paymentData.date,
         entry_type: 'receipt',
-        distributed_payment_id: paymentData.distributedPaymentId, // ✅ المعرف المشترك
+ distributed_payment_id: paymentData.distributedPaymentId, // المعرف المشترك
       }));
 
       const { error } = await supabase.from('customer_payments').insert(payments);
@@ -1867,7 +1867,7 @@ export default function CustomerBilling() {
         }
       />
 
-      {/* ✅ FIXED: Use ContractSection component instead of inline table */}
+ {/* FIXED: Use ContractSection component instead of inline table */}
       <ContractSection 
         contracts={contracts}
         payments={payments}
@@ -1906,7 +1906,7 @@ export default function CustomerBilling() {
         </div>
       </div>
 
-      {/* ✅ قسم الأرصدة والدفعات على الحساب (غير الموزعة) */}
+ {/* قسم الأرصدة والدفعات على الحساب (غير الموزعة) */}
       {(() => {
         const accountPaymentsList = payments.filter(p => p.entry_type === 'account_payment');
         if (accountPaymentsList.length === 0) return null;
@@ -2007,7 +2007,7 @@ export default function CustomerBilling() {
         onDiscountChange={loadData}
       />
 
-      {/* ✅ قسم فواتير المشتريات - يظهر دائماً مع زر إضافة */}
+ {/* قسم فواتير المشتريات - يظهر دائماً مع زر إضافة */}
       <Card className="border border-amber-500/20 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 shadow-2xl overflow-hidden relative group transition-all duration-300 hover:border-amber-500/30 rounded-2xl mt-6">
         <CardHeader className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-amber-500/20 text-white py-5">
           <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 w-full">
@@ -2048,7 +2048,7 @@ export default function CustomerBilling() {
         </CardContent>
       </Card>
 
-      {/* ✅ قسم إيجارات اللوحات من الشركات الصديقة — مجمعة حسب العقد */}
+ {/* قسم إيجارات اللوحات من الشركات الصديقة — مجمعة حسب العقد */}
       <div className="max-w-[96%] mx-auto px-6 mb-6">
         <FriendRentalsGroupedSection
           friendBillboardRentals={friendBillboardRentals}
@@ -2070,21 +2070,21 @@ export default function CustomerBilling() {
               friend_rental_cost: totalCost,
               used_as_payment: totalUsed,
               _groupRentals: rentals,
-              _contractAdType: adType, // ✅ نوع الإعلان للعقد المصدر
+ _contractAdType: adType, // نوع الإعلان للعقد المصدر
             });
             setUseRentalAsPaymentOpen(true);
           }}
         />
       </div>
 
-      {/* ✅ قسم فواتير المبيعات */}
+ {/* قسم فواتير المبيعات */}
       <SalesSection
         customerId={customerId}
         invoices={salesInvoices}
         onRefresh={loadData}
       />
 
-      {/* ✅ قسم سجلات الفواتير الأخرى (من customer_payments) */}
+ {/* قسم سجلات الفواتير الأخرى (من customer_payments) */}
       {(() => {
         const invoiceRecords = payments.filter(p => 
           p.entry_type === 'invoice' && 
@@ -2411,7 +2411,7 @@ export default function CustomerBilling() {
         onPrintInvoice={() => {}}
       />
 
-      {/* ✅ NEW: Receipt Print Dialog */}
+ {/* NEW: Receipt Print Dialog */}
       <ReceiptPrintDialog
         open={receiptPrintOpen}
         onOpenChange={setReceiptPrintOpen}
@@ -2419,7 +2419,7 @@ export default function CustomerBilling() {
         customerName={customerName}
       />
 
-      {/* ✅ NEW: Account Statement Dialog */}
+ {/* NEW: Account Statement Dialog */}
       <AccountStatementDialog
         open={accountStatementOpen}
         onOpenChange={setAccountStatementOpen}
@@ -2427,7 +2427,7 @@ export default function CustomerBilling() {
         customerName={customerName}
       />
 
-      {/* ✅ NEW: Send Account Statement Dialog */}
+ {/* NEW: Send Account Statement Dialog */}
       <SendAccountStatementDialog
         open={sendAccountStatementOpen}
         onOpenChange={setSendAccountStatementOpen}
@@ -2446,7 +2446,7 @@ export default function CustomerBilling() {
 
       {/* Removed duplicate EnhancedDistributePaymentDialog - see lines below for the correct implementation */}
 
-      {/* ✅ NEW: Print Invoice Payment Dialog */}
+ {/* NEW: Print Invoice Payment Dialog */}
       <PrintInvoicePaymentDialog
         open={printInvoicePaymentOpen}
         onOpenChange={setPrintInvoicePaymentOpen}
@@ -2496,7 +2496,7 @@ export default function CustomerBilling() {
             </div>
 
             <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg border border-border">
-              💡 سيتم إضافة المبلغ كدفعة على الحساب العام، ويمكنك لاحقاً تحويلها إلى دفعة موزعة لتسديد الفواتير بها.
+ سيتم إضافة المبلغ كدفعة على الحساب العام، ويمكنك لاحقاً تحويلها إلى دفعة موزعة لتسديد الفواتير بها.
             </div>
 
             <div className="flex justify-end gap-2 pt-4 border-t border-border">
@@ -2597,14 +2597,14 @@ export default function CustomerBilling() {
                   }
                 }}
               >
-                🔀 تحويل إلى دفعة موزعة على الفواتير
+ تحويل إلى دفعة موزعة على الفواتير
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* ✅ NEW: Bulk Payment Dialog */}
+ {/* NEW: Bulk Payment Dialog */}
       <BulkPaymentDialog
         open={bulkPaymentOpen}
         onOpenChange={setBulkPaymentOpen}
@@ -2614,7 +2614,7 @@ export default function CustomerBilling() {
         onSave={saveBulkPayment}
       />
 
-      {/* ✅ Distribute payment dialog */}
+ {/* Distribute payment dialog */}
       <EnhancedDistributePaymentDialog
         open={enhancedDistributePaymentOpen && editingDistributedPaymentId === null}
         onOpenChange={(open) => {
@@ -2640,7 +2640,7 @@ export default function CustomerBilling() {
         sourceAccountPaymentId={sourceAccountPaymentIdForDistribute}
       />
 
-      {/* ✅ Edit distributed payment dialog */}
+ {/* Edit distributed payment dialog */}
       <EnhancedDistributePaymentDialog
         open={editingDistributedPaymentId !== null}
         onOpenChange={(open) => {
@@ -2887,7 +2887,7 @@ export default function CustomerBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ General Debit Dialog (وارد عام) */}
+ {/* General Debit Dialog (وارد عام) */}
       <Dialog open={generalDebitOpen} onOpenChange={setGeneralDebitOpen}>
         <DialogContent className="max-w-md bg-card border-border">
           <DialogHeader className="border-b border-border pb-4">
@@ -2915,7 +2915,7 @@ export default function CustomerBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ General Credit Dialog (صادر عام) */}
+ {/* General Credit Dialog (صادر عام) */}
       <Dialog open={generalCreditOpen} onOpenChange={setGeneralCreditOpen}>
         <DialogContent className="max-w-md bg-card border-border">
           <DialogHeader className="border-b border-border pb-4">
@@ -2943,7 +2943,7 @@ export default function CustomerBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Purchase Invoice Dialog */}
+ {/* Purchase Invoice Dialog */}
       <PurchaseInvoiceDialog
         open={purchaseInvoiceDialogOpen}
         onOpenChange={setPurchaseInvoiceDialogOpen}
@@ -2952,7 +2952,7 @@ export default function CustomerBilling() {
         onSuccess={loadData}
       />
 
-      {/* ✅ Sales Invoice Dialog */}
+ {/* Sales Invoice Dialog */}
       <SalesInvoiceDialog
         open={salesInvoiceDialogOpen}
         onOpenChange={setSalesInvoiceDialogOpen}
@@ -2961,7 +2961,7 @@ export default function CustomerBilling() {
         onSuccess={loadData}
       />
 
-      {/* ✅ Purchase from customer dialog */}
+ {/* Purchase from customer dialog */}
       <Dialog open={purchaseFromCustomerOpen} onOpenChange={setPurchaseFromCustomerOpen}>
         <DialogContent className="max-w-md bg-card border-border">
           <DialogHeader className="border-b border-border pb-4">
@@ -3058,7 +3058,7 @@ export default function CustomerBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Print Invoice Details Dialog (for printers) */}
+ {/* Print Invoice Details Dialog (for printers) */}
       <Dialog open={printInvoiceDetailsOpen} onOpenChange={setPrintInvoiceDetailsOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -3197,7 +3197,7 @@ export default function CustomerBilling() {
                   </div>
                   <div className="mt-4 text-center">
                     {selectedInvoiceDetails.paid ? (
-                      <Badge className="bg-green-600 text-white px-4 py-2">✓ تم التسديد بالكامل</Badge>
+ <Badge className="bg-green-600 text-white px-4 py-2"> تم التسديد بالكامل</Badge>
                     ) : (
                       <Badge variant="destructive" className="px-4 py-2">لم يتم التسديد</Badge>
                     )}
@@ -3227,7 +3227,7 @@ export default function CustomerBilling() {
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Unpaid Contracts Dialog */}
+ {/* Unpaid Contracts Dialog */}
       <UnpaidContractsDialog
         open={unpaidContractsDialogOpen}
         onOpenChange={setUnpaidContractsDialogOpen}
@@ -3236,7 +3236,7 @@ export default function CustomerBilling() {
         getContractRemaining={getContractRemaining}
       />
 
-      {/* ✅ Use Rental As Payment Dialog (now uses EnhancedDistributePaymentDialog) */}
+ {/* Use Rental As Payment Dialog (now uses EnhancedDistributePaymentDialog) */}
       {selectedRentalForPayment && (
         <EnhancedDistributePaymentDialog
           open={useRentalAsPaymentOpen}

@@ -108,10 +108,10 @@ export const ImageTester: React.FC = () => {
                   {result.path}
                 </code>
                 {result.status === 'success' && (
-                  <span className="text-green-600 text-sm font-medium">✓ يعمل</span>
+ <span className="text-green-600 text-sm font-medium"> يعمل</span>
                 )}
                 {result.status === 'error' && (
-                  <span className="text-red-600 text-sm">✗ فشل</span>
+ <span className="text-red-600 text-sm"> فشل</span>
                 )}
               </div>
             ))}

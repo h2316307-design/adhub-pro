@@ -252,9 +252,9 @@ export default function MessagingSettings() {
                 </SelectContent>
               </Select>
               <p className="text-sm text-muted-foreground">
-                {whatsappProvider === 'wppconnect' && '🟢 WPPConnect — أسرع وأكثر استقراراً'}
-                {whatsappProvider === 'whatsapp-web' && '🔵 WhatsApp Web.js — النظام القديم'}
-                {whatsappProvider === 'textly' && '🟡 Textly — API خارجي بدون خادم محلي'}
+ {whatsappProvider === 'wppconnect' && ' WPPConnect — أسرع وأكثر استقراراً'}
+ {whatsappProvider === 'whatsapp-web' && ' WhatsApp Web.js — النظام القديم'}
+ {whatsappProvider === 'textly' && ' Textly — API خارجي بدون خادم محلي'}
               </p>
             </div>
           </CardContent>

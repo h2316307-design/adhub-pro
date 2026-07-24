@@ -106,7 +106,7 @@ interface ColorPreset {
 const COLOR_PRESETS: ColorPreset[] = [
   {
     name: 'ذهبي كلاسيكي',
-    emoji: '🏆',
+ emoji: '',
     primary_color: '#D4AF37',
     secondary_color: '#1a1a2e',
     accent_color: '#f0e6d2',
@@ -124,7 +124,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'أزرق احترافي',
-    emoji: '💼',
+ emoji: '',
     primary_color: '#2563eb',
     secondary_color: '#1e293b',
     accent_color: '#eff6ff',
@@ -142,7 +142,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'أخضر زمردي',
-    emoji: '🌿',
+ emoji: '',
     primary_color: '#059669',
     secondary_color: '#064e3b',
     accent_color: '#ecfdf5',
@@ -160,7 +160,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'أحمر أنيق',
-    emoji: '🔴',
+ emoji: '',
     primary_color: '#dc2626',
     secondary_color: '#1c1917',
     accent_color: '#fef2f2',
@@ -178,7 +178,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'بنفسجي ملكي',
-    emoji: '👑',
+ emoji: '',
     primary_color: '#7c3aed',
     secondary_color: '#1e1b4b',
     accent_color: '#f5f3ff',
@@ -196,7 +196,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'داكن فاخر',
-    emoji: '🖤',
+ emoji: '',
     primary_color: '#374151',
     secondary_color: '#111827',
     accent_color: '#f3f4f6',
@@ -214,7 +214,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'برتقالي دافئ',
-    emoji: '🔶',
+ emoji: '',
     primary_color: '#ea580c',
     secondary_color: '#431407',
     accent_color: '#fff7ed',
@@ -232,7 +232,7 @@ const COLOR_PRESETS: ColorPreset[] = [
   },
   {
     name: 'تركوازي عصري',
-    emoji: '💎',
+ emoji: '',
     primary_color: '#0891b2',
     secondary_color: '#164e63',
     accent_color: '#ecfeff',
@@ -457,7 +457,7 @@ const PrintSettingsPage = () => {
       if (editMode === 'global') {
         const ok = await saveGlobalToAll(settings);
         if (!ok) throw new Error("فشل الحفظ");
-        toast.success("تم حفظ الإعدادات العامة على جميع الفواتير ✅");
+ toast.success("تم حفظ الإعدادات العامة على جميع الفواتير ");
       } else {
         const ok = await saveSettings(selectedDocType, { document_type: selectedDocType, ...settings });
         if (!ok) throw new Error("فشل الحفظ");
@@ -492,7 +492,7 @@ const PrintSettingsPage = () => {
           setting_value: JSON.stringify(snapshot),
         } as any, { onConflict: 'setting_key' });
       if (error) throw error;
-      toast.success("✅ تم حفظ الإعدادات الحالية كإعدادات افتراضية يمكن الرجوع لها في أي وقت");
+ toast.success(" تم حفظ الإعدادات الحالية كإعدادات افتراضية يمكن الرجوع لها في أي وقت");
     } catch (error) {
       console.error(error);
       toast.error("فشل في حفظ الإعدادات الافتراضية");
@@ -518,7 +518,7 @@ const PrintSettingsPage = () => {
       if (snapshot.settings) {
         setSettings({ ...DEFAULT_PRINT_SETTINGS, ...snapshot.settings });
         const savedDate = snapshot.savedAt ? new Date(snapshot.savedAt).toLocaleDateString('ar-LY') : '';
-        toast.success(`✅ تم استعادة الإعدادات الافتراضية المحفوظة ${savedDate ? `بتاريخ ${savedDate}` : ''}`);
+ toast.success(` تم استعادة الإعدادات الافتراضية المحفوظة ${savedDate ? `بتاريخ ${savedDate}` : ''}`);
       }
     } catch (error) {
       console.error(error);
@@ -598,7 +598,7 @@ const PrintSettingsPage = () => {
               </div>
             </CardHeader>
             <CardContent className="pt-0 pb-3 space-y-2">
-              {/* ✅ وضع التحرير: عام أو خاص */}
+ {/* وضع التحرير: عام أو خاص */}
               <div className="flex gap-1 p-1 bg-muted rounded-lg">
                 <button
                   onClick={() => setEditMode('global')}
@@ -606,7 +606,7 @@ const PrintSettingsPage = () => {
                     editMode === 'global' ? "bg-primary text-primary-foreground shadow" : "hover:bg-background/80"
                   }`}
                 >
-                  ⚙️ إعدادات عامة (جميع الفواتير)
+                  إعدادات عامة (جميع الفواتير)
                 </button>
                 <button
                   onClick={() => setEditMode('per_document')}
@@ -614,14 +614,14 @@ const PrintSettingsPage = () => {
                     editMode === 'per_document' ? "bg-primary text-primary-foreground shadow" : "hover:bg-background/80"
                   }`}
                 >
-                  📄 إعدادات خاصة بمستند
+                  إعدادات خاصة بمستند
                 </button>
               </div>
 
               {editMode === 'global' && (
                 <div className="p-2 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
                   <p className="text-[11px] text-amber-700 dark:text-amber-400">
-                    💡 أي تغيير هنا سيُطبّق على <strong>جميع الفواتير</strong> عند الحفظ (الألوان، الشعار، الشركة، الخطوط، الهوامش...)
+                    أي تغيير هنا سيُطبّق على <strong>جميع الفواتير</strong> عند الحفظ (الألوان، الشعار، الشركة، الخطوط، الهوامش...)
                   </p>
                 </div>
               )}
@@ -734,7 +734,7 @@ const PrintSettingsPage = () => {
                           <SectionResetButton onClick={() => resetSection(['header_style', 'header_alignment', 'header_direction', 'header_swap', 'logo_position_order'])} />
                         </div>
 
-                        {/* ✅ زر تبديل نصفي الهيدر */}
+ {/* زر تبديل نصفي الهيدر */}
                         <div className="p-2.5 bg-muted/50 rounded-lg border border-dashed">
                           <div className="flex items-center justify-between">
                             <div>
@@ -772,7 +772,7 @@ const PrintSettingsPage = () => {
                                 </div>
                                 {settings.header_style === style && (
                                   <div className="h-4 w-4 rounded-full bg-primary flex items-center justify-center">
-                                    <span className="text-primary-foreground text-[10px]">✓</span>
+ <span className="text-primary-foreground text-[10px]"></span>
                                   </div>
                                 )}
                               </div>
@@ -1308,7 +1308,7 @@ const PrintSettingsPage = () => {
 
                 {/* ===== Tab 4: الألوان ===== */}
                 <TabsContent value="colors" className="mt-0">
-                  {/* ✅ أنماط ألوان جاهزة */}
+ {/* أنماط ألوان جاهزة */}
                   <div className="mb-4">
                     <div className="flex items-center gap-2 mb-2.5">
                       <Palette className="h-4 w-4 text-primary" />
@@ -1344,7 +1344,7 @@ const PrintSettingsPage = () => {
                             <div className="w-4 h-4 rounded-full border border-border shadow-sm" style={{ backgroundColor: preset.primary_color }} />
                             <div className="w-3 h-3 rounded-full border border-border shadow-sm" style={{ backgroundColor: preset.secondary_color }} />
                           </div>
-                          <p className="text-[9px] font-medium leading-tight">{preset.emoji} {preset.name}</p>
+                          <p className="text-[9px] font-medium leading-tight">{preset.name}</p>
                         </button>
                       ))}
                     </div>

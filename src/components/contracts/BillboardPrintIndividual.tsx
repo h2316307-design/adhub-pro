@@ -17,8 +17,8 @@ interface BillboardPrintIndividualProps {
   billboards: any[];
   designData?: any[] | null;
   customerPhone?: string;
-  taskItems?: any[]; // ✅ بيانات مهام التركيب/الإزالة تحتوي على صور اللوحات
-  printMode?: 'installation' | 'removal'; // ✅ NEW: نوع الطباعة (تركيب أو إزالة)
+ taskItems?: any[]; // بيانات مهام التركيب/الإزالة تحتوي على صور اللوحات
+ printMode?: 'installation' | 'removal'; // NEW: نوع الطباعة (تركيب أو إزالة)
 }
 
 export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> = ({
@@ -27,7 +27,7 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
   designData,
   customerPhone = '',
   taskItems = [],
-  printMode = 'installation' // ✅ NEW: القيمة الافتراضية تركيب
+ printMode = 'installation' // NEW: القيمة الافتراضية تركيب
 }) => {
   const [includeDesigns, setIncludeDesigns] = useState(true);
   const [printType, setPrintType] = useState<'client' | 'installation'>('client');
@@ -591,7 +591,7 @@ export const BillboardPrintIndividual: React.FC<BillboardPrintIndividualProps> =
         <body>
           ${pagesHtml.join('\n')}
           <div class="controls">
-            <button class="print-btn" onclick="window.print()">🖨️ طباعة</button>
+ <button class="print-btn" onclick="window.print()">️ طباعة</button>
           </div>
         </body>
         </html>
@@ -907,7 +907,7 @@ ${image ? `
                   className="w-4 h-4 text-primary"
                 />
                 <Label htmlFor="print-client" className="text-sm cursor-pointer font-medium">
-                  طباعة للعميل 📋
+ طباعة للعميل 
                 </Label>
               </div>
               <div className="flex items-center space-x-2 space-x-reverse">
@@ -921,7 +921,7 @@ ${image ? `
                   className="w-4 h-4 text-primary"
                 />
                 <Label htmlFor="print-installation" className="text-sm cursor-pointer font-medium">
-                  طباعة لفريق التركيب 🔧
+ طباعة لفريق التركيب 
                 </Label>
               </div>
             </div>
@@ -1007,7 +1007,7 @@ ${image ? `
           {!includeDesigns && (
             <div className="bg-accent/20 border border-accent rounded-lg p-3">
               <p className="text-sm text-accent-foreground">
-                💡 عند إلغاء التصميمات، ستظهر صورة اللوحة بحجم أكبر
+ عند إلغاء التصميمات، ستظهر صورة اللوحة بحجم أكبر
               </p>
             </div>
           )}
@@ -1047,7 +1047,7 @@ ${image ? `
             >
               {isDownloading ? (
                 <>
-                  <span className="animate-spin mr-2">⏳</span>
+ <span className="animate-spin mr-2"></span>
                   جاري التحميل...
                 </>
               ) : (

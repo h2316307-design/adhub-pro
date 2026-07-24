@@ -204,7 +204,7 @@ export async function generatePrintInvoiceHTML(data: PrintInvoiceData): Promise<
   const paymentHtml = (data.paymentMethod && showPrices) || data.includedInContract ? `
     <div style="margin-top:10px;padding:8px 12px;background-color:#f0f9ff;border-radius:6px;display:flex;gap:20px;font-size:${t.bodyFontSize - 1}px;color:#0369a1;">
       ${data.paymentMethod && showPrices ? `<span>طريقة الدفع: <strong>${data.paymentMethod}</strong></span>` : ''}
-      ${data.includedInContract ? `<span style="color:#059669;">✓ مضمنة في العقد</span>` : ''}
+ ${data.includedInContract ? `<span style="color:#059669;"> مضمنة في العقد</span>` : ''}
     </div>
   ` : '';
 

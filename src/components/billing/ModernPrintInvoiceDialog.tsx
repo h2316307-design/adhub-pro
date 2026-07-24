@@ -148,9 +148,9 @@ export default function ModernPrintInvoiceDialog({
   const [accountDeduction, setAccountDeduction] = useState(0); // مبلغ الخصم من رصيد الحساب
   const [selectedPrinterId, setSelectedPrinterId] = useState<string>(''); // المطبعة المختارة
   const [printers, setPrinters] = useState<any[]>([]); // قائمة المطابع
-  const [showNotes, setShowNotes] = useState(true); // ✅ إظهار/إخفاء الملاحظات
-  const [includedInContract, setIncludedInContract] = useState(false); // ✅ مضمنة في العقد
-  const [isReinstallation, setIsReinstallation] = useState(false); // ✅ علامة إعادة التركيب
+ const [showNotes, setShowNotes] = useState(true); // إظهار/إخفاء الملاحظات
+ const [includedInContract, setIncludedInContract] = useState(false); // مضمنة في العقد
+ const [isReinstallation, setIsReinstallation] = useState(false); // علامة إعادة التركيب
   const isInitialLoadRef = useRef(true);
 
   const [localPrintItems, setLocalPrintItems] = useState<PrintItem[]>([]);
@@ -770,8 +770,8 @@ export default function ModernPrintInvoiceDialog({
         invoice_number: invoiceNumber || `INV-${Date.now()}`,
         customer_id: customerId ?? null,
         customer_name: customerName ?? null,
-        printer_name: printerName, // ✅ اسم المطبعة الفعلي
-        printer_id: selectedPrinterId || null, // ✅ معرف المطبعة
+ printer_name: printerName, // اسم المطبعة الفعلي
+ printer_id: selectedPrinterId || null, // معرف المطبعة
         invoice_date: invoiceDate || new Date().toISOString().slice(0, 10),
         subtotal: subtotalValue,
         discount: Number(discount) || 0,
@@ -789,7 +789,7 @@ export default function ModernPrintInvoiceDialog({
         include_account_balance: includeAccountBalance ? true : false,
         invoice_type: (invoiceType === 'print_only' ? 'print' : invoiceType === 'print_install' ? 'print_install' : 'install'),
         payment_method: localPaymentMethod || null,
-        included_in_contract: includedInContract, // ✅ مضمنة في العقد
+ included_in_contract: includedInContract, // مضمنة في العقد
         updated_at: new Date().toISOString()
       };
 
@@ -829,7 +829,7 @@ export default function ModernPrintInvoiceDialog({
 
           // حساب المساحة والتكلفة الإجمالية
           const totalArea = localPrintItems.reduce((sum, item) => sum + (item.totalArea || 0), 0);
-          const totalCost = totalValue; // ✅ استخدام totalValue المعرف
+ const totalCost = totalValue; // استخدام totalValue المعرف
 
           // إنشاء مهمة الطباعة
           const { data: taskData, error: taskError } = await supabase
@@ -1254,7 +1254,7 @@ export default function ModernPrintInvoiceDialog({
                       />
                     </div>
 
-                    {/* ✅ خيار إظهار/إخفاء الملاحظات في الطباعة */}
+ {/* خيار إظهار/إخفاء الملاحظات في الطباعة */}
                     <div className="flex items-center space-x-2 space-x-reverse pt-2">
                       <Checkbox
                         id="show-notes"
@@ -1267,7 +1267,7 @@ export default function ModernPrintInvoiceDialog({
                       </label>
                     </div>
 
-                    {/* ✅ خيار مضمنة في العقد */}
+ {/* خيار مضمنة في العقد */}
                     <div className="flex items-center space-x-2 space-x-reverse pt-2 p-3 bg-accent/20 border border-accent rounded-lg">
                       <Checkbox
                         id="included-in-contract"
@@ -1318,7 +1318,7 @@ export default function ModernPrintInvoiceDialog({
                     </div>
                     <div className="mt-4 p-3 bg-muted/30 rounded-lg border border-border/50">
                       <p className="text-xs text-muted-foreground text-center">
-                        💡 انقر على أي عقد لتحديده/إلغاء تحديده مباشرة
+ انقر على أي عقد لتحديده/إلغاء تحديده مباشرة
                       </p>
                     </div>
                   </CardContent>
@@ -1379,7 +1379,7 @@ export default function ModernPrintInvoiceDialog({
                         />
                         {accountDeduction > 0 && (
                           <p className="text-xs text-green-600 dark:text-green-400 mt-1 font-semibold">
-                            ✓ سيتم خصم {formatArabicNumber(accountDeduction)} {currency.symbol} من رصيد الحساب
+ سيتم خصم {formatArabicNumber(accountDeduction)} {currency.symbol} من رصيد الحساب
                           </p>
                         )}
                       </div>
@@ -1493,7 +1493,7 @@ export default function ModernPrintInvoiceDialog({
                           </Button>
                         </div>
                         <div className="text-[11px] text-muted-foreground hidden lg:block">
-                          💡 يتيح لك تطبيق سعر متر واحد لجميع عناصر الفاتورة دفعة واحدة
+ يتيح لك تطبيق سعر متر واحد لجميع عناصر الفاتورة دفعة واحدة
                         </div>
                       </div>
                     )}

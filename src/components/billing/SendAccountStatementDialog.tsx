@@ -206,7 +206,7 @@ export function SendAccountStatementDialog({
               .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
             const balance = totalDebits - totalCredits;
 
-            finalMessage += `\n\n📊 ملخص الحساب:\n`;
+ finalMessage += `\n\n ملخص الحساب:\n`;
             finalMessage += `• إجمالي المدين: ${totalDebits.toLocaleString()} د.ل\n`;
             finalMessage += `• إجمالي الدائن: ${totalCredits.toLocaleString()} د.ل\n`;
             finalMessage += `• الرصيد النهائي: ${balance.toLocaleString()} د.ل`;
@@ -338,7 +338,7 @@ export function SendAccountStatementDialog({
 
           {sendAsPDF && platform === 'whatsapp-web' && (
             <div className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg">
-              ⚠️ إرسال ملفات PDF يتطلب استخدام Textly API
+ ️ إرسال ملفات PDF يتطلب استخدام Textly API
             </div>
           )}
 

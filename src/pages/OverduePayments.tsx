@@ -708,7 +708,7 @@ export default function OverduePayments() {
                                           </Badge>
                                         ) : (
                                           <Badge className="bg-green-500/10 text-green-700 border-green-500/20 text-[10px]">
-                                            ✓ مطابق
+ مطابق
                                           </Badge>
                                         )}
                                       </td>

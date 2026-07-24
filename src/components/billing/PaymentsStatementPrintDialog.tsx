@@ -322,7 +322,7 @@ export function PaymentsStatementPrintDialog({
               background: #fef3c7;
               color: #92400e;
               border: 1px solid #fbbf24;
-            ">🏛️ عهدة - ${custodyInfo.employee_name}</span>`;
+ ">️ عهدة - ${custodyInfo.employee_name}</span>`;
           }
           
           rows.push({
@@ -344,7 +344,7 @@ export function PaymentsStatementPrintDialog({
             rows.push({
               index: '',
               date: '',
-              customer_name: `<span style="color: #92400e; font-size: 10px; padding-right: 20px;">📋 المبلغ: ${fmtAmt(custodyInfo.initial_amount)} د.ل | المتبقي: <strong style="color: ${custodyInfo.current_balance > 0 ? '#dc2626' : '#059669'}">${fmtAmt(custodyInfo.current_balance)} د.ل</strong></span>`,
+ customer_name: `<span style="color: #92400e; font-size: 10px; padding-right: 20px;"> المبلغ: ${fmtAmt(custodyInfo.initial_amount)} د.ل | المتبقي: <strong style="color: ${custodyInfo.current_balance > 0 ? '#dc2626' : '#059669'}">${fmtAmt(custodyInfo.current_balance)} د.ل</strong></span>`,
               type: '',
               ad_type: '',
               amount: '',
@@ -458,7 +458,7 @@ export function PaymentsStatementPrintDialog({
           </Button>
         </div>
 
-        {/* ✅ قسم تحديد الفترة الزمنية */}
+ {/* قسم تحديد الفترة الزمنية */}
         <div className="bg-slate-50 dark:bg-slate-900 rounded-xl p-4 mb-6 border">
           <div className="flex items-center gap-2 mb-3">
             <Calendar className="h-5 w-5 text-primary" />
@@ -541,7 +541,7 @@ export function PaymentsStatementPrintDialog({
           </div>
         </div>
 
-        {/* ✅ عرض الدفعات المجمعة والمستقلة */}
+ {/* عرض الدفعات المجمعة والمستقلة */}
         <div className="bg-card rounded-xl border overflow-hidden">
           <div className="bg-slate-800 text-white p-3">
             <div className="grid grid-cols-8 gap-2 text-sm font-semibold">

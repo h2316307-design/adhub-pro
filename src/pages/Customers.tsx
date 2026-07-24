@@ -67,11 +67,11 @@ interface CustomerSummary {
   totalRent: number;       // إجمالي الديون (العقود + الفواتير + المهام المجمعة)
   totalPaid: number;       // إجمالي المدفوعات الصحيحة
   accountBalance: number;
-  remainingDebt: number;   // ✅ المتبقي من الدين باستخدام المنطق الصحيح
-  repaymentPercentage: number; // ✅ نسبة السداد الصحيحة
-  friendRentals?: number;  // ✅ الإيجارات الصديقة غير المستعملة
-  totalPurchases?: number; // ✅ المشتريات والإيجارات غير المستعملة
-  unallocatedBalance?: number; // ✅ الرصيد غير الموزع
+ remainingDebt: number; // المتبقي من الدين باستخدام المنطق الصحيح
+ repaymentPercentage: number; // نسبة السداد الصحيحة
+ friendRentals?: number; // الإيجارات الصديقة غير المستعملة
+ totalPurchases?: number; // المشتريات والإيجارات غير المستعملة
+ unallocatedBalance?: number; // الرصيد غير الموزع
   isSupplier?: boolean;
   isCustomer?: boolean;
   supplierType?: string | null;
@@ -164,7 +164,7 @@ function CustomerRow({
               )}
               {customer.unallocatedBalance && customer.unallocatedBalance > 0 ? (
                 <Badge variant="outline" className="bg-red-500/15 text-red-500 border-red-500/35 text-[10px] font-bold px-1.5 py-0 animate-pulse">
-                  ⚠️ رصيد معلق: {customer.unallocatedBalance.toLocaleString('ar-LY')} د.ل
+ ️ رصيد معلق: {customer.unallocatedBalance.toLocaleString('ar-LY')} د.ل
                 </Badge>
               ) : null}
             </div>
@@ -1010,7 +1010,7 @@ export default function Customers() {
             return c.contractsCount > 0;
           case 'no_contracts':
             return c.contractsCount === 0;
-          case 'suppliers': // ✅ جديد: فلتر الموردين
+ case 'suppliers': // جديد: فلتر الموردين
             return c.isSupplier === true;
           default:
             return true;
@@ -2769,7 +2769,7 @@ export default function Customers() {
             
             {(deleteCheckResult?.hasContracts || deleteCheckResult?.hasDebt) && (
               <p className="text-sm text-destructive font-medium">
-                ⚠️ سيتم حذف الزبون وجميع بياناته بشكل نهائي!
+ ️ سيتم حذف الزبون وجميع بياناته بشكل نهائي!
               </p>
             )}
             

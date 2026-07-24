@@ -113,7 +113,7 @@ export function useContractPricing() {
 
     console.log('\n🔍 ===== PRICE LOOKUP START =====');
     console.log(
-      `🔍 Parameters: size_ref=${String(sizeRef)} (norm id=${String(sizeId)} name=${String(
+ ` Parameters: size_ref=${String(sizeRef)} (norm id=${String(sizeId)} name=${String(
         sizeName
       )}), level="${normLevel}", customer="${normCustomer}", months=${months}`
     );

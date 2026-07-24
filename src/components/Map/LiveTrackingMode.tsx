@@ -52,7 +52,7 @@ const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: numbe
 
 // Get direction from heading
 const getDirectionFromHeading = (heading: number): string => {
-  const directions = ['↑ شمال', '↗ شمال شرق', '→ شرق', '↘ جنوب شرق', '↓ جنوب', '↙ جنوب غرب', '← غرب', '↖ شمال غرب']
+ const directions = ['↑ شمال', ' شمال شرق', '→ شرق', ' جنوب شرق', '↓ جنوب', ' جنوب غرب', '← غرب', ' شمال غرب']
   const index = Math.round(((heading % 360) + 360) % 360 / 45) % 8
   return directions[index]
 }
@@ -842,7 +842,7 @@ export default function LiveTrackingMode({
               nightMode ? 'bg-zinc-900/80 border-zinc-800/50' : 'bg-card/30 border-border/30'
             }`}>
               <p className={`text-xs font-bold mb-2 ${nightMode ? 'text-amber-100/80' : 'text-foreground'}`}>
-                اختر مدينة (نقرة = مسار فوري، اضغط مع ✓ = تحديد متعدد)
+ اختر مدينة (نقرة = مسار فوري، اضغط مع = تحديد متعدد)
               </p>
               <div className="grid grid-cols-3 gap-1.5">
                 {availableCities.map(city => {
@@ -868,7 +868,7 @@ export default function LiveTrackingMode({
                             : 'bg-accent/50 hover:bg-accent text-foreground'
                       }`}
                     >
-                      {isSelected && <span className="absolute -top-1 -right-1 text-[8px]">✓</span>}
+ {isSelected && <span className="absolute -top-1 -right-1 text-[8px]"></span>}
                       {city} ({cityCount})
                     </button>
                   );

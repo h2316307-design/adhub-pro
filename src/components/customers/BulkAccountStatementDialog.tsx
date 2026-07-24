@@ -53,22 +53,22 @@ export function BulkAccountStatementDialog({ customers, open, onOpenChange }: Bu
     const remaining = customer.totalRent - customer.totalPaid;
     
     let message = `السلام عليكم ${customer.name}\n\n`;
-    message += `📊 *كشف حساب*\n\n`;
-    message += `💰 إجمالي المستحقات: ${customer.totalRent.toLocaleString('ar-LY')} د.ل\n`;
-    message += `✅ إجمالي المدفوعات: ${customer.totalPaid.toLocaleString('ar-LY')} د.ل\n`;
+ message += ` *كشف حساب*\n\n`;
+ message += ` إجمالي المستحقات: ${customer.totalRent.toLocaleString('ar-LY')} د.ل\n`;
+ message += ` إجمالي المدفوعات: ${customer.totalPaid.toLocaleString('ar-LY')} د.ل\n`;
     
     if (customer.accountBalance > 0) {
-      message += `🏦 رصيد الحساب: ${customer.accountBalance.toLocaleString('ar-LY')} د.ل\n`;
+ message += ` رصيد الحساب: ${customer.accountBalance.toLocaleString('ar-LY')} د.ل\n`;
     }
     
-    message += `\n📌 *المبلغ المتبقي: ${remaining.toLocaleString('ar-LY')} د.ل*\n\n`;
+ message += `\n *المبلغ المتبقي: ${remaining.toLocaleString('ar-LY')} د.ل*\n\n`;
     
     if (remaining > 0) {
       message += `يرجى المبادرة بالسداد في أقرب وقت ممكن.\n`;
     } else if (remaining < 0) {
       message += `لديكم رصيد إضافي يمكن استخدامه في العقود القادمة.\n`;
     } else {
-      message += `✨ الحساب مسدد بالكامل - شكراً لتعاملكم معنا.\n`;
+ message += ` الحساب مسدد بالكامل - شكراً لتعاملكم معنا.\n`;
     }
     
     message += `\nشكراً لثقتكم بنا.`;
@@ -192,10 +192,10 @@ export function BulkAccountStatementDialog({ customers, open, onOpenChange }: Bu
                             {customer.name}
                           </Label>
                           <div className="text-xs text-muted-foreground space-y-1">
-                            <div>📱 {customer.phone}</div>
+ <div> {customer.phone}</div>
                             <div className="flex gap-3">
-                              <span>💰 المستحق: {customer.totalRent.toLocaleString('ar-LY')} د.ل</span>
-                              <span>✅ المدفوع: {customer.totalPaid.toLocaleString('ar-LY')} د.ل</span>
+ <span> المستحق: {customer.totalRent.toLocaleString('ar-LY')} د.ل</span>
+ <span> المدفوع: {customer.totalPaid.toLocaleString('ar-LY')} د.ل</span>
                               <span className={remaining > 0 ? 'text-red-600 font-semibold' : 'text-green-600'}>
                                 المتبقي: {remaining.toLocaleString('ar-LY')} د.ل
                               </span>

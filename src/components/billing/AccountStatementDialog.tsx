@@ -835,7 +835,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
           credit: 0,
           balance: 0,
           reference: contractsRef,
-          notes: '—', // ✅ إخفاء الملاحظات (تكلفة القص والتركيب)
+ notes: '—', // إخفاء الملاحظات (تكلفة القص والتركيب)
           adType: taskAdType,
         });
       });

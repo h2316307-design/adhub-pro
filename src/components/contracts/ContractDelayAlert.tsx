@@ -85,7 +85,7 @@ export const ContractDelayAlert: React.FC<ContractDelayAlertProps> = ({ contract
                 <AlertTriangle className={`h-4 w-4 shrink-0 ${accentColor}`} />
               )}
               <span className={`text-sm font-bold ${titleColor}`}>
-                {isNoDelay ? 'تم تصحيح التاريخ ✓' : 'تأخير تركيب'}
+ {isNoDelay ? 'تم تصحيح التاريخ ' : 'تأخير تركيب'}
               </span>
               <Badge className={`text-[10px] px-1.5 py-0 ${badgeClass}`}>
                 {delayData.delayedBillboards}/{delayData.totalBillboards}
@@ -145,7 +145,7 @@ export const ContractDelayAlert: React.FC<ContractDelayAlertProps> = ({ contract
                         <span className="font-semibold flex items-center gap-1"><Calendar className="h-3 w-3 text-orange-400" /> البداية الحالية:</span>
                         <span className="font-manrope font-bold">
                           {new Date(delayData.contractStartDate).toLocaleDateString('ar')}
-                          {datesAlreadyAdjusted && <span className="text-emerald-400 mr-1">✓</span>}
+ {datesAlreadyAdjusted && <span className="text-emerald-400 mr-1"></span>}
                         </span>
                       </div>
                     )}

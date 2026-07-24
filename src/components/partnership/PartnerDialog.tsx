@@ -176,7 +176,7 @@ export function PartnerDialog({ trigger, partner, onSaved, autoSave = true }: Pa
               <span className="text-yellow-600">تغييرات غير محفوظة</span>
             )}
             {!isSaving && !hasChanges && autoSave && isEdit && (
-              <span className="text-green-600">✓ محفوظ</span>
+ <span className="text-green-600"> محفوظ</span>
             )}
           </div>
           <Button variant="secondary" onClick={()=>setOpen(false)}>إغلاق</Button>

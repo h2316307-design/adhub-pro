@@ -1209,12 +1209,12 @@ export function SendAccountStatementDialog({
             {sendAsPDF && sendingMethod !== 'textly' && (
               <div className="text-sm text-amber-600 p-3 bg-amber-50 rounded-lg flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
-                ⚠️ إرسال ملفات PDF يتطلب استخدام Textly API
+ ️ إرسال ملفات PDF يتطلب استخدام Textly API
               </div>
             )}
           </div>
 
-          {/* ✅ فلتر الفترة الزمنية */}
+ {/* فلتر الفترة الزمنية */}
           <div className="p-4 bg-muted/50 rounded-lg border space-y-3">
             <Label className="text-base font-semibold flex items-center gap-2">
               <Calendar className="h-4 w-4" />

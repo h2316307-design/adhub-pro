@@ -402,7 +402,7 @@ function replaceVariables(
     .replace(/{currency}/g, currencyInfo.writtenName)
     .replace(/{billboardsCount}/g, String(billboardsCount))
     .replace(/{discount}/g, discountText)
-    .replace(/{inclusionText}/g, inclusionText) // ✅ استبدال متغير شامل/غير شامل
+ .replace(/{inclusionText}/g, inclusionText) // استبدال متغير شامل/غير شامل
     // NOTE: paymentsHtml may contain <br> etc. We keep it as-is for wrapping,
     // but it MUST be escaped at render time inside SVG text.
     .replace(/{payments}/g, paymentsHtml)

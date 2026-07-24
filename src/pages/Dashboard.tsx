@@ -162,10 +162,10 @@ export default function Dashboard() {
 
   const getGreeting = () => {
     const hour = currentTime.getHours();
-    if (hour < 5) return 'يسعد مساؤك 🌙';
-    if (hour < 12) return 'صباح الخير والبركة ☀️';
-    if (hour < 17) return 'أهلاً بك، طاب يومك ☕';
-    return 'مساء الخير والأنوار 🌙';
+ if (hour < 5) return 'يسعد مساؤك ';
+ if (hour < 12) return 'صباح الخير والبركة ️';
+ if (hour < 17) return 'أهلاً بك، طاب يومك ';
+ return 'مساء الخير والأنوار ';
   };
 
   const openWhatsAppDialog = useCallback(async (
@@ -2769,7 +2769,7 @@ return removalTasks.filter(t => {
                   size="xs" 
                   className="text-[9.5px] border-rose-500/20 text-rose-600 dark:text-rose-400 hover:bg-rose-500/5 h-8.5 rounded-xl font-bold"
                 >
-                  ⚠️ إخطار انتهاء العقد
+ ️ إخطار انتهاء العقد
                 </Button>
                 <Button 
                   onClick={() => applyTemplate('expiring')} 
@@ -2777,7 +2777,7 @@ return removalTasks.filter(t => {
                   size="xs" 
                   className="text-[9.5px] border-amber-500/20 text-amber-600 dark:text-amber-400 hover:bg-amber-500/5 h-8.5 rounded-xl font-bold"
                 >
-                  ⏳ تذكير قرب الانتهاء
+ تذكير قرب الانتهاء
                 </Button>
                 <Button 
                   onClick={() => applyTemplate('installment')} 
@@ -2785,7 +2785,7 @@ return removalTasks.filter(t => {
                   size="xs" 
                   className="text-[9.5px] border-emerald-500/20 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/5 h-8.5 rounded-xl font-bold"
                 >
-                  💳 تذكير بموعد القسط
+ تذكير بموعد القسط
                 </Button>
                 <Button 
                   onClick={() => applyTemplate('receipt')} 
@@ -2793,7 +2793,7 @@ return removalTasks.filter(t => {
                   size="xs" 
                   className="text-[9.5px] border-blue-500/20 text-blue-600 dark:text-blue-400 hover:bg-blue-500/5 h-8.5 rounded-xl font-bold"
                 >
-                  ✅ تأكيد استلام الدفعة
+ تأكيد استلام الدفعة
                 </Button>
               </div>
             </div>

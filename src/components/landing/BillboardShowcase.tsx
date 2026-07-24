@@ -227,8 +227,8 @@ const BillboardShowcase: React.FC<BillboardShowcaseProps> = ({ billboards }) => 
                       </div>
 
                       {billboard.Nearest_Landmark && (
-                        <p className="text-[11px] text-muted-foreground/70 line-clamp-1">
-                          📍 {billboard.Nearest_Landmark}
+                        <p className="text-[11px] text-muted-foreground/70 line-clamp-1 flex items-center gap-1">
+                          <MapPin className="w-3 h-3 text-amber-500 shrink-0" /> {billboard.Nearest_Landmark}
                         </p>
                       )}
 

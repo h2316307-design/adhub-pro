@@ -586,7 +586,7 @@ export function SharedBillboardDialog({ trigger, billboard, onSaved, autoSave = 
               <span className="text-yellow-600">تغييرات غير محفوظة</span>
             )}
             {!isSaving && !hasChanges && autoSave && rows.length > 0 && (
-              <span className="text-green-600">✓ محفوظ</span>
+ <span className="text-green-600"> محفوظ</span>
             )}
           </div>
           {rows.length > 0 && (

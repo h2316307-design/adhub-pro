@@ -954,10 +954,10 @@ export function CutoutCostSummary({
                                             )}
                                           </div>
                                           {group.nearest_landmark && (
-                                            <p className="text-xs text-muted-foreground">🏛️ {group.nearest_landmark}</p>
+ <p className="text-xs text-muted-foreground">️ {group.nearest_landmark}</p>
                                           )}
                                           {(group as any).district && (
-                                            <p className="text-xs text-muted-foreground">📍 {(group as any).district}</p>
+ <p className="text-xs text-muted-foreground"> {(group as any).district}</p>
                                           )}
                                         </div>
                                       </div>

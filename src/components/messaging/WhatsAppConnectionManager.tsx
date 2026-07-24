@@ -131,10 +131,10 @@ export function WhatsAppConnectionManager({ provider = 'wppconnect' }: WhatsAppC
 
   const handleTestMessage = async () => {
     const testPhone = "0914148865";
-    const testMessage = `مرحباً! هذه رسالة اختبار من نظام إدارة اللوحات الإعلانية.\n\nالمزود: ${providerLabel}\nالنظام يعمل بنجاح! ✅`;
+ const testMessage = `مرحباً! هذه رسالة اختبار من نظام إدارة اللوحات الإعلانية.\n\nالمزود: ${providerLabel}\nالنظام يعمل بنجاح! `;
     const success = await sendMessage({ phone: testPhone, message: testMessage });
     if (success) {
-      toast({ title: "✅ نجح الاختبار", description: `تم إرسال رسالة تجريبية إلى ${testPhone}` });
+ toast({ title: " نجح الاختبار", description: `تم إرسال رسالة تجريبية إلى ${testPhone}` });
     }
   };
 

@@ -229,7 +229,7 @@ export const BillboardFilters: React.FC<BillboardFiltersProps> = ({
 
   return (
     <div className="space-y-4">
-      {/* ✅ شريط البحث الرئيسي - تصميم عصري */}
+ {/* شريط البحث الرئيسي - تصميم عصري */}
       <Card className="relative overflow-hidden border border-border/40 shadow-xl bg-gradient-to-br from-primary/5 via-card/90 to-primary/5 rounded-[2rem] hover:shadow-primary/5 hover:border-primary/20 transition-all duration-500">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-primary/10 via-transparent to-transparent pointer-events-none" />
         
@@ -246,7 +246,7 @@ export const BillboardFilters: React.FC<BillboardFiltersProps> = ({
             <div className="flex-1 relative">
               <SearchInputWithHistory
                 historyKey="billboards"
-                placeholder="🔍 ابحث باسم اللوحة، الموقع، العميل، رقم العقد..."
+                placeholder="ابحث باسم اللوحة، الموقع، العميل، رقم العقد..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className={cn(
@@ -295,7 +295,7 @@ export const BillboardFilters: React.FC<BillboardFiltersProps> = ({
       </Card>
 
 
-      {/* ✅ الفلاتر السريعة للحالة */}
+ {/* الفلاتر السريعة للحالة */}
       <div className="flex items-center gap-3 flex-wrap p-3 rounded-[1.5rem] bg-card/60 backdrop-blur-md border border-border/60 shadow-sm">
         <span className="text-xs sm:text-sm font-bold text-muted-foreground flex items-center gap-1.5 ml-2 mr-1">
           <Sparkles className="h-4 w-4 text-primary animate-pulse" />
@@ -329,7 +329,7 @@ export const BillboardFilters: React.FC<BillboardFiltersProps> = ({
         )}
       </div>
 
-      {/* ✅ الفلاتر المتقدمة - قابلة للطي */}
+ {/* الفلاتر المتقدمة - قابلة للطي */}
       <Collapsible open={isAdvancedOpen} onOpenChange={setIsAdvancedOpen}>
         <CollapsibleContent className="transition-all duration-300">
           <Card className="border border-border/50 shadow-lg bg-card/80 backdrop-blur-sm">
@@ -606,7 +606,7 @@ export const BillboardFilters: React.FC<BillboardFiltersProps> = ({
         </CollapsibleContent>
       </Collapsible>
 
-      {/* ✅ شريط الفلاتر النشطة - تصميم محسن */}
+ {/* شريط الفلاتر النشطة - تصميم محسن */}
       {(searchQuery || activeFiltersCount > 0) && (
         <div className="flex items-center gap-2 flex-wrap p-3 rounded-xl bg-muted/30 border border-border/30">
           <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">

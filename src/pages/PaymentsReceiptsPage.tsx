@@ -964,7 +964,7 @@ export default function PaymentsReceiptsPage() {
                                       <span>لدى الموظف: <strong className="text-foreground">{group.custodyInfo.employee_name}</strong></span>
                                       <span>المبلغ: <strong className="text-amber-700 dark:text-amber-400 font-numbers">{group.custodyInfo.initial_amount.toLocaleString('en-US')} د.ل</strong></span>
                                       <span>الرصيد الحالي: <strong className={`font-numbers ${group.custodyInfo.current_balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{group.custodyInfo.current_balance.toLocaleString('en-US')} د.ل</strong></span>
-                                      {group.custodyInfo.current_balance === 0 && <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold border-none">✓ مسددة</Badge>}
+ {group.custodyInfo.current_balance === 0 && <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold border-none"> مسددة</Badge>}
                                     </div>
                                   </td>
                                 </tr>

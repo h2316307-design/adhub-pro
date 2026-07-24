@@ -1666,7 +1666,7 @@ export default function PrinterAccounts() {
                 فاتورة {pendingQueueIndex + 1} من {pendingQueue.length}
               </span>
               <Button size="sm" onClick={handleNextPendingInvoice} className="gap-2">
-                {pendingQueueIndex + 1 < pendingQueue.length ? 'التالي ←' : 'إنهاء ✓'}
+ {pendingQueueIndex + 1 < pendingQueue.length ? 'التالي ←' : 'إنهاء '}
               </Button>
             </div>
           )}

@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Printer, FileText, Trash2, Edit, UserCheck, Wallet, AlertCircle } from "lucide-react";
+import { Printer, FileText, Trash2, Edit, UserCheck, Wallet, AlertCircle, Wrench, Receipt, DollarSign } from "lucide-react";
 import { showPrintPreview } from '@/components/print/PrintPreviewDialog';
 import { PaymentRow } from "./BillingTypes";
 import { supabase } from "@/integrations/supabase/client";
@@ -1129,35 +1129,35 @@ export function DistributedPaymentDetailsDialog({
                       return {
                         reference: 'مهمة مجمعة',
                         description: taskTypeLabels[payment.notes?.match(/نوع:\s*(\S+)/)?.[1] || ''] || 'مهمة مجمعة',
-                        icon: '🔧'
+                        Icon: Wrench
                       };
                     }
                     if (payment.sales_invoice_id) {
                       return {
                         reference: 'فاتورة مبيعات',
                         description: payment.notes || 'مبيعات',
-                        icon: '🧾'
+                        Icon: Receipt
                       };
                     }
                     if (payment.printed_invoice_id) {
                       return {
                         reference: 'فاتورة طباعة',
                         description: payment.notes || 'طباعة',
-                        icon: '🖨️'
+                        Icon: Printer
                       };
                     }
                     if (payment.entry_type === 'payment' && !payment.contract_number) {
                       return {
                         reference: 'رصيد فائض (غير موزع)',
                         description: payment.notes || 'رصيد في الحساب العام للزبون',
-                        icon: '💰'
+                        Icon: DollarSign
                       };
                     }
                     // Default: عقد
                     return {
                       reference: `عقد رقم ${payment.contract_number}`,
                       description: 'لوحة إعلانية',
-                      icon: '📄'
+                      Icon: FileText
                     };
                   };
                   
@@ -1166,7 +1166,7 @@ export function DistributedPaymentDetailsDialog({
                   return (
                     <TableRow key={payment.id}>
                       <TableCell className="font-semibold text-lg">
-                        <span className="ml-2">{paymentInfo.icon}</span>
+                        <paymentInfo.Icon className="w-4 h-4 inline-block ml-2 text-primary" />
                         {paymentInfo.reference}
                       </TableCell>
                       <TableCell className="text-muted-foreground">

@@ -966,7 +966,7 @@ const SmartDistribution = () => {
                   <p className="text-xs text-muted-foreground">حدد ما تريد طباعته</p>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setPrintFiltersOpen(false)}>✕</Button>
+ <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full" onClick={() => setPrintFiltersOpen(false)}></Button>
             </div>
 
             <div className="p-5 space-y-5">

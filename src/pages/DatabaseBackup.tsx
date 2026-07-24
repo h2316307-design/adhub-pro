@@ -826,7 +826,7 @@ unset PGPASSWORD
           <Alert className="border-amber-500/50 bg-amber-50/30 dark:bg-amber-950/20">
             <Terminal className="h-4 w-4 text-amber-600" />
             <AlertDescription className="text-amber-800 dark:text-amber-300 text-[11px] leading-relaxed space-y-1.5 w-full">
-              <p className="font-bold">💡 خطوات الاستخدام:</p>
+ <p className="font-bold"> خطوات الاستخدام:</p>
               <div className="grid gap-4 md:grid-cols-2 mt-1">
                 <div>
                   <p className="font-bold text-emerald-700 dark:text-emerald-300">لـ Windows (.bat):</p>

@@ -556,7 +556,7 @@ export default function BillboardPrintDialog({
       // Clean up
       document.body.removeChild(container);
 
-      toast.success(`✅ تم تحميل ${billboards.length} صفحة كملف PDF`);
+ toast.success(` تم تحميل ${billboards.length} صفحة كملف PDF`);
       setOpen(false);
     } catch (error) {
       console.error('❌ Error generating PDF:', error);
@@ -584,7 +584,7 @@ export default function BillboardPrintDialog({
             سيتم طباعة كل لوحة في صفحة منفصلة مع بياناتها الكاملة مرتبة حسب المقاس
           </p>
 
-          {/* ✅ Print type selection */}
+ {/* Print type selection */}
           <div className="space-y-3 bg-slate-700/50 rounded-lg p-4 border border-slate-600">
             <Label className="text-sm font-bold text-yellow-400">نوع الطباعة:</Label>
             <div className="flex items-center space-x-4 space-x-reverse gap-4">
@@ -599,7 +599,7 @@ export default function BillboardPrintDialog({
                   className="w-4 h-4 text-yellow-400"
                 />
                 <Label htmlFor="print-client" className="text-sm cursor-pointer text-slate-200 font-medium">
-                  طباعة للعميل 📋
+ طباعة للعميل 
                 </Label>
               </div>
               <div className="flex items-center space-x-2 space-x-reverse">
@@ -613,7 +613,7 @@ export default function BillboardPrintDialog({
                   className="w-4 h-4 text-yellow-400"
                 />
                 <Label htmlFor="print-installation" className="text-sm cursor-pointer text-slate-200 font-medium">
-                  طباعة لفريق التركيب 🔧
+ طباعة لفريق التركيب 
                 </Label>
               </div>
             </div>
@@ -624,7 +624,7 @@ export default function BillboardPrintDialog({
             <div className="space-y-2">
               <div className="bg-green-600/20 border border-green-500/50 rounded-lg p-3">
                 <p className="text-sm text-green-200 font-medium">
-                  ✅ التصاميم متوفرة
+ التصاميم متوفرة
                   {designFaceA && designFaceB ? ' (الوجهين)' : designFaceA ? ' (الوجه الأمامي)' : ' (الوجه الثاني)'}
                 </p>
               </div>
@@ -645,7 +645,7 @@ export default function BillboardPrintDialog({
           ) : (
             <div className="bg-yellow-600/20 border border-yellow-500/50 rounded-lg p-3">
               <p className="text-sm text-yellow-200">
-                ⚠️ لا توجد تصاميم مرفقة بهذا العقد
+ ️ لا توجد تصاميم مرفقة بهذا العقد
               </p>
             </div>
           )}
@@ -653,7 +653,7 @@ export default function BillboardPrintDialog({
           {!includeDesigns && (
             <div className="bg-blue-600/20 border border-blue-500/50 rounded-lg p-3">
               <p className="text-sm text-blue-200">
-                💡 عند إلغاء التصميمات، ستظهر صورة اللوحة بحجم أكبر وفي المنتصف
+ عند إلغاء التصميمات، ستظهر صورة اللوحة بحجم أكبر وفي المنتصف
               </p>
             </div>
           )}

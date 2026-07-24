@@ -223,7 +223,7 @@ export default function StickerPreview({ settings, zoom, previewBillboard }: Pro
           )}
           {settings.contactPhone && (
             <div className="flex items-center gap-1.5" style={{ direction: 'ltr' }}>
-              <div className="w-6 h-6 rounded-full bg-[#333] flex items-center justify-center text-white text-[10px] font-black shrink-0">✆</div>
+ <div className="w-6 h-6 rounded-full bg-[#333] flex items-center justify-center text-white text-[10px] font-black shrink-0"></div>
               <div>
                 <div style={{ fontSize: 7, fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.3 }}>Contact</div>
                 <div style={{ fontSize: 9, fontWeight: 800 }}>{settings.contactPhone}</div>

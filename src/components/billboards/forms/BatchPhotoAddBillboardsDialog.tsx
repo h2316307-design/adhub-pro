@@ -149,7 +149,7 @@ const SatelliteMapPinMatcher: React.FC<{
     <div className="relative w-full h-[250px] sm:h-[270px] rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-950 shadow-inner">
       <div ref={mapContainerRef} className="w-full h-full z-0" />
       <div className="absolute top-2 right-2 bg-slate-950/90 backdrop-blur-md px-2.5 py-1 rounded-xl border border-slate-700 text-[10px] font-mono text-slate-200 z-10 flex items-center gap-1.5 shadow-md">
-        <span className="text-amber-400 font-extrabold">📍</span>
+ <span className="text-amber-400 font-extrabold"></span>
         <span>{defaultLat.toFixed(6)}, {defaultLng.toFixed(6)}</span>
       </div>
     </div>
@@ -349,7 +349,7 @@ export const BatchPhotoAddBillboardsDialog: React.FC<BatchPhotoAddBillboardsDial
           )
         );
 
-        toast.success(`⚡ تم تنظيم وتحديد البلدية (${detected.municipality}) ونقطة الدالة (${topLandmark}) تلقائياً! 🎯`);
+ toast.success(` تم تنظيم وتحديد البلدية (${detected.municipality}) ونقطة الدالة (${topLandmark}) تلقائياً! `);
       } else {
         setPhotoItems(prev => prev.map(p => (p.id === itemId ? { ...p, isGeocoding: false } : p)));
       }
@@ -372,7 +372,7 @@ export const BatchPhotoAddBillboardsDialog: React.FC<BatchPhotoAddBillboardsDial
       }
     }
 
-    toast.success(`⚡ تم تنظيم وتوجيه (${count}) صورة إعلانية بحسب البلديات وأقرب النقاط الدالة أوتوماتيكياً!`);
+ toast.success(` تم تنظيم وتوجيه (${count}) صورة إعلانية بحسب البلديات وأقرب النقاط الدالة أوتوماتيكياً!`);
   };
 
   // Handle File Selection with INSTANT EXIF & Geocoding extraction
@@ -910,7 +910,7 @@ export const BatchPhotoAddBillboardsDialog: React.FC<BatchPhotoAddBillboardsDial
                               title="إعادة التحديد والتنظيم التلقائي للبلدية وأقرب نقطة دالة بناءً على إحداثيات الدبوس"
                             >
                               <Zap className="h-3 w-3 fill-current" />
-                              <span>تنظيم البلدية والدالة ⚡</span>
+ <span>تنظيم البلدية والدالة </span>
                             </Button>
                           )}
                         </div>

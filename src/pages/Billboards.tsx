@@ -91,7 +91,7 @@ export default function Billboards() {
 
   // Collapsible states
   const [summaryOpen, setSummaryOpen] = useState(false);
-  const [mapOpen, setMapOpen] = useState(true); // ✅ مفتوحة افتراضياً لعرض الخريطة الجديدة فوراً
+ const [mapOpen, setMapOpen] = useState(true); // مفتوحة افتراضياً لعرض الخريطة الجديدة فوراً
 
   // Print filters
   const [printFiltersOpen, setPrintFiltersOpen] = useState(false);
@@ -922,7 +922,7 @@ export default function Billboards() {
 
       if (!error) {
         updateBillboardLocal(targetId, { overlay_config: cleanConfig });
-        toast.success(`تم حفظ إعدادات التراكب البصري والتناسب الواقعي للوحة #${sequenceNumber} بنجاح! 🚀`);
+ toast.success(`تم حفظ إعدادات التراكب البصري والتناسب الواقعي للوحة #${sequenceNumber} بنجاح! `);
       } else {
         console.error('[save-overlay-error]', error);
         toast.error(`حدث خطأ أثناء حفظ التراكب: ${error.message}`);

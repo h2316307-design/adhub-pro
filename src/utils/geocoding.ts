@@ -272,6 +272,7 @@ export function getLandmarksFromMemory(lat: number, lng: number): string[] {
 
 // Circuit breaker & cool-down trackers to prevent repeated 429 rate limit errors & CORS noise
 let googlePlacesCooldownUntil = 0;
+let lastGooglePlacesRequestTime = 0;
 let nominatimCooldownUntil = 0;
 const INFLIGHT_REQUESTS = new Map<string, Promise<GeocodingResult | null>>();
 
@@ -283,6 +284,19 @@ async function fetchGoogleOfficialGeocode(lat: number, lng: number): Promise<{ l
   if (!GOOGLE_API_KEY) return { landmarks: [] };
 
   // If Google Places is currently in 429 cool-down backoff, skip to prevent repetitive 429 console errors
+  if (Date.now() < googlePlacesCooldownUntil) {
+    return { landmarks: [] };
+  }
+
+  // Throttle outbound calls to Google Places API (at least 300ms gap)
+  const now = Date.now();
+  const elapsed = now - lastGooglePlacesRequestTime;
+  if (elapsed < 300) {
+    await new Promise(resolve => setTimeout(resolve, 300 - elapsed));
+  }
+  lastGooglePlacesRequestTime = Date.now();
+
+  // Double check cool-down status after throttle wait
   if (Date.now() < googlePlacesCooldownUntil) {
     return { landmarks: [] };
   }
@@ -314,9 +328,10 @@ async function fetchGoogleOfficialGeocode(lat: number, lng: number): Promise<{ l
     }).catch(() => null);
 
     if (placesRes) {
-      if (placesRes.status === 429) {
-        // Activate 5-minute cool-down for Google Places API to avoid repeated 429 errors
-        googlePlacesCooldownUntil = Date.now() + 5 * 60 * 1000;
+      if (placesRes.status === 429 || placesRes.status === 403) {
+        // Activate 30-minute cool-down for Google Places API to avoid repeated 429/403 errors
+        googlePlacesCooldownUntil = Date.now() + 30 * 60 * 1000;
+        console.warn('[geocoding] Google Places API 429 rate limit hit. Activated 30m cool-down. Failing over to Esri + OSM.');
       } else if (placesRes.ok) {
         try {
           const placesData = await placesRes.json();

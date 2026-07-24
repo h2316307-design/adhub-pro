@@ -164,12 +164,12 @@ export function SmartBillboardConfirmDialog({
                         </Badge>
                         {isCompleted && task.type === 'installation' && (
                           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 px-1 font-medium">
-                            ✓ ستبقى وتُعلّم كمستبدلة
+ ستبقى وتُعلّم كمستبدلة
                           </span>
                         )}
                         {isCompleted && task.type !== 'installation' && (
                           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 px-1 font-medium">
-                            ✓ ستبقى في المهمة المكتملة
+ ستبقى في المهمة المكتملة
                           </span>
                         )}
                       </div>

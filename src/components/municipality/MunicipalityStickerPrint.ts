@@ -127,7 +127,7 @@ export async function printStickers(
             ` : ''}
             ${settings.contactPhone ? `
               <div class="contact-row">
-                <div class="contact-icon phone">✆</div>
+ <div class="contact-icon phone"></div>
                 <div>
                   <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">Contact</div>
                   <div style="font-size:13px;font-weight:800;direction:ltr;">${settings.contactPhone}</div>

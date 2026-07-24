@@ -9,7 +9,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { Shield, Plus, Edit, Trash2, Save, Users, Eye, Pencil, ChevronDown, ChevronUp, Check, X } from 'lucide-react';
+import { Shield, Plus, Edit, Trash2, Save, Users, Eye, Pencil, ChevronDown, ChevronUp, Check, X, Home, MapPin, Building2, Landmark, DollarSign, Receipt, Tag, ClipboardList, BarChart3, HardHat, Settings, LucideIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Textarea } from '@/components/ui/textarea';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -35,7 +35,7 @@ interface PermissionItem {
 interface PermissionGroup {
   id: string;
   title: string;
-  icon: string;
+  icon: LucideIcon;
   items: PermissionItem[];
 }
 
@@ -44,7 +44,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'core',
     title: 'الصفحات الأساسية',
-    icon: '🏠',
+    icon: Home,
     items: [
       { id: 'dashboard', label: 'لوحة التحكم', description: 'الصفحة الرئيسية', hasEdit: false },
       { id: 'contracts', label: 'العقود', description: 'إدارة العقود', hasEdit: true },
@@ -55,7 +55,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'billboards',
     title: 'اللوحات',
-    icon: '📍',
+    icon: MapPin,
     items: [
       { id: 'billboards', label: 'جميع اللوحات', description: 'عرض وإدارة اللوحات', hasEdit: true },
       { id: 'billboard_photos', label: 'معرض الصور', description: 'عرض معرض صور اللوحات', hasEdit: false },
@@ -69,7 +69,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'partnerships',
     title: 'الشراكات',
-    icon: '🏢',
+    icon: Building2,
     items: [
       { id: 'shared_billboards', label: 'اللوحات المشتركة', description: 'عرض اللوحات المشتركة', hasEdit: true },
       { id: 'shared_companies', label: 'الشركات المشاركة', description: 'إدارة الشركات المشاركة', hasEdit: true },
@@ -80,7 +80,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'municipalities',
     title: 'البلديات',
-    icon: '🏛️',
+    icon: Landmark,
     items: [
       { id: 'municipality_stickers', label: 'ملصقات البلديات', description: 'إدارة ملصقات البلديات', hasEdit: true },
       { id: 'municipality_stats', label: 'الإحصائيات', description: 'عرض إحصائيات البلديات', hasEdit: false },
@@ -91,7 +91,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'customers',
     title: 'العملاء',
-    icon: '👥',
+    icon: Users,
     items: [
       { id: 'customers', label: 'قائمة العملاء', description: 'إدارة بيانات العملاء', hasEdit: true },
       { id: 'customer_billing', label: 'حسابات العملاء', description: 'عرض حسابات العملاء', hasEdit: true },
@@ -101,7 +101,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'finance',
     title: 'المالية',
-    icon: '💰',
+    icon: DollarSign,
     items: [
       { id: 'overdue_payments', label: 'الدفعات المتأخرة', description: 'عرض الدفعات المتأخرة', hasEdit: false },
       { id: 'payments', label: 'الدفعات والإيصالات', description: 'إدارة الدفعات', hasEdit: true },
@@ -114,7 +114,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'accounts',
     title: 'الحسابات',
-    icon: '🧾',
+    icon: Receipt,
     items: [
       { id: 'printed_invoices_page', label: 'فواتير الطباعة', description: 'عرض فواتير الطباعة', hasEdit: true },
       { id: 'printer_accounts', label: 'حسابات المطابع', description: 'إدارة حسابات المطابع', hasEdit: true },
@@ -124,7 +124,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'pricing',
     title: 'التسعير',
-    icon: '🏷️',
+    icon: Tag,
     items: [
       { id: 'pricing', label: 'أسعار الإيجار', description: 'إدارة أسعار الإيجار', hasEdit: true },
       { id: 'pricing_factors', label: 'نظام المعاملات', description: 'إدارة معاملات التسعير', hasEdit: true },
@@ -133,7 +133,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'tasks',
     title: 'المهام',
-    icon: '📋',
+    icon: ClipboardList,
     items: [
       { id: 'tasks', label: 'المهمات اليومية', description: 'إدارة المهام اليومية', hasEdit: true },
       { id: 'installation_tasks', label: 'التركيب', description: 'إدارة مهام التركيب', hasEdit: true },
@@ -147,7 +147,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'reports',
     title: 'التقارير',
-    icon: '📊',
+    icon: BarChart3,
     items: [
       { id: 'activity_log', label: 'سجل الحركات', description: 'عرض سجل الحركات والنشاطات', hasEdit: false },
       { id: 'reports', label: 'التقارير والإحصائيات', description: 'عرض التقارير', hasEdit: false },
@@ -158,7 +158,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'team',
     title: 'الفريق',
-    icon: '👷',
+    icon: HardHat,
     items: [
       { id: 'users', label: 'المستخدمين', description: 'إدارة المستخدمين', hasEdit: true },
       { id: 'roles', label: 'الأدوار والصلاحيات', description: 'إدارة الأدوار والصلاحيات', hasEdit: true },
@@ -169,7 +169,7 @@ const permissionGroups: PermissionGroup[] = [
   {
     id: 'settings',
     title: 'الإعدادات',
-    icon: '⚙️',
+    icon: Settings,
     items: [
       { id: 'settings', label: 'الإعدادات العامة', description: 'الإعدادات العامة للنظام', hasEdit: true },
       { id: 'system_settings', label: 'إعدادات النظام', description: 'إعدادات النظام المتقدمة', hasEdit: true },
@@ -561,7 +561,7 @@ export default function RolesManagement() {
                   <AccordionItem key={group.id} value={group.id} className="border rounded-lg overflow-hidden">
                     <AccordionTrigger className="px-4 py-3 hover:no-underline hover:bg-muted/50">
                       <div className="flex items-center gap-3 flex-1">
-                        <span className="text-lg">{group.icon}</span>
+                        <group.icon className="h-5 w-5 text-primary shrink-0" />
                         <span className="font-semibold">{group.title}</span>
                         <div className="flex items-center gap-2 mr-auto">
                           <Badge variant={allViewSelected ? 'default' : 'outline'} className="text-xs">

@@ -361,7 +361,7 @@ export const useCompositeTasks = (customerId?: string) => {
       await supabase.from('customer_payments').insert({
         customer_id: task.customer_id,
         customer_name: task.customer_name,
-        printed_invoice_id: invoice.id, // ✅ ربط بالفاتورة لتجنب التكرار
+ printed_invoice_id: invoice.id, // ربط بالفاتورة لتجنب التكرار
         amount: -customerTotal,
         entry_type: 'invoice',
         paid_at: new Date().toISOString().split('T')[0],

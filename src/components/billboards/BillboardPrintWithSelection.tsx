@@ -319,7 +319,7 @@ export const BillboardPrintWithSelection: React.FC<BillboardPrintWithSelectionPr
       // محاولة الرفع السحابي أولاً
       const uploadedUrl = await uploadImage(file, `print-bg-${Date.now()}`, 'print-backgrounds');
       addNewCustomBackground(uploadedUrl);
-      toast.success('تم رفع وحفظ الخلفية بنجاح ✨', { id: toastId });
+ toast.success('تم رفع وحفظ الخلفية بنجاح ', { id: toastId });
       setShowAddBackgroundForm(false);
     } catch (uploadErr) {
       console.warn('Upload failed, falling back to base64:', uploadErr);
@@ -329,7 +329,7 @@ export const BillboardPrintWithSelection: React.FC<BillboardPrintWithSelectionPr
         const base64 = readerEvent.target?.result as string;
         if (base64) {
           addNewCustomBackground(base64);
-          toast.success('تم حفظ الخلفية محلياً بنجاح ✨', { id: toastId });
+ toast.success('تم حفظ الخلفية محلياً بنجاح ', { id: toastId });
           setShowAddBackgroundForm(false);
         } else {
           toast.error('فشل معالجة الصورة محلياً', { id: toastId });
@@ -359,7 +359,7 @@ export const BillboardPrintWithSelection: React.FC<BillboardPrintWithSelectionPr
             const uploadedUrl = await uploadImage(file, `print-bg-pasted-${Date.now()}`, 'print-backgrounds');
             
             addNewCustomBackground(uploadedUrl);
-            toast.success('تم رفع وحفظ الخلفية الملصقة بنجاح ✨', { id: toastId });
+ toast.success('تم رفع وحفظ الخلفية الملصقة بنجاح ', { id: toastId });
             setShowAddBackgroundForm(false);
           } catch (uploadErr) {
             console.warn('Cloud upload failed for pasted image, falling back to base64:', uploadErr);
@@ -369,7 +369,7 @@ export const BillboardPrintWithSelection: React.FC<BillboardPrintWithSelectionPr
               const base64 = e.target?.result as string;
               if (base64) {
                 addNewCustomBackground(base64);
-                toast.success('تم حفظ الخلفية محلياً بنجاح ✨', { id: toastId });
+ toast.success('تم حفظ الخلفية محلياً بنجاح ', { id: toastId });
                 setShowAddBackgroundForm(false);
               }
             };

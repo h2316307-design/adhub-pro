@@ -302,20 +302,20 @@ export async function createContract(contractData: ContractData) {
     'Contract Date': contractPayload.start_date,
     Duration: null,
     'End Date': contractPayload.end_date,
-    'Ad Type': contractPayload.ad_type || '', // ✅ FIXED: العمود الموجود فقط
-    'Total Rent': rentalCostOnly, // ✅ CORRECTED: حفظ سعر الإيجار فقط (بدون التركيب والطباعة)
+ 'Ad Type': contractPayload.ad_type || '', // FIXED: العمود الموجود فقط
+ 'Total Rent': rentalCostOnly, // CORRECTED: حفظ سعر الإيجار فقط (بدون التركيب والطباعة)
     Discount: contractPayload.discount || 0,
-    installation_cost: installationCost, // ✅ بأحرف صغيرة كما في 
+ installation_cost: installationCost, // بأحرف صغيرة كما في 
     installation_enabled: installation_enabled !== false,
-    print_cost: printCost, // ✅ NEW: حفظ تكلفة الطباعة
+ print_cost: printCost, // NEW: حفظ تكلفة الطباعة
     // ✅ FIX: fee is TEXT column
-    fee: String(totalOperatingFee), // ✅ حفظ إجمالي رسوم التشغيل في عمود fee
-    operating_fee_rate: operatingFeeRate, // ✅ حفظ نسبة التشغيل في عمودها الخاص
+ fee: String(totalOperatingFee), // حفظ إجمالي رسوم التشغيل في عمود fee
+ operating_fee_rate: operatingFeeRate, // حفظ نسبة التشغيل في عمودها الخاص
     friend_rental_data: parsedFriendRentalData,
     friend_rental_includes_installation: friend_rental_includes_installation || false,
     friend_rental_operating_fee_enabled: friend_rental_operating_fee_enabled || false,
     friend_rental_operating_fee_rate: friend_rental_operating_fee_rate || 3,
-    Total: finalTotal, // ✅ CORRECTED: الإجمالي النهائي الكامل
+ Total: finalTotal, // CORRECTED: الإجمالي النهائي الكامل
     'Print Status': null,
     'Renewal Status': null,
     // ✅ FIX: Total Paid and Remaining are TEXT columns
@@ -326,13 +326,13 @@ export async function createContract(contractData: ContractData) {
     'Payment 3': contractData['Payment 3'] ? String(contractData['Payment 3']) : null,
     // ✅ FIX: Remaining is TEXT column
     Remaining: String(contractData['Remaining'] || finalTotal),
-    payment_status: 'unpaid', // ✅ FIX: إضافة حالة الدفع الافتراضية
+ payment_status: 'unpaid', // FIX: إضافة حالة الدفع الافتراضية
     customer_id: customer_id,
     billboard_id: null,
     // ✅ FIXED: حفظ بيانات اللوحات و billboard_ids
     billboards_data: JSON.stringify(billboardsData),
     billboards_count: billboardsData.length,
-    billboard_ids: billboard_ids ? billboard_ids.join(',') : null, // ✅ حفظ معرفات اللوحات كنص مفصول بفواصل
+ billboard_ids: billboard_ids ? billboard_ids.join(',') : null, // حفظ معرفات اللوحات كنص مفصول بفواصل
     // ✅ CRITICAL FIX: Save billboard_prices from ContractCreate
     billboard_prices: contractData.billboard_prices || null,
     // ✅ FIXED: Save installments data properly
@@ -621,7 +621,7 @@ export async function getContractWithBillboards(contractId: string): Promise<any
       'Contract Number': c['Contract Number'] ?? c.Contract_Number,
       customer_id: c.customer_id ?? null,
       customer_name: c.customer_name ?? c['Customer Name'] ?? c.Customer_Name ?? '',
-      ad_type: c['Ad Type'] ?? c.Ad_Type ?? '', // ✅ FIXED: استخدام العمود الموجود فقط
+ ad_type: c['Ad Type'] ?? c.Ad_Type ?? '', // FIXED: استخدام العمود الموجود فقط
       start_date: c.start_date ?? c['Contract Date'] ?? c.contract_date ?? '',
       end_date: c.end_date ?? c['End Date'] ?? '',
       rent_cost: typeof c.rent_cost === 'number' ? c.rent_cost : Number(c['Total Rent'] ?? 0),
@@ -633,7 +633,7 @@ export async function getContractWithBillboards(contractId: string): Promise<any
       // إضافة بيانات اللوحات المحفوظة
       saved_billboards_data: c.billboards_data || c['billboards_data'],
       saved_billboards_count: c.billboards_count ?? 0,
-      billboard_ids: c.billboard_ids || '', // ✅ إضافة معرفات اللوحات
+ billboard_ids: c.billboard_ids || '', // إضافة معرفات اللوحات
       // ✅ CRITICAL FIX: Add billboard_prices to getContractWithBillboards
       billboard_prices: c.billboard_prices || null,
       // ✅ NEW: Add operating fee data to getContractWithBillboards
@@ -818,8 +818,8 @@ export async function updateContract(contractId: string, updates: any) {
         }
       }
 
-      payload['installation_cost'] = installationCost; // ✅ بأحرف صغيرة
-      payload['print_cost'] = printCost; // ✅ NEW: حفظ تكلفة الطباعة
+ payload['installation_cost'] = installationCost; // بأحرف صغيرة
+ payload['print_cost'] = printCost; // NEW: حفظ تكلفة الطباعة
 
       // ✅ CORRECTED: حساب القيم الصحيحة
       const finalTotal = Number(merged['Total']) || Number(merged.rent_cost) || 0; // هذا هو الإجمالي النهائي
@@ -1252,8 +1252,8 @@ async function updateContractBillboardsData(contractNumber: string) {
     await updateContract(contractNumber, {
       billboards_data: JSON.stringify(billboardsData),
       billboards_count: billboardsData.length,
-      billboard_ids: billboardIds.join(','), // ✅ حفظ معرفات اللوحات
-      installation_cost: installationCost // ✅ بأحرف صغيرة
+ billboard_ids: billboardIds.join(','), // حفظ معرفات اللوحات
+ installation_cost: installationCost // بأحرف صغيرة
     });
 
     console.log(`Updated billboard and installation data for contract ${contractNumber}`);
@@ -1306,7 +1306,7 @@ export async function renewContract(originalContractId: string, options?: { star
     ad_type: original.ad_type || original['Ad Type'] || '',
     start_date: String(newStart),
     end_date: String(newEnd),
-    rent_cost: options?.keep_cost === false ? 0 : (Number(original.total_cost ?? original['Total'] ?? 0) || 0), // ✅ استخدام الإجمالي النهائي
+ rent_cost: options?.keep_cost === false ? 0 : (Number(original.total_cost ?? original['Total'] ?? 0) || 0), // استخدام الإجمالي النهائي
     billboard_ids: billboardIds,
     // ✅ NEW: Copy print cost settings from original contract
     print_cost_enabled: original.print_cost_enabled || false,

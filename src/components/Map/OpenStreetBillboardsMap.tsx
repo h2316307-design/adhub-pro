@@ -321,7 +321,7 @@ const createPopupContent = (b: Billboard): string => {
 
           ${isRented && adType ? `
             <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(139,92,246,0.12); border-radius: 6px;">
-              <span style="font-size: 10px;">📢</span>
+ <span style="font-size: 10px;"></span>
               <span style="font-size: 10px; color: #8b5cf6; font-weight: 600;">${esc(adType)}</span>
             </div>
           ` : ""}
@@ -1233,7 +1233,7 @@ export default function OpenStreetBillboardsMap({ billboards, className, onReady
               <Camera className="h-4 w-4" />
               <span className="text-xs font-bold">صور ميدانية {fieldPhotosWithGps.length ? `(${fieldPhotosWithGps.length})` : ''}</span>
             </div>
-            <span className="text-[10px]">{isFetchingFieldPhotos ? '...' : showFieldPhotos ? '✓' : ''}</span>
+ <span className="text-[10px]">{isFetchingFieldPhotos ? '...' : showFieldPhotos ? '' : ''}</span>
           </button>
         </div>
 

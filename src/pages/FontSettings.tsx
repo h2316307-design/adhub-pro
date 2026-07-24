@@ -234,7 +234,7 @@ export default function FontSettings() {
                     </SelectContent>
                   </Select>
                   <p className="text-xs text-muted-foreground">
-                    💡 يمكنك رؤية التغيير فوراً في لوحة المعاينة المجاورة. اضغط على حفظ لتطبيقه نهائياً.
+ يمكنك رؤية التغيير فوراً في لوحة المعاينة المجاورة. اضغط على حفظ لتطبيقه نهائياً.
                   </p>
                 </div>
 

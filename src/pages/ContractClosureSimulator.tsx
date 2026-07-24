@@ -1232,7 +1232,7 @@ export default function ContractClosureSimulator() {
                   </div>
                   {earliestEndDateContract && (
                     <p className="text-[9px] text-muted-foreground leading-normal mt-1.5 p-1.5 rounded bg-muted/40 border border-border/40">
-                      💡 زر <strong>نهاية العقد الأول</strong> يضبط تاريخ المحاكاة تلقائياً إلى تاريخ انتهاء العقد الأقرب للزبون 
+ زر <strong>نهاية العقد الأول</strong> يضبط تاريخ المحاكاة تلقائياً إلى تاريخ انتهاء العقد الأقرب للزبون 
                       (عقد <strong>#{earliestEndDateContract.Contract_Number}</strong> ينتهي بتاريخ <strong>{earliestEndDateContract['End Date'] || earliestEndDateContract.original_end_date}</strong>).
                     </p>
                   )}

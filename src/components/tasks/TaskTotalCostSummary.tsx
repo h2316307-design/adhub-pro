@@ -822,7 +822,7 @@ export function TaskTotalCostSummary({
               </div>
             </div>
 
-            {/* 🖨️ & ✂️ التحكم في إعدادات الطباعة والقص */}
+ {/* ️ & ️ التحكم في إعدادات الطباعة والقص */}
             <div className="p-4 rounded-xl border border-border/80 bg-muted/20 space-y-3 text-right" dir="rtl">
               <div className="flex items-center justify-between flex-wrap gap-2">
                 <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
@@ -831,9 +831,9 @@ export function TaskTotalCostSummary({
                 </span>
                 {(isPrintActive || isCutoutActive) && (
                   <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 font-bold">
-                    {isPrintActive && `🖨️ طباعة (${printPricePerMeter} د.ل/م²)`}
+ {isPrintActive && `️ طباعة (${printPricePerMeter} د.ل/م²)`}
                     {isPrintActive && isCutoutActive && ' • '}
-                    {isCutoutActive && `✂️ قص ومجسمات (${cutoutCost} د.ل)`}
+ {isCutoutActive && `️ قص ومجسمات (${cutoutCost} د.ل)`}
                   </Badge>
                 )}
               </div>

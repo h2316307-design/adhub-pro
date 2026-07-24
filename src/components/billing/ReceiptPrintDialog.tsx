@@ -354,8 +354,8 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
         // إزالة معلومات التوزيع من الملاحظات للعرض
         cleanNotes = cleanNotes.replace(/دفعة موزعة على \d+ عقود: [\d,\s]+\n*/g, '').trim();
         // إزالة معلومات العهدة والموظف
-        cleanNotes = cleanNotes.replace(/📋 تم التحويل لعهدة مالية:[\s\S]*?(?=\n\n|$)/g, '').trim();
-        cleanNotes = cleanNotes.replace(/👤 تم تسليم جزء للموظفين:[\s\S]*?(?=\n\n|$)/g, '').trim();
+ cleanNotes = cleanNotes.replace(/ تم التحويل لعهدة مالية:[\s\S]*?(?=\n\n|$)/g, '').trim();
+ cleanNotes = cleanNotes.replace(/ تم تسليم جزء للموظفين:[\s\S]*?(?=\n\n|$)/g, '').trim();
         cleanNotes = cleanNotes.replace(/ملاحظات:\s*/g, '').trim();
       }
 

@@ -455,8 +455,8 @@ export const BillboardHistoryDialog: React.FC<BillboardHistoryDialogProps> = ({
                   <td>${record.discount_percentage ? Number(record.discount_percentage).toFixed(2) + '%' : '-'}</td>
                   <td>${record.installation_cost ? Number(record.installation_cost).toLocaleString() + ' دينار' : '-'}</td>
                   <td>${record.print_cost ? Number(record.print_cost).toLocaleString() + ' دينار' : '-'}</td>
-                  <td>${record.include_installation_in_price ? '✓ نعم' : '-'}</td>
-                  <td>${record.include_print_in_price ? '✓ نعم' : '-'}</td>
+ <td>${record.include_installation_in_price ? ' نعم' : '-'}</td>
+ <td>${record.include_print_in_price ? ' نعم' : '-'}</td>
                   <td>${Number(record.rent_amount || 0).toLocaleString()} دينار</td>
                   <td>${record.team_name || '-'}</td>
                   <td>${record.pricing_category || '-'}</td>
@@ -889,7 +889,7 @@ export const BillboardHistoryDialog: React.FC<BillboardHistoryDialogProps> = ({
                             <div className="text-muted-foreground leading-relaxed">
                               تم إيقاف تأجير هذه اللوحة بعد انقضاء <span className="font-bold text-foreground">{elapsed} يوم</span> فقط من العقد.
                               <span className="block mt-1">
-                                💸 القيمة المالية المستردة/المخصومة للعقد: <span className="font-extrabold text-emerald-600 dark:text-emerald-400">{refund.toLocaleString()} دينار ليبي</span>.
+ القيمة المالية المستردة/المخصومة للعقد: <span className="font-extrabold text-emerald-600 dark:text-emerald-400">{refund.toLocaleString()} دينار ليبي</span>.
                               </span>
                               {record.notes && (
                                 <span className="block mt-1 border-t border-rose-500/10 pt-1 text-xs font-semibold text-foreground">

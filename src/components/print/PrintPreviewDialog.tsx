@@ -180,7 +180,7 @@ export function PrintPreviewDialog() {
       const fileName = `${job.title || 'document'}.pdf`;
       const pdfBlob = await iframeToPdfBlob(iframeRef.current, fileName, { marginMm: [0, 0, 0, 0] });
       const { uploadPdfBlobAndSendWhatsApp } = await import('@/utils/pdfDriveWhatsApp');
-      await uploadPdfBlobAndSendWhatsApp({ pdfBlob, fileName, driveFolder: folder, phone: whatsAppPhone, message: `📄 ${job.title || 'مستند'}\n\n` });
+ await uploadPdfBlobAndSendWhatsApp({ pdfBlob, fileName, driveFolder: folder, phone: whatsAppPhone, message: ` ${job.title || 'مستند'}\n\n` });
       toast.success('تم الإرسال عبر واتساب بنجاح');
       setWhatsAppOpen(false);
     } catch (err) {

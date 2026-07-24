@@ -239,7 +239,7 @@ export function CostSummaryCard({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-5 space-y-5">
-        {/* ✅ Estimated Total Badge with Refresh Button */}
+ {/* Estimated Total Badge with Refresh Button */}
         <div className="p-4 rounded-xl bg-gradient-to-r from-muted/80 to-muted/50 border border-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
@@ -759,7 +759,7 @@ export function CostSummaryCard({
                     </Button>
                   )}
 
-                  {/* ✅ NEW: Friend Operating Fee Toggle */}
+ {/* NEW: Friend Operating Fee Toggle */}
                   {setFriendRentalOperatingFeeEnabled && (
                     <div className="mt-3 pt-3 border-t border-amber-500/20 space-y-2">
                       <div className="flex items-center justify-between">
@@ -852,7 +852,7 @@ export function CostSummaryCard({
             <span className="font-semibold text-purple-600 font-manrope">{calculatedOperatingFee.toLocaleString('ar-LY')} {currencySymbol}</span>
           </div>
 
-          {/* ✅ NEW: Friend Operating Fee Line */}
+ {/* NEW: Friend Operating Fee Line */}
           {friendOperatingFeeAmount > 0 && (
             <div className="flex justify-between items-center text-sm pt-2 border-t border-amber-500/20 mt-2">
               <span className="text-muted-foreground flex items-center gap-1">
@@ -863,7 +863,7 @@ export function CostSummaryCard({
             </div>
           )}
 
-          {/* ✅ Combined total operating fee */}
+ {/* Combined total operating fee */}
           {friendOperatingFeeAmount > 0 && (
             <div className="flex justify-between items-center pt-2 border-t-2 border-purple-500/30 mt-2">
               <span className="font-bold text-sm text-purple-700 dark:text-purple-300">إجمالي رسوم التشغيل</span>
@@ -982,7 +982,7 @@ export function CostSummaryCard({
             </p>
           ) : null}
 
-          {/* ✅ الإجمالي الافتراضي بدون احتساب الإيقاف — للمرجعية فقط */}
+ {/* الإجمالي الافتراضي بدون احتساب الإيقاف — للمرجعية فقط */}
           {pausedRefundSum > 0 && (
             <div className="mt-3 p-3 rounded-lg border border-dashed border-border bg-muted/30 space-y-1.5">
               <div className="text-[11px] font-semibold text-muted-foreground mb-1">

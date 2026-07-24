@@ -51,7 +51,7 @@ interface ElementSettings {
 type StatusOverrideKey = 'no-design' | 'one-design' | 'one-install';
 
 const STATUS_OVERRIDE_LABELS: Record<StatusOverrideKey, { label: string; icon: string; color: string }> = {
-  'no-design': { label: 'بدون تصميم', icon: '⚠', color: '#ef4444' },
+ 'no-design': { label: 'بدون تصميم', icon: '', color: '#ef4444' },
   'one-design': { label: 'تصميم واحد', icon: '◐', color: '#f59e0b' },
   'one-install': { label: 'تركيب وجه واحد', icon: '①', color: '#3b82f6' },
 };
@@ -1693,7 +1693,7 @@ export default function BillboardPrintSettings() {
 
     // بدون تصميم
     if (showBadgeNoDesign && !hasDesignA && !hasDesignB) {
-      badges.push(`<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:12px;font-size:${badgeElement.fontSize || '11px'};font-weight:${badgeElement.fontWeight || '600'};">⚠ بدون تصميم</span>`);
+ badges.push(`<span style="background:#ef4444;color:#fff;padding:2px 8px;border-radius:12px;font-size:${badgeElement.fontSize || '11px'};font-weight:${badgeElement.fontWeight || '600'};"> بدون تصميم</span>`);
     }
     // تصميم واحد فقط (للوحة ذات وجهين)
     else if (showBadgeOneDesign && hasTwoFaces && hasDesignA && !hasDesignB) {
@@ -2379,7 +2379,7 @@ export default function BillboardPrintSettings() {
                     <span className="flex items-center gap-2">
                       <FolderOpen className="h-4 w-4" />
                       {profile.profile_name}
-                      {profile.is_default && <span className="text-amber-500">★</span>}
+ {profile.is_default && <span className="text-amber-500"></span>}
                       {profile.id === activeProfileId && <Check className="h-3 w-3 text-green-500" />}
                     </span>
                   </SelectItem>
@@ -2511,7 +2511,7 @@ export default function BillboardPrintSettings() {
                                 disabled={setDefaultProfileMutation.isPending || profile.is_default}
                                 title={profile.is_default ? "البروفايل الافتراضي" : "تعيين كافتراضي"}
                               >
-                                {profile.is_default ? '★' : '☆'}
+ {profile.is_default ? '' : ''}
                               </Button>
                               <Button 
                                 size="sm" 
@@ -2878,7 +2878,7 @@ export default function BillboardPrintSettings() {
                         </Select>
                         {selectedTeamForPrint !== 'all' && (
                           <p className="text-[10px] text-green-600 font-medium">
-                            ✓ تم تحديد لوحات الفريق تلقائياً
+ تم تحديد لوحات الفريق تلقائياً
                           </p>
                         )}
                       </div>
@@ -3338,7 +3338,7 @@ export default function BillboardPrintSettings() {
                   </CardTitle>
                   <CardDescription>
                     {activeEditingStatus 
-                      ? `✏️ تحرير حالة: ${STATUS_OVERRIDE_LABELS[activeEditingStatus].icon} ${STATUS_OVERRIDE_LABELS[activeEditingStatus].label} — التغييرات تُحفظ كتجاوز`
+ ? `️ تحرير حالة: ${STATUS_OVERRIDE_LABELS[activeEditingStatus].icon} ${STATUS_OVERRIDE_LABELS[activeEditingStatus].label} — التغييرات تُحفظ كتجاوز`
                       : `اختر عنصراً لتعديل إعداداته - وضع: ${PRINT_MODES[currentMode as keyof typeof PRINT_MODES]}`
                     }
                   </CardDescription>
@@ -3399,7 +3399,7 @@ export default function BillboardPrintSettings() {
                                 {/* مؤشر تحرير الحالة */}
                                 {hasStatusOverride && (
                                   <div className="text-xs text-center py-1 px-2 rounded" style={{ background: `${STATUS_OVERRIDE_LABELS[activeEditingStatus!].color}20`, color: STATUS_OVERRIDE_LABELS[activeEditingStatus!].color }}>
-                                    ✏️ تعديل تجاوز لحالة: {STATUS_OVERRIDE_LABELS[activeEditingStatus!].label}
+ ️ تعديل تجاوز لحالة: {STATUS_OVERRIDE_LABELS[activeEditingStatus!].label}
                                   </div>
                                 )}
                                 {/* Position with Sliders */}
@@ -3822,7 +3822,7 @@ export default function BillboardPrintSettings() {
                               {hasOverrides && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">مُخصص</span>
                               )}
-                              {isActive ? '✏️ تحرير' : '🔍 معاينة'}
+ {isActive ? '️ تحرير' : ' معاينة'}
                             </span>
                           </Button>
                         );
@@ -3834,7 +3834,7 @@ export default function BillboardPrintSettings() {
                         className="w-full h-10 text-sm"
                         onClick={() => setPreviewStatusMode(previewStatusMode === 'all-statuses' ? 'none' : 'all-statuses')}
                       >
-                        🔲 عرض جميع الشارات معاً
+ عرض جميع الشارات معاً
                       </Button>
                     </div>
                     
@@ -3854,7 +3854,7 @@ export default function BillboardPrintSettings() {
                   {activeEditingStatus && (
                     <div className="p-3 rounded-lg border-2 border-dashed" style={{ borderColor: STATUS_OVERRIDE_LABELS[activeEditingStatus].color, background: `${STATUS_OVERRIDE_LABELS[activeEditingStatus].color}10` }}>
                       <p className="text-sm font-bold text-center mb-1" style={{ color: STATUS_OVERRIDE_LABELS[activeEditingStatus].color }}>
-                        ✏️ وضع التحرير: {STATUS_OVERRIDE_LABELS[activeEditingStatus].icon} {STATUS_OVERRIDE_LABELS[activeEditingStatus].label}
+ ️ وضع التحرير: {STATUS_OVERRIDE_LABELS[activeEditingStatus].icon} {STATUS_OVERRIDE_LABELS[activeEditingStatus].label}
                       </p>
                       <p className="text-xs text-center text-muted-foreground">
                         أي تغيير تقوم به في تبويب "العناصر" سيُحفظ كتجاوز لهذه الحالة فقط
@@ -3911,7 +3911,7 @@ export default function BillboardPrintSettings() {
                     <div className="space-y-3 border-t pt-3">
                       <p className="text-xs text-muted-foreground font-medium">تفعيل/تعطيل كل شارة:</p>
                       <div className="flex items-center justify-between">
-                        <span style={{background:'#ef4444',color:'#fff',padding:'2px 8px',borderRadius:'12px',fontSize:'11px',fontWeight:'600'}}>⚠ بدون تصميم</span>
+ <span style={{background:'#ef4444',color:'#fff',padding:'2px 8px',borderRadius:'12px',fontSize:'11px',fontWeight:'600'}}> بدون تصميم</span>
                         <Switch checked={showBadgeNoDesign} onCheckedChange={setShowBadgeNoDesign} />
                       </div>
                       <div className="flex items-center justify-between">
@@ -4440,13 +4440,13 @@ export default function BillboardPrintSettings() {
                   const badges: { label: string; bg: string }[] = [];
                   
                   if (previewStatusMode === 'no-design' && showBadgeNoDesign) {
-                    badges.push({ label: '⚠ بدون تصميم', bg: '#ef4444' });
+ badges.push({ label: ' بدون تصميم', bg: '#ef4444' });
                   } else if (previewStatusMode === 'one-design' && showBadgeOneDesign) {
                     badges.push({ label: '◐ تصميم واحد', bg: '#f59e0b' });
                   } else if (previewStatusMode === 'one-install' && showBadgeOneInstall) {
                     badges.push({ label: '① تركيب وجه واحد', bg: '#3b82f6' });
                   } else if (previewStatusMode === 'all-statuses') {
-                    if (showBadgeNoDesign) badges.push({ label: '⚠ بدون تصميم', bg: '#ef4444' });
+ if (showBadgeNoDesign) badges.push({ label: ' بدون تصميم', bg: '#ef4444' });
                     if (showBadgeOneDesign) badges.push({ label: '◐ تصميم واحد', bg: '#f59e0b' });
                     if (showBadgeOneInstall) badges.push({ label: '① تركيب وجه واحد', bg: '#3b82f6' });
                   } else if (previewStatusMode === 'none' && currentBillboard) {
@@ -4456,7 +4456,7 @@ export default function BillboardPrintSettings() {
                     const two = (currentBillboard.Faces_Count || 1) >= 2;
                     const instA = currentBillboard.installed_image_face_a_url || currentBillboard.installed_image_url;
                     const instB = currentBillboard.installed_image_face_b_url;
-                    if (!hasA && !hasB && showBadgeNoDesign) badges.push({ label: '⚠ بدون تصميم', bg: '#ef4444' });
+ if (!hasA && !hasB && showBadgeNoDesign) badges.push({ label: ' بدون تصميم', bg: '#ef4444' });
                     else if (two && hasA && !hasB && showBadgeOneDesign) badges.push({ label: '◐ تصميم واحد', bg: '#f59e0b' });
                     if (two && instA && !instB && showBadgeOneInstall) badges.push({ label: '① تركيب وجه واحد', bg: '#3b82f6' });
                   }

@@ -918,16 +918,16 @@ export function BillboardTaskCard({
                 <span className="text-[10px] font-bold text-muted-foreground block">تفاصيل التكلفة لكل عنصر لللوحة:</span>
                 <div className="flex items-center gap-1.5 text-[10px] flex-wrap font-bold">
                   <Badge variant="outline" className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-200">
-                    🔧 تركيب: {totalCustomerCost.toLocaleString('ar-LY')} د.ل
+ تركيب: {totalCustomerCost.toLocaleString('ar-LY')} د.ل
                   </Badge>
                   {item.has_cutout && (
                     <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-200">
-                      ✂️ قص/مجسم
+ ️ قص/مجسم
                     </Badge>
                   )}
                   {(isPrintActive || (item.price_per_meter || printPricePerMeter) > 0) && (
                     <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-200">
-                      🖨️ طباعة {item.price_per_meter || printPricePerMeter ? `(${item.price_per_meter || printPricePerMeter} د.ل/م²)` : ''}
+ ️ طباعة {item.price_per_meter || printPricePerMeter ? `(${item.price_per_meter || printPricePerMeter} د.ل/م²)` : ''}
                     </Badge>
                   )}
                 </div>

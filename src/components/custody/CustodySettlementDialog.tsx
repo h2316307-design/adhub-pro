@@ -246,7 +246,7 @@ export function CustodySettlementDialog({
             </div>
             {parseFloat(returnedAmount) !== account.current_balance && (
               <p className="text-sm text-orange-600">
-                ⚠️ المبلغ المرتجع ({formatArabicNumber(parseFloat(returnedAmount) || 0)}) مختلف عن الرصيد الحالي ({formatArabicNumber(account.current_balance)})
+ ️ المبلغ المرتجع ({formatArabicNumber(parseFloat(returnedAmount) || 0)}) مختلف عن الرصيد الحالي ({formatArabicNumber(account.current_balance)})
               </p>
             )}
           </div>

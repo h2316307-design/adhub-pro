@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Calendar, X, Wrench, Camera } from 'lucide-react';
+import { Search, Calendar, X, Wrench, Camera, MapPin } from 'lucide-react';
 import type { Billboard } from '@/types';
 import { BillboardImage } from '@/components/BillboardImage';
 import { supabase } from '@/integrations/supabase/client';
@@ -241,8 +241,8 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
                       <div className="p-3 flex items-start justify-between gap-3">
                         <div className="flex-1">
                           <div className="font-semibold">{(b as any).name || (b as any).Billboard_Name}</div>
-                          <div className="text-xs text-muted-foreground mb-1">
-                            📍 {(b as any).location || (b as any).Nearest_Landmark}
+                          <div className="text-xs text-muted-foreground mb-1 flex items-center gap-1">
+                            <MapPin className="w-3 h-3 text-amber-500 shrink-0" /> {(b as any).location || (b as any).Nearest_Landmark}
                           </div>
                           <div className="text-xs text-muted-foreground">
                             الحجم: {(b as any).size || (b as any).Size} • {(b as any).city || (b as any).City}

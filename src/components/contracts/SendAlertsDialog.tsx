@@ -558,8 +558,8 @@ export function SendAlertsDialog({ open, onOpenChange, contracts }: SendAlertsDi
     const today = new Date();
     const selectedData = allAlertContracts.filter(c => selectedContracts.has(c.id));
 
-    let r = `📊 تقرير تنبيهات العقود\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    r += `📅 التاريخ: ${new Date().toLocaleDateString('ar', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n`;
+ let r = ` تقرير تنبيهات العقود\n━━━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+ r += ` التاريخ: ${new Date().toLocaleDateString('ar', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}\n\n`;
 
     const expiring = selectedData.filter(c => {
       const endDate = new Date(c.end_date!);
@@ -571,7 +571,7 @@ export function SendAlertsDialog({ open, onOpenChange, contracts }: SendAlertsDi
     });
 
     if (expiring.length > 0) {
-      r += `📌 قاربت على الانتهاء (${expiring.length}):\n`;
+ r += ` قاربت على الانتهاء (${expiring.length}):\n`;
       expiring.forEach(c => {
         const endDate = new Date(c.end_date!);
         const daysRemaining = Math.ceil((endDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
@@ -582,7 +582,7 @@ export function SendAlertsDialog({ open, onOpenChange, contracts }: SendAlertsDi
     }
 
     if (expired.length > 0) {
-      r += `⚠️ منتهية (${expired.length}):\n`;
+ r += `️ منتهية (${expired.length}):\n`;
       expired.forEach(c => {
         const endDate = new Date(c.end_date!);
         const daysExpired = Math.ceil((today.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24));

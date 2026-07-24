@@ -24,7 +24,7 @@ function adjustColor(hex: string, amount: number): string {
 
 const shortLabelFor = (billboard: any): string => {
   if (billboard?.Status === 'temp_adding' || billboard?.status === 'temp_adding') {
-    return '📍';
+    return '+';
   }
   const size = String(billboard?.Size || billboard?.size || '')
     .trim()

@@ -470,7 +470,7 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
           
           if (billboardsData) {
             details.billboardSizes = {};
-            details.billboardExtras = {}; // ✅ بيانات إضافية للوحات
+ details.billboardExtras = {}; // بيانات إضافية للوحات
             billboardsData.forEach((b: any) => {
               const sizeInfo = details.sizesMap[b.Size];
               details.billboardSizes[b.ID] = sizeInfo || { width: null, height: null };
@@ -580,7 +580,7 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
     const customerTotal = getEffectiveCustomerTotal(task, taskDetails);
     if (customerTotal === 0) {
       const confirmZero = await systemConfirm({
-        title: '⚠️ تنبيه',
+ title: '️ تنبيه',
         message: 'قيمة هذه الفاتورة صفر!\n\nهذه المهمة لا تحتوي على تكاليف محددة للعميل.\nقد يكون ذلك بسبب عدم اكتمال ربط البيانات.\n\nهل تريد المتابعة بالطباعة؟',
         confirmText: 'متابعة',
       });
@@ -696,11 +696,11 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
         variant="outline" 
         size="sm"
         disabled={loading || !taskDetails || !hasItems}
-        title={!hasItems ? 'لا توجد بنود في هذه الفاتورة' : getEffectiveCustomerTotal(task, taskDetails) === 0 ? '⚠️ قيمة الفاتورة صفر' : ''}
+ title={!hasItems ? 'لا توجد بنود في هذه الفاتورة' : getEffectiveCustomerTotal(task, taskDetails) === 0 ? '️ قيمة الفاتورة صفر' : ''}
         className={getEffectiveCustomerTotal(task, taskDetails) === 0 && hasItems ? 'border-amber-400 text-amber-600' : ''}
       >
         <Printer className="h-4 w-4 mr-2" />
-        {loading ? 'جاري التحميل...' : !hasItems ? 'لا توجد بنود' : getEffectiveCustomerTotal(task, taskDetails) === 0 ? '⚠️ فاتورة فارغة' : 'طباعة فاتورة الزبون'}
+ {loading ? 'جاري التحميل...' : !hasItems ? 'لا توجد بنود' : getEffectiveCustomerTotal(task, taskDetails) === 0 ? '️ فاتورة فارغة' : 'طباعة فاتورة الزبون'}
       </Button>
     </div>
   );
@@ -759,7 +759,7 @@ function generateEmptyInvoiceHTML(task: CompositeTaskWithDetails, invoiceTitle: 
     </div>
     
     <div class="empty-message">
-      <div class="empty-icon">📋</div>
+ <div class="empty-icon"></div>
       <div class="empty-text">
         <strong>لا توجد بنود في هذه الفاتورة</strong><br><br>
         هذه المهمة لا تحتوي على عناصر طباعة أو تركيب أو قص.<br>
@@ -1165,7 +1165,7 @@ function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any, showD
           </tbody>
         </table>
         <div style="margin-top: 10px; padding: 8px; background: #fff3cd; border: 1px solid #ffc107; border-radius: 4px; font-size: 9px; color: #856404;">
-          ℹ️ هذه الفاتورة تم إنشاؤها من بيانات التكاليف الإجمالية. للحصول على تفاصيل اللوحات، يرجى مراجعة المهمة المجمّعة.
+ ️ هذه الفاتورة تم إنشاؤها من بيانات التكاليف الإجمالية. للحصول على تفاصيل اللوحات، يرجى مراجعة المهمة المجمّعة.
         </div>
       </div>
     `;

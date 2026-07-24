@@ -424,7 +424,7 @@ export default function ContractInvoiceDialog({ open, onOpenChange, contract }: 
       </head>
       <body>
         <div class="invoice-container">
-          <!-- ✅ Header from unified system -->
+ <!-- Header from unified system -->
           ${unifiedHeaderHtml({
             styles,
             fullLogoUrl: styles.showLogo !== false ? (styles.logoPath ? `${baseUrl}${styles.logoPath}` : `${baseUrl}/logofaresgold.svg`) : `${baseUrl}/logofaresgold.svg`,
@@ -528,7 +528,7 @@ export default function ContractInvoiceDialog({ open, onOpenChange, contract }: 
             </div>
           </div>
 
-          <!-- ✅ Footer from unified system -->
+ <!-- Footer from unified system -->
           ${unifiedFooterHtml(styles)}
         </div>
       </body>
@@ -714,7 +714,7 @@ export default function ContractInvoiceDialog({ open, onOpenChange, contract }: 
               </div>
 
               <div className="text-sm text-green-600 bg-green-50 p-3 rounded">
-                💡 ستطبع الفاتورة بتصميم احترافي مع تفاصيل اللوحات والأسعار بنفس التنسيق الذي يظهر في نافذة الطباعة
+ ستطبع الفاتورة بتصميم احترافي مع تفاصيل اللوحات والأسعار بنفس التنسيق الذي يظهر في نافذة الطباعة
               </div>
 
               <div className="flex gap-2 justify-end">

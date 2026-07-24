@@ -1610,7 +1610,7 @@ export default function OfferEdit() {
               </Card>
             )}
 
-            {/* ✅ اختيار اللوحات مع الخريطة - Tabs مثل صفحة العقود */}
+ {/* اختيار اللوحات مع الخريطة - Tabs مثل صفحة العقود */}
             <Card className="border-amber-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] rounded-3xl overflow-hidden h-[calc(100vh-160px)] min-h-[950px] flex flex-col border bg-card/60 backdrop-blur-md">
               <div className="p-3 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent border-b border-border/60 shrink-0">
                 <BillboardFilters

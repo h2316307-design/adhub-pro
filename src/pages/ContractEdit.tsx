@@ -381,7 +381,7 @@ export default function ContractEdit() {
     description: string; 
     dueDate: string; 
   }>>([]);
-  const [installmentsLoaded, setInstallmentsLoaded] = useState<boolean>(false); // ✅ NEW: Track if installments were loaded from DB
+ const [installmentsLoaded, setInstallmentsLoaded] = useState<boolean>(false); // NEW: Track if installments were loaded from DB
   
   // ✅ NEW: Installment distribution settings (saved to DB)
   const [installmentDistributionType, setInstallmentDistributionType] = useState<'single' | 'multiple' | 'periods'>('multiple');
@@ -914,7 +914,7 @@ export default function ContractEdit() {
         if (loadedInstallments.length > 0) {
           const normalized = loadedInstallments.map(normalizeInstallment);
           setInstallments(normalized);
-          setInstallmentsLoaded(true); // ✅ Mark installments as loaded from DB
+ setInstallmentsLoaded(true); // Mark installments as loaded from DB
           console.log('Set installments from installments_data (normalized):', normalized);
         } else {
           // Fallback to old Payment 1, 2, 3 format
@@ -947,7 +947,7 @@ export default function ContractEdit() {
           
           if (payments.length > 0) {
             setInstallments(payments);
-            setInstallmentsLoaded(true); // ✅ Mark installments as loaded from DB
+ setInstallmentsLoaded(true); // Mark installments as loaded from DB
           }
           console.log('Set installments from old Payment format:', payments);
         }
@@ -2926,7 +2926,7 @@ export default function ContractEdit() {
     }
     
     setInstallments(list);
-    setInstallmentsLoaded(false); // ✅ Allow future redistribution
+ setInstallmentsLoaded(false); // Allow future redistribution
     toast.success(`تم توزيع المبلغ على ${count} أقساط مغلقة بنجاح`);
   };
 
@@ -2959,7 +2959,7 @@ export default function ContractEdit() {
 
   const clearAllInstallments = () => {
     setInstallments([]);
-    setInstallmentsLoaded(false); // ✅ Allow auto-distribution after clearing
+ setInstallmentsLoaded(false); // Allow auto-distribution after clearing
   };
 
   const distributeByDurationPeriods = React.useCallback((count: number) => {
@@ -3045,7 +3045,7 @@ export default function ContractEdit() {
     }));
     
     setInstallments(newInstallments);
-    setInstallmentsLoaded(false); // ✅ Allow future redistribution
+ setInstallmentsLoaded(false); // Allow future redistribution
     toast.info(`تم إنشاء ${count} دفعات فارغة - يرجى إدخال المبالغ يدوياً`);
   };
 
@@ -3214,7 +3214,7 @@ export default function ContractEdit() {
     }
 
     setInstallments(newInstallments);
-    setInstallmentsLoaded(false); // ✅ Allow future redistribution
+ setInstallmentsLoaded(false); // Allow future redistribution
     
     if (hasFirstPayment) {
       toast.success(`تم توزيع الدفعات: دفعة أولى (${finalFirstPayment.toLocaleString('ar-LY')} د.ل) + ${numberOfRecurringPayments} أقساط مغلقة (${cleanRecurringAmount.toLocaleString('ar-LY')} د.ل)`);
@@ -3758,7 +3758,7 @@ export default function ContractEdit() {
           saving={saving}
         />
 
-        {/* ✅ تنبيه الأسعار المحفوظة */}
+ {/* تنبيه الأسعار المحفوظة */}
         {useStoredPrices && currentContract?.billboard_prices && (
           <div className="flex items-start gap-3 px-4 py-3 rounded-xl border-2 border-amber-500/50 bg-amber-500/10">
             <div className="p-1.5 rounded-lg bg-amber-500/20 mt-0.5 shrink-0">
@@ -3863,7 +3863,7 @@ export default function ContractEdit() {
               use30DayMonth={use30DayMonth}
             />
 
-            {/* ✅ NEW: إيجارات اللوحات الصديقة بالجملة */}
+ {/* NEW: إيجارات اللوحات الصديقة بالجملة */}
             {selected.length > 0 && billboards.filter(b => 
               selected.includes(String((b as any).ID)) && (b as any).friend_company_id
             ).length > 0 && (
@@ -3977,7 +3977,7 @@ export default function ContractEdit() {
               />
             )}
 
-            {/* ✅ اختيار اللوحات مع الخريطة */}
+ {/* اختيار اللوحات مع الخريطة */}
             <Card className="border-border shadow-lg overflow-hidden h-[calc(100vh-160px)] min-h-[800px] flex flex-col">
               <div className="p-3 bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border-b border-border shrink-0">
                 <BillboardFilters
@@ -4193,7 +4193,7 @@ export default function ContractEdit() {
                   </div>
                   
                   <p className="text-xs text-muted-foreground text-center bg-muted/30 p-2 rounded-lg">
-                    ⚠️ رسوم منفصلة عن اللوحات العادية
+ ️ رسوم منفصلة عن اللوحات العادية
                   </p>
                 </CardContent>
               </Card>
@@ -4243,7 +4243,7 @@ export default function ContractEdit() {
               </Card>
             )}
 
-            {/* ✅ إجمالي رسوم التشغيل */}
+ {/* إجمالي رسوم التشغيل */}
             {(operatingFee > 0 || partnershipOperatingFee > 0 || friendOperatingFeeAmount > 0) && (
               <Card className="bg-card border-border shadow-lg overflow-hidden">
                 <div className="h-1 bg-gradient-to-r from-emerald-500 to-teal-500" />

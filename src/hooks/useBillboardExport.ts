@@ -264,8 +264,8 @@ export const useBillboardExport = () => {
           'المستوى': billboard.Level || billboard.level || '',
           'الحالة': billboard.Status || billboard.status || '',
           'رقم العقد': billboard.Contract_Number || billboard.contractNumber || '',
-          'اسم العميل': await getCurrentCustomerName(billboard), // ✅ Updated from contracts
-          'نوع الإعلان': await getCurrentAdType(billboard), // ✅ Updated from contracts
+ 'اسم العميل': await getCurrentCustomerName(billboard), // Updated from contracts
+ 'نوع الإعلان': await getCurrentAdType(billboard), // Updated from contracts
           'تاريخ بداية الإيجار': billboard.Rent_Start_Date || billboard.rent_start_date || '',
           'تاريخ نهاية الإيجار': billboard.Rent_End_Date || billboard.rent_end_date || '',
           'لوحة شراكة': billboard.is_partnership ? 'نعم' : 'لا',

@@ -287,7 +287,7 @@ export function AddUserDialog({ open, onOpenChange, onUserAdded }: AddUserDialog
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="user">مستخدم عادي</SelectItem>
-                {/* ✅ SECURITY: Only show admin option if current user is admin */}
+ {/* SECURITY: Only show admin option if current user is admin */}
                 {isCurrentUserAdmin && (
                   <SelectItem value="admin">مدير</SelectItem>
                 )}

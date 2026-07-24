@@ -112,7 +112,7 @@ export function ContractPDFSummary({
         <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-primary text-lg">👤</span>
+ <span className="text-primary text-lg"></span>
             </div>
             <h3 className="font-semibold text-foreground">بيانات العميل</h3>
           </div>
@@ -140,7 +140,7 @@ export function ContractPDFSummary({
         <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm hover:shadow-md transition-shadow">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-              <span className="text-primary text-lg">📄</span>
+ <span className="text-primary text-lg"></span>
             </div>
             <h3 className="font-semibold text-foreground">بيانات العقد</h3>
           </div>
@@ -225,7 +225,7 @@ export function ContractPDFSummary({
       <div className="bg-card rounded-xl border border-border/50 p-4 shadow-sm">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
-            <span className="text-primary text-lg">⚙️</span>
+ <span className="text-primary text-lg">️</span>
           </div>
           <h3 className="font-semibold text-foreground">خيارات الطباعة</h3>
         </div>

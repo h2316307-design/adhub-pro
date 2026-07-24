@@ -318,7 +318,7 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
           <Label>{label}</Label>
           <div className="flex gap-1">
             <Button size="sm" variant="outline" onClick={() => handlePasteFromClipboard(face)} className="text-xs h-7 px-2" title="لصق من الحافظة">
-              <span className="text-[10px]">📋</span>
+ <span className="text-[10px]"></span>
               لصق
             </Button>
             <Button

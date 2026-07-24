@@ -25,8 +25,8 @@ export interface ModernInvoiceData {
   invoiceNumber: string;
   date: string;
   customerName: string;
-  invoiceName?: string; // ✅ عنوان ديناميكي - يُحدد حسب نوع العملية
-  invoiceTitleEn?: string; // ✅ العنوان الإنجليزي الديناميكي
+ invoiceName?: string; // عنوان ديناميكي - يُحدد حسب نوع العملية
+ invoiceTitleEn?: string; // العنوان الإنجليزي الديناميكي
   items: {
     description: string;
     quantity: number;
@@ -105,7 +105,7 @@ async function generateModernInvoiceWithThemeAsync(
   // ✅ عنوان ديناميكي - يُقرأ من data.invoiceName
   const headerData: DocumentHeaderData = {
     titleEn: data.invoiceTitleEn || 'SALES INVOICE',
-    titleAr: data.invoiceName || 'فاتورة مبيعات', // ✅ ديناميكي
+ titleAr: data.invoiceName || 'فاتورة مبيعات', // ديناميكي
     documentNumber: data.invoiceNumber,
     date: formatDate(data.date),
   };
@@ -399,7 +399,7 @@ function generateModernInvoiceFallback(data: ModernInvoiceData): string {
   <div class="invoice-container">
     <div class="header">
       <div style="flex: 1; text-align: right;">
-        <!-- ✅ الشعار ومعلومات الشركة تأتي من الإعدادات المحفوظة -->
+ <!-- الشعار ومعلومات الشركة تأتي من الإعدادات المحفوظة -->
       </div>
       <div style="flex: 1; text-align: left;">
         <div class="invoice-title">${dynamicTitleEn}</div>

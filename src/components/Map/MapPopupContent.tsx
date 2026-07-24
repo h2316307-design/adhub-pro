@@ -247,7 +247,7 @@ export const createCompactPopupContent = (billboard: Billboard | any): string =>
             color: ${isTorn ? '#fca5a5' : '#cbd5e1'}; border-radius: 8px; font-size: 10px; font-weight: 700; cursor: pointer; transition: all 0.2s;
           }" title="${isTorn ? 'مفعّل: إعلان ممزق — اضغط للإلغاء' : 'تسجيل إعلان ممزق'}">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-            ${isTorn ? 'ممزق ✓' : 'ممزق'}
+ ${isTorn ? 'ممزق ' : 'ممزق'}
           </button>
           
           <button onclick="event.preventDefault(); event.stopPropagation(); window.dispatchEvent(new CustomEvent('billboard-toggle-visibility', {detail: '${billboardId}'}));" style="

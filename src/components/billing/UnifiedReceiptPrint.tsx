@@ -250,7 +250,7 @@ export async function printUnifiedReceipt(
       ? 'المتبقي من إجمالي الديون' 
       : normalizedRemainingBalance < 0 
         ? 'رصيد دائن للعميل' 
-        : 'مسدد بالكامل ✓';
+ : 'مسدد بالكامل ';
     
     totals.push({
       label: balanceLabel,
@@ -317,7 +317,7 @@ export async function printUnifiedReceipt(
           <div style="margin: 10px 0; page-break-inside: avoid;">
             <div style="background: #f0f7ff; border: 2px solid #3b82f6; border-radius: 10px; padding: 10px; text-align: center;">
               <div style="font-size: 13px; font-weight: 700; color: #1e40af; margin-bottom: 8px;">
-                📎 مرفق: صورة إيصال الدفع${imageUrls.length > 1 ? ` (${imageUrls.length})` : ''}
+ مرفق: صورة إيصال الدفع${imageUrls.length > 1 ? ` (${imageUrls.length})` : ''}
               </div>
               ${imagesHtml}
             </div>

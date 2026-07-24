@@ -90,7 +90,7 @@ interface SectionPosition {
   fontSize: number;
   visible: boolean;
   textAlign?: 'start' | 'middle' | 'end';
-  lineSpacing?: number; // ✅ التباعد بين السطرين
+ lineSpacing?: number; // التباعد بين السطرين
   suffixText?: string; // نص إضافي بعد رقم الهاتف
 }
 
@@ -103,7 +103,7 @@ interface FirstPartyData {
 export interface PageSectionSettings {
   header: SectionPosition;
   date: SectionPosition;
-  adType?: SectionPosition; // ✅ نوع الإعلان - جديد
+ adType?: SectionPosition; // نوع الإعلان - جديد
   firstParty: SectionPosition;
   firstPartyData: FirstPartyData;
   secondParty: SectionPosition; // السطر الأول: اسم الشركة

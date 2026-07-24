@@ -262,7 +262,7 @@ export default function TeamBillboardCard({
             {/* Show notes if present */}
             {account.notes && !editingAmount && (
               <div className="text-xs text-muted-foreground mt-1 truncate" title={account.notes}>
-                📝 {account.notes}
+ {account.notes}
               </div>
             )}
           </div>

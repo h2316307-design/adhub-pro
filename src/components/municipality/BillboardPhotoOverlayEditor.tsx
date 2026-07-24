@@ -226,13 +226,13 @@ export async function extractPhotoHeading(imageUrl: string): Promise<number | nu
 const getCardinalDirectionLabel = (deg: number) => {
   const normalized = (deg % 360 + 360) % 360;
   if (normalized >= 337.5 || normalized < 22.5) return 'شمال ⬆️';
-  if (normalized >= 22.5 && normalized < 67.5) return 'شمال شرق ↗️';
-  if (normalized >= 67.5 && normalized < 112.5) return 'شرق ➡️';
-  if (normalized >= 112.5 && normalized < 157.5) return 'جنوب شرق ↘️';
+ if (normalized >= 22.5 && normalized < 67.5) return 'شمال شرق ️';
+ if (normalized >= 67.5 && normalized < 112.5) return 'شرق ️';
+ if (normalized >= 112.5 && normalized < 157.5) return 'جنوب شرق ️';
   if (normalized >= 157.5 && normalized < 202.5) return 'جنوب ⬇️';
-  if (normalized >= 202.5 && normalized < 247.5) return 'جنوب غرب ↙️';
+ if (normalized >= 202.5 && normalized < 247.5) return 'جنوب غرب ️';
   if (normalized >= 247.5 && normalized < 292.5) return 'غرب ⬅️';
-  return 'شمال غرب ↖️';
+ return 'شمال غرب ️';
 };
 
 const MapPinPicker: React.FC<{
@@ -466,7 +466,7 @@ const MapPinPicker: React.FC<{
         title: 'الموقع الأصلي الميداني (ثابت غير قابل للتحريك)',
       }).addTo(map);
 
-      origMarker.bindTooltip('📌 الموقع الأصلي الميداني (ثابت)', {
+ origMarker.bindTooltip(' الموقع الأصلي الميداني (ثابت)', {
         permanent: false,
         direction: 'top',
         className: 'bg-slate-900 text-amber-300 border border-slate-700 text-[10px] font-bold px-2 py-1 rounded shadow-md',
@@ -569,13 +569,13 @@ const MapPinPicker: React.FC<{
 
   const directions = [
     { label: 'شمال ⬆️', heading: 0 },
-    { label: 'ش.شرق ↗️', heading: 45 },
-    { label: 'شرق ➡️', heading: 90 },
-    { label: 'ج.شرق ↘️', heading: 135 },
+ { label: 'ش.شرق ️', heading: 45 },
+ { label: 'شرق ️', heading: 90 },
+ { label: 'ج.شرق ️', heading: 135 },
     { label: 'جنوب ⬇️', heading: 180 },
-    { label: 'ج.غرب ↙️', heading: 225 },
+ { label: 'ج.غرب ️', heading: 225 },
     { label: 'غرب ⬅️', heading: 270 },
-    { label: 'ش.غرب ↖️', heading: 315 },
+ { label: 'ش.غرب ️', heading: 315 },
   ];
 
   return (
@@ -626,7 +626,7 @@ const MapPinPicker: React.FC<{
 
         {/* Pin Coords Badge */}
         <div className="absolute top-2 right-2 bg-slate-950/85 backdrop-blur-md px-2.5 py-1 rounded-lg border border-slate-700 text-[10px] text-slate-200 font-mono z-10 flex items-center gap-1 shadow-md">
-          <span className="text-amber-400 font-bold">📍</span>
+ <span className="text-amber-400 font-bold"></span>
           <span>{currentLat.toFixed(6)}, {currentLng.toFixed(6)}</span>
         </div>
 
@@ -675,7 +675,7 @@ const MapPinPicker: React.FC<{
 
           <div className="flex items-center gap-2">
             {isExtractingExif && (
-              <span className="text-[10px] text-amber-300 font-bold animate-pulse">🔍 قراءة بوصلة الصورة...</span>
+ <span className="text-[10px] text-amber-300 font-bold animate-pulse"> قراءة بوصلة الصورة...</span>
             )}
             <button
               type="button"
@@ -699,7 +699,7 @@ const MapPinPicker: React.FC<{
           </div>
         ) : (
           <div className="text-[10px] text-slate-400 font-medium bg-slate-900/60 border border-slate-800 px-2.5 py-1 rounded-lg">
-            ℹ️ لا تتوفر بيانات بوصلة مسجلة تلقائياً بالصورة (المخروط مخفي افتراضياً لعدم التشتيت ويمكنك إظهاره من الزر أعلاه).
+ ️ لا تتوفر بيانات بوصلة مسجلة تلقائياً بالصورة (المخروط مخفي افتراضياً لعدم التشتيت ويمكنك إظهاره من الزر أعلاه).
           </div>
         )}
 
@@ -1083,7 +1083,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
     };
     setConfig(updated);
     saveOverlayConfig(updated);
-    toast.success("تم التوسيط والتعرف الذكي على مقياس الصورة وقاعدة الأرض بنجاح! 🚀");
+ toast.success("تم التوسيط والتعرف الذكي على مقياس الصورة وقاعدة الأرض بنجاح! ");
   };
 
   // Handle Cutout Image Upload
@@ -1492,7 +1492,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
       });
     }
 
-    toast.success(`تم حفظ جميع عناصر اللوحة #${currentSeq} (التراكب البصري، التناسب الواقعي، البيانات الميدانية، والدبوس الجغرافي) بنجاح! 🚀`);
+ toast.success(`تم حفظ جميع عناصر اللوحة #${currentSeq} (التراكب البصري، التناسب الواقعي، البيانات الميدانية، والدبوس الجغرافي) بنجاح! `);
   };
 
   // Composite & Download High-Res Realistic Overlaid Photo
@@ -1582,7 +1582,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
       link.click();
 
       toast.dismiss('download-image');
-      toast.success('تم تحميل الصورة الواقعية عالية الدقة بنجاح! 🚀');
+ toast.success('تم تحميل الصورة الواقعية عالية الدقة بنجاح! ');
     } catch (e) {
       toast.dismiss('download-image');
       toast.error('تعذر تحميل الصورة عبر المتصفح، تم حفظ التراكب في النظام');
@@ -1737,7 +1737,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                   className="absolute border-b-2 border-dashed border-amber-500/60 pointer-events-none z-25 transition-all duration-75 flex items-center justify-end px-3"
                 >
                   <span className="text-[9px] bg-amber-500 text-slate-950 font-black px-2 py-0.5 rounded-full shadow-md transform -translate-y-1/2">
-                    📍 قاعدة العمود على الأرض ({config.y_pct}%)
+ قاعدة العمود على الأرض ({config.y_pct}%)
                   </span>
                 </div>
               )}
@@ -1780,13 +1780,13 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                         <Move className="h-3.5 w-3.5 animate-pulse" />
                         <span>
                           {isCroppingBillboard
-                            ? `✂️ جاري القص السفلي (${config.crop_bottom_pct || 0}%)`
+ ? `️ جاري القص السفلي (${config.crop_bottom_pct || 0}%)`
                             : isScalingBillboard
-                            ? `🔍 جاري التكبير والتصغير (${config.scale_pct}%)`
+ ? ` جاري التكبير والتصغير (${config.scale_pct}%)`
                             : isRotatingBillboard
-                            ? `🔄 جاري التدوير (${config.rotation_deg}°)`
+ ? ` جاري التدوير (${config.rotation_deg}°)`
                             : isDraggingBillboard
-                            ? `📍 جاري السحب والتحريك (${config.x_pct}%, ${config.y_pct}%)`
+ ? ` جاري السحب والتحريك (${config.x_pct}%, ${config.y_pct}%)`
                             : 'اسحب للتحريك | الأطراف للتكبير | الأسفل للقص | الأعلى للتدوير'}
                         </span>
                       </div>
@@ -1835,7 +1835,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                       >
                         {/* Tooltip badge visible ONLY when hovering or dragging */}
                         <div className={`absolute bottom-7 bg-slate-900/95 text-amber-400 border border-amber-500/40 text-[9px] font-black px-2.5 py-0.5 rounded-full shadow-xl whitespace-nowrap transition-opacity pointer-events-none ${isCroppingBillboard ? 'opacity-100 scale-110 ring-2 ring-amber-400' : 'opacity-0 group-hover/crop:opacity-100'}`}>
-                          ✂️ قص أسفل ({config.crop_bottom_pct || 0}%)
+ ️ قص أسفل ({config.crop_bottom_pct || 0}%)
                         </div>
                         <div className={`w-6 h-6 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-full border-2 border-slate-950 shadow-xl flex items-center justify-center transition-transform ${isCroppingBillboard ? 'scale-125 ring-2 ring-amber-300' : 'hover:scale-125'}`}>
                           <Scissors className="h-3 w-3 stroke-[3]" />
@@ -1984,7 +1984,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                 <div className="text-xs text-slate-300 font-medium">
                   {activeTool === 'ruler'
                     ? 'انقر واسحب سهماً مرجعياً على عنصر معروف (مثل عرض سيارة 1.8م)'
-                    : 'اسحب أيقونة اللوحة لتموضعها • استخدم الأطراف للتكبير • استخدم المقبض السفلي ✂️ للقص'}
+ : 'اسحب أيقونة اللوحة لتموضعها • استخدم الأطراف للتكبير • استخدم المقبض السفلي ️ للقص'}
                 </div>
               )}
             </div>
@@ -2179,7 +2179,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                       </Badge>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
-                      اسحب المقبض الأصفر السفلي ✂️ في الشاشة أو المؤشر هنا لقص وتغطية العمود أو الحافة السفلية
+ اسحب المقبض الأصفر السفلي ️ في الشاشة أو المؤشر هنا لقص وتغطية العمود أو الحافة السفلية
                     </p>
                     <Slider
                       value={[config.crop_bottom_pct || 0]}
@@ -2273,7 +2273,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
                     </div>
                     <p className="text-[11px] text-slate-300 font-medium leading-relaxed">
                       • نقطة الارتكاز السفلية مثبتة على الأرض، والتكبير والتصغير يحدث للأعلى.<br/>
-                      • استخدم أسهم الكيبورد <span className="font-mono text-amber-300">⬆️ ⬇️ ⬅️ ➡️</span> للضبط الدقيق جداً.<br/>
+ • استخدم أسهم الكيبورد <span className="font-mono text-amber-300">⬆️ ⬇️ ⬅️ ️</span> للضبط الدقيق جداً.<br/>
                       • اضغط <code className="bg-slate-800 px-1 py-0.5 rounded text-amber-300 font-mono">Shift</code> مع الأسهم للتحريك السريع.
                     </p>
                     <div className="flex gap-1.5 flex-wrap pt-1">

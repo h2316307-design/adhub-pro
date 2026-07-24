@@ -2501,7 +2501,7 @@ export function UnifiedTaskInvoice({
                           fileName,
                           driveFolder: 'فواتير',
                           phone: whatsAppManualPhone.trim(),
-                          message: `📄 ${getInvoiceTitle().split('|')[0].trim()} - ${task.customer_name || ''}`,
+ message: ` ${getInvoiceTitle().split('|')[0].trim()} - ${task.customer_name || ''}`,
                         });
                         toast.success('تم الإرسال عبر واتساب');
                         setShowWhatsAppPhoneInput(false);
@@ -2540,7 +2540,7 @@ export function UnifiedTaskInvoice({
                         fileName,
                         driveFolder: 'فواتير',
                         phone: customerPhone,
-                        message: `📄 ${getInvoiceTitle().split('|')[0].trim()} - ${task.customer_name || ''}`,
+ message: ` ${getInvoiceTitle().split('|')[0].trim()} - ${task.customer_name || ''}`,
                       });
                       toast.success('تم الإرسال عبر واتساب');
                     } catch (e) { console.error(e); toast.error('فشل الإرسال'); }
@@ -2635,7 +2635,7 @@ export function UnifiedTaskInvoice({
                 </div>
               </div>
 
-              {/* ✅ ملخص المقاسات والمجسمات - لجميع أنواع الفواتير */}
+ {/* ملخص المقاسات والمجسمات - لجميع أنواع الفواتير */}
               {data?.items && data.items.length > 0 && (() => {
                 // حساب عدد اللوحات لكل مقاس (مع احتساب الأوجه)
                 // لأن كل وجه الآن في صف منفصل، نجمع حسب billboardId
@@ -2934,7 +2934,7 @@ export function UnifiedTaskInvoice({
                               {isFirst && (
                                 <td rowSpan={faceCount} data-no-break style={{ padding: '6px 4px', border: `1px solid ${tableBorder}`, textAlign: 'center', fontWeight: 'bold', fontSize: '9px', verticalAlign: 'middle', overflow: 'visible', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                                   <div>{cleanReprintLabel(item.billboardName || '-')}</div>
-                                  {/* ✅ علامة التركيب الأصلي */}
+ {/* علامة التركيب الأصلي */}
                                   {item.isOriginalInstallation && (
                                     <div style={{ marginTop: '3px' }}>
                                       <span style={{
@@ -2953,7 +2953,7 @@ export function UnifiedTaskInvoice({
                                       </span>
                                     </div>
                                   )}
-                                  {/* ✅ علامات إعادة التركيب والاستبدال */}
+ {/* علامات إعادة التركيب والاستبدال */}
                                   {item.isReinstallation && (
                                     <div style={{ marginTop: '3px' }}>
                                       <span style={{
@@ -3016,7 +3016,7 @@ export function UnifiedTaskInvoice({
                               {isFirst && (
                                 <td rowSpan={faceCount} style={{ padding: '8px 4px', border: `1px solid ${tableBorder}`, textAlign: 'center', verticalAlign: 'middle', overflow: 'visible', whiteSpace: 'normal', wordBreak: 'break-word' }}>
                                   <div style={{ fontWeight: 'bold', fontSize: '9px', marginBottom: '6px', lineHeight: '1.3', display: 'block' }}>{cleanReprintLabel(item.sizeName).replace(' (مجسم)', '')}</div>
-                                  {/* ✅ شارة مجسم تحت المقاس عند وجود قص */}
+ {/* شارة مجسم تحت المقاس عند وجود قص */}
                                   {item.sizeName.includes('(مجسم)') && (
                                     <div style={{ marginBottom: '6px' }}>
                                       <span style={{
@@ -3031,7 +3031,7 @@ export function UnifiedTaskInvoice({
                                       }}>مجسم</span>
                                     </div>
                                   )}
-                                  {/* ✅ إظهار نوع اللوحة تحت المقاس */}
+ {/* إظهار نوع اللوحة تحت المقاس */}
                                   {item.billboardType && (
                                     <div style={{ fontSize: '8px', color: '#555', marginBottom: '6px', lineHeight: '1.3', display: 'block' }}>
                                       <span style={{

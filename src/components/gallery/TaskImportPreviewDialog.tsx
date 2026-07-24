@@ -57,7 +57,7 @@ export default function TaskImportPreviewDialog({ preview, importing, onClose, o
           {/* Stats bar */}
           <div className="px-6 py-3 bg-muted/30 border-b border-border/30 flex-shrink-0">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium truncate">📄 {preview.fileName}</span>
+ <span className="text-sm font-medium truncate"> {preview.fileName}</span>
               {preview.isValidFormat ? (
                 <Badge className="bg-emerald-500/15 text-emerald-600 border-emerald-500/30 text-xs">
                   <CheckCircle2 className="h-3 w-3 ml-1" /> ملف نظام

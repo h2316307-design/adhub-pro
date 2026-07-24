@@ -3018,7 +3018,7 @@ export default function InstallationTasks() {
                     </div>
                     <div className="flex gap-1">
                       <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); handlePasteFromClipboard(face); }} className="text-xs h-7 px-2" title="لصق من الحافظة">
-                        <span className="text-[10px]">📋</span>
+ <span className="text-[10px]"></span>
                         لصق
                       </Button>
                       <Button size="sm" variant={installedUploadMethod === 'file' ? 'default' : 'outline'} onClick={(e) => { e.stopPropagation(); setInstalledUploadMethod('file'); }} className="text-xs h-7 px-2">

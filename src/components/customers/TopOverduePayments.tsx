@@ -99,7 +99,7 @@ export function TopOverduePayments() {
       <Card className="bg-gradient-to-br from-green-500/10 to-emerald-500/5 border-green-500/20">
         <CardHeader>
           <CardTitle className="text-green-400 flex items-center gap-2">
-            ✅ لا توجد دفعات متأخرة
+ لا توجد دفعات متأخرة
           </CardTitle>
         </CardHeader>
         <CardContent>

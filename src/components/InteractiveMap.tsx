@@ -584,7 +584,7 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
 
                 ${isRented && adType ? `
                   <div style="display: flex; align-items: center; gap: 6px; padding: 5px 8px; background: rgba(139,92,246,0.12); border-radius: 6px;">
-                    <span style="font-size: 10px;">📢</span>
+ <span style="font-size: 10px;"></span>
                     <span style="font-size: 10px; color: #8b5cf6; font-weight: 600;">${adType}</span>
                   </div>
                 ` : ''}
@@ -625,7 +625,7 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
                     ? 'background: #10b981; color: white;'
                     : 'background: rgba(212,175,55,0.15); color: #d4af37; border: 1px solid rgba(212,175,55,0.3);'
                   }">
-                  ${isSelected ? '✓ مختار' : 'اختيار'}
+ ${isSelected ? ' مختار' : 'اختيار'}
                 </button>
               </div>
             </div>

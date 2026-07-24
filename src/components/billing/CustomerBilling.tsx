@@ -799,7 +799,7 @@ export default function CustomerBilling() {
               >
                 رجوع للزبائن
               </Button>
-              {/* ✅ NEW: Only modern buttons - removed old ones */}
+ {/* NEW: Only modern buttons - removed old ones */}
               <Button 
                 onClick={openAccountStatement}
                 className="gap-2 expenses-action-btn bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold"
@@ -837,7 +837,7 @@ export default function CustomerBilling() {
         totalFriendRentals={totalFriendRentals}
       />
 
-      {/* ✅ FIXED: Use ContractSection component instead of inline table */}
+ {/* FIXED: Use ContractSection component instead of inline table */}
       <ContractSection 
         contracts={contracts}
         payments={payments}
@@ -947,7 +947,7 @@ export default function CustomerBilling() {
     autoPrintForPrinter={printForPrinter}
       />
 
-      {/* ✅ NEW: Receipt Print Dialog */}
+ {/* NEW: Receipt Print Dialog */}
       <ReceiptPrintDialog
         open={receiptPrintOpen}
         onOpenChange={setReceiptPrintOpen}
@@ -955,7 +955,7 @@ export default function CustomerBilling() {
         customerName={customerName}
       />
 
-      {/* ✅ NEW: Account Statement Dialog */}
+ {/* NEW: Account Statement Dialog */}
       <AccountStatementDialog
         open={accountStatementOpen}
         onOpenChange={setAccountStatementOpen}
@@ -963,7 +963,7 @@ export default function CustomerBilling() {
         customerName={customerName}
       />
 
-      {/* ✅ NEW: Send Receipt Dialog */}
+ {/* NEW: Send Receipt Dialog */}
       <SendReceiptDialog
         open={sendReceiptOpen}
         onOpenChange={setSendReceiptOpen}

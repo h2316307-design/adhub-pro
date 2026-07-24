@@ -2696,7 +2696,7 @@ export default function DesignStudio() {
       if (error) throw error;
       setTemplates(prev => prev.map(t => t.id === selectedTemplateId ? { ...t, ...templateData } as SavedTemplate : t));
       try { localStorage.setItem('design_studio:last_template_id', selectedTemplateId); } catch {}
-      toast.success('✅ تم تحديث القالب الحالي بنجاح!');
+ toast.success(' تم تحديث القالب الحالي بنجاح!');
     } catch (e) {
       const errorMsg = e instanceof Error ? e.message : String(e);
       toast.error(`فشل تحديث القالب: ${errorMsg}`);
@@ -4072,8 +4072,8 @@ export default function DesignStudio() {
                               }`}
                               title="حالة صور التركيب"
                             >
-                              📷 {tc.photoItems || 0}/{tc.totalItems || 0}
-                              {tc.photoStatus === 'all' ? ' ✓' : tc.photoStatus === 'none' ? ' ✗' : ''}
+ {tc.photoItems || 0}/{tc.totalItems || 0}
+ {tc.photoStatus === 'all' ? ' ' : tc.photoStatus === 'none' ? ' ' : ''}
                             </div>
                           )}
                           {/* Selected check */}
@@ -4116,7 +4116,7 @@ export default function DesignStudio() {
             {/* Modal Footer */}
             <div className="p-4 border-t border-border/30 flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground">
-                {selectedContractId ? `✅ تم اختيار عقد #${selectedContractId}` : 'لم يتم اختيار عقد بعد'}
+ {selectedContractId ? ` تم اختيار عقد #${selectedContractId}` : 'لم يتم اختيار عقد بعد'}
               </span>
               <div className="flex gap-2">
                 <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => { setShowContractModal(false); setTaskSearch(''); }}>
@@ -4462,7 +4462,7 @@ export default function DesignStudio() {
                 </div>
                 {adTypeOverride && (
                   <p className="text-[10px] text-amber-600 dark:text-amber-400">
-                    ✓ مفعل: سيظهر النص أعلاه بدلاً من نوع الإعلان لكل البطاقات.
+ مفعل: سيظهر النص أعلاه بدلاً من نوع الإعلان لكل البطاقات.
                   </p>
                 )}
               </CardContent>
@@ -4708,7 +4708,7 @@ export default function DesignStudio() {
                         </Button>
                       </div>
                       <div className="flex items-center justify-between pt-2">
-                        <Label className="text-[11px]">تبديل اتجاه القالب (صور ↔ نص)</Label>
+ <Label className="text-[11px]">تبديل اتجاه القالب (صور نص)</Label>
                         <Switch checked={coverSwapSides} onCheckedChange={setCoverSwapSides} />
                       </div>
                       <div className="flex items-center justify-between pt-1">
@@ -5401,13 +5401,13 @@ export default function DesignStudio() {
                     <Select value={selectedLayerId} onValueChange={(v) => { setSelectedLayerId(v); setSelectedLayerIds([v]); }}>
                       <SelectTrigger className="h-9 text-xs rounded-xl"><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="image" className="text-xs">📸 الصورة الرئيسية</SelectItem>
-                        <SelectItem value="panel" className="text-xs">📋 شريط المعلومات</SelectItem>
-                        <SelectItem value="canvas_bg" className="text-xs">🎨 خلفية القالب</SelectItem>
-                        <SelectItem value="location" className="text-xs">📍 شريط الموقع</SelectItem>
+ <SelectItem value="image" className="text-xs"> الصورة الرئيسية</SelectItem>
+ <SelectItem value="panel" className="text-xs"> شريط المعلومات</SelectItem>
+ <SelectItem value="canvas_bg" className="text-xs"> خلفية القالب</SelectItem>
+ <SelectItem value="location" className="text-xs"> شريط الموقع</SelectItem>
                         {textElements.map(el => (
                           <SelectItem key={el.id} value={el.id} className="text-xs">
-                            {el.type === 'image' ? '🖼️' : el.type === 'icon' ? '⭐' : '✍️'} {el.label}
+ {el.type === 'image' ? '️' : el.type === 'icon' ? '' : '️'} {el.label}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -6280,7 +6280,7 @@ export default function DesignStudio() {
                     size="sm"
                     className="h-7 px-2.5 text-[11px] rounded-full gap-1 whitespace-nowrap"
                     onClick={() => setCoverSwapSides(v => !v)}
-                    title="عكس الاتجاه (يمين ↔ يسار)"
+ title="عكس الاتجاه (يمين يسار)"
                   >
                     عكس
                   </Button>

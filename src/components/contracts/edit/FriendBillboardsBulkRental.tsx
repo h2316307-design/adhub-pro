@@ -258,7 +258,7 @@ export function FriendBillboardsBulkRental({
               />
             </div>
             
-            {/* ✅ NEW: Toggle for operating fee */}
+ {/* NEW: Toggle for operating fee */}
             <div className="flex items-center gap-2 bg-background/80 rounded-lg px-3 py-1.5 border border-border">
               <DollarSign className="h-4 w-4 text-muted-foreground" />
               <Label htmlFor="operating-fee-enabled" className="text-sm cursor-pointer">
@@ -494,7 +494,7 @@ export function FriendBillboardsBulkRental({
             </Button>
           </div>
           
-          {/* ✅ NEW: Operating fee summary */}
+ {/* NEW: Operating fee summary */}
           {operatingFeeEnabled && operatingFeeAmount > 0 && (
             <div className="flex items-center justify-between bg-green-500/10 rounded-lg px-4 py-2 border border-green-500/20">
               <div className="flex items-center gap-2">

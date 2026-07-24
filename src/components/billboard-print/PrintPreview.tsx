@@ -303,7 +303,7 @@ export function PrintPreview({
     // شارات الحالة (بدون تصميم / تصميم واحد / وجه واحد)
     const statusBadges: string[] = [];
     if (statusFlags.noDesign) {
-      statusBadges.push(`<span class="status-badge status-no-design" data-element-key="statusBadges" style="${hl('statusBadges')}">⚠ بدون تصميم</span>`);
+ statusBadges.push(`<span class="status-badge status-no-design" data-element-key="statusBadges" style="${hl('statusBadges')}"> بدون تصميم</span>`);
     }
     if (statusFlags.singleDesign) {
       statusBadges.push(`<span class="status-badge status-single-design" data-element-key="statusBadges" style="${hl('statusBadges')}">◐ تصميم واحد</span>`);

@@ -840,7 +840,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                   {isAvailable ? 'حجز سريع' : 'تفريغ'}
                 </Button>
                 
-                {/* ✅ زر الإحداثيات */}
+ {/* زر الإحداثيات */}
                 <Button 
                   size="sm" 
                   variant="outline"
@@ -860,7 +860,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                   <Eye className="h-4 w-4" />
                 </Button>
 
-                {/* ✅ زر إعادة التصوير */}
+ {/* زر إعادة التصوير */}
                 {isAdmin && (
                   <>
                     <Button 
@@ -888,7 +888,7 @@ export const BillboardGridCard: React.FC<BillboardGridCardProps> = ({
                 )}
               </div>
               
-              {/* ✅ زر تاريخ اللوحة - صف منفصل وواضح */}
+ {/* زر تاريخ اللوحة - صف منفصل وواضح */}
               <Button 
                 size="sm" 
                 variant="outline"

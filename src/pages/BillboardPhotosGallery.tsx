@@ -408,7 +408,7 @@ export default function BillboardPhotosGallery() {
             <div className="space-y-4">
               {/* File info */}
               <div className="bg-muted/50 rounded-lg p-3 space-y-2">
-                <p className="text-sm font-medium">📄 {importPreview.fileName}</p>
+ <p className="text-sm font-medium"> {importPreview.fileName}</p>
                 <div className="flex flex-wrap gap-3 text-sm">
                   <span className="flex items-center gap-1">
                     إجمالي الصفوف: <Badge variant="secondary">{importPreview.totalRows}</Badge>

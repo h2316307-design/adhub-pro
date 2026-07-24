@@ -416,8 +416,8 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
               <div className="flex flex-col gap-1.5">
                 {[
                   { value: 'skip' as DuplicateMode, label: 'رفع الجديدة فقط (تخطي المكرر)', icon: '🆕' },
-                  { value: 'replace' as DuplicateMode, label: 'استبدال المكررات تلقائياً', icon: '🔄' },
-                  { value: 'delete_all' as DuplicateMode, label: 'حذف الكل واستبدال', icon: '🗑️' },
+ { value: 'replace' as DuplicateMode, label: 'استبدال المكررات تلقائياً', icon: '' },
+ { value: 'delete_all' as DuplicateMode, label: 'حذف الكل واستبدال', icon: '️' },
                 ].map(opt => (
                   <label
                     key={opt.value}
@@ -503,8 +503,8 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
                   </div>
                   <div className="flex items-center gap-1.5 flex-shrink-0">
                     {f.status === 'uploading' && <Loader2 className="w-4 h-4 animate-spin text-amber-500" />}
-                    {f.status === 'done' && <span className="text-green-500 text-sm font-bold">✓</span>}
-                    {f.status === 'error' && <span className="text-red-500 text-sm font-bold">✗</span>}
+ {f.status === 'done' && <span className="text-green-500 text-sm font-bold"></span>}
+ {f.status === 'error' && <span className="text-red-500 text-sm font-bold"></span>}
                     {f.status === 'duplicate' && <span className="text-yellow-500 text-[10px]">مكررة</span>}
                     {f.status === 'pending' && !isUploading && (
                       <button onClick={() => removeFile(i)} className="p-1 rounded hover:bg-destructive/10 transition-colors">

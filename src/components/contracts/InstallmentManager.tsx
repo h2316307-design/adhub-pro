@@ -171,12 +171,12 @@ export const InstallmentManager: React.FC<InstallmentManagerProps> = ({
             </div>
             {Math.abs(installments.reduce((sum, inst) => sum + inst.amount, 0) - finalTotal) > 1 && (
               <div className="text-xs text-red-600 font-medium bg-red-50 p-2 rounded">
-                ⚠️ مجموع الدفعات ({installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString('ar-LY')} د.ل) لا يساوي إجمالي العقد ({finalTotal.toLocaleString('ar-LY')} د.ل)
+ ️ مجموع الدفعات ({installments.reduce((sum, inst) => sum + inst.amount, 0).toLocaleString('ar-LY')} د.ل) لا يساوي إجمالي العقد ({finalTotal.toLocaleString('ar-LY')} د.ل)
               </div>
             )}
             {Math.abs(installments.reduce((sum, inst) => sum + inst.amount, 0) - finalTotal) <= 1 && (
               <div className="text-xs text-green-600 font-medium bg-green-50 p-2 rounded">
-                ✅ مجموع الدفعات يطابق إجمالي العقد
+ مجموع الدفعات يطابق إجمالي العقد
               </div>
             )}
           </div>

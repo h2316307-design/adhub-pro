@@ -160,7 +160,7 @@ export function UserPermissionsDialog({ open, onOpenChange, userId, userName, on
             )}
 
             <p className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-              💡 لتعديل صلاحيات الدور نفسه، اذهب إلى صفحة <strong>إدارة الأدوار</strong>
+ لتعديل صلاحيات الدور نفسه، اذهب إلى صفحة <strong>إدارة الأدوار</strong>
             </p>
 
             <div className="flex items-center justify-end gap-2 pt-4 border-t">

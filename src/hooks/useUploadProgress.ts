@@ -50,9 +50,9 @@ export function useUploadProgress() {
       toast.dismiss(id);
       setTimeout(() => {
         if (success) {
-          toast.success(message || 'تم الرفع بنجاح ✅', { duration: 3000 });
+ toast.success(message || 'تم الرفع بنجاح ', { duration: 3000 });
         } else {
-          toast.error(message || 'فشل الرفع ❌', { duration: 5000 });
+ toast.error(message || 'فشل الرفع ', { duration: 5000 });
         }
       }, 200);
     }
@@ -101,9 +101,9 @@ export function createUploadProgressTracker() {
       toast.dismiss(toastId);
       setTimeout(() => {
         if (success) {
-          toast.success(message || 'تم الرفع بنجاح ✅', { duration: 3000 });
+ toast.success(message || 'تم الرفع بنجاح ', { duration: 3000 });
         } else {
-          toast.error(message || 'فشل الرفع ❌', { duration: 5000 });
+ toast.error(message || 'فشل الرفع ', { duration: 5000 });
         }
       }, 200);
       toastId = undefined;

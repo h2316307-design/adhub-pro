@@ -1521,10 +1521,10 @@ const MySqlDatabaseManagement = () => {
         throw new Error(err);
       }
       const result = await response.json();
-      addLog(`✅ ${operation} - تم بنجاح`, 'success');
+ addLog(` ${operation} - تم بنجاح`, 'success');
       return result;
     } catch (err: any) {
-      addLog(`❌ ${operation} - ${err.message}`, 'error');
+ addLog(` ${operation} - ${err.message}`, 'error');
       throw err;
     }
   };
@@ -1572,7 +1572,7 @@ const MySqlDatabaseManagement = () => {
   };
 
   const truncateAll = async () => {
-    if (!confirm('⚠️ هل أنت متأكد من حذف جميع البيانات؟ لا يمكن التراجع!')) return;
+ if (!confirm('️ هل أنت متأكد من حذف جميع البيانات؟ لا يمكن التراجع!')) return;
     setIsExecuting(true);
     addLog('جاري حذف جميع البيانات...');
     try {
@@ -1587,8 +1587,8 @@ const MySqlDatabaseManagement = () => {
   };
 
   const dropAll = async () => {
-    if (!confirm('⚠️⚠️ هل أنت متأكد من حذف جميع الجداول؟ سيتم حذف كل شيء!')) return;
-    if (!confirm('⚠️ تأكيد نهائي: سيتم حذف جميع الجداول والبيانات بالكامل!')) return;
+ if (!confirm('️️ هل أنت متأكد من حذف جميع الجداول؟ سيتم حذف كل شيء!')) return;
+ if (!confirm('️ تأكيد نهائي: سيتم حذف جميع الجداول والبيانات بالكامل!')) return;
     setIsExecuting(true);
     addLog('جاري حذف جميع الجداول...');
     try {

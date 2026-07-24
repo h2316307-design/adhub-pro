@@ -963,7 +963,7 @@ export default function ContractCreate() {
                 ? 'text-green-700 bg-green-50 border border-green-200' 
                 : 'text-gray-600 bg-gray-50 border border-gray-200'
             }`}>
-              <strong>الحالة الحالية:</strong> تكلفة الطباعة {printCostEnabled ? 'مفعلة ✅' : 'غير مفعلة ❌'}
+ <strong>الحالة الحالية:</strong> تكلفة الطباعة {printCostEnabled ? 'مفعلة ' : 'غير مفعلة '}
             </div>
             
             {printCostEnabled && (
@@ -1014,7 +1014,7 @@ export default function ContractCreate() {
                 )}
                 
                 <div className="text-sm text-blue-600 bg-blue-50 p-2 rounded">
-                  💡 عند تفعيل تكلفة الطباعة، سيتم إضافة التكلفة تلقائياً إلى سعر كل لوحة وستظهر في العقد المطبوع كـ "شاملة تكاليف الطباعة"
+ عند تفعيل تكلفة الطباعة، سيتم إضافة التكلفة تلقائياً إلى سعر كل لوحة وستظهر في العقد المطبوع كـ "شاملة تكاليف الطباعة"
                 </div>
               </div>
             )}
@@ -1087,7 +1087,7 @@ export default function ContractCreate() {
               <div className="font-medium mb-1">طريقة الحساب:</div>
               <div>رسوم التشغيل = صافي الإيجار × {operatingFeeRate}% = {rentalCostOnly.toLocaleString()} × {operatingFeeRate}% = {operatingFee.toLocaleString()} {currentCurrency.symbol}</div>
               <div className="text-xs mt-2 text-blue-600">
-                💡 صافي الإيجار = الإجمالي النهائي - تكلفة التركيب - تكلفة الطباعة - الخصم
+ صافي الإيجار = الإجمالي النهائي - تكلفة التركيب - تكلفة الطباعة - الخصم
               </div>
             </div>
           </div>
@@ -1152,7 +1152,7 @@ export default function ContractCreate() {
             
             {!installationEnabled && (
               <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded">
-                <div className="font-medium">⚠️ التركيب غير مفعل</div>
+ <div className="font-medium">️ التركيب غير مفعل</div>
                 <div className="text-xs mt-2">
                   عند إلغاء التركيب، سيتم حساب نسبة التشغيل من الإجمالي الكلي (صافي الإيجار = الإجمالي الكلي)
                 </div>
@@ -1160,7 +1160,7 @@ export default function ContractCreate() {
             )}
           </div>
 
-          {/* ✅ NEW: إيجارات اللوحات الصديقة بالجملة */}
+ {/* NEW: إيجارات اللوحات الصديقة بالجملة */}
           {selected.length > 0 && billboards.filter(b => 
             selected.includes(String((b as any).ID)) && (b as any).friend_company_id
           ).length > 0 && (

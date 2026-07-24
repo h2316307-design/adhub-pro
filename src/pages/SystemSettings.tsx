@@ -458,7 +458,7 @@ export default function SystemSettings() {
           {aiProvider === 'gemini' && (
             <>
               <div className="space-y-2 p-4 rounded-lg border border-amber-500/30 bg-amber-50 dark:bg-amber-950/20">
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">🔒 مفتاح Gemini API</p>
+ <p className="text-sm font-medium text-amber-800 dark:text-amber-200"> مفتاح Gemini API</p>
                 <p className="text-sm text-muted-foreground">
                   لأسباب أمنية، يجب إضافة مفتاح Gemini API كـ Secret في لوحة تحكم Supabase بالاسم <code className="bg-muted px-1 rounded text-xs">GEMINI_API_KEY</code>
                 </p>
