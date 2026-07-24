@@ -3251,6 +3251,7 @@ export default function InstallationTasks() {
             has_cutout: item.has_cutout,
             contract_number: itemTask?.contract_id,
             ad_type: selectedContractForPrint.adType,
+            overlay_config: (item as any).overlay_config || billboardById[item.billboard_id]?.overlay_config,
           };
         });
         const contractObj = contractById[selectedContractForPrint.contractNumber];
@@ -3359,6 +3360,7 @@ export default function InstallationTasks() {
             team_id: itemTask?.team_id,
             has_cutout: item.has_cutout,
             contract_number: itemTask?.contract_id,
+            overlay_config: (item as any).overlay_config || billboardById[item.billboard_id]?.overlay_config,
           };
         });
         const contractObj = contractById[firstTask?.contract_id];

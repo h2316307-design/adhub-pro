@@ -41,6 +41,7 @@ interface BillboardActionsProps {
   setBulkAddOpen?: (open: boolean) => void;
   setExcelImportOpen?: (open: boolean) => void;
   setExcelImageImportOpen?: (open: boolean) => void;
+  setBatchPhotoImportOpen?: (open: boolean) => void;
   exportMunicipalityToExcel: (excludeHidden: boolean, selectedMunicipality: string) => void;
   municipalities: string[];
 }
@@ -71,6 +72,7 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
   setBulkAddOpen,
   setExcelImportOpen,
   setExcelImageImportOpen,
+  setBatchPhotoImportOpen,
   exportMunicipalityToExcel,
   municipalities,
 }) => {
@@ -328,6 +330,18 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
               >
                 <Upload className="h-4 w-4 text-purple-600" />
                 استيراد صور من Excel
+              </DropdownMenuItem>
+            </>
+          )}
+          {setBatchPhotoImportOpen && (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem 
+                onClick={() => setBatchPhotoImportOpen(true)} 
+                className="cursor-pointer gap-2 font-bold text-amber-600 dark:text-amber-400"
+              >
+                <Camera className="h-4 w-4 text-amber-500" />
+                إضافة لوحات من صور ميدانية
               </DropdownMenuItem>
             </>
           )}

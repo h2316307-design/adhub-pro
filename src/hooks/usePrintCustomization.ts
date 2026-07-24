@@ -296,6 +296,9 @@ const defaultSettings: PrintCustomizationSettings = {
   billboard_status_font_size: '14px',
   billboard_status_offset_y: '6mm',
 
+  // إعدادات إظهار الكلمات فوق المقاس (طول، عرض، ارتفاع) - معطل افتراضياً
+  show_size_dimension_labels: 'false',
+
   // إعدادات صفحة الغلاف
   cover_page_enabled: 'true',
   cover_logo_url: '/logofaresgold.svg',
@@ -303,13 +306,13 @@ const defaultSettings: PrintCustomizationSettings = {
   cover_phrase_font_size: '28px',
   cover_municipality_font_size: '36px',
   cover_logo_size: '220px',
-  cover_logo_top: '90mm',
+  cover_logo_top: '50%',
   cover_logo_left: '50%',
   cover_logo_align: 'center',
-  cover_phrase_top: '138mm',
+  cover_phrase_top: '50%',
   cover_phrase_left: '50%',
   cover_phrase_align: 'center',
-  cover_municipality_top: '152mm',
+  cover_municipality_top: '50%',
   cover_municipality_left: '50%',
   cover_municipality_align: 'center',
   cover_background_enabled: 'true',
@@ -345,8 +348,9 @@ export function usePrintCustomization(settingKey: string = 'default') {
       }
 
       if (data) {
+        const localDimLabels = localStorage.getItem('show_size_dimension_labels') || 'false';
         // دمج البيانات مع الإعدادات الافتراضية للحقول الجديدة
-        setSettings({ ...defaultSettings, ...data, status_overrides: (data as any).status_overrides || undefined } as PrintCustomizationSettings);
+        setSettings({ ...defaultSettings, ...data, show_size_dimension_labels: localDimLabels, status_overrides: (data as any).status_overrides || undefined } as PrintCustomizationSettings);
       }
       // إذا لم توجد بيانات، نستخدم الإعدادات الافتراضية (تم تعيينها بالفعل)
     } catch (error) {
@@ -363,8 +367,12 @@ export function usePrintCustomization(settingKey: string = 'default') {
       const resolvedNewSettings = typeof newSettings === 'function' ? newSettings(currentSettings) : newSettings;
       const updatedSettings = { ...currentSettings, ...resolvedNewSettings };
 
+      if (resolvedNewSettings.show_size_dimension_labels !== undefined) {
+        localStorage.setItem('show_size_dimension_labels', String(resolvedNewSettings.show_size_dimension_labels));
+      }
+
       // Strip fields not present in the DB schema (kept client-side only)
-      const { map_label_scale, ...dbPayload } = updatedSettings as any;
+      const { map_label_scale, show_size_dimension_labels, ...dbPayload } = updatedSettings as any;
 
       const { error } = await supabase
         .from('billboard_print_customization')

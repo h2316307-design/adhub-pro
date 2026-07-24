@@ -58,7 +58,7 @@ const parseDimensions = (sizeStr: string) => {
   };
 };
 
-const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean) => {
+const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean, showLabels: boolean = false) => {
   if (!sizeStr) return '';
   const dims = parseDimensions(sizeStr);
   if (!dims.length && !dims.width && !dims.height) return '';
@@ -68,18 +68,18 @@ const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean) => {
   return `
     <div class="print-size-container">
       <div class="print-dim-col">
-        <div class="print-dim-label">طول</div>
+        ${showLabels ? `<div class="print-dim-label">طول</div>` : ''}
         <div class="print-dim-value">${dims.length || '-'}</div>
       </div>
       <div class="print-dim-separator">×</div>
       <div class="print-dim-col">
-        <div class="print-dim-label">عرض</div>
+        ${showLabels ? `<div class="print-dim-label">عرض</div>` : ''}
         <div class="print-dim-value">${dims.width || '-'}</div>
       </div>
       ${showH ? `
         <div class="print-dim-separator">×</div>
         <div class="print-dim-col">
-          <div class="print-dim-label">ارتفاع</div>
+          ${showLabels ? `<div class="print-dim-label">ارتفاع</div>` : ''}
           <div class="print-dim-value">${dims.height}</div>
         </div>
       ` : ''}
@@ -138,6 +138,10 @@ const settingGroups: SettingGroup[] = [
       { key: 'calc_meters_by_faces', label: 'حساب إجمالي الأمتار بعدد الأوجه', type: 'select', options: [
         { value: 'true', label: 'نعم (ضرب المساحة في عدد الأوجه)' },
         { value: 'false', label: 'لا (حساب مساحة الوجه الواحد فقط)' },
+      ]},
+      { key: 'show_size_dimension_labels', label: 'إظهار الكلمات فوق المقاس (طول، عرض، ارتفاع)', type: 'select', options: [
+        { value: 'false', label: 'إخفاء الكلمات (معطّل افتراضياً)' },
+        { value: 'true', label: 'إظهار الكلمات' },
       ]},
     ],
   },
@@ -452,7 +456,7 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
  
         <!-- المقاس -->
         <div style="position:absolute;top:${s.size_top};left:${s.size_left};transform:translateX(-50%);width:100mm;text-align:center;font-size:${s.size_font_size};font-weight:${s.size_font_weight || '500'};color:${s.size_color};z-index:5;">
-          ${generatePrintedSizeHtml(sb.size, showHeightInPrint)}
+          ${generatePrintedSizeHtml(sb.size, showHeightInPrint, (s as any).show_size_dimension_labels === 'true')}
         </div>
  
         <!-- عدد الأوجه -->
@@ -561,15 +565,15 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
 
     return `
       <div style="position:relative;width:210mm;height:297mm;background-color:#fff;${bgStyle}font-family:'Doran',Arial,sans-serif;direction:rtl;overflow:visible;">
-        <div style="position:absolute;top:${logoTop};left:50%;transform:translateX(-50%);width:92%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:20px;text-align:center;z-index:5;">
-          <div style="display:flex;align-items:center;justify-content:center;width:100%;">
-            <img src="${coverLogoUrl}" alt="شعار" style="width:${coverLogoSize};max-width:100%;height:auto;object-fit:contain;display:inline-block;" onerror="this.style.display='none'" />
+        <div style="position:absolute;top:45%;left:0;right:0;width:100%;transform:translateY(-50%);text-align:center;margin:0 auto;display:block;z-index:5;">
+          <div style="width:100%;text-align:center;margin:0 auto 20px auto;display:block;clear:both;">
+            <img src="${coverLogoUrl}" alt="شعار" style="display:inline-block;margin:0 auto;text-align:center;width:${coverLogoSize};max-width:90%;height:auto;vertical-align:middle;" onerror="this.style.display='none'" />
           </div>
-          <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;width:100%;">
-            <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;line-height:1.2;">
+          <div style="width:100%;text-align:center;margin:0 auto;display:block;">
+            <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;line-height:1.3;text-align:center;margin:0 auto 8px auto;display:block;">
               ${coverPhrase}
             </div>
-            <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;line-height:1.2;">
+            <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;line-height:1.3;text-align:center;margin:0 auto;display:block;">
               ${municipalityName}
             </div>
           </div>

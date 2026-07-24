@@ -271,12 +271,18 @@ export const useBillboardData = () => {
 
       // ✅ NEW: Load contracts to match with billboards (optimizing columns selected)
       const contractsResult = await fetchWithRetry<any[]>(async () => {
-        const res = await supabase
-          .from('Contract')
-          .select('id, Contract_Number, billboard_ids, billboard_id, customer_name, customer_id, ad_type, start_date, end_date, billboard_prices, design_data')
+        let res = await supabase
+          .from('contracts')
+          .select('*')
           .order('id', { ascending: false });
+        if (res.error) {
+          res = await supabase
+            .from('Contract')
+            .select('*')
+            .order('id', { ascending: false });
+        }
         return res;
-      }, { maxRetries: 2, timeout: 30000 });
+      }, { maxRetries: 1, timeout: 15000 });
 
       const contractsData = contractsResult.data as any[] || [];
       console.log('✅ Contracts loaded for matching:', contractsData?.length || 0);

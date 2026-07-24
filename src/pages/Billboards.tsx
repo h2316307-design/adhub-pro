@@ -18,7 +18,7 @@ import { BillboardAddDialog } from '@/components/billboards/BillboardAddDialog';
 import { BillboardEditDialog } from '@/components/billboards/BillboardEditDialog';
 import { BillboardSummaryCards } from '@/components/billboards/BillboardSummaryCards';
 import { MaintenanceDialog } from '@/components/billboards/MaintenanceDialog';
-import { BulkAddDialog, ExcelImportDialog, ExcelImageImportDialog } from '@/components/billboards/forms';
+import { BulkAddDialog, ExcelImportDialog, ExcelImageImportDialog, BatchPhotoAddBillboardsDialog } from '@/components/billboards/forms';
 import { ContractManagementDialog } from '@/components/billboards/ContractManagementDialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { PrintFiltersDialog } from '@/components/billboards/PrintFiltersDialog';
@@ -99,6 +99,7 @@ export default function Billboards() {
   const [bulkAddOpen, setBulkAddOpen] = useState(false);
   const [excelImportOpen, setExcelImportOpen] = useState(false);
   const [excelImageImportOpen, setExcelImageImportOpen] = useState(false);
+  const [batchPhotoImportOpen, setBatchPhotoImportOpen] = useState(false);
   // ✅ Billboard selection state
   const [selectedBillboardIds, setSelectedBillboardIds] = useState<Set<number>>(new Set());
   const [excludeFriendlyAndHidden, setExcludeFriendlyAndHidden] = useState(true);
@@ -1291,6 +1292,7 @@ export default function Billboards() {
                 setBulkAddOpen={setBulkAddOpen}
                 setExcelImportOpen={setExcelImportOpen}
                 setExcelImageImportOpen={setExcelImageImportOpen}
+                setBatchPhotoImportOpen={setBatchPhotoImportOpen}
               />
             </div>
           </div>
@@ -1736,6 +1738,18 @@ export default function Billboards() {
         open={excelImageImportOpen}
         onOpenChange={setExcelImageImportOpen}
         onSuccess={loadBillboards}
+      />
+
+      {/* Batch Photo Add Billboards Dialog */}
+      <BatchPhotoAddBillboardsDialog
+        open={batchPhotoImportOpen}
+        onOpenChange={setBatchPhotoImportOpen}
+        onSuccess={loadBillboards}
+        municipalities={municipalities}
+        sizes={sizes}
+        citiesList={citiesList}
+        billboardTypes={billboardTypes}
+        levels={levels}
       />
       
       {/* Quick Add Dialog */}

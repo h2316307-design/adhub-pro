@@ -22,7 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Slider } from '@/components/ui/slider';
-import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet, Camera, ImageIcon, Loader2, CheckCircle2, AlertTriangle, Sparkles, X as XIcon, X as XIcon2, Info, RefreshCw, Eye, Check, SlidersHorizontal, ChevronDown, Wrench, Clock, Ban } from 'lucide-react';
+import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, ArrowUpDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet, Camera, ImageIcon, Loader2, CheckCircle2, AlertTriangle, Sparkles, X as XIcon, X as XIcon2, Info, RefreshCw, Eye, Check, SlidersHorizontal, ChevronDown, Wrench, Clock, Ban } from 'lucide-react';
 import { extractExifData } from '@/utils/exifExtractor';
 import { uploadImage } from '@/services/imageUploadService';
 import { compressLossless } from '@/utils/imageCompressor';
@@ -149,7 +149,7 @@ const formatSizeForPrint = (sizeStr: string, showHeight: boolean) => {
   return `${dims.length} × ${dims.width}`;
 };
 
-const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean) => {
+const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean, showLabels: boolean = false) => {
   if (!sizeStr) return '';
   const dims = parseDimensions(sizeStr);
   if (!dims.length && !dims.width && !dims.height) return '';
@@ -159,18 +159,18 @@ const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean) => {
   return `
     <div class="print-size-container">
       <div class="print-dim-col">
-        <div class="print-dim-label">طول</div>
+        ${showLabels ? `<div class="print-dim-label">طول</div>` : ''}
         <div class="print-dim-value">${dims.length || '-'}</div>
       </div>
       <div class="print-dim-separator">×</div>
       <div class="print-dim-col">
-        <div class="print-dim-label">عرض</div>
+        ${showLabels ? `<div class="print-dim-label">عرض</div>` : ''}
         <div class="print-dim-value">${dims.width || '-'}</div>
       </div>
       ${showH ? `
         <div class="print-dim-separator">×</div>
         <div class="print-dim-col">
-          <div class="print-dim-label">ارتفاع</div>
+          ${showLabels ? `<div class="print-dim-label">ارتفاع</div>` : ''}
           <div class="print-dim-value">${dims.height}</div>
         </div>
       ` : ''}
@@ -772,15 +772,61 @@ export default function MunicipalityBillboardOrganizer() {
     }
   };
 
-  const handleBillboardLocationChange = (id: number | string, newLat: number, newLng: number) => {
+  const handleBillboardLocationChange = async (id: number | string, newLat: number, newLng: number) => {
+    const seq = Number(id);
     setCurrentCollection(prev => ({
       ...prev,
       items: prev.items.map(it =>
-        it.sequence_number === Number(id) || (it as any).id === id
+        it.sequence_number === seq || (it as any).id === id
           ? { ...it, latitude: newLat, longitude: newLng }
           : it
       ),
     }));
+
+    const collId = currentCollection.id;
+    if (collId) {
+      try {
+        await supabase
+          .from('municipality_collection_items')
+          .update({ latitude: newLat, longitude: newLng })
+          .eq('collection_id', collId)
+          .eq('sequence_number', seq);
+      } catch (e: any) {
+        console.error('[location] DB update exception:', e?.message);
+      }
+    }
+  };
+
+  const handleUpdateItemDetails = async (seq: number, details: Partial<CollectionItem>) => {
+    setCurrentCollection(prev => ({
+      ...prev,
+      items: prev.items.map(it =>
+        it.sequence_number === seq ? { ...it, ...details } : it
+      ),
+    }));
+
+    const collId = currentCollection.id;
+    if (collId) {
+      try {
+        const updatePayload: Record<string, any> = {};
+        if (details.location_text !== undefined) updatePayload.location_text = details.location_text;
+        if (details.nearest_landmark !== undefined) updatePayload.nearest_landmark = details.nearest_landmark;
+        if (details.size !== undefined) updatePayload.size = details.size;
+        if (details.municipality !== undefined) updatePayload.municipality = details.municipality;
+        if (details.latitude !== undefined) updatePayload.latitude = details.latitude;
+        if (details.longitude !== undefined) updatePayload.longitude = details.longitude;
+
+        if (Object.keys(updatePayload).length > 0) {
+          await supabase
+            .from('municipality_collection_items')
+            .update(updatePayload)
+            .eq('collection_id', collId)
+            .eq('sequence_number', seq);
+        }
+      } catch (e: any) {
+        console.error('[item_update] DB update exception:', e?.message);
+      }
+    }
   };
 
   const loadSizeCutoutImages = async () => {
@@ -2127,10 +2173,34 @@ export default function MunicipalityBillboardOrganizer() {
     );
   }, [currentCollection.items, searchItems]);
 
-  // Get unique sizes from current items
+  const sortByDbSizeRank = () => {
+    if (currentCollection.items.length === 0) {
+      toast.error('لا توجد لوحات لترتيبها');
+      return;
+    }
+    setCurrentCollection(prev => {
+      const sorted = [...prev.items].sort((a, b) => {
+        const orderA = getSizeSortOrder(a.size);
+        const orderB = getSizeSortOrder(b.size);
+        if (orderA !== orderB) return orderA - orderB;
+        return a.sequence_number - b.sequence_number;
+      });
+      const resequenced = sorted.map((item, idx) => ({ ...item, sequence_number: idx + 1 }));
+      return { ...prev, items: resequenced };
+    });
+    toast.success('تم إعادة ترتيب وتسلسل اللوحات حسب رتبة المقاسات المعتمدة في الإعدادات');
+  };
+
+  // Get unique sizes from current items sorted strictly by DB size rank (sort_order)
   const availableSizes = useMemo(() => {
-    return [...new Set(currentCollection.items.map(i => i.size).filter(Boolean))].sort();
-  }, [currentCollection.items]);
+    const unique = [...new Set(currentCollection.items.map(i => i.size).filter(Boolean))];
+    return unique.sort((a, b) => {
+      const orderA = getSizeSortOrder(a);
+      const orderB = getSizeSortOrder(b);
+      if (orderA !== orderB) return orderA - orderB;
+      return a.localeCompare(b, 'ar');
+    });
+  }, [currentCollection.items, sizesList]);
 
   // ============ PRINT ============
   const handlePrint = async () => {
@@ -2142,7 +2212,12 @@ export default function MunicipalityBillboardOrganizer() {
     try {
       const s = customSettings;
       const pages: string[] = [];
-      const printItems = [...currentCollection.items].sort((a, b) => a.sequence_number - b.sequence_number);
+      const printItems = [...currentCollection.items].sort((a, b) => {
+        const orderA = getSizeSortOrder(a.size);
+        const orderB = getSizeSortOrder(b.size);
+        if (orderA !== orderB) return orderA - orderB;
+        return a.sequence_number - b.sequence_number;
+      });
       const displayMunicipality = municipalityName || collectionName;
       const readStoredStatusValue = (key: string, fallback: string) => {
         try {
@@ -2195,26 +2270,23 @@ export default function MunicipalityBillboardOrganizer() {
         const muniAlign = (s as any).cover_municipality_align || 'center';
 
         const coverBgEnabled = (s as any).cover_background_enabled !== 'false';
-        const coverBgUrl = (s as any).cover_background_url || '';
-        const coverBgClass = coverBgEnabled ? (coverBgUrl ? '' : '<div class="background"></div>') : '';
-        const coverBgInline = coverBgEnabled && coverBgUrl ? `background-image:url('${coverBgUrl}');background-size:210mm 297mm;background-repeat:no-repeat;` : '';
-
-        const posStyle = (align: string, left: string) => {
-          return `left:${left};transform:translateX(-50%);text-align:${align};`;
-        };
+        const coverBgUrl = (s as any).cover_background_url || matchingBg?.url || customBackgroundUrl;
+        const coverBgHtml = coverBgEnabled && coverBgUrl 
+          ? `<div class="background" style="position:absolute;top:0;left:0;width:210mm;height:297mm;z-index:0;overflow:hidden;"><img src="${coverBgUrl}" style="width:210mm;height:297mm;object-fit:fill;object-position:center;display:block;" /></div>` 
+          : '';
 
         pages.push(`
-            <div class="page" style="${coverBgInline}">
-              ${coverBgClass}
-              <div style="position:absolute;top:${logoTop};left:50%;transform:translateX(-50%);width:92%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:20px;text-align:center;z-index:5;">
-                <div style="display:flex;align-items:center;justify-content:center;width:100%;">
-                  <img src="${normalizeGoogleImageUrl(coverLogoUrl)}" alt="شعار" style="width:${coverLogoSize};max-width:100%;height:auto;object-fit:contain;display:inline-block;" crossorigin="anonymous" onerror="this.style.display='none'" />
+            <div class="page" style="position:relative;width:210mm;height:297mm;overflow:hidden;background:#fff;margin:0 auto;">
+              ${coverBgHtml}
+              <div style="position:absolute;top:45%;left:0;right:0;width:100%;transform:translateY(-50%);text-align:center;margin:0 auto;display:block;z-index:5;">
+                <div style="width:100%;text-align:center;margin:0 auto 20px auto;display:block;clear:both;">
+                  <img src="${normalizeGoogleImageUrl(coverLogoUrl)}" alt="شعار" style="display:inline-block;margin:0 auto;text-align:center;width:${coverLogoSize};max-width:90%;height:auto;vertical-align:middle;" crossorigin="anonymous" onerror="this.style.display='none'" />
                 </div>
-                <div style="display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center;width:100%;">
-                  <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;line-height:1.2;">
+                <div style="width:100%;text-align:center;margin:0 auto;display:block;">
+                  <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverPhraseFontSize};font-weight:700;color:#000;line-height:1.3;text-align:center;margin:0 auto 8px auto;display:block;">
                     ${coverPhrase}
                   </div>
-                  <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;line-height:1.2;">
+                  <div style="font-family:'Doran',Arial,sans-serif;font-size:${coverMunicipalityFontSize};font-weight:700;color:#000;line-height:1.3;text-align:center;margin:0 auto;display:block;">
                     ${displayMunicipality}
                   </div>
                 </div>
@@ -2498,12 +2570,15 @@ export default function MunicipalityBillboardOrganizer() {
                   const scale = (ov?.scale_pct ?? 100) / 100;
                   const rot = ov?.rotation_deg ?? 0;
                   const dims = parseSizeDimensions(item.size);
+                  const isV2 = ov?.anchor_version === 'v2';
+                  const translateY = isV2 ? '-100%' : '-50%';
+                  const transformOrigin = isV2 ? 'bottom center' : 'center center';
 
                   return `
-                    <div style="position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #fafafa; border-bottom: 1px solid #ddd; flex-shrink: 0;">
-                      <img src="${resolveImg(item.image_url)}" alt="صورة اللوحة" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
+                    <div class="overlay-container" style="position: relative; width: 100%; aspect-ratio: 16 / 9; overflow: hidden; background: #fafafa; border-bottom: 1px solid #ddd; flex-shrink: 0;">
+                      <img src="${resolveImg(item.image_url)}" alt="صورة اللوحة" class="billboard-image" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
                       ${isOverlayActive ? (isCutoutPresent ? `
-                        <img src="${resolveImg(activeCutout)}" style="
+                        <img src="${resolveImg(activeCutout)}" class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="
                           position: absolute;
                           left: ${x}%;
                           top: ${y}%;
@@ -2511,13 +2586,12 @@ export default function MunicipalityBillboardOrganizer() {
                           min-width: 40px;
                           height: auto;
                           display: block;
-                          transform: translate(-50%, -50%) scale(${scale}) rotate(${rot}deg);
-                          transform-origin: center center;
-                          filter: drop-shadow(0 10px 25px rgba(0,0,0,0.7));
+                          transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg);
+                          transform-origin: ${transformOrigin};
                           z-index: 10;
                         " />
                       ` : `
-                        <div style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, -50%) scale(${scale}) rotate(${rot}deg); transform-origin: center center; z-index: 10; display: flex; flex-direction: column; align-items: center;">
+                        <div class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="position: absolute; left: ${x}%; top: ${y}%; transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg); transform-origin: ${transformOrigin}; z-index: 10; display: flex; flex-direction: column; align-items: center;">
                           <div style="background: linear-gradient(135deg, #b45309, #1e293b); border: 2.5px solid #f59e0b; color: #fff; padding: 5px 10px; border-radius: 10px; font-weight: bold; font-size: 10px; text-align: center; box-shadow: 0 8px 20px rgba(0,0,0,0.8); width: ${Math.max(110, 80 * dims.ratio)}px; height: 70px; display: flex; flex-direction: column; justify-content: center; align-items: center; font-family: Tajawal, sans-serif;">
                             <span style="font-size: 10px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%;">${item.billboard_name || `لوحة #${item.sequence_number}`}</span>
                             <span style="font-size: 8px; color: #f59e0b; margin-top: 2px;">${item.size}</span>
@@ -2609,7 +2683,7 @@ export default function MunicipalityBillboardOrganizer() {
             ${statusCustom}
 
             <div class="absolute-field" style="top: ${s.size_top}; left: ${s.size_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.size_font_size}; font-weight: ${s.size_font_weight}; color: ${s.size_color}; z-index: 5;">
-              ${generatePrintedSizeHtml(item.size, showHeightInPrint)}
+              ${generatePrintedSizeHtml(item.size, showHeightInPrint, (s as any).show_size_dimension_labels === 'true')}
             </div>
 
             ${s.faces_count_show !== 'false' ? `
@@ -2691,17 +2765,69 @@ export default function MunicipalityBillboardOrganizer() {
         </head>
         <body>${pages.join('\n')}
         <script>
+          function adjustOverlayPositions() {
+            var containers = document.querySelectorAll('.overlay-container');
+            containers.forEach(function(container) {
+              var bgImg = container.querySelector('.billboard-image');
+              var cutoutImg = container.querySelector('.overlay-cutout');
+              if (!bgImg || !cutoutImg) return;
+
+              var cw = container.clientWidth;
+              var ch = container.clientHeight;
+              var nw = bgImg.naturalWidth;
+              var nh = bgImg.naturalHeight;
+              if (!cw || !ch || !nw || !nh) return;
+
+              var imgRatio = nw / nh;
+              var boxRatio = cw / ch;
+
+              var renderW = cw;
+              var renderH = ch;
+              var renderLeft = 0;
+              var renderTop = 0;
+
+              if (imgRatio > boxRatio) {
+                renderH = cw / imgRatio;
+                renderTop = (ch - renderH) / 2;
+              } else {
+                renderW = ch * imgRatio;
+                renderLeft = (cw - renderW) / 2;
+              }
+
+              var xPct = parseFloat(cutoutImg.getAttribute('data-x') || '50');
+              var yPct = parseFloat(cutoutImg.getAttribute('data-y') || '50');
+              var scale = parseFloat(cutoutImg.getAttribute('data-scale') || '1');
+              var rot = parseFloat(cutoutImg.getAttribute('data-rot') || '0');
+              var isV2 = cutoutImg.getAttribute('data-anchor') === 'v2';
+
+              var overlayLeftPx = renderLeft + (xPct / 100) * renderW;
+              var overlayTopPx = renderTop + (yPct / 100) * renderH;
+              var overlayWidthPx = (27.15 / 100) * renderW;
+
+              var translateY = isV2 ? '-100%' : '-50%';
+              var transformOrigin = isV2 ? 'bottom center' : 'center center';
+
+              cutoutImg.style.left = overlayLeftPx + 'px';
+              cutoutImg.style.top = overlayTopPx + 'px';
+              cutoutImg.style.width = overlayWidthPx + 'px';
+              cutoutImg.style.transform = 'translate(-50%, ' + translateY + ') scale(' + scale + ') rotate(' + rot + 'deg)';
+              cutoutImg.style.transformOrigin = transformOrigin;
+            });
+          }
+
           function printWhenLoaded() {
             var images = Array.from(document.querySelectorAll('img'));
             var loaded = 0;
             var total = images.length;
             if (total === 0) {
+              adjustOverlayPositions();
               setTimeout(function() { window.print(); }, 300);
               return;
             }
             function onDone() {
               loaded++;
               if (loaded >= total) {
+                adjustOverlayPositions();
                 setTimeout(function() { window.print(); }, 400);
               }
             }
@@ -2941,91 +3067,45 @@ export default function MunicipalityBillboardOrganizer() {
             )}
           </CardContent>
         </Card>
-        {/* Statistics Dashboard Cards */}
-        {currentCollection.items.length > 0 && (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 animate-in fade-in duration-300">
-            <Card className="border border-border/15 bg-gradient-to-br from-indigo-500/10 to-indigo-500/5 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between">
-              <span className="text-[10px] text-indigo-500/80 font-bold uppercase tracking-wider">إجمالي اللوحات</span>
-              <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{currentCollection.items.length}</span>
-              <span className="text-[10px] text-muted-foreground mt-1">لوحة مسجلة</span>
-            </Card>
-            <Card className="border border-border/15 bg-gradient-to-br from-emerald-500/10 to-emerald-500/5 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between">
-              <span className="text-[10px] text-emerald-500/80 font-bold uppercase tracking-wider">إجمالي المساحة</span>
-              <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-1">
-                {totalAreaMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
-              </span>
-              <span className="text-[10px] text-muted-foreground mt-1">
-                {customSettings.calc_meters_by_faces === 'true' ? 'محتسباً بعدد الأوجه' : 'مساحة الوجه الواحد'}
-              </span>
-            </Card>
-            {sizeStats.map(stat => (
-              <Card key={stat.size} className="border border-border/15 bg-gradient-to-br from-card/60 to-card/30 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between relative group overflow-hidden">
-                <div className="absolute top-0 left-0 w-full h-[2px] bg-indigo-500/20 group-hover:bg-indigo-500/40 transition-colors" />
-                <span className="text-[10px] text-muted-foreground font-bold truncate" title={stat.size}>{stat.size}</span>
-                <span className="text-xl font-bold text-foreground mt-1">{stat.count} <span className="text-xs font-normal text-muted-foreground">لوحات</span></span>
-                <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1">
-                  {stat.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
-                </span>
-              </Card>
-            ))}
-          </div>
-        )}
 
-        {/* Map Selection Statistics Cards */}
+        {/* Selected Items stats */}
         {selectedItems.size > 0 && (
-          <div className="border border-indigo-500/20 bg-indigo-500/[0.02] rounded-3xl p-5 space-y-4 animate-in slide-in-from-top-4 duration-300">
-            <div className="flex items-center justify-between border-b border-indigo-500/10 pb-3">
-              <h3 className="text-sm font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-indigo-500 animate-pulse" />
-                <span>إحصائيات اللوحات المحددة ({selectedItems.size} لوحة)</span>
+          <div className="border border-amber-500/30 bg-amber-500/[0.04] rounded-3xl p-5 space-y-4 animate-in slide-in-from-top-4 duration-300">
+            <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
+              <h3 className="text-sm font-bold text-amber-400 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                ملخص اللوحات المحددة ({selectedItems.size} لوحة)
               </h3>
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => {
-                  setCurrentCollection(prev => {
-                    const filtered = prev.items.filter(i => !selectedItems.has(i.sequence_number));
-                    const reSequenced = filtered.map((item, idx) => ({ ...item, sequence_number: idx + 1 }));
-                    return { ...prev, items: reSequenced };
-                  });
-                  toast.success(`تم حذف ${selectedItems.size} لوحة`);
-                  setSelectedItems(new Set());
-                }}
-                className="h-8 rounded-lg text-xs text-red-500 hover:bg-red-500/10 hover:text-red-600 gap-1"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                حذف المحدد ({selectedItems.size})
-              </Button>
-              <Button 
-                variant="ghost" 
-                size="sm" 
                 onClick={() => setSelectedItems(new Set())}
-                className="h-8 rounded-lg text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+                className="h-8 rounded-lg text-xs text-slate-400 hover:bg-slate-800 hover:text-white"
               >
                 إلغاء التحديد
               </Button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
-              <Card className="border border-indigo-500/15 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-2xl shadow-sm p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider">اللوحات المحددة</span>
-                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">{selectedItemsStats.totalCount}</span>
-                <span className="text-[10px] text-muted-foreground mt-1">لوحة محددة</span>
+              <Card className="border border-amber-500/20 bg-slate-900/90 rounded-2xl shadow-sm p-4 flex flex-col justify-between">
+                <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">اللوحات المحددة</span>
+                <span className="text-2xl font-black text-amber-400 mt-1">{selectedItemsStats.totalCount}</span>
+                <span className="text-[10px] text-slate-400 mt-1">لوحة محددة</span>
               </Card>
-              <Card className="border border-indigo-500/15 bg-indigo-500/10 dark:bg-indigo-500/5 rounded-2xl shadow-sm p-4 flex flex-col justify-between">
-                <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold uppercase tracking-wider">مساحة المحددة</span>
-                <span className="text-2xl font-black text-indigo-600 dark:text-indigo-400 mt-1">
+              <Card className="border border-amber-500/20 bg-slate-900/90 rounded-2xl shadow-sm p-4 flex flex-col justify-between">
+                <span className="text-[10px] text-amber-400 font-bold uppercase tracking-wider">مساحة المحددة</span>
+                <span className="text-2xl font-black text-amber-400 mt-1">
                   {selectedItemsStats.totalArea.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
                 </span>
-                <span className="text-[10px] text-muted-foreground mt-1">
+                <span className="text-[10px] text-slate-400 mt-1">
                   {customSettings.calc_meters_by_faces === 'true' ? 'محتسباً بعدد الأوجه' : 'مساحة الوجه الواحد'}
                 </span>
               </Card>
               {selectedItemsStats.sizeStats.map(stat => (
-                <Card key={stat.size} className="border border-border/15 bg-card/40 backdrop-blur-md rounded-2xl shadow-sm p-4 flex flex-col justify-between relative overflow-hidden">
-                  <div className="absolute top-0 left-0 w-full h-[2px] bg-indigo-500/40" />
-                  <span className="text-[10px] text-muted-foreground font-bold truncate" title={stat.size}>{stat.size}</span>
-                  <span className="text-xl font-bold text-foreground mt-1">{stat.count} <span className="text-xs font-normal text-muted-foreground">لوحات</span></span>
-                  <span className="text-[11px] text-indigo-600 dark:text-indigo-400 font-semibold mt-1">
+                <Card key={stat.size} className="border border-slate-800 bg-slate-900/90 rounded-2xl shadow-sm p-4 flex flex-col justify-between relative overflow-hidden">
+                  <div className="absolute top-0 left-0 w-full h-[2px] bg-amber-500/40" />
+                  <span className="text-[10px] text-slate-400 font-bold truncate" title={stat.size}>{stat.size}</span>
+                  <span className="text-xl font-bold text-slate-100 mt-1">{stat.count} <span className="text-xs font-normal text-slate-400">لوحات</span></span>
+                  <span className="text-[11px] text-amber-400 font-semibold mt-1">
                     {stat.totalMeters.toLocaleString('en-US', { maximumFractionDigits: 2 })} م²
                   </span>
                 </Card>
@@ -3035,19 +3115,17 @@ export default function MunicipalityBillboardOrganizer() {
         )}
 
         {/* ─── Action Toolbar ─── */}
-        <div className="flex items-center gap-2 flex-wrap p-3 rounded-2xl bg-card/40 border border-border/10 backdrop-blur-md shadow-sm">
+        <div className="flex items-center gap-2 flex-wrap p-3 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md shadow-lg">
           {/* Group: Add/Import */}
           <div className="flex items-center gap-1.5">
-            {/* Primary: Add new with photo */}
             <Button
               onClick={openAddDialog}
               size="sm"
-              className="h-9 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 text-white shadow shadow-indigo-600/20 gap-2 font-semibold"
+              className="h-9 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black shadow-lg shadow-amber-500/20 gap-2"
             >
               <Plus className="h-4 w-4" />
               إضافة لوحة
             </Button>
-            {/* Camera: photo import shortcut */}
             <input
               ref={batchPhotoInputRef}
               type="file"
@@ -3060,7 +3138,7 @@ export default function MunicipalityBillboardOrganizer() {
               onClick={() => batchPhotoInputRef.current?.click()}
               size="sm"
               variant="outline"
-              className="h-9 rounded-xl border-violet-500/25 bg-violet-500/8 text-violet-600 dark:text-violet-400 hover:bg-violet-500/15 hover:border-violet-500/40 gap-1.5 font-medium"
+              className="h-9 rounded-xl border-slate-700 bg-slate-950 text-amber-400 hover:bg-slate-800 gap-1.5 font-bold"
               title="استيراد صورة ميدانية واستخراج إحداثياتها تلقائياً"
             >
               <Camera className="h-4 w-4" />
@@ -3710,7 +3788,10 @@ export default function MunicipalityBillboardOrganizer() {
         items={currentCollection.items}
         initialIndex={overlayEditorIndex}
         onSaveItemOverlay={handleSaveItemOverlay}
+        onSaveCoordinates={handleBillboardLocationChange}
+        onUpdateItemDetails={handleUpdateItemDetails}
         sizeCutoutMap={sizeCutoutMap}
+        availableSizes={dbSizes}
       />
 
       {/* Batch Photos Import Dialog */}
@@ -4485,7 +4566,7 @@ export default function MunicipalityBillboardOrganizer() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
                     <div className="flex items-center justify-between p-3 border border-border/15 rounded-xl bg-background/40">
                       <Label htmlFor="faces_count_show" className="text-xs font-bold text-muted-foreground">عرض الأوجه</Label>
                       <Switch 
@@ -4505,6 +4586,17 @@ export default function MunicipalityBillboardOrganizer() {
                     <div className="flex items-center justify-between p-3 border border-border/15 rounded-xl bg-background/40">
                       <Label htmlFor="show_height_in_print" className="text-xs font-bold text-muted-foreground">عرض الارتفاع</Label>
                       <Switch id="show_height_in_print" checked={showHeightInPrint} onCheckedChange={setShowHeightInPrint} />
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 border border-border/15 rounded-xl bg-background/40">
+                      <Label htmlFor="show_size_dimension_labels" className="text-xs font-bold text-muted-foreground">كلمات المقاس (طول/عرض)</Label>
+                      <Switch 
+                        id="show_size_dimension_labels" 
+                        checked={customSettings.show_size_dimension_labels === 'true'} 
+                        onCheckedChange={async (v) => {
+                          await saveSettings({ show_size_dimension_labels: v ? 'true' : 'false' });
+                        }} 
+                      />
                     </div>
                   </div>
                 </div>

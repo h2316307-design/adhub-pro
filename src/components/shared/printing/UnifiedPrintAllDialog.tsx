@@ -36,6 +36,7 @@ export interface BillboardPrintItem {
   has_cutout?: boolean;
   contract_number?: number | string | null;
   ad_type?: string | null;
+  overlay_config?: any;
 }
 
 export interface UnifiedPrintAllDialogProps {
@@ -86,7 +87,23 @@ export function UnifiedPrintAllDialog({
   const [respectCityLimits, setRespectCityLimits] = useState(false);
   const [showWhatsAppInput, setShowWhatsAppInput] = useState(false);
   const [manualPhone, setManualPhone] = useState('');
-  const [showInstalledImages, setShowInstalledImages] = useState(false);
+  const [sizeCutoutMap, setSizeCutoutMap] = useState<Record<string, string>>({});
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await supabase.from('sizes').select('name, image_url');
+        if (data) {
+          const map: Record<string, string> = {};
+          data.forEach((s: any) => {
+            if (s.name && s.image_url) {
+              map[s.name.trim()] = s.image_url;
+            }
+          });
+          setSizeCutoutMap(map);
+        }
+      } catch (e) { /* ignore */ }
+    })();
+  }, []);
   const [installedImagesData, setInstalledImagesData] = useState<Record<number, { face_a?: string; face_b?: string }>>({});
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
   const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
@@ -95,6 +112,47 @@ export function UnifiedPrintAllDialog({
   const [showBillboardStatusOpt, setShowBillboardStatusOpt] = useState(false);
   const [printCityInsteadOfMunicipality, setPrintCityInsteadOfMunicipality] = useState(false);
   const [showBackgroundOptions, setShowBackgroundOptions] = useState(false);
+  const [showSizeDimensionLabels, setShowSizeDimensionLabels] = useState(false);
+
+  const parseDimensions = (sizeStr: string) => {
+    if (!sizeStr) return { length: '', width: '', height: '' };
+    const cleaned = sizeStr.replace(/متر/g, '').replace(/م/g, '').trim();
+    const parts = cleaned.split(/[×xX*]/).map(p => p.trim()).filter(Boolean);
+    return {
+      length: parts[0] || '',
+      width: parts[1] || '',
+      height: parts[2] || '',
+    };
+  };
+
+  const generatePrintedSizeHtml = (sizeStr: string, showHeight: boolean, showLabels: boolean = false) => {
+    if (!sizeStr) return '';
+    const dims = parseDimensions(sizeStr);
+    if (!dims.length && !dims.width && !dims.height) return sizeStr;
+
+    const showH = showHeight && !!dims.height;
+    
+    return `
+      <div class="print-size-container">
+        <div class="print-dim-col">
+          ${showLabels ? `<div class="print-dim-label">طول</div>` : ''}
+          <div class="print-dim-value">${dims.length || '-'}</div>
+        </div>
+        <div class="print-dim-separator">×</div>
+        <div class="print-dim-col">
+          ${showLabels ? `<div class="print-dim-label">عرض</div>` : ''}
+          <div class="print-dim-value">${dims.width || '-'}</div>
+        </div>
+        ${showH ? `
+          <div class="print-dim-separator">×</div>
+          <div class="print-dim-col">
+            ${showLabels ? `<div class="print-dim-label">ارتفاع</div>` : ''}
+            <div class="print-dim-value">${dims.height}</div>
+          </div>
+        ` : ''}
+      </div>
+    `;
+  };
   
   const { settings: customSettings, loading: settingsLoading } = usePrintCustomization();
   const { 
@@ -411,20 +469,57 @@ export function UnifiedPrintAllDialog({
         ? `${getContextLabel()} رقم: ${itemContractNumber}${customerCompanyText ? ' - الزبون: ' + customerCompanyText : ''}${itemAdType ? ' - نوع الإعلان: ' + itemAdType : ''}`
         : (itemAdType ? `${customerCompanyText ? 'الزبون: ' + customerCompanyText + ' - ' : ''}نوع الإعلان: ${itemAdType}` : customerCompanyText ? `الزبون: ${customerCompanyText}` : '');
 
-      // تحديد الصورة الرئيسية: صورة اللوحة أو صورة الدبوس (الدبوس فقط في تنظيم البلديات)
+      // تحديد الصورة الرئيسية والتراكب المفرغ إن وجد
       const hasMainImage = !!mainImage;
       const showPinFallback = contextType !== 'contract' && contextType !== 'offer' && contextType !== 'installation' && contextType !== 'removal';
-      const imageSection = hasMainImage
-        ? `<img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />`
-        : (showPinFallback
-          ? `<div class="pin-fallback">
-              <img src="${pinSvgDataUrl}" alt="دبوس اللوحة" style="width: 80px; height: auto; margin-bottom: 8px;" />
-              <div style="font-size: 11px; color: #666; direction: ltr;">${coords || 'لا توجد إحداثيات'}</div>
-            </div>`
-          : `<div class="pin-fallback">
-              <div style="font-size: 13px; color: #999; direction: rtl;">لا توجد صورة</div>
-              <div style="font-size: 11px; color: #666; direction: ltr; margin-top: 4px;">${coords || 'لا توجد إحداثيات'}</div>
-            </div>`);
+      
+      const ov = item.overlay_config || billboard?.overlay_config;
+      const isOverlayActive = ov && ov.enabled !== false;
+      const sizeKey = size?.trim() || '';
+      const sizeCutoutUrl = sizeCutoutMap[sizeKey] || sizeCutoutMap[sizeKey.replace(/×/g, 'x').replace(/X/g, 'x')] || null;
+      const activeCutout = ov?.cutout_image_url || sizeCutoutUrl || null;
+      
+      let imageSection = '';
+      if (hasMainImage && isOverlayActive) {
+        const x = ov?.x_pct ?? 50;
+        const y = ov?.y_pct ?? 50;
+        const scale = (ov?.scale_pct ?? 100) / 100;
+        const rot = ov?.rotation_deg ?? 0;
+        const isV2 = ov?.anchor_version === 'v2';
+        const translateY = isV2 ? '-100%' : '-50%';
+        const transformOrigin = isV2 ? 'bottom center' : 'center center';
+        
+        imageSection = `
+          <div class="overlay-container" style="position: relative; width: 100%; height: 100%; overflow: hidden; background: #fafafa;">
+            <img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
+            ${activeCutout ? `
+              <img src="${activeCutout}" class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="
+                position: absolute;
+                left: ${x}%;
+                top: ${y}%;
+                width: 27.15%;
+                height: auto;
+                display: block;
+                transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg);
+                transform-origin: ${transformOrigin};
+                z-index: 10;
+              " />
+            ` : ''}
+          </div>
+        `;
+      } else if (hasMainImage) {
+        imageSection = `<img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />`;
+      } else if (showPinFallback) {
+        imageSection = `<div class="pin-fallback">
+            <img src="${pinSvgDataUrl}" alt="دبوس اللوحة" style="width: 80px; height: auto; margin-bottom: 8px;" />
+            <div style="font-size: 11px; color: #666; direction: ltr;">${coords || 'لا توجد إحداثيات'}</div>
+          </div>`;
+      } else {
+        imageSection = `<div class="pin-fallback">
+            <div style="font-size: 13px; color: #999; direction: rtl;">لا توجد صورة</div>
+            <div style="font-size: 11px; color: #666; direction: ltr; margin-top: 4px;">${coords || 'لا توجد إحداثيات'}</div>
+          </div>`;
+      }
 
       pages.push(`
         <div class="page">
@@ -457,7 +552,7 @@ export function UnifiedPrintAllDialog({
           ` : ''}
 
           <div class="absolute-field size" style="top: ${toCssLength(s.size_top)}; left: calc(${s.size_left} - 40mm${s.size_offset_x && s.size_offset_x !== '0mm' ? ` + ${s.size_offset_x}` : ''}); width: 80mm; text-align: ${s.size_alignment || 'center'}; font-size: ${s.size_font_size}; font-weight: ${s.size_font_weight}; color: ${s.size_color};">
-            ${size}
+            ${generatePrintedSizeHtml(size, false, showSizeDimensionLabels)}
           </div>
           
           <div class="absolute-field faces-count" style="top: calc(${toCssLength(s.size_top)} + ${toCssLength(s.faces_count_top)}); left: calc(${s.size_left} - 40mm${s.size_offset_x && s.size_offset_x !== '0mm' ? ` + ${s.size_offset_x}` : ''}); width: 80mm; text-align: ${s.size_alignment || 'center'}; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color};">
@@ -687,6 +782,56 @@ export function UnifiedPrintAllDialog({
       <body>
         ${pages.join('\n')}
         <script>
+          function adjustOverlayPositions() {
+            var containers = document.querySelectorAll('.overlay-container');
+            containers.forEach(function(container) {
+              var bgImg = container.querySelector('.billboard-image');
+              var cutoutImg = container.querySelector('.overlay-cutout');
+              if (!bgImg || !cutoutImg) return;
+
+              var cw = container.clientWidth;
+              var ch = container.clientHeight;
+              var nw = bgImg.naturalWidth;
+              var nh = bgImg.naturalHeight;
+              if (!cw || !ch || !nw || !nh) return;
+
+              var imgRatio = nw / nh;
+              var boxRatio = cw / ch;
+
+              var renderW = cw;
+              var renderH = ch;
+              var renderLeft = 0;
+              var renderTop = 0;
+
+              if (imgRatio > boxRatio) {
+                renderH = cw / imgRatio;
+                renderTop = (ch - renderH) / 2;
+              } else {
+                renderW = ch * imgRatio;
+                renderLeft = (cw - renderW) / 2;
+              }
+
+              var xPct = parseFloat(cutoutImg.getAttribute('data-x') || '50');
+              var yPct = parseFloat(cutoutImg.getAttribute('data-y') || '50');
+              var scale = parseFloat(cutoutImg.getAttribute('data-scale') || '1');
+              var rot = parseFloat(cutoutImg.getAttribute('data-rot') || '0');
+              var isV2 = cutoutImg.getAttribute('data-anchor') === 'v2';
+
+              var overlayLeftPx = renderLeft + (xPct / 100) * renderW;
+              var overlayTopPx = renderTop + (yPct / 100) * renderH;
+              var overlayWidthPx = (27.15 / 100) * renderW;
+
+              var translateY = isV2 ? '-100%' : '-50%';
+              var transformOrigin = isV2 ? 'bottom center' : 'center center';
+
+              cutoutImg.style.left = overlayLeftPx + 'px';
+              cutoutImg.style.top = overlayTopPx + 'px';
+              cutoutImg.style.width = overlayWidthPx + 'px';
+              cutoutImg.style.transform = 'translate(-50%, ' + translateY + ') scale(' + scale + ') rotate(' + rot + 'deg)';
+              cutoutImg.style.transformOrigin = transformOrigin;
+            });
+          }
+
           document.fonts.ready.then(function() {
             var images = document.querySelectorAll('img');
             var loadedCount = 0;
@@ -694,10 +839,12 @@ export function UnifiedPrintAllDialog({
             function checkAllLoaded() {
               loadedCount++;
               if (loadedCount >= totalImages) {
+                adjustOverlayPositions();
                 setTimeout(function() { window.print(); }, 300);
               }
             }
             if (totalImages === 0) {
+              adjustOverlayPositions();
               setTimeout(function() { window.print(); }, 300);
             } else {
               images.forEach(function(img) {
@@ -1480,6 +1627,17 @@ export function UnifiedPrintAllDialog({
               />
               <Label htmlFor="showTeamName" className="cursor-pointer flex-1">
                 إظهار اسم الفريق المختار
+              </Label>
+            </div>
+
+            <div className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted/50 transition-colors bg-amber-500/10 border border-amber-500/20">
+              <Checkbox
+                id="showSizeDimensionLabels"
+                checked={showSizeDimensionLabels}
+                onCheckedChange={(c) => setShowSizeDimensionLabels(!!c)}
+              />
+              <Label htmlFor="showSizeDimensionLabels" className="cursor-pointer flex-1 text-xs font-bold text-amber-200">
+                إظهار الكلمات فوق المقاس (طول، عرض، ارتفاع) - معطّل افتراضياً
               </Label>
             </div>
 

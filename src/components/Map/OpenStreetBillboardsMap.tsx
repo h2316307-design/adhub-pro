@@ -10,10 +10,12 @@ import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
 import type { SatelliteProvider } from "@/types/map";
 import { SATELLITE_TILE_URLS, SATELLITE_PROVIDERS } from "@/types/map";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, Layers, Locate, Map as MapIcon, ChevronDown, ChevronUp, X, Satellite, Camera } from "lucide-react";
+import { ZoomIn, ZoomOut, Layers, Locate, Map as MapIcon, ChevronDown, ChevronUp, X, Satellite, Camera, Route, Sparkles, Navigation, ExternalLink } from "lucide-react";
 import { useFieldPhotos, type FieldPhoto } from '@/hooks/useFieldPhotos';
 import { buildPhotoInfoCard, computeDestination, CAMERA_ICON_HTML, ARROW_ICON_SVG } from './FieldPhotoMarkers';
 import { escapeHtml as esc, jsonForHtmlAttr } from '@/utils/escapeHtml';
+import { SmartRoutePlannerModal } from "./SmartRoutePlannerModal";
+import type { RouteOptimizationResult } from "@/utils/routeOptimizer";
 
 // Add critical CSS for popup z-index
 const popupStyles = `
@@ -383,9 +385,81 @@ export default function OpenStreetBillboardsMap({ billboards, className, onReady
     [fieldPhotos]
   );
   
-  // Field photos layer refs
-  const photoMarkersLayerRef = useRef<L.LayerGroup | null>(null);
-  
+  // Smart Inspection Route State
+  const [showRoutePlannerModal, setShowRoutePlannerModal] = useState(false);
+  const [activeRoute, setActiveRoute] = useState<RouteOptimizationResult | null>(null);
+  const routeLayerRef = useRef<L.LayerGroup | null>(null);
+
+  const handleActivateRouteOnMap = (route: RouteOptimizationResult) => {
+    setActiveRoute(route);
+    if (!mapRef.current) return;
+
+    if (routeLayerRef.current) {
+      routeLayerRef.current.clearLayers();
+    } else {
+      routeLayerRef.current = L.layerGroup().addTo(mapRef.current);
+    }
+
+    const latlngs = route.waypoints.map(w => [w.lat, w.lng] as [number, number]);
+
+    // Outer glowing polyline
+    const glowPoly = L.polyline(latlngs, {
+      color: '#fbbf24',
+      weight: 10,
+      opacity: 0.6,
+    });
+
+    // Inner dashed polyline
+    const mainPoly = L.polyline(latlngs, {
+      color: '#f59e0b',
+      weight: 5,
+      opacity: 0.95,
+      dashArray: '10, 10',
+    });
+
+    routeLayerRef.current.addLayer(glowPoly);
+    routeLayerRef.current.addLayer(mainPoly);
+
+    // Render Waypoint Numbered Badges (#1, #2, #3...)
+    route.waypoints.forEach(wp => {
+      const badgeHtml = `
+        <div style="
+          background: #f59e0b;
+          color: #0f172a;
+          font-weight: 900;
+          font-size: 11px;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 2px solid #ffffff;
+          box-shadow: 0 3px 8px rgba(0,0,0,0.6);
+        ">${wp.order}</div>
+      `;
+
+      const icon = L.divIcon({
+        html: badgeHtml,
+        className: 'route-waypoint-badge',
+        iconSize: [24, 24],
+        iconAnchor: [-8, 30],
+      });
+
+      const marker = L.marker([wp.lat, wp.lng], { icon, zIndexOffset: 2000 });
+      routeLayerRef.current?.addLayer(marker);
+    });
+
+    mapRef.current.fitBounds(L.latLngBounds(latlngs), { padding: [60, 60] });
+  };
+
+  const handleClearRoute = () => {
+    setActiveRoute(null);
+    if (routeLayerRef.current) {
+      routeLayerRef.current.clearLayers();
+    }
+  };
+
   // Track if initial fit was done to prevent refitting on selection changes
   const initialFitDoneRef = useRef(false);
   const prevPointsLengthRef = useRef(0);
@@ -1162,7 +1236,71 @@ export default function OpenStreetBillboardsMap({ billboards, className, onReady
             <span className="text-[10px]">{isFetchingFieldPhotos ? '...' : showFieldPhotos ? '✓' : ''}</span>
           </button>
         </div>
+
+        {/* Smart Inspection Route Planner Toggle */}
+        <div className="mt-2 bg-[#1a1a2e]/95 backdrop-blur-sm rounded-xl shadow-lg border border-amber-500/40 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setShowRoutePlannerModal(true)}
+            className="w-full flex items-center justify-between gap-2 px-3 py-2 text-amber-400 hover:bg-amber-500/20 transition-all font-bold text-xs cursor-pointer"
+          >
+            <div className="flex items-center gap-2">
+              <Route className="h-4 w-4 text-amber-400" />
+              <span>مسار المعاينة الذكي</span>
+            </div>
+            <Sparkles className="h-3.5 w-3.5 text-amber-400" />
+          </button>
+        </div>
+
+        {/* Active Route Floating Bar */}
+        {activeRoute && (
+          <div className="mt-2 p-2.5 bg-slate-950/95 backdrop-blur-md rounded-xl border border-amber-500/50 text-slate-100 shadow-xl space-y-1.5 dir-rtl">
+            <div className="text-[11px] font-black text-amber-400 flex items-center justify-between">
+              <span className="flex items-center gap-1">
+                <Route className="h-3.5 w-3.5" />
+                مسار رحلة المعاينة ({activeRoute.waypoints.length} لوحة)
+              </span>
+              <button
+                type="button"
+                onClick={handleClearRoute}
+                className="p-0.5 text-slate-400 hover:text-rose-400 cursor-pointer"
+                title="إلغاء مسار الرحلة"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-300">
+              <span className="flex items-center gap-1">
+                <Navigation className="h-3 w-3 text-emerald-400" />
+                <span>{activeRoute.totalDistanceKm} كم</span>
+              </span>
+              <span className="flex items-center gap-1">
+                <Clock className="h-3 w-3 text-sky-400" />
+                <span>{activeRoute.totalTimeMins} دقيقة</span>
+              </span>
+            </div>
+
+            <a
+              href={activeRoute.googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-1 py-1 px-2 bg-emerald-500 hover:bg-emerald-600 text-slate-950 rounded-lg text-[10px] font-extrabold shadow-sm transition-all"
+            >
+              <ExternalLink className="h-3 w-3" />
+              <span>فتح الملاحة في Google Maps</span>
+            </a>
+          </div>
+        )}
       </div>
+
+      {/* Smart Route Planner Dialog */}
+      <SmartRoutePlannerModal
+        open={showRoutePlannerModal}
+        onOpenChange={setShowRoutePlannerModal}
+        billboards={billboards}
+        onActivateRouteOnMap={handleActivateRouteOnMap}
+      />
 
       {/* Stats badge matching Google Maps */}
       <div className="absolute bottom-6 left-4 z-[1000]">

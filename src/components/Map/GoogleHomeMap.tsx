@@ -2754,10 +2754,177 @@ export default function GoogleHomeMap({
     return () => { cancelled = true; };
   }, [selectedBillboardForCard]);
 
+  const handleSmartRouteChange = useCallback((routePoints: any[]) => {
+    if (mapProvider !== 'google' || !googleMapInstanceRef.current || !window.google?.maps) return;
+    
+    if (googleSmartRouteLineRef.current) {
+      googleSmartRouteLineRef.current.setMap(null);
+      googleSmartRouteLineRef.current = null;
+    }
+    googleSmartRouteRenderersRef.current.forEach(r => { try { r.setMap(null); } catch(e) {} });
+    googleSmartRouteRenderersRef.current = [];
+    googleSmartRouteMarkersRef.current.forEach(m => { try { m.setMap(null); } catch(e) {} });
+    googleSmartRouteMarkersRef.current = [];
+    
+    if (!routePoints || routePoints.length === 0) return;
+    
+    const map = googleMapInstanceRef.current;
+    
+    routePoints.forEach((point, index) => {
+      const count = (point as any).billboardCount || 1;
+      const label = count > 1 ? `${index + 1} (${count})` : `${index + 1}`;
+      const size = count > 1 ? 36 : 28;
+      const fontSize = count > 1 ? 10 : 12;
+      const numberSvg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="${size/2}" cy="${size/2}" r="${size/2-1}" fill="#f59e0b" stroke="#fff" stroke-width="2"/>
+        <text x="${size/2}" y="${size/2 + fontSize/3}" text-anchor="middle" fill="#fff" font-size="${fontSize}" font-weight="bold" font-family="Arial">${label}</text>
+      </svg>`;
+      
+      const marker = new google.maps.Marker({
+        position: { lat: point.lat, lng: point.lng },
+        map,
+        icon: {
+          url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(numberSvg),
+          scaledSize: new google.maps.Size(size, size),
+          anchor: new google.maps.Point(size/2, size/2),
+        },
+        zIndex: 700,
+        title: point.name,
+      });
+      googleSmartRouteMarkersRef.current.push(marker);
+    });
+    
+    const directionsService = new google.maps.DirectionsService();
+    const MAX_WAYPOINTS = 23;
+    
+    const batches: { origin: google.maps.LatLngLiteral; destination: google.maps.LatLngLiteral; waypoints: google.maps.DirectionsWaypoint[] }[] = [];
+    
+    for (let i = 0; i < routePoints.length - 1; i += MAX_WAYPOINTS + 1) {
+      const batchEnd = Math.min(i + MAX_WAYPOINTS + 2, routePoints.length);
+      const batchPoints = routePoints.slice(i, batchEnd);
+      if (batchPoints.length < 2) continue;
+      
+      batches.push({
+        origin: { lat: batchPoints[0].lat, lng: batchPoints[0].lng },
+        destination: { lat: batchPoints[batchPoints.length - 1].lat, lng: batchPoints[batchPoints.length - 1].lng },
+        waypoints: batchPoints.slice(1, -1).map(p => ({
+          location: { lat: p.lat, lng: p.lng },
+          stopover: true,
+        })),
+      });
+    }
+    
+    const fallbackToPolyline = () => {
+      const path = routePoints.map(p => ({ lat: p.lat, lng: p.lng }));
+      const glowLine = new google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: '#3b82f6',
+        strokeOpacity: 0.22,
+        strokeWeight: 14,
+        map,
+        zIndex: 599
+      });
+      googleSmartRouteMarkersRef.current.push(glowLine as any);
+
+      googleSmartRouteLineRef.current = new google.maps.Polyline({
+        path,
+        geodesic: true,
+        strokeColor: '#3b82f6',
+        strokeOpacity: 0,
+        strokeWeight: 4,
+        map,
+        zIndex: 600,
+        icons: [{
+          icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, strokeColor: '#3b82f6', scale: 4 },
+          offset: '0',
+          repeat: '20px',
+        }, {
+          icon: {
+            path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
+            strokeOpacity: 0.8, strokeColor: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.8, scale: 3,
+          },
+          offset: '50%',
+          repeat: '200px',
+        }],
+      });
+    };
+    
+    let successCount = 0;
+    batches.forEach((batch, batchIdx) => {
+      directionsService.route({
+        origin: batch.origin,
+        destination: batch.destination,
+        waypoints: batch.waypoints,
+        travelMode: google.maps.TravelMode.DRIVING,
+        optimizeWaypoints: false,
+      }, (result, status) => {
+        if (status === google.maps.DirectionsStatus.OK && result) {
+          const path = result.routes[0].overview_path;
+          const glowLine = new google.maps.Polyline({
+            path,
+            geodesic: true,
+            strokeColor: '#f59e0b',
+            strokeOpacity: 0.22,
+            strokeWeight: 14,
+            map,
+            zIndex: 599
+          });
+          googleSmartRouteMarkersRef.current.push(glowLine as any);
+
+          const renderer = new google.maps.DirectionsRenderer({
+            map,
+            directions: result,
+            suppressMarkers: true,
+            polylineOptions: {
+              strokeColor: '#f59e0b',
+              strokeOpacity: 0.9,
+              strokeWeight: 5,
+              zIndex: 600,
+            },
+            preserveViewport: batchIdx > 0,
+          });
+          googleSmartRouteRenderersRef.current.push(renderer);
+          successCount++;
+        } else {
+          console.warn('DirectionsService failed for batch', batchIdx, status);
+          if (batchIdx === 0 && successCount === 0) {
+            fallbackToPolyline();
+          }
+        }
+      });
+    });
+    
+    const bounds = new google.maps.LatLngBounds();
+    routePoints.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
+    map.fitBounds(bounds, { top: 100, bottom: 50, left: 50, right: 50 });
+  }, [mapProvider]);
+
   const outerBB: any = selectedBillboardForCard;
   const isCompareMode = outerBB ? (!!outerBB.comparisonMatch || outerBB.isComparison) : false;
   const cardWidth = isCompareMode ? 940 : 740;
   const halfWidth = cardWidth / 2;
+  const activeCardScreenPos = cardScreenPos || (selectedBillboardForCard as any)?.cardScreenPos;
+  const containerW = containerRef.current?.clientWidth || (typeof window !== 'undefined' ? window.innerWidth : 1200);
+  const arrowPointerLeft = activeCardScreenPos
+    ? Math.max(18, Math.min(cardWidth - 18, activeCardScreenPos.x - Math.max(12, Math.min(containerW - (cardWidth + 12), activeCardScreenPos.x - halfWidth)))) - 7
+    : 0;
+  const mapContainerHeight = isFullscreen ? '100vh' : (isMobile ? '100%' : '700px');
+  const mapContainerMinHeight = isMobile ? '380px' : '700px';
+
+  const leafletMapStyle: React.CSSProperties = {
+    height: mapContainerHeight,
+    minHeight: mapContainerMinHeight,
+    width: '100%',
+    display: mapProvider === 'openstreetmap' ? 'block' : 'none',
+  };
+
+  const googleMapStyle: React.CSSProperties = {
+    height: mapContainerHeight,
+    minHeight: mapContainerMinHeight,
+    width: '100%',
+    display: mapProvider === 'google' ? 'block' : 'none',
+  };
 
   return (
     <div 
@@ -2839,7 +3006,7 @@ export default function GoogleHomeMap({
             </div>
           ) : (
             /* ── Desktop 3-column grid ── */
-            <div className="grid pointer-events-none" style={{ gridTemplateColumns: '1fr auto 1fr', alignItems: 'start', gap: '8px' }}>
+            <div className="grid pointer-events-none" style={{ gridTemplateColumns: 'auto 1fr auto', alignItems: 'center', gap: '12px' }}>
               {isDraggingPin && (
                 <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[9999] bg-gradient-to-r from-amber-600 via-amber-700 to-amber-800 text-white font-extrabold px-6 py-3 rounded-2xl shadow-2xl border-2 border-amber-300 backdrop-blur-xl flex items-center gap-3 animate-pulse pointer-events-none">
                   <MapPin className="h-6 w-6 text-amber-200 animate-bounce" />
@@ -2848,7 +3015,7 @@ export default function GoogleHomeMap({
               )}
 
               {/* Col-1 LEFT: hint popover */}
-              <div className="flex items-start pointer-events-auto">
+              <div className="flex items-center pointer-events-auto">
                 {!isMultiSelectMode && (
                   <Popover>
                     <PopoverTrigger asChild>
@@ -2890,7 +3057,7 @@ export default function GoogleHomeMap({
 
               {/* Col-2 CENTER: search + chips */}
               {!externalSearchQuery && (
-                <div className="flex flex-col gap-1.5 pointer-events-auto min-w-[280px] max-w-[380px] w-full">
+                <div className="flex flex-col items-center gap-1.5 pointer-events-auto min-w-[320px] max-w-[500px] w-full mx-auto">
                   <MapSearchBar
                     value={searchQuery}
                     onChange={setSearchQuery}
@@ -2898,9 +3065,9 @@ export default function GoogleHomeMap({
                     billboards={billboards}
                     onSelectBillboard={focusOnBillboard}
                     onNavigateToCoords={navigateToCoords}
-                    placeholder="ابحث عن لوحة، منطقة، إحداثيات..."
+                    placeholder="ابحث عن لوحة، شارع، منطقة، معلم..."
                   />
-                  <div className="flex items-center justify-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar">
+                  <div className="flex items-center justify-center gap-1.5 overflow-x-auto py-0.5 no-scrollbar w-full">
                     {nearbyCount > 0 && (
                       <span className="px-2.5 py-1 rounded-full text-[9px] font-extrabold bg-green-500/10 border border-green-500/20 text-green-400 animate-pulse flex items-center gap-1 shrink-0">
                         <span className="w-1 h-1 rounded-full bg-green-400" />
@@ -2917,14 +3084,14 @@ export default function GoogleHomeMap({
                       return (
                         <button key={chip.key}
                           onClick={() => setLocalStatusFilter(prev => prev.includes(chip.key) ? prev.filter(k => k !== chip.key) : [...prev, chip.key])}
-                          className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all shrink-0 ${ isActive ? 'bg-amber-600 border-amber-500 text-white shadow-md' : `${chip.color} hover:bg-white/5` }`}
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold border transition-all shrink-0 cursor-pointer ${ isActive ? 'bg-amber-600 border-amber-500 text-white shadow-md' : `${chip.color} hover:bg-white/5` }`}
                           style={{ fontFamily: 'Tajawal, sans-serif' }}
                         >{chip.label}</button>
                       );
                     })}
                     {localStatusFilter.length > 0 && (
                       <button onClick={() => setLocalStatusFilter([])}
-                        className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white shrink-0"
+                        className="px-2 py-1 rounded-full text-[9px] font-bold bg-slate-800 text-slate-400 border border-slate-700 hover:text-white shrink-0 cursor-pointer"
                         style={{ fontFamily: 'Tajawal, sans-serif' }}
                       >إلغاء</button>
                     )}
@@ -2934,7 +3101,7 @@ export default function GoogleHomeMap({
               {externalSearchQuery && <div />/* spacer col-2 */}
 
               {/* Col-3 RIGHT: action buttons */}
-              <div className="flex items-start justify-end gap-2 pointer-events-auto">
+              <div className="flex items-center justify-end gap-2 pointer-events-auto">
                 {/* Pin Lock/Unlock toggle for movement protection */}
                 <button
                   onClick={() => {
@@ -2946,7 +3113,7 @@ export default function GoogleHomeMap({
                       toast.success('🔒 تم قفل تحريك اللوحات — المواقع آمنة الآن من أي سحب غير مقصود');
                     }
                   }}
-                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold whitespace-nowrap cursor-pointer ${
+                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3 py-2 text-xs font-extrabold whitespace-nowrap cursor-pointer ${
                     isPinDragEnabled
                       ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_15px_rgba(245,158,11,0.4)] animate-pulse'
                       : 'bg-slate-950/85 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-400'
@@ -2964,7 +3131,7 @@ export default function GoogleHomeMap({
                     setIsMultiSelectMode(!isMultiSelectMode);
                     if (isMultiSelectMode) { setSelectedBillboardIds(new Set()); setIsDrawingMode(false); setDrawingPoints([]); }
                   }}
-                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3 py-2 text-xs font-extrabold whitespace-nowrap cursor-pointer ${
                     isMultiSelectMode
                       ? 'bg-amber-600 border-amber-500 text-white shadow-[0_0_12px_rgba(245,158,11,0.3)] animate-pulse'
                       : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-amber-500/20 hover:border-amber-500/50 hover:text-amber-500'
@@ -2982,7 +3149,7 @@ export default function GoogleHomeMap({
                     if (isDrawingMode) { setIsDrawingMode(false); setDrawingPoints([]); }
                     else { setIsDrawingMode(true); setDrawingPoints([]); setIsMultiSelectMode(true); }
                   }}
-                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3.5 py-2.5 text-xs font-extrabold whitespace-nowrap ${
+                  className={`flex items-center justify-center gap-1.5 rounded-xl transition-all shadow-md border px-3 py-2 text-xs font-extrabold whitespace-nowrap cursor-pointer ${
                     isDrawingMode
                       ? 'bg-indigo-600 border-indigo-500 text-white shadow-[0_0_12px_rgba(99,102,241,0.3)] animate-pulse'
                       : 'bg-slate-950/80 backdrop-blur-md text-slate-300 border-indigo-500/20 hover:border-indigo-500/50 hover:text-indigo-500'
@@ -2994,8 +3161,8 @@ export default function GoogleHomeMap({
                   تحديد بالرسم
                 </button>
 
-                {/* Billboard count badge */}
-                <MapHeader billboardCount={filteredBillboards.length} compact={false} />
+                {/* Billboard count badge (compact glass badge) */}
+                <MapHeader billboardCount={filteredBillboards.length} compact={true} />
               </div>
             </div>
           )}
@@ -3522,153 +3689,7 @@ export default function GoogleHomeMap({
         }}
         onRequestLocation={requestUserLocation}
         onBillboardSelect={onBillboardClick}
-        onSmartRouteChange={(routePoints) => {
-          if (mapProvider !== 'google' || !googleMapInstanceRef.current || !window.google?.maps) return;
-          
-          if (googleSmartRouteLineRef.current) {
-            googleSmartRouteLineRef.current.setMap(null);
-            googleSmartRouteLineRef.current = null;
-          }
-          googleSmartRouteRenderersRef.current.forEach(r => { try { r.setMap(null); } catch(e) {} });
-          googleSmartRouteRenderersRef.current = [];
-          googleSmartRouteMarkersRef.current.forEach(m => { try { m.setMap(null); } catch(e) {} });
-          googleSmartRouteMarkersRef.current = [];
-          
-          if (!routePoints || routePoints.length === 0) return;
-          
-          const map = googleMapInstanceRef.current;
-          
-          routePoints.forEach((point, index) => {
-            const count = (point as any).billboardCount || 1;
-            const label = count > 1 ? `${index + 1} (${count})` : `${index + 1}`;
-            const size = count > 1 ? 36 : 28;
-            const fontSize = count > 1 ? 10 : 12;
-            const numberSvg = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-              <circle cx="${size/2}" cy="${size/2}" r="${size/2-1}" fill="#f59e0b" stroke="#fff" stroke-width="2"/>
-              <text x="${size/2}" y="${size/2 + fontSize/3}" text-anchor="middle" fill="#fff" font-size="${fontSize}" font-weight="bold" font-family="Arial">${label}</text>
-            </svg>`;
-            
-            const marker = new google.maps.Marker({
-              position: { lat: point.lat, lng: point.lng },
-              map,
-              icon: {
-                url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(numberSvg),
-                scaledSize: new google.maps.Size(size, size),
-                anchor: new google.maps.Point(size/2, size/2),
-              },
-              zIndex: 700,
-              title: point.name,
-            });
-            googleSmartRouteMarkersRef.current.push(marker);
-          });
-          
-          const directionsService = new google.maps.DirectionsService();
-          const MAX_WAYPOINTS = 23;
-          
-          const batches: { origin: google.maps.LatLngLiteral; destination: google.maps.LatLngLiteral; waypoints: google.maps.DirectionsWaypoint[] }[] = [];
-          
-          for (let i = 0; i < routePoints.length - 1; i += MAX_WAYPOINTS + 1) {
-            const batchEnd = Math.min(i + MAX_WAYPOINTS + 2, routePoints.length);
-            const batchPoints = routePoints.slice(i, batchEnd);
-            if (batchPoints.length < 2) continue;
-            
-            batches.push({
-              origin: { lat: batchPoints[0].lat, lng: batchPoints[0].lng },
-              destination: { lat: batchPoints[batchPoints.length - 1].lat, lng: batchPoints[batchPoints.length - 1].lng },
-              waypoints: batchPoints.slice(1, -1).map(p => ({
-                location: { lat: p.lat, lng: p.lng },
-                stopover: true,
-              })),
-            });
-          }
-          
-          const fallbackToPolyline = () => {
-            const path = routePoints.map(p => ({ lat: p.lat, lng: p.lng }));
-            // Glowing background polyline
-            const glowLine = new google.maps.Polyline({
-              path,
-              geodesic: true,
-              strokeColor: '#3b82f6',
-              strokeOpacity: 0.22,
-              strokeWeight: 14,
-              map,
-              zIndex: 599
-            });
-            googleSmartRouteMarkersRef.current.push(glowLine as any);
-
-            googleSmartRouteLineRef.current = new google.maps.Polyline({
-              path,
-              geodesic: true,
-              strokeColor: '#3b82f6',
-              strokeOpacity: 0,
-              strokeWeight: 4,
-              map,
-              zIndex: 600,
-              icons: [{
-                icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, strokeColor: '#3b82f6', scale: 4 },
-                offset: '0',
-                repeat: '20px',
-              }, {
-                icon: {
-                  path: google.maps.SymbolPath.FORWARD_CLOSED_ARROW,
-                  strokeOpacity: 0.8, strokeColor: '#3b82f6', fillColor: '#3b82f6', fillOpacity: 0.8, scale: 3,
-                },
-                offset: '50%',
-                repeat: '200px',
-              }],
-            });
-          };
-          
-          let successCount = 0;
-          batches.forEach((batch, batchIdx) => {
-            directionsService.route({
-              origin: batch.origin,
-              destination: batch.destination,
-              waypoints: batch.waypoints,
-              travelMode: google.maps.TravelMode.DRIVING,
-              optimizeWaypoints: false,
-            }, (result, status) => {
-              if (status === google.maps.DirectionsStatus.OK && result) {
-                // Glowing background polyline for directions route
-                const path = result.routes[0].overview_path;
-                const glowLine = new google.maps.Polyline({
-                  path,
-                  geodesic: true,
-                  strokeColor: '#f59e0b',
-                  strokeOpacity: 0.22,
-                  strokeWeight: 14,
-                  map,
-                  zIndex: 599
-                });
-                googleSmartRouteMarkersRef.current.push(glowLine as any);
-
-                const renderer = new google.maps.DirectionsRenderer({
-                  map,
-                  directions: result,
-                  suppressMarkers: true,
-                  polylineOptions: {
-                    strokeColor: '#f59e0b',
-                    strokeOpacity: 0.9,
-                    strokeWeight: 5,
-                    zIndex: 600,
-                  },
-                  preserveViewport: batchIdx > 0,
-                });
-                googleSmartRouteRenderersRef.current.push(renderer);
-                successCount++;
-              } else {
-                console.warn('DirectionsService failed for batch', batchIdx, status);
-                if (batchIdx === 0 && successCount === 0) {
-                  fallbackToPolyline();
-                }
-              }
-            });
-          });
-          
-          const bounds = new google.maps.LatLngBounds();
-          routePoints.forEach(p => bounds.extend({ lat: p.lat, lng: p.lng }));
-          map.fitBounds(bounds, { top: 100, bottom: 50, left: 50, right: 50 });
-        }}
+        onSmartRouteChange={handleSmartRouteChange}
       />
 
       {/* Provider Toggle */}
@@ -3693,24 +3714,8 @@ export default function GoogleHomeMap({
       )}
 
       {/* Map Containers */}
-      <div 
-        ref={leafletMapRef} 
-        style={{ 
-          height: isFullscreen ? '100vh' : (isMobile ? '100%' : '700px'), 
-          minHeight: isMobile ? '380px' : '700px',
-          width: '100%', 
-          display: mapProvider === 'openstreetmap' ? 'block' : 'none' 
-        }} 
-      />
-      <div 
-        ref={googleMapRef} 
-        style={{ 
-          height: isFullscreen ? '100vh' : (isMobile ? '100%' : '700px'), 
-          minHeight: isMobile ? '380px' : '700px',
-          width: '100%', 
-          display: mapProvider === 'google' ? 'block' : 'none' 
-        }} 
-      />
+      <div ref={leafletMapRef} style={leafletMapStyle} />
+      <div ref={googleMapRef} style={googleMapStyle} />
 
       {/* Image Lightbox */}
       {lightboxImage && (
@@ -3819,7 +3824,7 @@ export default function GoogleHomeMap({
               <div
                 className="absolute z-20"
                 style={{
-                  left: Math.max(18, Math.min(cardWidth - 18, cardScreenPos.x - (Math.max(12, Math.min((containerRef.current?.clientWidth || window.innerWidth) - (cardWidth + 12), cardScreenPos.x - halfWidth))) )) - 7,
+                  left: arrowPointerLeft,
                   bottom: -7,
                   width: 14,
                   height: 14,

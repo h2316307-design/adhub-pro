@@ -190,22 +190,22 @@ export function BackgroundSelector({ value, onChange, compact = false }: Backgro
             >
               {/* Flow component container */}
               <div 
-                className="absolute top-[20%] left-1/2 -translate-x-1/2 w-[92%] flex flex-col items-center justify-start gap-3 text-center transition-all duration-200"
+                className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[92%] flex flex-col items-center justify-center gap-3 text-center transition-all duration-200"
               >
                 {/* Logo component */}
-                <div style={{ width: `${logoPercent}%` }} className="flex items-center justify-center transition-all duration-200">
+                <div style={{ width: `${logoPercent}%` }} className="flex items-center justify-center mx-auto text-center transition-all duration-200">
                   <img 
                     src={normalizedLogoUrl} 
                     alt="شعار المعاينة" 
-                    className="w-full h-auto object-contain"
+                    className="w-full h-auto object-contain object-center block mx-auto"
                     onError={(e) => { (e.target as any).src = '/logofaresgold.svg'; }}
                   />
                 </div>
 
                 {/* Text components: Phrase + Municipality Name */}
-                <div className="flex flex-col items-center gap-1 text-center w-full">
-                  <div className="text-[11px] font-black text-slate-900 tracking-wide leading-tight">لوحات بلدية</div>
-                  <div className="text-[13px] font-black text-amber-600 leading-tight">عين زارة / طرابلس</div>
+                <div className="flex flex-col items-center justify-center gap-1 text-center w-full mx-auto">
+                  <div className="text-[11px] font-black text-slate-900 tracking-wide leading-tight text-center w-full">لوحات بلدية</div>
+                  <div className="text-[13px] font-black text-amber-600 leading-tight text-center w-full">عين زارة / طرابلس</div>
                 </div>
               </div>
             </div>
