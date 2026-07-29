@@ -444,7 +444,8 @@ export const InstallationTaskDetail: React.FC<Props> = ({
     if (error) {
       toast.error('فشل في تعميم الوجه');
     } else {
-      toast.success(`تم تعميم "${faces === 1 ? 'وجه واحد' : 'وجهان'}" على ${ids.length} لوحة`);
+      const facesLabel = faces === 1 ? 'وجه واحد' : faces === 2 ? 'وجهان' : `${faces} أوجه`;
+      toast.success(`تم تعميم "${facesLabel}" على ${ids.length} لوحة`);
       onRefreshItems();
     }
   }, [incompleteBillboards, onRefreshItems]);

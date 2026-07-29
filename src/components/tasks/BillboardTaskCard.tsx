@@ -108,7 +108,24 @@ export function BillboardTaskCard({
   const [editingDate, setEditingDate] = useState(item.installation_date || '');
   const [savingDate, setSavingDate] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const [facesToInstall, setFacesToInstall] = useState<number>(item.faces_to_install || (billboard?.Faces_Count || 1));
+  const availableFacesCount = Math.max(1, Number(
+    billboard?.Faces_Count || 
+    billboard?.faces_count || 
+    billboard?.faces || 
+    item?.billboard?.Faces_Count || 
+    item?.billboard?.faces_count || 
+    item?.faces_to_install || 
+    2
+  ));
+  const [facesToInstall, setFacesToInstall] = useState<number>(
+    item.faces_to_install ? Math.min(item.faces_to_install, availableFacesCount) : availableFacesCount
+  );
+
+  useEffect(() => {
+    if (item.faces_to_install !== undefined && item.faces_to_install !== null) {
+      setFacesToInstall(item.faces_to_install);
+    }
+  }, [item.faces_to_install]);
   const [photoHistoryItems, setPhotoHistoryItems] = useState<any[]>([]);
   const [isBranchesExpanded, setIsBranchesExpanded] = useState(false);
   const { confirm: systemConfirm } = useSystemDialog();
@@ -398,12 +415,16 @@ export function BillboardTaskCard({
         .update({ faces_to_install: faces } as any)
         .eq('id', item.id);
       if (error) throw error;
-      toast.success(faces === 1 ? 'تم تحديد الوجه الأمامي فقط' : 'تم تحديد الوجهين');
+      toast.success(
+        faces === 1 ? 'تم تحديد وجه واحد للتركيب' :
+        faces === 2 ? 'تم تحديد وجهين للتركيب' :
+        `تم تحديد ${faces} أوجه للتركيب`
+      );
       onRefresh?.();
     } catch (error) {
       console.error('Error updating faces_to_install:', error);
       toast.error('فشل في تحديث الوجه');
-      setFacesToInstall(item.faces_to_install || billboard?.Faces_Count || 1);
+      setFacesToInstall(item.faces_to_install || availableFacesCount);
     }
   };
 
@@ -639,7 +660,7 @@ export function BillboardTaskCard({
                   ) : null}
                   <div>
                     <div>التاريخ: {photoHistoryItems.find(h => h.reinstall_number === 1)?.installation_date ? format(new Date(photoHistoryItems.find(h => h.reinstall_number === 1).installation_date), 'dd/MM/yyyy', { locale: ar }) : (item.installation_date ? format(new Date(item.installation_date), 'dd/MM/yyyy', { locale: ar }) : 'غير محدد')}</div>
-                    <div className="font-semibold text-foreground">الوجوه: {item.faces_to_install || facesCount || 2} وجه</div>
+                    <div className="font-semibold text-foreground">الوجوه: {item.faces_to_install || availableFacesCount || 2} وجه</div>
                   </div>
                 </div>
                 <Badge variant="outline" className="text-[9px] bg-green-500/10 text-green-600 border-green-500/30 font-bold">مكتملة</Badge>
@@ -1167,7 +1188,7 @@ export function BillboardTaskCard({
                     item.reinstalled_faces === 'both' ? 'وجهين (أمامي وخلفي)' :
                     item.reinstalled_faces === 'face_a' ? 'وجه أمامي (1)' :
                     item.reinstalled_faces === 'face_b' ? 'وجه خلفي (1)' :
-                    `${item.faces_to_install || facesCount || 1} وجه`
+                    `${item.faces_to_install || availableFacesCount || 1} وجه`
                   }
                 </span>
               </Badge>
@@ -1643,7 +1664,7 @@ export function BillboardTaskCard({
                       item.reinstalled_faces === 'both' ? 'وجهين (أمامي وخلفي)' :
                       item.reinstalled_faces === 'face_a' ? 'وجه أمامي (1)' :
                       item.reinstalled_faces === 'face_b' ? 'وجه خلفي (1)' :
-                      `${item.faces_to_install || facesCount || 1} وجه`
+                      `${item.faces_to_install || availableFacesCount || 1} وجه`
                     }
                   </span>
                 </Badge>
@@ -1919,11 +1940,17 @@ export function BillboardTaskCard({
                 })()}
 
                 {/* Faces to install selection */}
-                {billboard?.Faces_Count > 1 && (
+                {availableFacesCount >= 1 && (
                   <div className="pt-2 border-t border-border/40 space-y-1.5" onClick={(e) => e.stopPropagation()}>
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">الوجه المطلوب تركيبه</span>
-                      {onApplyFacesToAll && (
+                      <span className="text-[11px] font-bold text-muted-foreground flex items-center gap-1">
+                        <Layers className="h-3.5 w-3.5 text-primary" />
+                        الوجه المطلوب تركيبه
+                        <span className="text-[10px] text-muted-foreground font-normal">
+                          (من أصل {availableFacesCount} {availableFacesCount === 1 ? 'وجه متوفر' : availableFacesCount === 2 ? 'وجهين متوفرين' : 'أوجه متوفرة'})
+                        </span>
+                      </span>
+                      {onApplyFacesToAll && availableFacesCount > 1 && (
                         <button
                           onClick={() => onApplyFacesToAll(facesToInstall)}
                           className="text-[9px] text-primary hover:underline font-bold flex items-center gap-0.5"
@@ -1933,27 +1960,30 @@ export function BillboardTaskCard({
                         </button>
                       )}
                     </div>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleFacesChange(1)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                          facesToInstall === 1
-                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                            : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
-                        }`}
-                      >
-                        الوجه الأمامي فقط
-                      </button>
-                      <button
-                        onClick={() => handleFacesChange(2)}
-                        className={`flex-1 py-1.5 rounded-lg text-xs font-bold border transition-all cursor-pointer ${
-                          facesToInstall === 2
-                            ? 'bg-primary text-primary-foreground border-primary shadow-sm'
-                            : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
-                        }`}
-                      >
-                        الوجهين بالكامل
-                      </button>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {Array.from({ length: availableFacesCount }).map((_, idx) => {
+                        const faceNum = idx + 1;
+                        const label = availableFacesCount === 2
+                          ? (faceNum === 1 ? 'الوجه الأمامي فقط (1)' : 'الوجهين بالكامل (2)')
+                          : availableFacesCount === 1
+                          ? 'وجه واحد (1)'
+                          : `${faceNum} ${faceNum === 1 ? 'وجه' : faceNum === 2 ? 'وجهين' : 'أوجه'}`;
+
+                        return (
+                          <button
+                            key={faceNum}
+                            type="button"
+                            onClick={() => handleFacesChange(faceNum)}
+                            className={`flex-1 min-w-[80px] py-1.5 px-2 rounded-lg text-xs font-bold border transition-all cursor-pointer text-center ${
+                              facesToInstall === faceNum
+                                ? 'bg-primary text-primary-foreground border-primary shadow-sm'
+                                : 'bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/60'
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

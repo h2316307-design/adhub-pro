@@ -652,7 +652,8 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
       additionalCost: item.additional_cost || 0, additionalNotes: item.additional_cost_notes || '',
       companyAdditionalCost: item.company_additional_cost || 0, companyAdditionalNotes: item.company_additional_cost_notes || '',
       hasCutout: !!item.has_cutout,
-      hasPrint: printBillboardIds.includes(item.billboard_id)
+      hasPrint: printBillboardIds.includes(item.billboard_id),
+      facesToInstall: item.faces_to_install || item.billboard?.Faces_Count || 2
     });
   };
 
@@ -697,7 +698,8 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
         company_installation_cost: editValues.companyCost,
         additional_cost: editValues.additionalCost || null, additional_cost_notes: editValues.additionalNotes || null,
         company_additional_cost: editValues.companyAdditionalCost || null, company_additional_cost_notes: editValues.companyAdditionalNotes || null,
-        has_cutout: editValues.hasCutout
+        has_cutout: editValues.hasCutout,
+        faces_to_install: editValues.facesToInstall
       }).eq('id', editingItemId);
       if (error) throw error;
 
@@ -711,7 +713,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
             if (billboard) {
               const sizeName = billboard.Size || 'غير محدد';
               const area = calculateAreaFromSizeData(sizeName, sizesMap);
-              const faces = editingItem.faces_to_install || billboard.Faces_Count || 2;
+              const faces = editValues.facesToInstall || editingItem.faces_to_install || billboard.Faces_Count || 2;
               const totalItemArea = area * faces;
               
               const { data: existing } = await supabase
@@ -760,7 +762,8 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
           company_installation_cost: editValues.companyCost,
           additional_cost: editValues.additionalCost, additional_cost_notes: editValues.additionalNotes,
           company_additional_cost: editValues.companyAdditionalCost, company_additional_cost_notes: editValues.companyAdditionalNotes,
-          has_cutout: editValues.hasCutout 
+          has_cutout: editValues.hasCutout,
+          faces_to_install: editValues.facesToInstall
         } : item
       );
       setTaskItems(newItems);
