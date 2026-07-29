@@ -105,6 +105,7 @@ export function UnifiedPrintAllDialog({
     })();
   }, []);
   const [installedImagesData, setInstalledImagesData] = useState<Record<number, { face_a?: string; face_b?: string }>>({});
+  const [showInstalledImages, setShowInstalledImages] = useState(false);
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
   const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
   const [tableSettingsDialogOpen, setTableSettingsDialogOpen] = useState(false);
@@ -716,8 +717,13 @@ export function UnifiedPrintAllDialog({
           }
 
           .billboard-name { font-family: 'Doran', Arial, sans-serif; font-size: 20px; font-weight: 500; color: #333; line-height: 1.2; }
-          .size { font-family: 'Manrope', Arial, sans-serif; font-size: 41px; font-weight: 700; line-height: 1.1; }
+          .size { font-family: 'Manrope', Arial, sans-serif; font-size: 41px; font-weight: 700; line-height: 1.1; display: flex; justify-content: center; align-items: center; }
           .faces-count { line-height: 1.3; }
+          .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; color: inherit; white-space: nowrap; }
+          .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: inherit; }
+          .print-dim-label { font-size: 0.6em; opacity: 0.8; margin-bottom: 2px; }
+          .print-dim-value { font-weight: inherit; }
+          .print-dim-separator { margin: 0 0.1em; opacity: 0.7; }
           .contract-number { font-family: 'Doran', Arial, sans-serif; font-size: 16px; font-weight: 500; line-height: 1.2; }
           .location-info, .landmark-info { font-family: 'Doran', Arial, sans-serif; font-size: 16px; line-height: 1.2; }
 
@@ -1076,6 +1082,11 @@ export function UnifiedPrintAllDialog({
           .img-group { display: flex; gap: 2px; justify-content: center; align-items: center; }
           .design-img, .installed-img { max-width: 48%; max-height: calc(${rowHeight} - 4px); object-fit: contain; }
           .image-placeholder { width: 100%; height: ${rowHeight}; background: #f0f0f0; display: flex; align-items: center; justify-content: center; font-size: 7px; color: #666; }
+          .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; color: inherit; white-space: nowrap; }
+          .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: inherit; }
+          .print-dim-label { font-size: 0.6em; opacity: 0.8; margin-bottom: 2px; }
+          .print-dim-value { font-weight: inherit; }
+          .print-dim-separator { margin: 0 0.1em; opacity: 0.7; }
           @media print {
             body { print-color-adjust: exact; -webkit-print-color-adjust: exact; background: #fff !important; margin: 0; padding: 0; }
             .page { page-break-after: always; margin: 0; box-shadow: none; height: ${isLandscape ? '210mm' : '297mm'}; overflow: hidden; }

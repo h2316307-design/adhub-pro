@@ -387,7 +387,15 @@ export function PrintPreview({
           }
           .size {
             font-family: '${s.secondary_font}', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
           }
+          .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; color: inherit; white-space: nowrap; }
+          .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: inherit; }
+          .print-dim-label { font-size: 0.6em; opacity: 0.8; margin-bottom: 2px; }
+          .print-dim-value { font-weight: inherit; }
+          .print-dim-separator { margin: 0 0.1em; opacity: 0.7; }
           .contract-number {
             font-family: '${s.primary_font}', Arial, sans-serif;
           }
