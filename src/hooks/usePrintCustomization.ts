@@ -67,6 +67,8 @@ export interface PrintCustomizationSettings {
   faces_count_alignment: string;
   faces_count_offset_x: string;
   faces_count_show: string;
+  faces_count_font_family?: string;
+  faces_count_font_weight?: string;
   
   // رقم العقد
   contract_number_top: string;
@@ -215,12 +217,14 @@ const defaultSettings: PrintCustomizationSettings = {
   size_offset_x: '0mm',
   
   faces_count_top: '67mm',
-  faces_count_left: '64%',
+  faces_count_left: '63%',
   faces_count_font_size: '12px',
   faces_count_color: '#000000',
   faces_count_alignment: 'center',
   faces_count_offset_x: '0mm',
   faces_count_show: 'true',
+  faces_count_font_family: 'Doran',
+  faces_count_font_weight: '700',
   
   contract_number_top: '39.869mm',
   contract_number_right: '22mm',

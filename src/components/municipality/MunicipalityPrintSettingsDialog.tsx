@@ -37,6 +37,16 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   backgroundUrl: string;
   onSaveSuccess?: () => void;
+  sampleBillboard?: {
+    name: string;
+    size: string;
+    faces: number;
+    municipality: string;
+    landmark: string;
+    coords: string;
+    imageUrl?: string;
+  };
+  items?: any[];
 }
 
 const parseMM = (val: string): number => { const n = parseFloat(val); return isNaN(n) ? 0 : n; };
@@ -152,6 +162,16 @@ const settingGroups: SettingGroup[] = [
       { key: 'faces_count_top', label: 'الموقع من الأعلى', type: 'mm', min: 0, max: 280, step: 0.5 },
       { key: 'faces_count_left', label: 'الموقع من اليسار', type: 'percent', min: 0, max: 100, step: 0.5 },
       { key: 'faces_count_font_size', label: 'حجم الخط', type: 'px', min: 8, max: 40, step: 1 },
+      { key: 'faces_count_color', label: 'لون الخط', type: 'text' },
+      { key: 'faces_count_font_weight' as any, label: 'سماكة الخط', type: 'text' },
+      { key: 'faces_count_font_family' as any, label: 'نوع الخط', type: 'select', options: [
+        { value: 'Doran', label: 'Doran (فني / افتراضي)' },
+        { value: 'Manrope', label: 'Manrope (عصري)' },
+        { value: 'Cairo', label: 'Cairo (عريض)' },
+        { value: 'Tajawal', label: 'Tajawal (واضح)' },
+        { value: 'monospace', label: 'Monospace (ثابت)' },
+        { value: 'Arial', label: 'Arial (افتراضي)' },
+      ]},
       { key: 'faces_count_show', label: 'إظهار عدد الأوجه في الطباعة', type: 'select', options: [
         { value: 'true', label: 'مفعّل' },
         { value: 'false', label: 'معطّل' },
@@ -259,7 +279,14 @@ const settingGroups: SettingGroup[] = [
   },
 ];
 
-export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, backgroundUrl, onSaveSuccess }: Props) {
+export default function MunicipalityPrintSettingsDialog({
+  open,
+  onOpenChange,
+  backgroundUrl,
+  onSaveSuccess,
+  sampleBillboard: initialSampleBillboard,
+  items,
+}: Props) {
   const { settings, saveSettings, resetToDefaults, saving } = usePrintCustomization('municipality');
   const [localSettings, setLocalSettings] = useState<PrintCustomizationSettings>(settings);
 
@@ -301,7 +328,7 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
     });
   };
 
-  const [previewZoom, setPreviewZoom] = useState(0.4);
+  const [previewZoom, setPreviewZoom] = useState(1.0);
   const [activeTab, setActiveTab] = useState('الترقيم');
   const [sampleBillboard, setSampleBillboard] = useState<{
     name: string; size: string; faces: number; municipality: string; landmark: string; coords: string; imageUrl: string;
@@ -311,15 +338,65 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
   const [previewMapLoading, setPreviewMapLoading] = useState(false);
   const mapDebounceRef = useRef<number | null>(null);
   const mapReqIdRef = useRef(0);
+  const previewPaneRef = useRef<HTMLDivElement>(null);
+
+  // Auto-fit zoom calculation for responsive A4 sheet preview
+  const fitZoomToContainer = () => {
+    if (!previewPaneRef.current) return;
+    const containerWidth = previewPaneRef.current.clientWidth - 48;
+    const containerHeight = previewPaneRef.current.clientHeight - 48;
+    const mmToPx = 3.7795275591;
+    const a4WidthPx = 210 * mmToPx;
+    const a4HeightPx = 297 * mmToPx;
+
+    const scaleX = containerWidth / a4WidthPx;
+    const scaleY = containerHeight / a4HeightPx;
+    const fitScale = Math.min(scaleX, scaleY);
+    if (!isNaN(fitScale) && fitScale > 0) {
+      setPreviewZoom(Number(fitScale.toFixed(2)));
+    }
+  };
 
   useEffect(() => {
     if (open) {
       setLocalSettings(settings);
+      setPreviewZoom(1.0); // Default Zoom to 100%
       loadSampleBillboard();
     }
-  }, [open, settings]);
+  }, [open, settings, items]);
 
-  const loadSampleBillboard = async () => {
+  const loadSampleBillboard = async (targetIndex?: number) => {
+    // 1. Prioritize active collection items from props
+    if (items && items.length > 0) {
+      let selectedItem: any;
+      if (typeof targetIndex === 'number' && items[targetIndex]) {
+        selectedItem = items[targetIndex];
+      } else {
+        // Pick the last item with an image or last item
+        selectedItem = [...items].reverse().find(i => i.image_url) || items[items.length - 1];
+      }
+
+      if (selectedItem) {
+        const rawSize = selectedItem.size || '12x4';
+        const normalized = rawSize.replace(/×/g, 'x').replace(/X/g, 'x').replace(/\*/g, 'x');
+        const parts = normalized.split('x').map((s: string) => s.trim());
+        const sizeWithHeight = parts.length >= 3 ? rawSize : `${parts[0] || '12'}x${parts[1] || '4'}x3`;
+        const lat = selectedItem.latitude;
+        const lng = selectedItem.longitude;
+        setSampleBillboard({
+          name: String(selectedItem.sequence_number).padStart(2, '0'),
+          size: sizeWithHeight,
+          faces: selectedItem.faces_count === 'وجه' ? 1 : 2,
+          municipality: selectedItem.municipality || selectedItem.location_text || 'البلدية',
+          landmark: selectedItem.nearest_landmark || 'أقرب نقطة دالة',
+          coords: lat && lng ? `${lat}, ${lng}` : '32.901753, 13.217222',
+          imageUrl: selectedItem.image_url || '',
+        });
+        return;
+      }
+    }
+
+    // 2. Fallback to Supabase query
     try {
       const { data } = await supabase
         .from('billboards')
@@ -381,7 +458,7 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
   const customPinUrl = (localSettings.custom_pin_url || '').trim();
   const pinTipOffsetPercent = customPinUrl ? 100 : (pinData.anchorY / pinData.height) * 100;
 
-  const sb = sampleBillboard || {
+  const sb = sampleBillboard || initialSampleBillboard || {
     name: '01', size: '12x4x3', faces: 2, municipality: 'طرابلس المركز',
     landmark: 'وسط جسر القبة الفلكية', coords: '32.901753, 13.217222', imageUrl: '',
   };
@@ -440,10 +517,10 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
     return `
       <div style="position:relative;width:210mm;height:297mm;background-color:#fff;background-image:url('${backgroundUrl}');background-size:210mm 297mm;background-repeat:no-repeat;font-family:'Doran',Arial,sans-serif;direction:rtl;overflow:hidden;">
         <style>
-          .print-size-container { display: inline-flex; align-items: center; justify-content: center; gap: 0.12em; direction: rtl; color: inherit; }
+          .print-size-container { display: flex; align-items: center; justify-content: center; margin: 0 auto; width: 100%; gap: 0.12em; direction: rtl; color: inherit; text-align: center; }
           .print-dim-col { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1; color: inherit; }
-          .print-dim-label { font-size: 0.45em; font-weight: 700; opacity: 1; margin-bottom: 2px; letter-spacing: 0.5px; color: inherit; }
-          .print-dim-value { font-size: 1em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; color: inherit; }
+          .print-dim-label { font-size: 0.45em; font-weight: 700; opacity: 1; margin-bottom: 2px; letter-spacing: 0.5px; color: inherit; text-align: center; }
+          .print-dim-value { font-size: 1em; font-weight: 700; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; color: inherit; text-align: center; }
           .print-dim-separator { font-size: 0.65em; opacity: 1; margin-top: 0.25em; font-weight: 700; color: inherit; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; }
         </style>
         ${statusHeader}
@@ -455,13 +532,13 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
         </div>
  
         <!-- المقاس -->
-        <div style="position:absolute;top:${s.size_top};left:${s.size_left};transform:translateX(-50%);width:100mm;text-align:center;font-size:${s.size_font_size};font-weight:${s.size_font_weight || '500'};color:${s.size_color};z-index:5;">
+        <div style="position:absolute;top:${s.size_top};left:${s.size_left};transform:translateX(-50%);width:70mm;display:flex;align-items:center;justify-content:center;text-align:center;font-size:${s.size_font_size};font-weight:${s.size_font_weight || '500'};color:${s.size_color};z-index:5;margin:0;padding:0;">
           ${generatePrintedSizeHtml(sb.size, showHeightInPrint, (s as any).show_size_dimension_labels === 'true')}
         </div>
  
         <!-- عدد الأوجه -->
         ${s.faces_count_show !== 'false' ? `
-        <div style="position:absolute;top:${s.faces_count_top};left:${s.faces_count_left};transform:translateX(-50%);width:80mm;text-align:center;font-size:${s.faces_count_font_size};color:${s.faces_count_color};z-index:5;">
+        <div style="position:absolute;top:${s.faces_count_top};left:${s.size_left};transform:translateX(-50%);width:70mm;display:flex;align-items:center;justify-content:center;text-align:center;font-size:${s.faces_count_font_size};font-weight:${(s as any).faces_count_font_weight || '700'};color:${s.faces_count_color || '#000000'};font-family:'${(s as any).faces_count_font_family || s.coords_font_family || 'Doran'}',sans-serif;z-index:5;margin:0;padding:0;line-height:1;">
           ${sb.faces === 1 ? 'وجه واحد' : 'وجهين'}
         </div>
         ` : ''}
@@ -584,7 +661,7 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[1100px] p-0 overflow-hidden h-[90vh] rounded-3xl border border-white/10 shadow-2xl bg-slate-950/80 backdrop-blur-2xl">
+      <DialogContent className="max-w-[1400px] w-[95vw] p-0 overflow-hidden h-[92vh] rounded-3xl border border-emerald-500/20 shadow-2xl bg-slate-950/95 backdrop-blur-2xl">
         <DialogTitle className="sr-only">إعدادات الطباعة</DialogTitle>
         <DialogDescription className="sr-only">تعديل مواضع وتصميم لوحة البلدية</DialogDescription>
         <div className="flex h-full overflow-hidden">
@@ -898,49 +975,89 @@ export default function MunicipalityPrintSettingsDialog({ open, onOpenChange, ba
           <div className="flex-1 bg-slate-950 overflow-hidden flex flex-col relative">
             
             {/* Live Preview Header Toolbar */}
-            <div className="flex items-center justify-between px-5 py-4 bg-slate-900/30 border-b border-white/5 shrink-0">
+            <div className="flex items-center justify-between px-6 py-3.5 bg-slate-900/60 border-b border-white/5 shrink-0 backdrop-blur-md">
               <div className="flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
                 <h3 className="text-xs font-bold text-slate-200">المعاينة الحية التفاعلية</h3>
+                {items && items.length > 0 ? (
+                  <Select
+                    value={sb?.name || ''}
+                    onValueChange={(val) => {
+                      const idx = items.findIndex(i => String(i.sequence_number).padStart(2, '0') === val);
+                      if (idx !== -1) loadSampleBillboard(idx);
+                    }}
+                  >
+                    <SelectTrigger className="h-7 text-[11px] bg-white/10 border-white/15 text-slate-200 w-44 font-semibold rounded-lg focus:ring-0">
+                      <SelectValue placeholder="اختر عينة اللوحة" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-900 border-white/10 text-white text-xs">
+                      {items.map((it) => (
+                        <SelectItem key={it.sequence_number} value={String(it.sequence_number).padStart(2, '0')} className="text-xs focus:bg-indigo-600">
+                          عينة #{String(it.sequence_number).padStart(2, '0')} - {it.location_text || 'بدون اسم'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : sb ? (
+                  <span className="text-[10px] bg-white/5 border border-white/10 text-slate-400 px-2 py-0.5 rounded-md font-mono">
+                    عينة اللوحة: #{sb.name}
+                  </span>
+                ) : null}
               </div>
               <div className="flex items-center gap-2">
                 <Button 
                   size="sm" 
                   variant="outline" 
                   onClick={() => setPreviewZoom(z => Math.max(0.15, z - 0.05))}
-                  className="w-8 h-8 p-0 rounded-lg border-white/10 hover:bg-white/5 text-slate-300"
+                  className="w-8 h-8 p-0 rounded-lg border-white/10 hover:bg-white/10 text-slate-300"
+                  title="تصغير (-)"
                 >
                   <ZoomOut className="h-4 w-4" />
                 </Button>
-                <span className="text-[11px] font-mono w-12 text-center text-slate-300 bg-white/5 px-2 py-1 rounded-md border border-white/5">
+                <span className="text-[11px] font-mono w-14 text-center text-slate-200 bg-white/10 px-2 py-1 rounded-md border border-white/10 font-bold">
                   {Math.round(previewZoom * 100)}%
                 </span>
                 <Button 
                   size="sm" 
                   variant="outline" 
-                  onClick={() => setPreviewZoom(z => Math.min(1, z + 0.05))}
-                  className="w-8 h-8 p-0 rounded-lg border-white/10 hover:bg-white/5 text-slate-300"
+                  onClick={() => setPreviewZoom(z => Math.min(1.2, z + 0.05))}
+                  className="w-8 h-8 p-0 rounded-lg border-white/10 hover:bg-white/10 text-slate-300"
+                  title="تكبير (+)"
                 >
                   <ZoomIn className="h-4 w-4" />
                 </Button>
                 <Button 
                   size="sm" 
-                  variant="ghost" 
-                  onClick={() => setPreviewZoom(0.4)} 
-                  className="text-xs text-slate-400 hover:text-white px-2 py-0"
+                  variant="secondary" 
+                  onClick={fitZoomToContainer} 
+                  className="h-8 text-xs text-emerald-300 hover:text-white px-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 font-semibold gap-1"
+                  title="احتواء الورقة بالكامل داخل الشاشة تلقائياً"
                 >
-                  إعادة ضبط
+                  🎯 احتواء تلقائي
                 </Button>
               </div>
             </div>
 
             {/* Scrollable Container with centered interactive document preview */}
-            <div className="flex-1 overflow-auto p-8 flex items-start justify-center bg-slate-950/90 no-scrollbar">
+            <div ref={previewPaneRef} className="flex-1 overflow-auto p-6 flex items-center justify-center bg-slate-950 no-scrollbar">
               <div
-                className="origin-top shadow-2xl border border-white/5 rounded-lg bg-white overflow-hidden transition-all duration-300"
-                style={{ transform: `scale(${previewZoom})`, transformOrigin: 'top center' }}
-                dangerouslySetInnerHTML={{ __html: activeTab === 'صفحة الغلاف' ? coverPreviewHtml : previewHtml }}
-              />
+                className="relative shadow-2xl rounded-xl bg-white overflow-hidden transition-all duration-200 my-auto shrink-0 border border-white/10"
+                style={{
+                  width: `calc(210mm * ${previewZoom})`,
+                  height: `calc(297mm * ${previewZoom})`,
+                }}
+              >
+                <div
+                  className="origin-top-left bg-white"
+                  style={{
+                    width: '210mm',
+                    height: '297mm',
+                    transform: `scale(${previewZoom})`,
+                    transformOrigin: 'top left',
+                  }}
+                  dangerouslySetInnerHTML={{ __html: activeTab === 'صفحة الغلاف' ? coverPreviewHtml : previewHtml }}
+                />
+              </div>
             </div>
           </div>
 

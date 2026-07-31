@@ -702,6 +702,7 @@ export default function MunicipalityBillboardOrganizer() {
   const [showGoogleMapsDialog, setShowGoogleMapsDialog] = useState(false);
   const [zoomImageModalUrl, setZoomImageModalUrl] = useState<string | null>(null);
   const [zoomScale, setZoomScale] = useState<number>(1);
+  const [inlineEditingCell, setInlineEditingCell] = useState<{ seq: number; field: 'location' | 'landmark' } | null>(null);
   const [searchItems, setSearchItems] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const [showReplaceDialog, setShowReplaceDialog] = useState(false);
@@ -3054,13 +3055,13 @@ export default function MunicipalityBillboardOrganizer() {
             ${statusFooter}
             ${statusCustom}
 
-            <div class="absolute-field" style="top: ${s.size_top}; left: ${s.size_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.size_font_size}; font-weight: ${s.size_font_weight}; color: ${s.size_color}; z-index: 5;">
+            <div class="absolute-field" style="top: ${s.size_top}; left: ${s.size_left}; transform: translateX(-50%); width: 70mm; display: flex; align-items: center; justify-content: center; text-align: center; font-size: ${s.size_font_size}; font-weight: ${s.size_font_weight || '500'}; color: ${s.size_color}; z-index: 5; margin: 0; padding: 0;">
               ${generatePrintedSizeHtml(item.size, showHeightInPrint, (s as any).show_size_dimension_labels === 'true')}
             </div>
 
             ${s.faces_count_show !== 'false' ? `
-            <div class="absolute-field" style="top: calc(${s.size_top} + 12mm); left: ${s.size_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color}; z-index: 5; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif;">
-              ${item.faces_count}
+            <div class="absolute-field" style="top: ${s.faces_count_top || `calc(${s.size_top} + 12mm)`}; left: ${s.size_left}; transform: translateX(-50%); width: 70mm; display: flex; align-items: center; justify-content: center; text-align: center; font-size: ${s.faces_count_font_size}; font-weight: ${(s as any).faces_count_font_weight || '700'}; color: ${s.faces_count_color || '#000000'}; font-family: '${(s as any).faces_count_font_family || s.coords_font_family || 'Doran'}', sans-serif; z-index: 5; margin: 0; padding: 0; line-height: 1;">
+              ${(!item.faces_count || item.faces_count === 'وجهين' || item.faces_count === '2' || item.faces_count === 2) ? 'وجهين' : 'وجه واحد'}
             </div>
             ` : ''}
 
@@ -3862,30 +3863,75 @@ export default function MunicipalityBillboardOrganizer() {
                           />
                         </td>
                         <td className="p-3 text-center font-bold text-indigo-500">{item.sequence_number}</td>
-                        <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                          <div className="space-y-1">
+                        {/* Location / Billboard Name Cell with Pencil Quick Edit */}
+                        {inlineEditingCell?.seq === item.sequence_number && inlineEditingCell?.field === 'location' ? (
+                          <td className="p-2" onClick={(e) => e.stopPropagation()}>
                             <Input
+                              autoFocus
                               value={item.location_text || item.billboard_name || ''}
                               onChange={(e) => updateItem(item.sequence_number, { location_text: e.target.value, billboard_name: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === 'Enter') setInlineEditingCell(null); }}
+                              onBlur={() => setInlineEditingCell(null)}
                               placeholder="اسم الموقع / الشارع..."
-                              className="h-8 text-xs font-semibold rounded-lg border-border/15 bg-background/50 focus-visible:ring-indigo-500"
+                              className="h-8 text-xs font-semibold rounded-lg border-indigo-500/50 bg-background focus-visible:ring-indigo-500"
                             />
-                            {item.municipality && (
-                              <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1 px-1">
-                                <Building2 className="h-2.5 w-2.5" />
-                                {item.municipality}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="p-2" onClick={(e) => e.stopPropagation()}>
-                          <Input
-                            value={item.nearest_landmark || ''}
-                            onChange={(e) => updateItem(item.sequence_number, { nearest_landmark: e.target.value })}
-                            placeholder="أقرب نقطة دالة..."
-                            className="h-8 text-xs rounded-lg border-border/15 bg-background/50 focus-visible:ring-indigo-500"
-                          />
-                        </td>
+                          </td>
+                        ) : (
+                          <td
+                            className="p-3 group/cell cursor-pointer hover:bg-indigo-500/5 transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setInlineEditingCell({ seq: item.sequence_number, field: 'location' }); }}
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex flex-col">
+                                <span className="font-semibold text-foreground/90 text-xs">{item.location_text || item.billboard_name || '—'}</span>
+                                {item.municipality && (
+                                  <span className="text-[10px] text-muted-foreground mt-0.5 inline-flex items-center gap-1">
+                                    <Building2 className="h-2.5 w-2.5" />
+                                    {item.municipality}
+                                  </span>
+                                )}
+                              </div>
+                              <button
+                                type="button"
+                                className="opacity-0 group-hover/cell:opacity-100 p-1 text-muted-foreground hover:text-indigo-600 transition-all rounded-md hover:bg-indigo-500/10"
+                                title="تعديل اسم الموقع"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
+
+                        {/* Nearest Landmark Cell with Pencil Quick Edit */}
+                        {inlineEditingCell?.seq === item.sequence_number && inlineEditingCell?.field === 'landmark' ? (
+                          <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                            <Input
+                              autoFocus
+                              value={item.nearest_landmark || ''}
+                              onChange={(e) => updateItem(item.sequence_number, { nearest_landmark: e.target.value })}
+                              onKeyDown={(e) => { if (e.key === 'Enter') setInlineEditingCell(null); }}
+                              onBlur={() => setInlineEditingCell(null)}
+                              placeholder="أقرب نقطة دالة..."
+                              className="h-8 text-xs rounded-lg border-indigo-500/50 bg-background focus-visible:ring-indigo-500"
+                            />
+                          </td>
+                        ) : (
+                          <td
+                            className="p-3 group/cell cursor-pointer hover:bg-indigo-500/5 transition-colors"
+                            onClick={(e) => { e.stopPropagation(); setInlineEditingCell({ seq: item.sequence_number, field: 'landmark' }); }}
+                          >
+                            <div className="flex items-center justify-between gap-2 text-xs">
+                              <span className="text-muted-foreground">{item.nearest_landmark || '—'}</span>
+                              <button
+                                type="button"
+                                className="opacity-0 group-hover/cell:opacity-100 p-1 text-muted-foreground hover:text-indigo-600 transition-all rounded-md hover:bg-indigo-500/10"
+                                title="تعديل أقرب نقطة دالة"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
+                          </td>
+                        )}
                         <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <DimensionInput
                             value={item.size}
@@ -5788,6 +5834,7 @@ export default function MunicipalityBillboardOrganizer() {
         open={showPrintSettings}
         onOpenChange={setShowPrintSettings}
         backgroundUrl={customBackgroundUrl}
+        items={currentCollection.items}
         onSaveSuccess={refetch}
       />
 

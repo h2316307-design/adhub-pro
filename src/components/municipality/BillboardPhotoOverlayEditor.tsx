@@ -1187,7 +1187,10 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
     setIsDraggingBillboard(prev => {
       if (prev && currentItem) {
         // Auto-save position to Database and parent state immediately on drag release!
-        saveOverlayConfig(configRef.current);
+        const targetCfg = configRef.current;
+        setTimeout(() => {
+          saveOverlayConfig(targetCfg);
+        }, 0);
       }
       return false;
     });
