@@ -22,7 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Slider } from '@/components/ui/slider';
-import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, ArrowUpDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet, Camera, ImageIcon, Loader2, CheckCircle2, AlertTriangle, Sparkles, X as XIcon, X as XIcon2, Info, RefreshCw, Eye, Check, SlidersHorizontal, ChevronDown, Wrench, Clock, Ban } from 'lucide-react';
+import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, ArrowUpDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet, Camera, ImageIcon, Loader2, CheckCircle2, AlertTriangle, Sparkles, X as XIcon, XIcon as XIcon2, Info, RefreshCw, Eye, Check, SlidersHorizontal, ChevronDown, Wrench, Clock, Ban, Clipboard, Maximize2, ZoomIn, ZoomOut, ExternalLink, Download } from 'lucide-react';
 import { extractExifData } from '@/utils/exifExtractor';
 import { uploadImage } from '@/services/imageUploadService';
 import { compressLossless } from '@/utils/imageCompressor';
@@ -432,6 +432,105 @@ const DimensionInput = ({
   );
 };
 
+/**
+ * Returns true if the URL is a Google Maps short link that needs expansion.
+ */
+const isShortGoogleMapsUrl = (url: string): boolean => {
+  const str = url.trim().toLowerCase();
+  return str.includes('maps.app.goo.gl') || str.includes('goo.gl/maps');
+};
+
+/**
+ * Extracts lat/lng from a Google Maps URL.
+ * Supports formats:
+ *  - https://www.google.com/maps?q=lat,lng
+ *  - https://www.google.com/maps/@lat,lng,zoom
+ *  - https://www.google.com/maps/place/.../data=...!3dlat!4dlng
+ *  - https://www.google.com/maps/place/name/@lat,lng,zoom
+ *  - Raw HTML pages containing coordinate patterns
+ */
+const parseGoogleMapsUrl = (url: string): { lat: number; lng: number } | null => {
+  if (!url || !url.trim()) return null;
+  const str = url.trim();
+
+  // Pattern 1: ?q=lat,lng or ?q=lat%2Clng
+  const qMatch = str.match(/[?&]q=(-?\d+\.?\d*)[,%2C]+(-?\d+\.?\d*)/i);
+  if (qMatch) {
+    const lat = parseFloat(qMatch[1]);
+    const lng = parseFloat(qMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+  }
+
+  // Pattern 2: /@lat,lng,zoom
+  const atMatch = str.match(/@(-?\d+\.?\d*),(-?\d+\.?\d*),/);
+  if (atMatch) {
+    const lat = parseFloat(atMatch[1]);
+    const lng = parseFloat(atMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+  }
+
+  // Pattern 3: !3dlat!4dlng (data param)
+  const d3Match = str.match(/!3d(-?\d+\.?\d*)!4d(-?\d+\.?\d*)/);
+  if (d3Match) {
+    const lat = parseFloat(d3Match[1]);
+    const lng = parseFloat(d3Match[2]);
+    if (!isNaN(lat) && !isNaN(lng)) return { lat, lng };
+  }
+
+  // Pattern 4: plain coords anywhere in URL/text (fallback)
+  const coordMatch = str.match(/(-?\d{1,3}\.\d{4,}),\s*(-?\d{1,3}\.\d{4,})/);
+  if (coordMatch) {
+    const lat = parseFloat(coordMatch[1]);
+    const lng = parseFloat(coordMatch[2]);
+    if (!isNaN(lat) && !isNaN(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng };
+  }
+
+  return null;
+};
+
+/**
+ * Expands a short Google Maps URL (maps.app.goo.gl / goo.gl/maps)
+ * by fetching it through allorigins.win CORS proxy.
+ * Returns the final expanded URL and/or extracted coordinates.
+ */
+const expandShortGoogleMapsUrl = async (
+  shortUrl: string
+): Promise<{ lat: number; lng: number } | null> => {
+  // Try via allorigins which follows redirects and returns status.url
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(shortUrl)}`;
+  const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(12000) });
+  if (!res.ok) return null;
+  const data = await res.json();
+
+  // 1. Try the final redirect URL from allorigins metadata
+  if (data.status?.url) {
+    const coords = parseGoogleMapsUrl(data.status.url);
+    if (coords) return coords;
+  }
+
+  // 2. Search raw HTML content for coordinate patterns
+  const html: string = data.contents || '';
+  const coords = parseGoogleMapsUrl(html);
+  if (coords) return coords;
+
+  // 3. Try og:url meta tag inside the HTML
+  const ogMatch = html.match(/<meta[^>]+property="og:url"[^>]+content="([^"]+)"/i)
+    ?? html.match(/<meta[^>]+content="([^"]+)"[^>]+property="og:url"/i);
+  if (ogMatch) {
+    const coords2 = parseGoogleMapsUrl(ogMatch[1]);
+    if (coords2) return coords2;
+  }
+
+  // 4. Try canonical link
+  const canonMatch = html.match(/<link[^>]+rel="canonical"[^>]+href="([^"]+)"/i);
+  if (canonMatch) {
+    const coords3 = parseGoogleMapsUrl(canonMatch[1]);
+    if (coords3) return coords3;
+  }
+
+  return null;
+};
+
 export default function MunicipalityBillboardOrganizer() {
   const [collections, setCollections] = useState<{ id: string; name: string; created_at: string }[]>([]);
   const [currentCollection, setCurrentCollection] = useState<Collection>({ name: '', municipality_name: '', items: [] });
@@ -595,6 +694,14 @@ export default function MunicipalityBillboardOrganizer() {
   const [bulkStatusValue, setBulkStatusValue] = useState('تم التركيب');
   const [bulkStatusCustom, setBulkStatusCustom] = useState('');
   const [bulkSize, setBulkSize] = useState('');
+  const [bulkFacesCount, setBulkFacesCount] = useState<'وجه' | 'وجهين' | ''>('');
+  // Google Maps URL input state
+  const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [googleMapsUrlError, setGoogleMapsUrlError] = useState('');
+  const [googleMapsUrlLoading, setGoogleMapsUrlLoading] = useState(false);
+  const [showGoogleMapsDialog, setShowGoogleMapsDialog] = useState(false);
+  const [zoomImageModalUrl, setZoomImageModalUrl] = useState<string | null>(null);
+  const [zoomScale, setZoomScale] = useState<number>(1);
   const [searchItems, setSearchItems] = useState('');
   const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
   const [showReplaceDialog, setShowReplaceDialog] = useState(false);
@@ -1121,13 +1228,29 @@ export default function MunicipalityBillboardOrganizer() {
     toast.success('تم فتح مشروع جديد فارغ');
   };
 
+  // Helper to fetch default values pre-filled from the last item in the collection
+  const getLastItemDefaults = () => {
+    const lastItem = currentCollection.items.length > 0
+      ? [...currentCollection.items].sort((a, b) => b.sequence_number - a.sequence_number)[0]
+      : null;
+    return {
+      size: lastItem?.size || defaultSize || '',
+      faces_count: lastItem?.faces_count || 'وجهين',
+      status: lastItem?.status || 'تم التركيب',
+      nearest_landmark: lastItem?.nearest_landmark || '',
+      location_text: lastItem?.location_text || '',
+    };
+  };
+
   // Add new manual billboard
   const openAddDialog = () => {
+    const defaults = getLastItemDefaults();
     setNewItem({
-      size: defaultSize || '',
-      faces_count: 'وجهين',
-      location_text: '',
-      nearest_landmark: '',
+      size: defaults.size,
+      faces_count: defaults.faces_count,
+      status: defaults.status,
+      location_text: defaults.location_text,
+      nearest_landmark: defaults.nearest_landmark,
       latitude: null,
       longitude: null,
       item_type: 'new',
@@ -1137,12 +1260,211 @@ export default function MunicipalityBillboardOrganizer() {
     setPendingImageUrl(null);
     setPhotoPreviewUrl(null);
     setPhotoExifStatus('none');
+    setGoogleMapsUrl('');
+    setGoogleMapsUrlError('');
+    setGoogleMapsUrlLoading(false);
     setShowAddDialog(true);
+  };
+
+  // Handle direct paste from clipboard button
+  const handlePasteFromClipboard = async () => {
+    try {
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(t => t.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const file = new File([blob], `pasted-image-${Date.now()}.${imageType.split('/')[1] || 'png'}`, { type: imageType });
+          handlePhotoImport(file);
+          toast.success('تم جلب الصورة من الحافظة');
+          return;
+        }
+      }
+      toast.info('لم يتم العثور على صورة في الحافظة — استخدم Ctrl + V لصق الصورة مباشرة');
+    } catch {
+      toast.info('استخدم اختصار المفاتيح Ctrl + V لصق الصورة مباشرة');
+    }
+  };
+
+  // Global Ctrl + V Paste Listener for Images
+  useEffect(() => {
+    const handleGlobalPaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (!file) continue;
+
+          e.preventDefault();
+
+          // 1. If currently in Edit Billboard Dialog → update currently edited billboard
+          if (editingItem) {
+            toast.loading('جاري رفع الصورة وتحديث اللوحة الحالية...', { id: 'paste-edit-upload' });
+            try {
+              const compressed = await compressLossless(file);
+              const imgName = `mb-edit-paste-${editingItem.sequence_number}-${Date.now()}`;
+              const folder = `municipality-billboards/${(municipalityName || 'general').replace(/[^\w\u0600-\u06FF-]/g, '_')}`;
+              const imageUrl = await uploadImage(compressed, imgName, folder);
+              setEditingItem(prev => (prev ? { ...prev, image_url: imageUrl } : null));
+              updateItem(editingItem.sequence_number, { image_url: imageUrl });
+              toast.success(`تم تحديث صورة اللوحة رقم ${editingItem.sequence_number} بنجاح`, { id: 'paste-edit-upload' });
+            } catch (err: any) {
+              toast.error('فشل رفع الصورة: ' + (err?.message || ''), { id: 'paste-edit-upload' });
+            }
+            return;
+          }
+
+          // 2. If Add Dialog or Google Maps Dialog is open → upload into dialog
+          if (showAddDialog || showGoogleMapsDialog) {
+            handlePhotoImport(file);
+            toast.success('تم لصق الصورة في نافذة الإضافة (Ctrl+V)');
+            return;
+          }
+
+          // 3. If exactly 1 billboard is selected in list → attach image to it directly
+          if (selectedItems.size === 1) {
+            const seq = Array.from(selectedItems)[0];
+            toast.loading('جاري رفع الصورة الملصوقة...', { id: 'paste-upload' });
+            try {
+              const compressed = await compressLossless(file);
+              const imgName = `mb-paste-${seq}-${Date.now()}`;
+              const folder = `municipality-billboards/${(municipalityName || 'general').replace(/[^\w\u0600-\u06FF-]/g, '_')}`;
+              const imageUrl = await uploadImage(compressed, imgName, folder);
+              updateItem(seq, { image_url: imageUrl });
+              toast.success(`تم إرفاق الصورة الملصوقة باللوحة رقم ${seq}`, { id: 'paste-upload' });
+            } catch (err: any) {
+              toast.error('فشل رفع الصورة: ' + (err?.message || ''), { id: 'paste-upload' });
+            }
+            return;
+          }
+
+          // 4. Otherwise (no dialog & no selection) → open Add Dialog with this pasted image
+          openAddDialog();
+          handlePhotoImport(file);
+          toast.success('تم فتح نافذة الإضافة وإرفاق الصورة الملصوقة (Ctrl+V)');
+          return;
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [showAddDialog, showGoogleMapsDialog, editingItem, selectedItems, municipalityName]);
+
+  // Handle Google Maps URL parsing and geocoding
+  const handleGoogleMapsUrlParse = async (url: string) => {
+    setGoogleMapsUrl(url);
+    setGoogleMapsUrlError('');
+
+    if (!url.trim()) {
+      setNewItem(prev => ({ ...prev, latitude: null, longitude: null }));
+      return;
+    }
+
+    // Try direct parsing first
+    let coords = parseGoogleMapsUrl(url);
+
+    // If direct parsing failed and it's a short URL → expand it
+    if (!coords && isShortGoogleMapsUrl(url)) {
+      setGoogleMapsUrlLoading(true);
+      setGoogleMapsUrlError('');
+      try {
+        coords = await expandShortGoogleMapsUrl(url);
+      } catch {
+        coords = null;
+      }
+      if (!coords) {
+        setGoogleMapsUrlLoading(false);
+        setGoogleMapsUrlError(
+          'تعذّر استخراج الإحداثيات من الرابط المختصر — يرجى فتح الرابط في المتصفح ثم نسخ الرابط الكامل من شريط العنوان'
+        );
+        return;
+      }
+    } else if (!coords) {
+      setGoogleMapsUrlError('تعذّر استخراج الإحداثيات من هذا الرابط — تأكد أنه رابط قوقل ماب صحيح');
+      return;
+    }
+
+    const lat = Number(coords.lat.toFixed(6));
+    const lng = Number(coords.lng.toFixed(6));
+    setNewItem(prev => ({ ...prev, latitude: lat, longitude: lng }));
+    setGoogleMapsUrlError('');
+
+    // Auto-reverse geocode to fill location text and landmark
+    setGoogleMapsUrlLoading(true);
+    try {
+      const geo = await reverseGeocode(lat, lng);
+      if (geo) {
+        setNewItem(prev => ({
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+          location_text: prev.location_text || geo.location_text || '',
+          nearest_landmark: prev.nearest_landmark || geo.nearest_landmark || '',
+        }));
+      }
+    } finally {
+      setGoogleMapsUrlLoading(false);
+    }
+  };
+
+  // Handle Google Maps URL parsing for edit billboard dialog (editingItem)
+  const handleEditGoogleMapsUrlParse = async (url: string) => {
+    setGoogleMapsUrl(url);
+    setGoogleMapsUrlError('');
+
+    if (!url.trim()) return;
+
+    let coords = parseGoogleMapsUrl(url);
+    if (!coords && isShortGoogleMapsUrl(url)) {
+      setGoogleMapsUrlLoading(true);
+      try {
+        coords = await expandShortGoogleMapsUrl(url);
+      } catch {
+        coords = null;
+      }
+      setGoogleMapsUrlLoading(false);
+    }
+
+    if (!coords) {
+      setGoogleMapsUrlError('تعذّر استخراج الإحداثيات من هذا الرابط — تأكد أنه رابط قوقل ماب صحيح');
+      return;
+    }
+
+    const lat = Number(coords.lat.toFixed(6));
+    const lng = Number(coords.lng.toFixed(6));
+
+    if (editingItem) {
+      setEditingItem(prev => (prev ? { ...prev, latitude: lat, longitude: lng } : null));
+    }
+    setGoogleMapsUrlError('');
+
+    // Auto-reverse geocode to fill location text and landmark
+    setGoogleMapsUrlLoading(true);
+    try {
+      const geo = await reverseGeocode(lat, lng);
+      if (geo) {
+        setEditingItem(prev => (prev ? {
+          ...prev,
+          latitude: lat,
+          longitude: lng,
+          location_text: prev.location_text || geo.location_text || '',
+          nearest_landmark: prev.nearest_landmark || geo.nearest_landmark || '',
+        } : null));
+      }
+    } catch {
+      // non-fatal
+    } finally {
+      setGoogleMapsUrlLoading(false);
+    }
   };
 
   const handlePhotoImport = async (file: File) => {
     if (!file.type.startsWith('image/')) {
-      toast.error('يرجى اختيار ملف صورة');
+      toast.error('يرجى اختيار ملف صورة صالحة');
       return;
     }
 
@@ -1155,7 +1477,7 @@ export default function MunicipalityBillboardOrganizer() {
     setPhotoImportProgress(5);
 
     try {
-      // 1. Extract EXIF BEFORE compression (preserveExifData keeps it, but safer to read first)
+      // 1. Extract EXIF BEFORE compression
       const exif = await extractExifData(file);
       const hasGps = exif.lat !== null && exif.lng !== null;
       setPhotoExifStatus(hasGps ? 'found' : 'missing');
@@ -1164,22 +1486,40 @@ export default function MunicipalityBillboardOrganizer() {
         const cleanLat = Number(exif.lat.toFixed(6));
         const cleanLng = Number(exif.lng.toFixed(6));
         setNewItem(prev => ({ ...prev, latitude: cleanLat, longitude: cleanLng }));
+        if (editingItem) {
+          setEditingItem(prev => (prev ? { ...prev, latitude: cleanLat, longitude: cleanLng } : null));
+        }
       }
-      setPhotoImportProgress(20);
+      setPhotoImportProgress(15);
 
-      // 2. Lossless compression (WebWorker, GPS preserved)
+      // 2. Lossless compression with real progress updates
       const compressed = await compressLossless(file, (pct) => {
-        setPhotoImportProgress(20 + Math.round(pct * 0.4));
+        setPhotoImportProgress(15 + Math.round(pct * 0.35));
       });
-      setPhotoImportProgress(60);
+      setPhotoImportProgress(50);
 
-      // 3. Upload to default provider
+      // 3. Upload to provider with real-time progress timer
       setPhotoImportState('uploading');
+      let currentProgress = 50;
+      const progressTimer = setInterval(() => {
+        currentProgress = Math.min(88, currentProgress + Math.floor(Math.random() * 5 + 3));
+        setPhotoImportProgress(currentProgress);
+      }, 150);
+
       const imgName = `mun-photo-${Date.now()}-${file.name.replace(/[^\w.-]/g, '_').slice(0, 40)}`;
       const folder = `municipality-billboards/${(municipalityName || 'general').replace(/[^\w\u0600-\u06FF-]/g, '_')}`;
       const imageUrl = await uploadImage(compressed, imgName, folder);
+
+      clearInterval(progressTimer);
       setPendingImageUrl(imageUrl);
-      setPhotoImportProgress(80);
+
+      // Sync image to editingItem if currently editing an existing billboard
+      if (editingItem) {
+        setEditingItem(prev => (prev ? { ...prev, image_url: imageUrl } : null));
+        updateItem(editingItem.sequence_number, { image_url: imageUrl });
+      }
+
+      setPhotoImportProgress(90);
 
       // 4. Reverse Geocoding if we have coords
       if (hasGps && exif.lat && exif.lng) {
@@ -1191,11 +1531,18 @@ export default function MunicipalityBillboardOrganizer() {
             location_text: prev.location_text || geo.location_text,
             nearest_landmark: prev.nearest_landmark || geo.nearest_landmark,
           }));
+          if (editingItem) {
+            setEditingItem(prev => (prev ? {
+              ...prev,
+              location_text: prev.location_text || geo.location_text,
+              nearest_landmark: prev.nearest_landmark || geo.nearest_landmark,
+            } : null));
+          }
         }
       }
       setPhotoImportProgress(100);
       setPhotoImportState('done');
-      toast.success('تم رفع الصورة واستخراج الإحداثيات');
+      toast.success('تم رفع الصورة بنجاح وتحديد البيانات');
     } catch (err: any) {
       console.error('Photo import error:', err);
       setPhotoImportState('error');
@@ -1308,11 +1655,32 @@ export default function MunicipalityBillboardOrganizer() {
   };
 
   const addNewItem = () => {
-    const sizeToUse = (newItem.size || '').trim() || defaultSize.trim();
-    if (!sizeToUse) {
-      toast.error('يجب اختيار المقاس (يمكنك ضبط المقاس الافتراضي للقائمة)');
+    // 1. Block saving ONLY IF an image upload is actively in progress
+    if (photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding') {
+      toast.info('جاري رفع ومعالجة الصورة... يرجى الانتظار حتى اكتمال شريط التقدم');
       return;
     }
+
+    // 2. Validation for Google Maps dialog
+    if (showGoogleMapsDialog) {
+      if (!googleMapsUrl.trim()) {
+        toast.error('يرجى إدخال رابط قوقل ماب أولاً');
+        return;
+      }
+      if (!newItem.latitude || !newItem.longitude) {
+        toast.error('تعذّر استخراج الإحداثيات من الرابط — يرجى التأكد من صحة الرابط');
+        return;
+      }
+    }
+
+    // 3. Validation for Billboard Size
+    const sizeToUse = (newItem.size || '').trim() || defaultSize.trim();
+    if (!sizeToUse) {
+      toast.error('يرجى اختيار أو إدخال مقاس اللوحة أولاً');
+      return;
+    }
+
+    // 3. Proceed with adding item
     const nextSeq = currentCollection.items.length + 1;
     const item: CollectionItem = {
       sequence_number: nextSeq,
@@ -1326,14 +1694,20 @@ export default function MunicipalityBillboardOrganizer() {
       billboard_name: newItem.location_text || `لوحة جديدة ${nextSeq}`,
       municipality: municipalityName || '',
       status: newItem.status || 'تم التركيب',
-      image_url: pendingImageUrl || undefined,
+      image_url: pendingImageUrl || photoPreviewUrl || newItem.image_url || undefined,
     };
     setCurrentCollection(prev => ({ ...prev, items: [...prev.items, item] }));
     setNewItem({ size: defaultSize || '', faces_count: 'وجهين', location_text: '', nearest_landmark: '', latitude: null, longitude: null, item_type: 'new' });
     setPendingImageUrl(null);
     setPhotoPreviewUrl(null);
     setPhotoImportState('idle');
+    setGoogleMapsUrl('');
+    setGoogleMapsUrlError('');
+    setGoogleMapsUrlLoading(false);
+    
+    // Only close dialogs when validation passes and item is added
     setShowAddDialog(false);
+    setShowGoogleMapsDialog(false);
     toast.success(`تمت إضافة لوحة رقم ${nextSeq}`);
   };
 
@@ -2212,12 +2586,7 @@ export default function MunicipalityBillboardOrganizer() {
     try {
       const s = customSettings;
       const pages: string[] = [];
-      const printItems = [...currentCollection.items].sort((a, b) => {
-        const orderA = getSizeSortOrder(a.size);
-        const orderB = getSizeSortOrder(b.size);
-        if (orderA !== orderB) return orderA - orderB;
-        return a.sequence_number - b.sequence_number;
-      });
+      const printItems = [...currentCollection.items].sort((a, b) => a.sequence_number - b.sequence_number);
       const displayMunicipality = municipalityName || collectionName;
       const readStoredStatusValue = (key: string, fallback: string) => {
         try {
@@ -2690,7 +3059,7 @@ export default function MunicipalityBillboardOrganizer() {
             </div>
 
             ${s.faces_count_show !== 'false' ? `
-            <div class="absolute-field" style="top: ${s.faces_count_top}; left: ${s.faces_count_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color}; z-index: 5; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif;">
+            <div class="absolute-field" style="top: calc(${s.size_top} + 12mm); left: ${s.size_left}; transform: translateX(-50%); width: 80mm; text-align: center; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color}; z-index: 5; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif;">
               ${item.faces_count}
             </div>
             ` : ''}
@@ -3147,6 +3516,33 @@ export default function MunicipalityBillboardOrganizer() {
               <Camera className="h-4 w-4" />
               من صورة
             </Button>
+            {/* Google Maps URL add button */}
+            <Button
+              onClick={() => {
+                const defaults = getLastItemDefaults();
+                setNewItem({
+                  size: defaults.size,
+                  faces_count: defaults.faces_count,
+                  status: defaults.status,
+                  location_text: defaults.location_text,
+                  nearest_landmark: defaults.nearest_landmark,
+                  latitude: null,
+                  longitude: null,
+                  item_type: 'new',
+                });
+                setGoogleMapsUrl('');
+                setGoogleMapsUrlError('');
+                setGoogleMapsUrlLoading(false);
+                setShowGoogleMapsDialog(true);
+              }}
+              size="sm"
+              variant="outline"
+              className="h-9 rounded-xl border-emerald-500/30 bg-emerald-500/8 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/15 hover:border-emerald-500/50 gap-1.5 font-bold"
+              title="إضافة لوحة عبر رابط قوقل ماب — يُستخرج الإحداثي والموقع تلقائياً"
+            >
+              <MapPin className="h-4 w-4" />
+              من قوقل ماب
+            </Button>
             {/* Overlay Editor shortcut */}
             <Button
               onClick={() => {
@@ -3358,6 +3754,38 @@ export default function MunicipalityBillboardOrganizer() {
                   تغيير حالة المحدد
                 </Button>
 
+                {/* Bulk faces count change */}
+                <div className="flex items-center gap-1.5">
+                  <Select value={bulkFacesCount} onValueChange={(v) => setBulkFacesCount(v as 'وجه' | 'وجهين')}>
+                    <SelectTrigger className="h-8 w-28 text-xs rounded-xl bg-background/50 border-border/15">
+                      <SelectValue placeholder="عدد الأوجه" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
+                      <SelectItem value="وجه" className="text-xs">وجه واحد</SelectItem>
+                      <SelectItem value="وجهين" className="text-xs">وجهين</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 text-xs rounded-xl border-border/20 bg-card/45"
+                    disabled={!bulkFacesCount}
+                    onClick={() => {
+                      if (!bulkFacesCount) return;
+                      setCurrentCollection(prev => ({
+                        ...prev,
+                        items: prev.items.map(item =>
+                          selectedItems.has(item.sequence_number) ? { ...item, faces_count: bulkFacesCount } : item
+                        ),
+                      }));
+                      toast.success(`تم تغيير عدد الأوجه لـ ${selectedItems.size} لوحة إلى ${bulkFacesCount === 'وجه' ? 'وجه واحد' : 'وجهين'}`);
+                      setBulkFacesCount('');
+                    }}
+                  >
+                    تطبيق الأوجه
+                  </Button>
+                </div>
+
                 <Button size="sm" variant="outline" className="h-8 text-xs rounded-xl border-border/20 bg-card/45 gap-1.5" onClick={() => { setMoveSourceSeqs(Array.from(selectedItems).sort((a, b) => a - b)); setMoveTargetSeq(''); setMovePosition('above'); setShowMoveDialog(true); }}>
                   <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
                   نقل المحدد إلى رقم...
@@ -3434,18 +3862,30 @@ export default function MunicipalityBillboardOrganizer() {
                           />
                         </td>
                         <td className="p-3 text-center font-bold text-indigo-500">{item.sequence_number}</td>
-                        <td className="p-3">
-                          <div className="flex flex-col">
-                            <span className="font-semibold text-foreground/90">{item.location_text || item.billboard_name || '—'}</span>
+                        <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="space-y-1">
+                            <Input
+                              value={item.location_text || item.billboard_name || ''}
+                              onChange={(e) => updateItem(item.sequence_number, { location_text: e.target.value, billboard_name: e.target.value })}
+                              placeholder="اسم الموقع / الشارع..."
+                              className="h-8 text-xs font-semibold rounded-lg border-border/15 bg-background/50 focus-visible:ring-indigo-500"
+                            />
                             {item.municipality && (
-                              <span className="text-[10px] text-muted-foreground mt-0.5 inline-flex items-center gap-1">
+                              <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1 px-1">
                                 <Building2 className="h-2.5 w-2.5" />
                                 {item.municipality}
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="p-3 text-muted-foreground text-xs">{item.nearest_landmark || '—'}</td>
+                        <td className="p-2" onClick={(e) => e.stopPropagation()}>
+                          <Input
+                            value={item.nearest_landmark || ''}
+                            onChange={(e) => updateItem(item.sequence_number, { nearest_landmark: e.target.value })}
+                            placeholder="أقرب نقطة دالة..."
+                            className="h-8 text-xs rounded-lg border-border/15 bg-background/50 focus-visible:ring-indigo-500"
+                          />
+                        </td>
                         <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
                           <DimensionInput
                             value={item.size}
@@ -3453,7 +3893,20 @@ export default function MunicipalityBillboardOrganizer() {
                             availableSizes={dbSizes}
                           />
                         </td>
-                        <td className="p-3 text-center text-xs font-medium text-foreground/80">{item.faces_count}</td>
+                        <td className="p-3 text-center" onClick={(e) => e.stopPropagation()}>
+                          <Select
+                            value={item.faces_count || 'وجهين'}
+                            onValueChange={v => updateItem(item.sequence_number, { faces_count: v })}
+                          >
+                            <SelectTrigger className="h-8 w-24 mx-auto rounded-lg text-xs border-border/15 bg-background/50 font-medium">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
+                              <SelectItem value="وجه" className="text-xs">وجه واحد</SelectItem>
+                              <SelectItem value="وجهين" className="text-xs">وجهين</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </td>
                         <td className="p-3 text-center text-[10px] font-mono text-muted-foreground" dir="ltr">
                           {item.latitude && item.longitude ? `${item.latitude?.toFixed(6)}, ${item.longitude?.toFixed(6)}` : '—'}
                         </td>
@@ -3466,16 +3919,19 @@ export default function MunicipalityBillboardOrganizer() {
                         <td className="p-2.5" onClick={(e) => e.stopPropagation()}>
                           <div className="w-40 mx-auto">
                             {item.image_url ? (
-                              <div className="relative group overflow-hidden rounded-lg border border-border/15 shadow-sm">
+                              <div className="relative group overflow-hidden rounded-lg border border-border/15 shadow-sm cursor-pointer" onClick={() => setZoomImageModalUrl(item.image_url || null)}>
                                 <img
                                   src={item.image_url}
                                   alt="صورة اللوحة"
                                   className="w-full h-12.5 object-cover transition-transform duration-300 group-hover:scale-105"
                                   onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
                                 />
+                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                                  <Maximize2 className="h-4 w-4 text-white drop-shadow" />
+                                </div>
                                 <button
                                   type="button"
-                                  onClick={() => updateItem(item.sequence_number, { image_url: null })}
+                                  onClick={(e) => { e.stopPropagation(); updateItem(item.sequence_number, { image_url: null }); }}
                                   className="absolute top-1 right-1 bg-destructive/90 hover:bg-destructive text-destructive-foreground rounded-full h-5 w-5 flex items-center justify-center shadow transition-all scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100"
                                   title="حذف الصورة"
                                 >
@@ -3578,22 +4034,25 @@ export default function MunicipalityBillboardOrganizer() {
                       {/* Image Preview / Placeholder */}
                       <div className="relative rounded-xl overflow-hidden aspect-[16/10] bg-muted/40 border border-border/10 mb-3.5 group-hover:border-indigo-500/10 transition-colors" onClick={(e) => e.stopPropagation()}>
                         {item.image_url ? (
-                          <>
+                          <div className="relative w-full h-full cursor-pointer" onClick={() => setZoomImageModalUrl(item.image_url || null)}>
                             <img
                               src={item.image_url}
                               alt="صورة اللوحة"
                               className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                               onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
                             />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center pointer-events-none">
+                              <Maximize2 className="h-5 w-5 text-white drop-shadow" />
+                            </div>
                             <button
                               type="button"
-                              onClick={() => updateItem(item.sequence_number, { image_url: null })}
+                              onClick={(e) => { e.stopPropagation(); updateItem(item.sequence_number, { image_url: null }); }}
                               className="absolute top-1.5 right-1.5 bg-destructive/95 hover:bg-destructive text-white rounded-full h-6 w-6 flex items-center justify-center shadow transition-all scale-90 opacity-0 group-hover:opacity-100 group-hover:scale-100 z-10"
                               title="حذف الصورة"
                             >
                               <XIcon className="h-3.5 w-3.5" />
                             </button>
-                          </>
+                          </div>
                         ) : (
                           <div className="absolute inset-0 flex flex-col items-center justify-center p-3 text-center">
                             <ImageUploadZone
@@ -3889,9 +4348,274 @@ export default function MunicipalityBillboardOrganizer() {
         </DialogContent>
       </Dialog>
 
+      {/* ─── Google Maps URL Billboard Dialog ─── */}
+      <Dialog open={showGoogleMapsDialog} onOpenChange={(open) => {
+        if (!open) { setGoogleMapsUrl(''); setGoogleMapsUrlError(''); setGoogleMapsUrlLoading(false); }
+        setShowGoogleMapsDialog(open);
+      }}>
+        <DialogContent className="max-w-md border-border/10 rounded-3xl bg-background/98 backdrop-blur-xl shadow-2xl p-0 overflow-hidden">
+          {/* Header */}
+          <div className="px-6 pt-5 pb-4 border-b border-border/10 bg-gradient-to-r from-emerald-500/5 to-teal-500/5">
+            <DialogTitle className="font-bold text-base flex items-center gap-2">
+              <div className="p-1.5 bg-emerald-500/10 rounded-lg">
+                <MapPin className="h-4 w-4 text-emerald-500" />
+              </div>
+              إضافة لوحة من رابط قوقل ماب
+            </DialogTitle>
+            <DialogDescription className="text-[11px] text-muted-foreground mt-1">
+              الصق رابط Google Maps لاستخراج الإحداثيات وتعبئة البيانات تلقائياً
+            </DialogDescription>
+          </div>
+
+          <div className="px-6 py-5 space-y-4">
+            {/* URL Input */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+                رابط قوقل ماب
+                {googleMapsUrlLoading && (
+                  <span className="mr-auto text-[10px] text-emerald-500 flex items-center gap-1">
+                    <Loader2 className="h-3 w-3 animate-spin" /> جاري استخراج البيانات...
+                  </span>
+                )}
+                {!googleMapsUrlLoading && newItem.latitude && newItem.longitude && googleMapsUrl && !googleMapsUrlError && (
+                  <span className="mr-auto text-[10px] text-emerald-500 flex items-center gap-1 font-normal">
+                    <CheckCircle2 className="h-3 w-3" /> تم استخراج الإحداثيات
+                  </span>
+                )}
+              </Label>
+              <div className="relative">
+                <Input
+                  dir="ltr"
+                  autoFocus
+                  value={googleMapsUrl}
+                  onChange={e => handleGoogleMapsUrlParse(e.target.value)}
+                  placeholder="https://maps.google.com/maps?q=..."
+                  className={`font-mono text-xs rounded-xl border-border/15 bg-background/50 h-11 pl-9 ${
+                    googleMapsUrlError ? 'border-destructive/50 bg-destructive/5' :
+                    (newItem.latitude && newItem.longitude && googleMapsUrl && !googleMapsUrlError) ? 'border-emerald-500/40 bg-emerald-500/5' : ''
+                  }`}
+                />
+                {googleMapsUrlLoading ? (
+                  <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500 animate-spin" />
+                ) : (newItem.latitude && newItem.longitude && !googleMapsUrlError) ? (
+                  <CheckCircle2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-emerald-500" />
+                ) : (
+                  <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/40" />
+                )}
+              </div>
+              {googleMapsUrlError && (
+                <p className="text-[11px] text-destructive flex items-center gap-1.5 bg-destructive/5 border border-destructive/20 rounded-lg px-3 py-2">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {googleMapsUrlError}
+                </p>
+              )}
+              {/* Instructions */}
+              {!googleMapsUrl && (
+                <div className="bg-muted/40 border border-border/10 rounded-xl p-3 space-y-1.5">
+                  <p className="text-[11px] text-muted-foreground font-semibold">كيفية الحصول على الرابط:</p>
+                  <ol className="text-[10px] text-muted-foreground space-y-1 list-decimal list-inside leading-relaxed">
+                    <li>افتح قوقل ماب وانتقل إلى موقع اللوحة</li>
+                    <li>اضغط بزر اليمين على الموقع ← نسخ الإحداثيات، أو شارك الموقع</li>
+                    <li>الصق الرابط في الحقل أعلاه</li>
+                  </ol>
+                </div>
+              )}
+            </div>
+
+            {/* Extracted Coordinates Preview */}
+            {newItem.latitude && newItem.longitude && (
+              <div className="bg-emerald-500/[0.06] border border-emerald-500/20 rounded-xl p-3.5 space-y-2.5 animate-in fade-in duration-200">
+                <div className="flex items-center gap-2 text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  البيانات المُستخرجة
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-muted-foreground font-semibold">خط العرض (Lat)</span>
+                    <div className="font-mono font-bold text-foreground">{newItem.latitude.toFixed(6)}</div>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-[10px] text-muted-foreground font-semibold">خط الطول (Lng)</span>
+                    <div className="font-mono font-bold text-foreground">{newItem.longitude.toFixed(6)}</div>
+                  </div>
+                  {newItem.location_text && (
+                    <div className="col-span-2 space-y-0.5">
+                      <span className="text-[10px] text-muted-foreground font-semibold">الموقع (مُعبَّأ تلقائياً)</span>
+                      <div className="font-medium text-foreground/90">{newItem.location_text}</div>
+                    </div>
+                  )}
+                  {newItem.nearest_landmark && (
+                    <div className="col-span-2 space-y-0.5">
+                      <span className="text-[10px] text-muted-foreground font-semibold">أقرب نقطة دالة</span>
+                      <div className="font-medium text-foreground/90">{newItem.nearest_landmark}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Size & Faces */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">المقاس</Label>
+                <Select value={dbSizes.includes(newItem.size || '') ? newItem.size : ''} onValueChange={v => setNewItem(p => ({ ...p, size: v }))}>
+                  <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-9 text-xs">
+                    <SelectValue placeholder="اختر مقاس" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
+                    {dbSizes.map(s => <SelectItem key={s} value={s} className="text-xs">{s}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground">عدد الأوجه</Label>
+                <Select value={newItem.faces_count || 'وجهين'} onValueChange={v => setNewItem(p => ({ ...p, faces_count: v }))}>
+                  <SelectTrigger className="rounded-xl border-border/15 bg-background/50 h-9 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
+                    <SelectItem value="وجه" className="text-xs">وجه واحد</SelectItem>
+                    <SelectItem value="وجهين" className="text-xs">وجهين</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Photo Zone */}
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Camera className="h-3.5 w-3.5 text-emerald-500" />
+                  صورة اللوحة (اختياري)
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={(e) => { e.stopPropagation(); handlePasteFromClipboard(); }}
+                  className="h-6 text-[10px] rounded-lg border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 gap-1 font-semibold hover:bg-emerald-500/20"
+                  title="لصق صورة مباشرة من الحافظة (Ctrl + V)"
+                >
+                  <Clipboard className="h-3 w-3" />
+                  لصق صورة (Ctrl+V)
+                </Button>
+              </div>
+
+              {/* Progress Bar Indicator */}
+              {(photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding') && (
+                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-2.5 space-y-1.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                    <div className="flex items-center gap-1.5">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>
+                        {photoImportState === 'compressing' ? 'جاري ضغط الصورة...' :
+                         photoImportState === 'uploading' ? 'جاري رفع الصورة إلى السحابة...' :
+                         'استخراج بيانات الموقع...'}
+                      </span>
+                    </div>
+                    <span className="font-mono font-bold">{photoImportProgress}%</span>
+                  </div>
+                  <div className="w-full h-1.5 bg-emerald-500/20 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
+                      style={{ width: `${photoImportProgress}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {photoImportState === 'done' && (
+                <div className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                  تم رفع الصورة بنجاح وحفظها
+                </div>
+              )}
+
+              {photoPreviewUrl ? (
+                <div className="relative rounded-xl overflow-hidden border border-emerald-500/30 h-28 group">
+                  <img src={photoPreviewUrl} alt="معاينة" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => setZoomImageModalUrl(photoPreviewUrl)}
+                      className="h-7 text-[11px] font-semibold gap-1 bg-white/90 text-black hover:bg-white shadow"
+                    >
+                      <Maximize2 className="h-3 w-3" />
+                      تكبير
+                    </Button>
+                    <button
+                      type="button"
+                      onClick={() => { setPhotoPreviewUrl(null); setPendingImageUrl(null); setPhotoImportState('idle'); }}
+                      className="h-7 px-2 bg-destructive/90 hover:bg-destructive text-white rounded-md text-[11px] font-semibold flex items-center gap-1 shadow"
+                    >
+                      <XIcon className="h-3 w-3" />
+                      حذف
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div
+                  className="rounded-xl border border-dashed border-border/30 p-3 bg-muted/20 hover:bg-muted/40 cursor-pointer flex items-center justify-center gap-2 text-xs text-muted-foreground"
+                  onClick={() => photoDropRef.current?.click()}
+                  onDragOver={e => e.preventDefault()}
+                  onDrop={e => { e.preventDefault(); if (e.dataTransfer.files) handleDropOrSelectFiles(e.dataTransfer.files); }}
+                >
+                  <Camera className="h-4 w-4 text-emerald-500" />
+                  <span>اسحب صورة هنا أو اضغط للاختيار أو <strong>Ctrl + V</strong></span>
+                </div>
+              )}
+            </div>
+
+            {/* Location text (editable) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                موقع اللوحة
+                {googleMapsUrlLoading && <span className="mr-auto text-[10px] text-indigo-500">جاري التعبئة...</span>}
+              </Label>
+              <Input
+                value={newItem.location_text || ''}
+                onChange={e => setNewItem(p => ({ ...p, location_text: e.target.value }))}
+                placeholder="مثال: طريق الشط"
+                className="rounded-xl border-border/15 bg-background/50 h-9 text-sm"
+              />
+            </div>
+
+            {/* Nearest landmark (editable) */}
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">أقرب نقطة دالة</Label>
+              <Input
+                value={newItem.nearest_landmark || ''}
+                onChange={e => setNewItem(p => ({ ...p, nearest_landmark: e.target.value }))}
+                placeholder="مثال: أمام مسجد..."
+                className="rounded-xl border-border/15 bg-background/50 h-9 text-sm"
+              />
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 border-t border-border/10 flex items-center justify-between gap-3 bg-muted/20">
+            <Button variant="ghost" onClick={() => setShowGoogleMapsDialog(false)} className="rounded-xl h-10 text-muted-foreground">إلغاء</Button>
+            <Button
+              onClick={addNewItem}
+              disabled={googleMapsUrlLoading}
+              className="rounded-xl h-10 px-6 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-semibold shadow shadow-emerald-600/20 gap-2"
+            >
+              {googleMapsUrlLoading ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> جاري التحديد...</>
+              ) : (
+                <><Plus className="h-4 w-4" /> إضافة اللوحة</>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Add new billboard dialog */}
       {/* ─── Add Billboard Dialog (enhanced with photo import) ─── */}
-      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setPhotoPreviewUrl(null); setPendingImageUrl(null); setPhotoImportState('idle'); } setShowAddDialog(open); }}>
+      <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) { setPhotoPreviewUrl(null); setPendingImageUrl(null); setPhotoImportState('idle'); setGoogleMapsUrl(''); setGoogleMapsUrlError(''); } setShowAddDialog(open); }}>
         <DialogContent className="max-w-lg border-border/10 rounded-3xl bg-background/98 backdrop-blur-xl shadow-2xl p-0 overflow-hidden">
           {/* Dialog header strip */}
           <div className="px-6 pt-5 pb-4 border-b border-border/10 bg-gradient-to-r from-indigo-500/5 to-violet-500/5">
@@ -3909,11 +4633,24 @@ export default function MunicipalityBillboardOrganizer() {
 
               {/* ── Photo Import Zone ── */}
               <div className="space-y-2">
-                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                  <Camera className="h-3.5 w-3.5 text-violet-500" />
-                  صورة ميدانية
-                  <span className="text-[10px] font-normal text-muted-foreground/60">(اختياري — يُستخرج منها الإحداثيات تلقائياً)</span>
-                </Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Camera className="h-3.5 w-3.5 text-violet-500" />
+                    صورة ميدانية
+                    <span className="text-[10px] font-normal text-muted-foreground/60">(اختر، اسحب، أو اضغط Ctrl+V للصق)</span>
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); handlePasteFromClipboard(); }}
+                    className="h-7 text-[11px] rounded-lg border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 gap-1 font-semibold hover:bg-indigo-500/20"
+                    title="لصق صورة مباشرة من الحافظة"
+                  >
+                    <Clipboard className="h-3 w-3" />
+                    لصق صورة (Ctrl+V)
+                  </Button>
+                </div>
 
                 {/* Drop zone */}
                 <div
@@ -4097,6 +4834,52 @@ export default function MunicipalityBillboardOrganizer() {
                   placeholder="مثال: وسط جسر القبة الفلكية"
                   className="rounded-xl border-border/15 bg-background/50 h-10"
                 />
+              </div>
+
+              {/* ── Google Maps URL ── */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+                  رابط قوقل ماب
+                  <span className="text-[10px] font-normal text-muted-foreground/60">(الصق الرابط لاستخراج الإحداثيات تلقائياً)</span>
+                  {googleMapsUrlLoading && (
+                    <span className="mr-auto text-[10px] text-indigo-500 font-normal flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> جاري التحديد...
+                    </span>
+                  )}
+                  {!googleMapsUrlLoading && newItem.latitude && newItem.longitude && googleMapsUrl && !googleMapsUrlError && (
+                    <span className="mr-auto text-[10px] text-emerald-500 font-normal flex items-center gap-1">
+                      <CheckCircle2 className="h-3 w-3" /> تم استخراج الإحداثيات
+                    </span>
+                  )}
+                </Label>
+                <div className="relative">
+                  <Input
+                    dir="ltr"
+                    value={googleMapsUrl}
+                    onChange={e => handleGoogleMapsUrlParse(e.target.value)}
+                    placeholder="https://maps.google.com/maps?q=... أو الصق رابط قوقل ماب"
+                    className={`font-mono text-xs rounded-xl border-border/15 bg-background/50 h-10 pr-9 ${
+                      googleMapsUrlError ? 'border-destructive/40 bg-destructive/5' :
+                      (newItem.latitude && newItem.longitude && googleMapsUrl) ? 'border-emerald-500/30 bg-emerald-500/5' : ''
+                    }`}
+                  />
+                  {googleMapsUrl && (
+                    <button
+                      type="button"
+                      onClick={() => { setGoogleMapsUrl(''); setGoogleMapsUrlError(''); }}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {googleMapsUrlError && (
+                  <p className="text-[11px] text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    {googleMapsUrlError}
+                  </p>
+                )}
               </div>
 
               {/* ── Coordinates ── */}
@@ -4348,6 +5131,105 @@ export default function MunicipalityBillboardOrganizer() {
                   </SelectContent>
                 </Select>
               </div>
+              {/* Photo Zone */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+                    <Camera className="h-3.5 w-3.5 text-indigo-500" />
+                    صورة اللوحة
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={(e) => { e.stopPropagation(); handlePasteFromClipboard(); }}
+                    className="h-6 text-[10px] rounded-lg border-indigo-500/30 bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 gap-1 font-semibold hover:bg-indigo-500/20"
+                    title="لصق صورة مباشرة من الحافظة (Ctrl + V)"
+                  >
+                    <Clipboard className="h-3 w-3" />
+                    لصق صورة (Ctrl+V)
+                  </Button>
+                </div>
+                {/* Photo Upload / Status Progress Indicator */}
+                {(photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding') && (
+                  <div className="bg-indigo-500/10 border border-indigo-500/30 rounded-xl p-2.5 space-y-1.5 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between text-xs font-semibold text-indigo-600 dark:text-indigo-400">
+                      <div className="flex items-center gap-1.5">
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        <span>
+                          {photoImportState === 'compressing' ? 'جاري ضغط الصورة...' :
+                           photoImportState === 'uploading' ? 'جاري رفع الصورة إلى السحابة...' :
+                           'استخراج بيانات الموقع...'}
+                        </span>
+                      </div>
+                      <span className="font-mono">{photoImportProgress}%</span>
+                    </div>
+                    <div className="w-full h-1.5 bg-indigo-500/20 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-indigo-500 transition-all duration-300 rounded-full"
+                        style={{ width: `${photoImportProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {photoImportState === 'done' && (
+                  <div className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-2.5 py-1">
+                    <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+                    تم رفع الصورة بنجاح وحفظها
+                  </div>
+                )}
+
+                {editingItem.image_url ? (
+                  <div className="relative rounded-xl overflow-hidden border border-border/15 h-36 group">
+                    <img src={editingItem.image_url} alt="صورة اللوحة" className="w-full h-full object-cover" />
+                    <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setZoomImageModalUrl(editingItem.image_url || null)}
+                        className="h-8 text-xs font-semibold gap-1 bg-white/90 text-black hover:bg-white shadow"
+                        title="تكبير ومعاينة الصورة"
+                      >
+                        <Maximize2 className="h-3.5 w-3.5 text-indigo-600" />
+                        تكبير
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => photoDropRef.current?.click()}
+                        className="h-8 text-xs font-semibold gap-1 bg-white/90 text-black hover:bg-white shadow"
+                      >
+                        <Camera className="h-3.5 w-3.5" />
+                        تغيير
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        onClick={() => setEditingItem({ ...editingItem, image_url: null })}
+                        className="h-8 text-xs font-semibold gap-1 shadow"
+                      >
+                        <XIcon className="h-3.5 w-3.5" />
+                        حذف
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="rounded-xl border border-dashed border-border/30 p-4 bg-muted/20 hover:bg-muted/40 cursor-pointer flex flex-col items-center justify-center gap-1.5 text-xs text-muted-foreground transition-colors"
+                    onClick={() => photoDropRef.current?.click()}
+                    onDragOver={e => e.preventDefault()}
+                    onDrop={e => { e.preventDefault(); if (e.dataTransfer.files) handleDropOrSelectFiles(e.dataTransfer.files); }}
+                  >
+                    <Camera className="h-5 w-5 text-indigo-500" />
+                    <span>اضغط لاختيار صورة، اسحب هنا، أو <strong>Ctrl + V</strong> للصق</span>
+                  </div>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-muted-foreground">حالة اللوحة</Label>
                 <StatusQuickSelector
@@ -4364,6 +5246,47 @@ export default function MunicipalityBillboardOrganizer() {
                 <Label className="text-xs font-semibold text-muted-foreground">أقرب نقطة دالة</Label>
                 <Input value={editingItem.nearest_landmark} onChange={e => setEditingItem({ ...editingItem, nearest_landmark: e.target.value })} className="rounded-xl border-border/15 bg-background/50 h-10" />
               </div>
+              {/* Google Maps URL Field in Edit Dialog */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <MapPin className="h-3.5 w-3.5 text-emerald-500" />
+                  رابط قوقل ماب
+                  <span className="text-[10px] font-normal text-muted-foreground/60">(الصق الرابط لاستخراج الإحداثيات تلقائياً)</span>
+                  {googleMapsUrlLoading && (
+                    <span className="mr-auto text-[10px] text-emerald-500 flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" /> جاري التحديد...
+                    </span>
+                  )}
+                </Label>
+                <div className="relative">
+                  <Input
+                    dir="ltr"
+                    value={googleMapsUrl}
+                    onChange={e => handleEditGoogleMapsUrlParse(e.target.value)}
+                    placeholder="https://maps.google.com/maps?q=... أو الصق رابط قوقل ماب"
+                    className={`font-mono text-xs rounded-xl border-border/15 bg-background/50 h-10 pr-9 ${
+                      googleMapsUrlError ? 'border-destructive/40 bg-destructive/5' :
+                      (editingItem.latitude && editingItem.longitude && googleMapsUrl) ? 'border-emerald-500/30 bg-emerald-500/5' : ''
+                    }`}
+                  />
+                  {googleMapsUrl && (
+                    <button
+                      type="button"
+                      onClick={() => { setGoogleMapsUrl(''); setGoogleMapsUrlError(''); }}
+                      className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {googleMapsUrlError && (
+                  <p className="text-[11px] text-destructive flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 shrink-0" />
+                    {googleMapsUrlError}
+                  </p>
+                )}
+              </div>
+
               <div className="space-y-1.5">
                 <Label className="text-xs font-semibold text-muted-foreground">الإحداثيات (Lat, Lng)</Label>
                 <Input
@@ -4385,13 +5308,31 @@ export default function MunicipalityBillboardOrganizer() {
           )}
           <DialogFooter className="gap-2 mt-2">
             <Button variant="outline" onClick={() => setEditingItem(null)} className="rounded-xl h-10">إلغاء</Button>
-            <Button onClick={() => {
-              if (editingItem) {
-                updateItem(editingItem.sequence_number, editingItem);
-                setEditingItem(null);
-                toast.success('تم تحديث بيانات اللوحة');
-              }
-            }} className="rounded-xl h-10 bg-indigo-600 hover:bg-indigo-700 text-white">حفظ التعديلات</Button>
+            <Button
+              disabled={photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding'}
+              onClick={() => {
+                if (photoImportState === 'compressing' || photoImportState === 'uploading') {
+                  toast.info('جاري رفع ومعالجة الصورة... يرجى الانتظار حتى اكتمال شريط التقدم');
+                  return;
+                }
+                if (editingItem) {
+                  if (!editingItem.image_url) {
+                    toast.error('يرجى رفع أو إرفاق صورة للوحة أولاً (رفع الصورة إجباري للحفظ)');
+                    return;
+                  }
+                  updateItem(editingItem.sequence_number, editingItem);
+                  setEditingItem(null);
+                  toast.success('تم تحديث بيانات اللوحة');
+                }
+              }}
+              className="rounded-xl h-10 bg-indigo-600 hover:bg-indigo-700 text-white gap-2"
+            >
+              {(photoImportState === 'compressing' || photoImportState === 'uploading' || photoImportState === 'geocoding') ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> جاري المعالجة...</>
+              ) : (
+                <>حفظ التعديلات</>
+              )}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -5027,6 +5968,79 @@ export default function MunicipalityBillboardOrganizer() {
               تأكيد النقل
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Image Zoom Lightbox Modal ─── */}
+      <Dialog open={!!zoomImageModalUrl} onOpenChange={(open) => { if (!open) { setZoomImageModalUrl(null); setZoomScale(1); } }}>
+        <DialogContent className="max-w-4xl border-border/10 rounded-3xl bg-black/95 backdrop-blur-2xl shadow-2xl p-0 overflow-hidden text-white flex flex-col items-center">
+          {/* Header */}
+          <div className="w-full px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/5">
+            <div className="flex items-center gap-2 font-bold text-sm">
+              <Eye className="h-4 w-4 text-emerald-400" />
+              معاينة وتكبير صورة اللوحة
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setZoomScale(s => Math.min(3.5, s + 0.25))}
+                className="h-8 w-8 p-0 text-white hover:bg-white/10 rounded-lg"
+                title="تكبير (+)"
+              >
+                <ZoomIn className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setZoomScale(s => Math.max(0.5, s - 0.25))}
+                className="h-8 w-8 p-0 text-white hover:bg-white/10 rounded-lg"
+                title="تصغير (-)"
+              >
+                <ZoomOut className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setZoomScale(1)}
+                className="h-8 text-xs text-white/70 hover:bg-white/10 px-2 rounded-lg"
+              >
+                إعادة ضبط (100%)
+              </Button>
+              {zoomImageModalUrl && (
+                <a
+                  href={zoomImageModalUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="h-8 px-2 flex items-center gap-1 text-xs text-indigo-300 hover:bg-white/10 rounded-lg transition-colors"
+                  title="فتح الحجم الكامل في تبويب جديد"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  الرابط الأصلي
+                </a>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => { setZoomImageModalUrl(null); setZoomScale(1); }}
+                className="h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/10 rounded-full"
+              >
+                <XIcon className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Image Container with Smooth Scaling */}
+          <div className="w-full h-[75vh] p-6 flex items-center justify-center overflow-auto cursor-grab active:cursor-grabbing">
+            {zoomImageModalUrl && (
+              <img
+                src={zoomImageModalUrl}
+                alt="صورة اللوحة"
+                style={{ transform: `scale(${zoomScale})`, transition: 'transform 0.2s ease-out' }}
+                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl select-none"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>

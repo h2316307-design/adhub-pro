@@ -315,6 +315,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
   // Save edit function
   const saveEdit = async () => {
     if (!editing) return;
+    
     setSaving(true);
     try {
       const id = editing.ID ?? editing.id;
