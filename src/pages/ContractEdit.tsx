@@ -22,7 +22,8 @@ import { Badge } from '@/components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import SelectableGoogleHomeMap from '@/components/Map/SelectableGoogleHomeMap';
 import { cleanupOrphanedBillboards } from '@/services/contractCleanupService';
-import { isBillboardAvailable, getDaysUntilExpiry } from '@/utils/contractUtils';
+import { isBillboardAvailable, getDaysUntilExpiry, checkBillboardConflicts, type BillboardConflict } from '@/utils/contractUtils';
+import { BillboardConflictDialog } from '@/components/contracts/BillboardConflictDialog';
 import { calculateAllBillboardPrices } from '@/utils/contractBillboardPricing';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 
@@ -97,6 +98,11 @@ export default function ContractEdit() {
   const [swapBillboard, setSwapBillboard] = useState<{ id: string; name: string; size: string; imageUrl: string; landmark: string } | null>(null);
   const [maintenanceConfirmOpen, setMaintenanceConfirmOpen] = useState(false);
   const [pendingMaintenanceBillboard, setPendingMaintenanceBillboard] = useState<Billboard | null>(null);
+
+  // ─── Conflict detection state ───
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [conflictList, setConflictList] = useState<BillboardConflict[]>([]);
+  const [pendingConflictBillboard, setPendingConflictBillboard] = useState<Billboard | null>(null);
 
   // ✅ FIXED: Default to stored prices for existing contracts (true)
   // Will be set to false only for new contracts (no saved prices)
@@ -1171,103 +1177,41 @@ export default function ContractEdit() {
   }, [startDate, durationMonths, durationDays, pricingMode, use30DayMonth]);
 
 
-  // ✅ FIXED: Enhanced price lookup with fallback to size name matching
+  // ✅ FIXED: Enhanced price lookup with fallback to size name matching (Optimized Logging)
   const getPriceFromDatabase = (sizeId: number | null, level: any, customer: string, months: number, sizeName?: string): number | null => {
-    console.log(`\n🔍 ===== PRICE LOOKUP START =====`);
-    console.log(`🔍 Looking for price: size_id=${sizeId} (type: ${typeof sizeId}), sizeName="${sizeName}", level="${level}", customer="${customer}", months=${months}`);
-    
     let dbRow = null;
     
     // Try by size_id first if available
     if (sizeId !== null && sizeId !== undefined) {
-      console.log(`🔎 Step 1: Searching by size_id=${sizeId} (type: ${typeof sizeId})...`);
-      console.log(`📊 First 3 pricing rows for comparison:`, 
-        pricingData.slice(0, 3).map(p => ({ 
-          size: p.size, 
-          size_id: p.size_id, 
-          size_id_type: typeof p.size_id,
-          level: p.billboard_level, 
-          category: p.customer_category 
-        }))
-      );
-      
       dbRow = pricingData.find(p => {
-        // ✅ CRITICAL: Ensure both sides are numbers before comparison
         const pSizeId = p.size_id !== null && p.size_id !== undefined ? Number(p.size_id) : null;
-        const match = pSizeId === sizeId && 
-                     String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
-                     String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
-        if (pSizeId === sizeId || p.size_id === sizeId) {
-          console.log(`🔍 Comparing: p.size_id=${p.size_id} (${typeof p.size_id}) -> pSizeId=${pSizeId} === sizeId=${sizeId} (${typeof sizeId}), level match: ${String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase()}, customer match: ${String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase()}, FINAL MATCH: ${match}`);
-        }
-        return match;
+        return pSizeId === sizeId && 
+               String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
+               String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
       
       if (dbRow) {
-        console.log('✅ Found matching row by size_id:', {
-          size: dbRow.size,
-          size_id: dbRow.size_id,
-          level: dbRow.billboard_level,
-          category: dbRow.customer_category
-        });
+        console.log(`✅ Found matching price row by size_id=${sizeId} (level=${dbRow.billboard_level}, category=${dbRow.customer_category})`);
       } else {
-        console.warn(`❌ No match by size_id. Checking available pricing data for size_id=${sizeId}:`);
-        const sameSizeId = pricingData.filter(p => {
-          const pSizeId = Number(p.size_id);
-          return pSizeId === sizeId;
-        });
-        console.log(`  Found ${sameSizeId.length} rows with size_id=${sizeId}:`, 
-          sameSizeId.map(p => ({ size: p.size, size_id: p.size_id, level: p.billboard_level, category: p.customer_category }))
-        );
-        
-        // Show what levels and customers exist for this size_id
-        if (sameSizeId.length > 0) {
-          console.log(`  Available levels for size_id=${sizeId}:`, [...new Set(sameSizeId.map(p => p.billboard_level))]);
-          console.log(`  Available customers for size_id=${sizeId}:`, [...new Set(sameSizeId.map(p => p.customer_category))]);
-          console.log(`  🚨 MISMATCH DETAILS: Looking for level="${level}" and customer="${customer}"`);
-        }
+        console.warn(`❌ No match by size_id=${sizeId} for level="${level}" & customer="${customer}". Trying fallback...`);
       }
-    } else {
-      console.warn('⚠️ No size_id provided, will try size name matching');
     }
     
     // ✅ FALLBACK: If no size_id or not found, try by size name with normalization
     if (!dbRow && sizeName) {
-      console.log(`\n🔎 Step 2: Fallback to size name matching...`);
       const normalizedInputSize = normalizeSize(sizeName);
-      console.log(`  Input size: "${sizeName}" -> Normalized: "${normalizedInputSize}"`);
-      
-      // Show all available sizes for this level and customer
-      const matchingLevelCustomer = pricingData.filter(p => 
-        String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
-        String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase()
-      );
-      console.log(`  Available sizes for level="${level}" & customer="${customer}":`, 
-        matchingLevelCustomer.map(p => ({ size: p.size, size_id: p.size_id, normalized: normalizeSize(String(p.size || '')) }))
-      );
       
       dbRow = pricingData.find(p => {
         const dbSize = normalizeSize(String(p.size || ''));
-        const matches = dbSize === normalizedInputSize && 
-                       String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
-                       String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
-        
-        if (matches) {
-          console.log(`  ✅ MATCH: db size "${p.size}" (normalized: "${dbSize}") = input "${sizeName}" (normalized: "${normalizedInputSize}")`);
-        }
-        
-        return matches;
+        return dbSize === normalizedInputSize && 
+               String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
+               String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
       
       if (dbRow) {
-        console.log('✅ Found matching row by size name:', {
-          size: dbRow.size,
-          size_id: dbRow.size_id,
-          level: dbRow.billboard_level,
-          category: dbRow.customer_category
-        });
+        console.log(`✅ Found matching price row by size name "${sizeName}" (level=${dbRow.billboard_level}, category=${dbRow.customer_category})`);
       } else {
-        console.error(`❌ NO MATCH FOUND for size name "${sizeName}" (normalized: "${normalizedInputSize}")`);
+        console.warn(`❌ NO MATCH FOUND by size name "${sizeName}" (normalized: "${normalizedInputSize}") for level="${level}" & customer="${customer}"`);
       }
     }
     
@@ -1283,8 +1227,11 @@ export default function ContractEdit() {
       const column = monthColumnMap[months];
       if (column && dbRow[column] !== null && dbRow[column] !== undefined) {
         const price = Number(dbRow[column]) || 0;
-        console.log(`✅ SUCCESS: Found price ${price} in column "${column}"`);
-        console.log(`===== PRICE LOOKUP END =====\n`);
+        if (price === 0) {
+          console.warn(`⚠️ WARNING: Found price is 0 LYD in column "${column}" for size_id=${sizeId}, level="${level}", category="${customer}"`);
+        } else {
+          console.log(`✅ SUCCESS: Found price ${price} LYD in column "${column}"`);
+        }
         return price;
       } else {
         console.error(`❌ Column "${column}" is null/undefined in matched row:`, dbRow);
@@ -1296,9 +1243,7 @@ export default function ContractEdit() {
       return getPriceFromDatabase(sizeId, level, 'عادي', months, sizeName);
     }
     
-    console.error(`\n❌ FINAL RESULT: No price found!`);
-    console.error(`   Parameters: size_id=${sizeId}, sizeName="${sizeName}", level="${level}", customer="${customer}", months=${months}`);
-    console.log(`===== PRICE LOOKUP END =====\n`);
+    console.error(`❌ FINAL RESULT: No price found for size_id=${sizeId}, sizeName="${sizeName}", level="${level}", customer="${customer}", months=${months}`);
     return null;
   };
 
@@ -2669,7 +2614,7 @@ export default function ContractEdit() {
   }, [billboards, searchQuery, cityFilter, sizeFilter, sizeFilters, statusFilter, municipalityFilter, selected]);
 
   // Event handlers
-  const toggleSelect = (b: Billboard) => {
+  const toggleSelect = async (b: Billboard) => {
     const id = String((b as any).ID);
     const isSelected = selected.includes(id);
 
@@ -2689,6 +2634,30 @@ export default function ContractEdit() {
         setPendingMaintenanceBillboard(b);
         setMaintenanceConfirmOpen(true);
         return;
+      }
+
+      // ─── كشف التعارض مع العقود النشطة ───
+      const startDate = (currentContract?.['Contract Date'] || currentContract?.start_date || '').slice(0, 10);
+      const endDate = (currentContract?.['End Date'] || currentContract?.end_date || '').slice(0, 10);
+
+      if (startDate && endDate) {
+        const namesMap: Record<string, string> = {
+          [id]: (b as any).Billboard_Name || (b as any).name || id,
+        };
+        const conflicts = await checkBillboardConflicts(
+          [id],
+          startDate,
+          endDate,
+          contractNumber, // استثناء العقد الحالي
+          namesMap
+        );
+
+        if (conflicts.length > 0) {
+          setPendingConflictBillboard(b);
+          setConflictList(conflicts);
+          setConflictDialogOpen(true);
+          return;
+        }
       }
     }
 
@@ -4892,6 +4861,31 @@ export default function ContractEdit() {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* ── حوار تحذير التأجير المزدوج ── */}
+        <BillboardConflictDialog
+          open={conflictDialogOpen}
+          conflicts={conflictList}
+          singleBillboardName={
+            pendingConflictBillboard
+              ? ((pendingConflictBillboard as any).Billboard_Name || (pendingConflictBillboard as any).name)
+              : undefined
+          }
+          onConfirm={() => {
+            if (pendingConflictBillboard) {
+              const id = String((pendingConflictBillboard as any).ID);
+              setSelected((prev) => [...prev, id]);
+            }
+            setConflictDialogOpen(false);
+            setPendingConflictBillboard(null);
+            setConflictList([]);
+          }}
+          onCancel={() => {
+            setConflictDialogOpen(false);
+            setPendingConflictBillboard(null);
+            setConflictList([]);
+          }}
+        />
       </div>
     </div>
   );

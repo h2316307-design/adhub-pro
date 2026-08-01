@@ -225,12 +225,25 @@ export const PrintInvoices = () => {
     const imageName = `print-invoice-${sanitizeFileName(contractNumber)}-face-${face}.jpg`;
     const fileSizeKB = Math.round(file.size / 1024);
     progress.start(imageName, fileSizeKB);
+
+    let pct = 5;
+    const interval = setInterval(() => {
+      if (pct < 30) pct += 5;
+      else if (pct < 70) pct += 3;
+      else if (pct < 90) pct += 1;
+      progress.update(pct);
+    }, 250);
+
     try {
-      const imageUrl = await uploadToImgbb(file, imageName, `print-invoices/C${sanitizeFileName(contractNumber)}`);
-      progress.complete(true);
+      const { uploadImageWithFallback } = await import('@/services/imageUploadService');
+      const imageUrl = await uploadImageWithFallback(file, imageName, `print-invoices/C${sanitizeFileName(contractNumber)}`);
+      clearInterval(interval);
+      progress.update(100);
+      progress.complete(true, 'تم رفع تصميم أمر الطباعة بنجاح');
       return imageUrl;
-    } catch (err) {
-      progress.complete(false);
+    } catch (err: any) {
+      clearInterval(interval);
+      progress.complete(false, err.message || 'فشل رفع التصميم');
       throw err;
     }
   };

@@ -177,8 +177,8 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       toast.error('يرجى اختيار ملف صورة صحيح');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('حجم الصورة يجب أن لا يتجاوز 10MB');
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('حجم الصورة يجب أن لا يتجاوز 25MB');
       return;
     }
 
@@ -187,26 +187,40 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
     reader.onload = (e) => setImagePreview(e.target?.result as string);
     reader.readAsDataURL(file);
 
+    setSelectedFile(file);
     setImgbbUploading(true);
+
     const { createUploadProgressTracker } = await import('@/hooks/useUploadProgress');
     const progress = createUploadProgressTracker();
     const fileSizeKB = Math.round(file.size / 1024);
+
+    const bbName = addForm.Billboard_Name || 'billboard';
+    const imageName = `${bbName.replace(/\s+/g, '-')}-${Date.now()}.jpg`;
+    progress.start(imageName, fileSizeKB);
+
+    let pct = 5;
+    const interval = setInterval(() => {
+      if (pct < 30) pct += 5;
+      else if (pct < 70) pct += 3;
+      else if (pct < 90) pct += 1;
+      progress.update(pct);
+    }, 250);
+
     try {
-      const bbName = addForm.Billboard_Name || 'billboard';
-      const imageName = `${bbName}.jpg`.replace(/\s+/g, '-');
-      progress.start(imageName, fileSizeKB);
+      const { uploadImageWithFallback } = await import('@/services/imageUploadService');
+      const imageUrl = await uploadImageWithFallback(file, imageName, 'billboard-photos');
       
-      const imageUrl = await uploadToImgbb(file, imageName, 'billboard-photos');
-      setAddForm((prev: any) => ({ ...prev, Image_URL: imageUrl, image_name: bbName }));
-      setSelectedFile(null);
+      clearInterval(interval);
+      progress.update(100);
       progress.complete(true, 'تم رفع الصورة بنجاح');
-    } catch (error) {
+
+      setAddForm((prev: any) => ({ ...prev, Image_URL: imageUrl, image_name: imageName }));
+      setSelectedFile(null);
+    } catch (error: any) {
+      clearInterval(interval);
       console.error('Upload error:', error);
-      progress.complete(false, 'فشل رفع الصورة. تأكد من إعداد مفتاح API في الإعدادات.');
-      // Fallback: keep file for local upload
-      const imageName = generateImageName(addForm.Billboard_Name || '');
-      setSelectedFile(file);
-      setAddForm((prev: any) => ({ ...prev, image_name: imageName, Image_URL: `/image/${imageName}` }));
+      progress.complete(false, error.message || 'فشل رفع الصورة. يمكنك الإضافة لحفظها عند الإضافة.');
+      setAddForm((prev: any) => ({ ...prev, image_name: imageName }));
     } finally {
       setImgbbUploading(false);
     }
@@ -263,10 +277,31 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       finalImageName = generateImageName(Billboard_Name);
     }
     
+    let finalImageUrl = Image_URL;
     // Upload image if a file was selected
-    if (selectedFile && finalImageName) {
-      const uploadSuccess = await uploadImageToFolder(selectedFile, finalImageName);
-      if (!uploadSuccess) {
+    if (selectedFile) {
+      const { uploadImageWithFallback } = await import('@/services/imageUploadService');
+      const { createUploadProgressTracker } = await import('@/hooks/useUploadProgress');
+      const progress = createUploadProgressTracker();
+      const finalName = finalImageName || `${(Billboard_Name || 'billboard').replace(/\s+/g, '-')}-${Date.now()}.jpg`;
+      progress.start(finalName, Math.round(selectedFile.size / 1024));
+      
+      let pct = 5;
+      const interval = setInterval(() => {
+        if (pct < 85) pct += 5;
+        progress.update(pct);
+      }, 200);
+
+      try {
+        finalImageUrl = await uploadImageWithFallback(selectedFile, finalName, 'billboard-photos');
+        clearInterval(interval);
+        progress.update(100);
+        progress.complete(true, 'تم رفع الصورة وإضافة اللوحة بنجاح');
+        setSelectedFile(null);
+      } catch (uploadErr: any) {
+        clearInterval(interval);
+        console.error('Add billboard upload failed:', uploadErr);
+        progress.complete(false, uploadErr.message || 'فشل رفع الصورة عند الإضافة');
         setAdding(false);
         return;
       }
@@ -362,7 +397,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       Size,
  size_id: sizeId, // سيتم حفظه بشكل صحيح
       Level,
-      Image_URL,
+      Image_URL: finalImageUrl,
       image_name: finalImageName,
       billboard_type,
       Status: 'متاح',

@@ -684,9 +684,17 @@ export function UnifiedTaskInvoice({
               });
             }
 
+            // Exclude items where has_cutout is explicitly false
+            installItems.forEach((it: any) => {
+              if (it.has_cutout === false) {
+                const id = Number(it.billboard?.ID ?? it.billboard_id);
+                cutoutBillboardIds.delete(id);
+              }
+            });
+
             if (cutoutBillboardIds.size === 0) {
               installItems
-                .filter((it: any) => it.billboard?.has_cutout === true)
+                .filter((it: any) => it.has_cutout === true || (it.has_cutout !== false && it.billboard?.has_cutout === true))
                 .forEach((it: any) => {
                   const id = it.billboard?.ID ?? it.billboard_id;
                   if (id != null) cutoutBillboardIds.add(Number(id));
@@ -732,7 +740,12 @@ export function UnifiedTaskInvoice({
               const itemTeamName = itemTeam?.teamName || installationTaskTeamName || 'غير محدد';
 
               const areaPerFace = sizeInfo.width * sizeInfo.height;
-              const hasCutout = cutoutBillboardIds.has(Number(billboardId)) || item.billboard?.has_cutout === true;
+              const isCutoutDisabled = item.has_cutout === false || (item.has_cutout === undefined && item.billboard?.has_cutout === false);
+              const hasCutout = !isCutoutDisabled && (
+                item.has_cutout === true ||
+                cutoutBillboardIds.has(Number(billboardId)) ||
+                (item.has_cutout !== false && item.billboard?.has_cutout === true)
+              );
               const facesCountForBillboard = hasBackFace ? 2 : 1;
 
               // حساب التكاليف حسب نوع الفاتورة
@@ -1197,10 +1210,19 @@ export function UnifiedTaskInvoice({
               if (taskCutoutId && cutoutItemsByTaskId.has(taskCutoutId)) {
                 cutoutItemsByTaskId.get(taskCutoutId)!.forEach(id => taskCutoutBillboardIds.add(id));
               }
+
+              // إزالة أي لوحات خيار المجسم فيها غير مفعل بصراحة
+              taskItems.forEach((it: any) => {
+                if (it.has_cutout === false) {
+                  const id = Number(it.billboard?.ID ?? it.billboard_id);
+                  taskCutoutBillboardIds.delete(id);
+                }
+              });
+
               // فولباك 1: استخدام has_cutout من لوحات هذه المهمة فقط
               if (taskCutoutBillboardIds.size === 0) {
                 taskItems
-                  .filter((it: any) => it.billboard?.has_cutout === true)
+                  .filter((it: any) => it.has_cutout === true || (it.has_cutout !== false && it.billboard?.has_cutout === true))
                   .forEach((it: any) => {
                     const id = it.billboard?.ID ?? it.billboard_id;
                     if (id != null) taskCutoutBillboardIds.add(Number(id));
@@ -1212,12 +1234,14 @@ export function UnifiedTaskInvoice({
               const taskCustomerCutout = compTask?.customer_cutout_cost || 0;
 
               // ✅ فولباك 2: إذا كانت هناك تكلفة قص للزبون لكن لم نستطع تحديد اللوحات،
-              // عاملْ كل لوحات هذه المهمة كأنها تحمل مجسماً (المهمة بأكملها مهمة قص)
+              // عاملْ اللوحات المفعل عليها مجسم كأنها تحمل مجسماً
               if (taskCutoutBillboardIds.size === 0 && taskCustomerCutout > 0) {
-                taskItems.forEach((it: any) => {
-                  const id = it.billboard?.ID ?? it.billboard_id;
-                  if (id != null) taskCutoutBillboardIds.add(Number(id));
-                });
+                taskItems
+                  .filter((it: any) => it.has_cutout !== false && it.billboard?.has_cutout !== false)
+                  .forEach((it: any) => {
+                    const id = it.billboard?.ID ?? it.billboard_id;
+                    if (id != null) taskCutoutBillboardIds.add(Number(id));
+                  });
               }
 
               perTaskAggMap.set(taskInstallId, {
@@ -1278,7 +1302,12 @@ export function UnifiedTaskInvoice({
               const taskInstallRatio = perTaskAgg ? perTaskAgg.installCostRatio : 0;
               const taskCustomerInstallTotal = perTaskAgg?.compositeTask?.customer_installation_cost || 0;
 
-              const hasCutout = taskCutoutBillboardIds.has(Number(billboardId));
+              const isCutoutDisabled = item.has_cutout === false || (item.has_cutout === undefined && item.billboard?.has_cutout === false);
+              const hasCutout = !isCutoutDisabled && (
+                item.has_cutout === true ||
+                taskCutoutBillboardIds.has(Number(billboardId)) ||
+                (item.has_cutout !== false && item.billboard?.has_cutout === true)
+              );
               const facesCountForBillboard = hasBackFace ? 2 : 1;
               const cutoutCostPerFaceForBillboard = hasCutout ? (taskCutoutCostPerBillboard / facesCountForBillboard) : 0;
               const isPrinted = allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId));

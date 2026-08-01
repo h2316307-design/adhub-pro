@@ -169,3 +169,22 @@ export function displaySize(size: string | null | undefined): string {
   const base = `${fmt(large)}x${fmt(small)}`;
   return suffix ? `${base}-${suffix}` : base;
 }
+
+/**
+ * Professional Arabic formatting for billboard faces count (e.g. 1 → "وجه واحد", 2 → "وجهين")
+ */
+export function formatFacesCountArabic(count: number | string | null | undefined): string {
+  const num = Number(count) || 1;
+  if (num === 1) return 'وجه واحد';
+  if (num === 2) return 'وجهين';
+  if (num === 3) return 'ثلاثة أوجه';
+  if (num === 4) return 'أربعة أوجه';
+  if (num === 5) return 'خمسة أوجه';
+  if (num === 6) return 'ستة أوجه';
+  if (num === 7) return 'سبعة أوجه';
+  if (num === 8) return 'ثمانية أوجه';
+  if (num === 9) return 'تسعة أوجه';
+  if (num === 10) return 'عشرة أوجه';
+  return `${num} أوجه`;
+}
+

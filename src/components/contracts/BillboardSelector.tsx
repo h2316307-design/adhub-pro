@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Search, Calendar, X, Wrench, Camera, MapPin } from 'lucide-react';
+import { Search, Calendar, X, Wrench, Camera, MapPin, AlertTriangle } from 'lucide-react';
 import type { Billboard } from '@/types';
 import { BillboardImage } from '@/components/BillboardImage';
 import { supabase } from '@/integrations/supabase/client';
@@ -374,10 +374,12 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
                 const isNearExpiring = daysLeft !== null && daysLeft > 0 && daysLeft <= 3;
                 const isAvailable = st === 'available' || (!hasContract && st !== 'rented') || isExpired;
 
-                const canSelect = isAvailable || isNearExpiring || isSelected;
-                
+                const contractNumber = (b as any).contractNumber || (b as any).Contract_Number || (b as any).contract_number;
+                const contractCustomer = (b as any).Customer_Name || (b as any).customer_name || '';
+                const isRented = !isAvailable && !isNearExpiring;
+
                 return (
-                  <Card key={(b as any).ID} className={`card-hover ${!canSelect ? 'opacity-60' : ''} ${isSelected ? 'card-selected' : ''}`}>
+                  <Card key={(b as any).ID} className={`card-hover ${isSelected ? 'card-selected' : ''} ${isRented && !isSelected ? 'border-red-500/30' : ''}`}>
                     <CardContent className="p-0">
                       <BillboardImage
                         billboard={b}
@@ -397,20 +399,45 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
                           {isNearExpiring && (
                             <span className="badge-yellow status-expiring">قريبة الانتهاء</span>
                           )}
-                          {!isAvailable && !isNearExpiring && (
-                            <span className="badge-red status-rented">مؤجرة</span>
+                          {isRented && (
+                            <span className="badge-red status-rented flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              مؤجرة
+                            </span>
                           )}
                         </div>
+
+                        {/* معلومات العقد الحالي للوحة المؤجرة */}
+                        {isRented && contractNumber && (
+                          <div className="rounded-lg border border-red-500/25 bg-red-500/8 px-2 py-1.5 space-y-0.5 mt-1">
+                            <div className="text-xs text-red-300 font-semibold flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3 shrink-0" />
+                              عقد ساري: <span className="font-mono text-amber-400">#{contractNumber}</span>
+                            </div>
+                            {contractCustomer && (
+                              <div className="text-xs text-muted-foreground truncate">{contractCustomer}</div>
+                            )}
+                            {endDate && daysLeft !== null && daysLeft > 0 && (
+                              <div className="text-xs text-orange-400">
+                                ينتهي بعد {daysLeft} يوم
+                                {' '}({new Date(endDate).toLocaleDateString('ar-LY', { day: 'numeric', month: 'short' })})
+                              </div>
+                            )}
+                          </div>
+                        )}
                         
                         <div className="pt-2 flex gap-2">
                           <Button 
                             size="sm" 
-                            variant={isSelected ? 'destructive' : 'outline'} 
+                            variant={isSelected ? 'destructive' : isRented ? 'outline' : 'outline'} 
                             onClick={() => onToggleSelect(b as any)} 
-                            disabled={!canSelect}
-                            className="flex-1"
+                            className={`flex-1 ${
+                              isRented && !isSelected
+                                ? 'border-red-500/40 text-red-400 hover:bg-red-500/10 hover:border-red-500/60'
+                                : ''
+                            }`}
                           >
-                            {isSelected ? 'إزالة' : 'إضافة'}
+                            {isSelected ? 'إزالة' : isRented ? 'إضافة (مؤجرة)' : 'إضافة'}
                           </Button>
                           
                           {/* زر إعادة التصوير */}

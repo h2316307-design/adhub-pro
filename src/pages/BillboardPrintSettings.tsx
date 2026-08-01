@@ -18,6 +18,7 @@ import { Save, Loader2, RotateCcw, Eye, Upload, Settings, Move, Type, Image, Ima
 import QRCode from 'qrcode';
 import { Checkbox } from '@/components/ui/checkbox';
 import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
+import { formatFacesCountArabic } from '@/lib/utils';
 
 interface ElementSettings {
   visible: boolean;
@@ -620,6 +621,7 @@ export default function BillboardPrintSettings() {
         installed_image_face_a_url?: string;
         installed_image_face_b_url?: string;
         installation_date?: string;
+        has_cutout?: boolean;
       }> = {};
       if (installationItems) {
         installationItems.forEach((item: any) => {
@@ -648,6 +650,10 @@ export default function BillboardPrintSettings() {
             // تاريخ التركيب الخاص بكل لوحة
             if (item.installation_date) {
               installationDesigns[key].installation_date = item.installation_date;
+            }
+            // خيار المجسم للمهمة
+            if (item.has_cutout !== undefined && item.has_cutout !== null) {
+              installationDesigns[key].has_cutout = Boolean(item.has_cutout);
             }
           }
         });
@@ -730,6 +736,7 @@ export default function BillboardPrintSettings() {
         const contractDesign = contractDesignMap[bb.ID.toString()];
         return {
           ...bb,
+          has_cutout: installDesign?.has_cutout !== undefined ? installDesign.has_cutout : Boolean(bb.has_cutout),
           design_face_a: installDesign?.design_face_a || printDesign?.design_face_a || contractDesign?.designFaceA || bb.design_face_a || null,
           design_face_b: installDesign?.design_face_b || printDesign?.design_face_b || contractDesign?.designFaceB || bb.design_face_b || null,
           cutout_image_url: printDesign?.cutout_image_url || null,
@@ -1183,7 +1190,7 @@ export default function BillboardPrintSettings() {
           content = billboard?.Size || '3x4';
           break;
         case 'facesCount':
-          content = billboard ? `عدد الأوجه: ${billboard.Faces_Count || 1}` : 'عدد الأوجه: 2';
+          content = billboard ? formatFacesCountArabic(billboard.Faces_Count || 1) : 'وجهين';
           break;
         case 'locationInfo':
           content = billboard ? `${billboard.Municipality || ''} - ${billboard.District || ''}` : 'البلدية - المنطقة';
@@ -1509,7 +1516,7 @@ export default function BillboardPrintSettings() {
     const hasSingleInstallation = billboard?.installed_image_face_a_url || billboard?.installed_image_url;
     const hasTwoDesigns = billboard?.design_face_a && billboard?.design_face_b;
     const hasSingleDesign = billboard?.design_face_a && !billboard?.design_face_b;
-    const hasCutout = billboard?.has_cutout || billboard?.cutout_image_url;
+    const hasCutout = billboard?.has_cutout === true;
     
     // إذا كانت اللوحة بوجهين (تركيب وتصميم)
     if (hasTwoFaceInstallation && hasTwoDesigns) {
@@ -1809,7 +1816,7 @@ export default function BillboardPrintSettings() {
           content = billboard?.Size || '';
           break;
         case 'facesCount':
-          content = `عدد الأوجه: ${billboard?.Faces_Count || 1}`;
+          content = formatFacesCountArabic(billboard?.Faces_Count || 1);
           break;
         case 'locationInfo':
           content = `${billboard?.Municipality || ''} - ${billboard?.District || ''}`;
@@ -1961,7 +1968,7 @@ export default function BillboardPrintSettings() {
     if (!settings) return '';
     
     const contract = taskDetails?.contract;
-    const hasCutout = billboard?.has_cutout || billboard?.cutout_image_url;
+    const hasCutout = billboard?.has_cutout === true;
     const hasTwoFaceInstallation = billboard?.installed_image_face_a_url && billboard?.installed_image_face_b_url;
     const hasSingleInstallation = billboard?.installed_image_face_a_url || billboard?.installed_image_url;
     const hasDesignA = billboard?.design_face_a;
@@ -2069,7 +2076,7 @@ export default function BillboardPrintSettings() {
           break;
         case 'facesCount': {
           const cutoutLabel = hasCutout ? 'مجسم - ' : '';
-          content = `${cutoutLabel}عدد الأوجه: ${billboard?.Faces_Count || 1}`;
+          content = `${cutoutLabel}${formatFacesCountArabic(billboard?.Faces_Count || 1)}`;
           break;
         }
         case 'locationInfo':
@@ -3038,7 +3045,7 @@ export default function BillboardPrintSettings() {
                       const hasInstallation = bb.installed_image_face_a_url || bb.installed_image_url;
                       const hasTwoFaces = bb.installed_image_face_a_url && bb.installed_image_face_b_url;
                       const hasDesign = bb.design_face_a;
-                      const hasCutout = bb.has_cutout || bb.cutout_image_url;
+                      const hasCutout = bb.has_cutout === true;
                       
                       return (
                         <div 
@@ -4251,7 +4258,7 @@ export default function BillboardPrintSettings() {
                       case 'size':
                         return currentBillboard?.Size || '3x4';
                       case 'facesCount':
-                        return `عدد الأوجه: ${currentBillboard?.Faces_Count || 2}`;
+                        return formatFacesCountArabic(currentBillboard?.Faces_Count || 2);
                       case 'locationInfo':
                         return currentBillboard 
                           ? `${currentBillboard.Municipality || 'البلدية'} - ${currentBillboard.District || 'المنطقة'}`

@@ -21,6 +21,7 @@ import { usePrintCustomization } from '@/hooks/usePrintCustomization';
 import { useTablePrintSettings } from '@/hooks/useTablePrintSettings';
 import { TablePrintSettingsDialog } from '@/components/tasks/TablePrintSettingsDialog';
 import { createPinSvgUrl, getBillboardStatus } from '@/hooks/useMapMarkers';
+import { formatFacesCountArabic } from '@/lib/utils';
 
 export type PrintContextType = 'installation' | 'removal' | 'contract' | 'offer';
 
@@ -477,9 +478,10 @@ export function UnifiedPrintAllDialog({
       const ov = item.overlay_config || billboard?.overlay_config;
       const isImageActive = ov ? ov.show_image !== false : true;
       const isOverlayActive = ov ? ov.enabled !== false : true;
+      const isCutoutEnabled = item.has_cutout === true || (item.has_cutout !== false && Boolean(billboard?.has_cutout));
       const sizeKey = size?.trim() || '';
       const sizeCutoutUrl = sizeCutoutMap[sizeKey] || sizeCutoutMap[sizeKey.replace(/×/g, 'x').replace(/X/g, 'x')] || null;
-      const activeCutout = ov?.cutout_image_url || sizeCutoutUrl || null;
+      const activeCutout = isCutoutEnabled ? (ov?.cutout_image_url || sizeCutoutUrl || null) : null;
       
       let imageSection = '';
       if (hasMainImage && isImageActive) {
@@ -565,7 +567,7 @@ export function UnifiedPrintAllDialog({
           </div>
           
           <div class="absolute-field faces-count" style="top: calc(${toCssLength(s.size_top)} + ${toCssLength(s.faces_count_top)}); left: calc(${s.size_left} - 40mm${s.size_offset_x && s.size_offset_x !== '0mm' ? ` + ${s.size_offset_x}` : ''}); width: 80mm; text-align: ${s.size_alignment || 'center'}; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color};">
-            ${item.has_cutout ? 'مجسم - ' : ''}عدد ${facesCount} ${facesCount === 1 ? 'وجه' : 'أوجه'}
+            ${isCutoutEnabled ? 'مجسم - ' : ''}${formatFacesCountArabic(facesCount)}
           </div>
 
           ${printType === 'installation' && showTeamName && displayTeamNames ? `

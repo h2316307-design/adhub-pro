@@ -598,7 +598,9 @@ export function SelectedBillboardsCard({
     }
   };
 
-  // Load partnership info for selected billboards
+  // Load partnership info for selected billboards (Optimized dependency check)
+  const selectedIdsKey = selected.slice().sort().join(',');
+
   useEffect(() => {
     const loadPartnershipInfo = async () => {
       if (selectedBillboards.length === 0) {
@@ -624,59 +626,49 @@ export function SelectedBillboardsCard({
         });
       }
       
-      console.log('🔍 Partnership data from DB:', {
-        total: selectedBillboards.length,
-        partnershipFromDB: dbPartnershipMap.size,
-        data: Array.from(dbPartnershipMap.entries())
-      });
-      
       if (dbPartnershipMap.size === 0) {
         setPartnershipInfoMap(new Map());
         return;
       }
       
+      console.log('🔍 Partnership data from DB:', {
+        total: selectedBillboards.length,
+        partnershipFromDB: dbPartnershipMap.size
+      });
+      
       const newMap = new Map<string, PartnershipInfo>();
       
       // Process each partnership billboard from DB data
-      for (const [dbId, dbData] of dbPartnershipMap.entries()) {
-        const bb = selectedBillboards.find(b => (b as any).ID === dbId);
-        if (!bb) continue;
+      for (const billboard of selectedBillboards) {
+        const billboardIdNum = Number((billboard as any).ID);
+        const dbPartnership = dbPartnershipMap.get(billboardIdNum);
         
-        const billboardId = String(dbId);
-        const capital = Number(dbData.capital || 0);
-        const capitalRemaining = Number(dbData.capital_remaining ?? capital);
-        const phase = capitalRemaining <= 0 ? 'profit_sharing' : 'recovery';
-        const partnerCompanies = dbData.partner_companies || [];
+        if (!dbPartnership) continue;
         
-        // Fetch partnership terms from shared_billboards
+        const billboardIdStr = String((billboard as any).ID);
+        const billboardPrice = calculateBillboardPrice(billboard);
+        const capital = Number(dbPartnership.capital || 0);
+        const capitalRemaining = Number(dbPartnership.capital_remaining ?? capital);
+        const phase: 'recovery' | 'profit_sharing' = capitalRemaining > 0 ? 'recovery' : 'profit_sharing';
+        
+        const partnerCompanies = Array.isArray(dbPartnership.partner_companies) 
+          ? dbPartnership.partner_companies 
+          : [];
+        
+        const partnerShares: Array<{
+          partnerId: string;
+          partnerName: string;
+          preSharePct: number;
+          postSharePct: number;
+          estimatedShare: number;
+        }> = [];
+        
         const { data: terms } = await supabase
           .from('shared_billboards')
-          .select(`
-            partner_company_id,
-            partner_pre_pct,
-            partner_post_pct,
-            pre_company_pct,
-            pre_capital_pct,
-            post_company_pct,
-            partners:partner_company_id(id, name)
-          `)
-          .eq('billboard_id', dbId);
-        
-        const billboardPrice = calculateBillboardPrice(bb);
-        const partnerShares: PartnershipInfo['partnerShares'] = [];
-        
-        // Default percentages
-        let companySharePct = phase === 'recovery' ? 35 : 50;
-        let capitalDeductionPct = phase === 'recovery' ? 30 : 0;
-        
-        if (terms && terms.length > 0) {
-          companySharePct = phase === 'recovery' 
-            ? Number(terms[0].pre_company_pct || 35) 
-            : Number(terms[0].post_company_pct || 50);
-          capitalDeductionPct = phase === 'recovery' 
-            ? Number(terms[0].pre_capital_pct || 30) 
-            : 0;
+          .select('partner_company_id, partner_pre_pct, partner_post_pct, partners(name)')
+          .eq('billboard_id', billboardIdNum);
           
+        if (terms && terms.length > 0) {
           for (const term of terms) {
             const sharePct = phase === 'recovery' 
               ? Number(term.partner_pre_pct || 35) 
@@ -692,7 +684,6 @@ export function SelectedBillboardsCard({
             });
           }
         } else if (partnerCompanies.length > 0) {
-          // Fallback: use partner_companies array from billboard if no shared_billboards data
           const defaultSharePct = phase === 'recovery' ? 35 : 50;
           const sharePerPartner = defaultSharePct / partnerCompanies.length;
           
@@ -700,17 +691,19 @@ export function SelectedBillboardsCard({
             const estimatedShare = billboardPrice * (sharePerPartner / 100);
             partnerShares.push({
               partnerId: partnerName,
-              partnerName: partnerName,
-              preSharePct: sharePerPartner,
-              postSharePct: sharePerPartner,
+              partnerName,
+              preSharePct: defaultSharePct / partnerCompanies.length,
+              postSharePct: 50 / partnerCompanies.length,
               estimatedShare
             });
           });
         }
         
-        // Always add to map if it's a partnership billboard
-        newMap.set(billboardId, {
-          billboardId,
+        const companySharePct = phase === 'recovery' ? 65 : 50;
+        const capitalDeductionPct = phase === 'recovery' ? 35 : 0;
+        
+        newMap.set(billboardIdStr, {
+          billboardId: billboardIdStr,
           isPartnership: true,
           partnerCompanies,
           capital,
@@ -726,7 +719,7 @@ export function SelectedBillboardsCard({
     };
     
     loadPartnershipInfo();
-  }, [selected, billboards, calculateBillboardPrice, pricingMode, durationMonths, durationDays]);
+  }, [selectedIdsKey, pricingMode, durationMonths, durationDays]);
   
   // ✅ NEW: Helper to get display size name
   const getDisplaySize = (billboard: any): string => {

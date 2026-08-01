@@ -8,7 +8,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { createContract } from '@/services/contractService';
 import type { Billboard } from '@/types';
 import { getPriceFor, getDailyPriceFor, CustomerType } from '@/data/pricing';
-import { isBillboardAvailable } from '@/utils/contractUtils';
+import { isBillboardAvailable, checkBillboardConflicts, type BillboardConflict } from '@/utils/contractUtils';
+import { BillboardConflictDialog } from '@/components/contracts/BillboardConflictDialog';
 import { useContractForm } from '@/hooks/useContractForm';
 import { useContractCalculations } from '@/hooks/useContractCalculations';
 import { useContractInstallments } from '@/hooks/useContractInstallments';
@@ -76,6 +77,11 @@ export default function ContractCreate() {
   const [friendRentalOperatingFeeEnabled, setFriendRentalOperatingFeeEnabled] = useState<boolean>(false);
   const [friendRentalOperatingFeeRate, setFriendRentalOperatingFeeRate] = useState<number>(3);
   const [customerLinkedFriendCompanyId, setCustomerLinkedFriendCompanyId] = useState<string | null>(null);
+
+  // ─── Conflict detection state ───
+  const [conflictDialogOpen, setConflictDialogOpen] = useState(false);
+  const [conflictList, setConflictList] = useState<BillboardConflict[]>([]);
+  const [pendingConflictBillboard, setPendingConflictBillboard] = useState<Billboard | null>(null);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -586,10 +592,37 @@ export default function ContractCreate() {
     return basePrice + printCost;
   };
 
-  // Toggle billboard selection
-  const toggleSelect = (billboard: Billboard) => {
+  // Toggle billboard selection — مع كشف التعارض
+  const toggleSelect = async (billboard: Billboard) => {
     const id = String(billboard.ID);
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+    // إذا كانت اللوحة محددة بالفعل → أزلها مباشرة بدون تحقق
+    if (selected.includes(id)) {
+      setSelected((prev) => prev.filter((x) => x !== id));
+      return;
+    }
+
+    // التحقق من التعارض عند التواريخ المدخلة
+    if (formData.startDate && formData.endDate) {
+      const namesMap: Record<string, string> = { [id]: (billboard as any).Billboard_Name || (billboard as any).name || id };
+      const conflicts = await checkBillboardConflicts(
+        [id],
+        formData.startDate,
+        formData.endDate,
+        undefined,
+        namesMap
+      );
+
+      if (conflicts.length > 0) {
+        setPendingConflictBillboard(billboard);
+        setConflictList(conflicts);
+        setConflictDialogOpen(true);
+        return; // انتظر تأكيد المستخدم
+      }
+    }
+
+    // لا تعارض → أضف مباشرة
+    setSelected((prev) => [...prev, id]);
   };
 
   // Remove selected billboard
@@ -735,6 +768,33 @@ export default function ContractCreate() {
 
   return (
     <div className="container mx-auto px-4 py-6 space-y-6" dir="rtl">
+
+      {/* ── حوار تحذير التأجير المزدوج ── */}
+      <BillboardConflictDialog
+        open={conflictDialogOpen}
+        conflicts={conflictList}
+        singleBillboardName={
+          pendingConflictBillboard
+            ? ((pendingConflictBillboard as any).Billboard_Name || (pendingConflictBillboard as any).name)
+            : undefined
+        }
+        onConfirm={() => {
+          // المستخدم أكّد الإضافة رغم التحذير
+          if (pendingConflictBillboard) {
+            const id = String((pendingConflictBillboard as any).ID);
+            setSelected((prev) => [...prev, id]);
+          }
+          setConflictDialogOpen(false);
+          setPendingConflictBillboard(null);
+          setConflictList([]);
+        }}
+        onCancel={() => {
+          setConflictDialogOpen(false);
+          setPendingConflictBillboard(null);
+          setConflictList([]);
+        }}
+      />
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="section-header">إنشاء عقد جديد {nextContractNumber && `#${nextContractNumber}`}</h1>
@@ -755,6 +815,7 @@ export default function ContractCreate() {
         <div className="flex-1 space-y-6">
           {/* Billboard Selection - Tabs for List and Map View */}
           <div className="expenses-preview-item flex flex-col h-[calc(100vh-160px)] min-h-[950px] border border-amber-500/20 shadow-[0_20px_50px_rgba(0,0,0,0.15)] bg-slate-950/40 backdrop-blur-xl rounded-3xl p-4">
+
             <h3 className="expenses-preview-label mb-2 shrink-0 text-amber-500 font-extrabold">اختيار اللوحات</h3>
             
             <div className="shrink-0 mb-2">

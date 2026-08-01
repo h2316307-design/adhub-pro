@@ -107,8 +107,8 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
       toast.error('يرجى اختيار ملف صورة صحيح (JPG, PNG, GIF, WEBP)');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('حجم الملف يجب أن لا يتجاوز 10MB');
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('حجم الملف يجب أن لا يتجاوز 25MB');
       return;
     }
 
@@ -118,10 +118,23 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
     const progress = createUploadProgressTracker();
     const fileSizeKB = Math.round(file.size / 1024);
 
+    const { imageName, folderPath } = getDesignUploadContext(face);
+    progress.start(imageName, fileSizeKB);
+
+    let pct = 5;
+    const interval = setInterval(() => {
+      if (pct < 30) pct += 5;
+      else if (pct < 70) pct += 3;
+      else if (pct < 90) pct += 1;
+      progress.update(pct);
+    }, 250);
+
     try {
-      const { imageName, folderPath } = getDesignUploadContext(face);
-      progress.start(imageName, fileSizeKB);
-      const imageUrl = await uploadToImgbb(file, imageName, folderPath);
+      const { uploadImageWithFallback } = await import('@/services/imageUploadService');
+      const imageUrl = await uploadImageWithFallback(file, imageName, folderPath);
+
+      clearInterval(interval);
+      progress.update(100);
 
       if (face === 'A') {
         setDesignFaceAUrl(imageUrl);
@@ -129,9 +142,10 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
         setDesignFaceBUrl(imageUrl);
       }
       progress.complete(true, `تم رفع تصميم الوجه ${face === 'A' ? 'الأمامي' : 'الخلفي'} بنجاح`);
-    } catch (error) {
+    } catch (error: any) {
+      clearInterval(interval);
       console.error('Upload error:', error);
-      progress.complete(false, 'فشل رفع التصميم. تأكد من إعداد مفتاح API في الإعدادات.');
+      progress.complete(false, error.message || 'فشل رفع التصميم. يرجى إعادة المحاولة.');
     } finally {
       setUploading(false);
     }

@@ -100,8 +100,8 @@ export function ImageUploadZone({
       toast.error('يرجى اختيار ملف صورة صحيح');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('حجم الصورة يجب أن لا يتجاوز 10MB');
+    if (file.size > 25 * 1024 * 1024) {
+      toast.error('حجم الصورة يجب أن لا يتجاوز 25MB');
       return;
     }
 
@@ -109,14 +109,15 @@ export function ImageUploadZone({
     startSimulatedProgress();
     const finalName = imageName.toLowerCase().endsWith('.jpg') ? imageName : `${imageName}.jpg`;
     try {
-      const imageUrl = await uploadToImgbb(file, finalName, folder);
+      const { uploadImageWithFallback } = await import('@/services/imageUploadService');
+      const imageUrl = await uploadImageWithFallback(file, finalName, folder);
       onChange(imageUrl);
       stopSimulatedProgress(true);
- toast.success('تم رفع الصورة بنجاح ');
-    } catch (error) {
+      toast.success('تم رفع الصورة بنجاح ');
+    } catch (error: any) {
       console.error('Upload error:', error);
       stopSimulatedProgress(false);
-      toast.error('فشل رفع الصورة. تأكد من إعداد مفتاح API في الإعدادات.');
+      toast.error(error.message || 'فشل رفع الصورة. يرجى التأكد من الاتصال وإعادة المحاولة.');
     } finally {
       setUploading(false);
     }

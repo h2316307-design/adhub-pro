@@ -126,9 +126,6 @@ export const isBillboardAvailable = (billboard: any, ignoreVisibility = false): 
   return true;
 };
 
-/**
- * Generates a clean 2-3 letter uppercase code from an Arabic or English municipality name
- */
 export const generateMunicipalityCode = (name: string): string => {
   const cleanName = name.trim().toLowerCase();
   
@@ -206,3 +203,128 @@ export const generateMunicipalityCode = (name: string): string => {
 
   return 'MU';
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Billboard Conflict Detection
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BillboardConflict {
+  billboardId: string;
+  billboardName: string;
+  activeContractNumber: string;
+  activeContractCustomer: string;
+  activeContractEndDate: string;
+  daysRemaining: number;
+  startDate?: string;
+  adType?: string;
+}
+
+/**
+ * يتحقق من وجود تعارض بين اللوحات المختارة والعقود النشطة الموجودة.
+ * يُعيد قائمة بالتعارضات المكتشفة.
+ *
+ * @param billboardIds - معرّفات اللوحات المراد التحقق منها
+ * @param newStartDate - تاريخ بداية العقد الجديد (YYYY-MM-DD)
+ * @param newEndDate   - تاريخ نهاية العقد الجديد (YYYY-MM-DD)
+ * @param excludeContractNumber - رقم العقد الحالي لتجاهله (عند التعديل)
+ * @param billboardNamesMap - خريطة اختيارية لأسماء اللوحات {id -> name}
+ */
+export const checkBillboardConflicts = async (
+  billboardIds: string[],
+  newStartDate: string,
+  newEndDate: string,
+  excludeContractNumber?: string,
+  billboardNamesMap?: Record<string, string>
+): Promise<BillboardConflict[]> => {
+  if (!billboardIds.length || !newStartDate || !newEndDate) return [];
+
+  try {
+    // تحميل supabase ديناميكياً لتجنب الاستيراد الدائري
+    const { supabase } = await import('@/integrations/supabase/client');
+
+    const today = new Date().toISOString().split('T')[0];
+
+    // جلب جميع العقود النشطة (لم تنته بعد)
+    let query = supabase
+      .from('Contract')
+      .select('Contract_Number, "Customer Name", "End Date", "Contract Date", "Ad Type", billboard_ids')
+      .gte('"End Date"', today);
+
+    const { data: activeContracts, error } = await query;
+
+    if (error) {
+      console.error('checkBillboardConflicts error:', error);
+      return [];
+    }
+
+    if (!activeContracts || activeContracts.length === 0) return [];
+
+    const conflicts: BillboardConflict[] = [];
+    const today_ts = new Date().getTime();
+
+    for (const contract of activeContracts) {
+      // تجاهل العقد الحالي عند التعديل
+      if (
+        excludeContractNumber &&
+        String(contract.Contract_Number) === String(excludeContractNumber)
+      ) {
+        continue;
+      }
+
+      const contractEndDate = contract['End Date'];
+      if (!contractEndDate) continue;
+
+      // التحقق من التداخل الزمني بين العقدين
+      // التداخل يحدث إذا: بداية_الجديد <= نهاية_القائم && نهاية_الجديد >= بداية_القائم
+      const existingStart = contract['Contract Date']
+        ? new Date(contract['Contract Date']).getTime()
+        : 0;
+      const existingEnd = new Date(contractEndDate).getTime();
+      const newStart = new Date(newStartDate).getTime();
+      const newEnd = new Date(newEndDate).getTime();
+
+      const hasOverlap = newStart <= existingEnd && newEnd >= existingStart;
+      if (!hasOverlap) continue;
+
+      // استخرج معرّفات اللوحات في هذا العقد
+      const rawIds = contract.billboard_ids;
+      if (!rawIds) continue;
+
+      let contractBillboardIds: string[] = [];
+      if (typeof rawIds === 'string') {
+        contractBillboardIds = rawIds
+          .split(',')
+          .map((s: string) => s.trim())
+          .filter(Boolean);
+      } else if (Array.isArray(rawIds)) {
+        contractBillboardIds = (rawIds as any[]).map((x) => String(x).trim());
+      }
+
+      // ابحث عن تقاطع بين اللوحات المطلوبة واللوحات في العقد القائم
+      for (const reqId of billboardIds) {
+        if (contractBillboardIds.includes(String(reqId))) {
+          const daysRemaining = Math.ceil(
+            (existingEnd - today_ts) / (1000 * 60 * 60 * 24)
+          );
+          conflicts.push({
+            billboardId: reqId,
+            billboardName:
+              billboardNamesMap?.[reqId] || `لوحة #${reqId}`,
+            activeContractNumber: String(contract.Contract_Number),
+            activeContractCustomer: contract['Customer Name'] || '',
+            activeContractEndDate: contractEndDate,
+            daysRemaining: Math.max(0, daysRemaining),
+            startDate: contract['Contract Date'] || undefined,
+            adType: contract['Ad Type'] || (contract as any).ad_type || (contract as any).Ad_Type || undefined,
+          });
+        }
+      }
+    }
+
+    return conflicts;
+  } catch (err) {
+    console.error('checkBillboardConflicts unexpected error:', err);
+    return [];
+  }
+};
+

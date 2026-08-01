@@ -180,26 +180,59 @@ export const CutoutPerBillboardEditor: React.FC<Props> = ({ items, onChange, onE
     }
   };
 
+  // ── Toggle cutout status for all billboards in the task ──
+  const toggleAllCutouts = async (enable: boolean) => {
+    if (items.length === 0) return;
+    setBulkApplying(true);
+    try {
+      const next = items.map(it => ({ ...it, has_cutout: enable }));
+      onChange(next);
+      const ids = items.map(t => t.id);
+      const { error } = await (supabase.from('installation_task_items') as any)
+        .update({ has_cutout: enable })
+        .in('id', ids);
+      if (error) throw error;
+      toast.success(enable ? `تم تفعيل المجسم على جميع اللوحات (${items.length})` : `تم إيقاف المجسم على جميع اللوحات (${items.length})`);
+    } catch (e: any) {
+      toast.error('فشل التعديل الجماعي: ' + (e?.message || ''));
+    } finally {
+      setBulkApplying(false);
+    }
+  };
+
   return (
     <div dir="rtl" className="space-y-4 text-right">
       {/* Summary cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="p-4 rounded-2xl bg-purple-500/[0.03] border border-purple-500/20 text-center hover:scale-[1.01] transition-transform duration-300 shadow-sm flex flex-col justify-center">
-          <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">إجمالي كمية المجسمات</div>
-          <div className="text-xl font-bold text-purple-600 font-mono leading-none">{totals.count}</div>
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 text-right">
+        <div className="p-3.5 rounded-2xl border border-purple-500/20 bg-purple-500/[0.03] text-right">
+          <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">إجمالي لوحات المهمة</div>
+          <div className="text-xl font-bold text-purple-600 flex items-center justify-start gap-1.5 leading-none">
+            <Building2 className="h-4.5 w-4.5 shrink-0" />
+            <span>{items.length}</span>
+            <span className="text-xs font-semibold text-muted-foreground/80 mr-1">لوحة ({cutoutItems.length} مجسم)</span>
+          </div>
         </div>
-        <div className="p-4 rounded-2xl bg-amber-500/[0.03] border border-amber-500/20 text-center hover:scale-[1.01] transition-transform duration-300 shadow-sm flex flex-col justify-center">
-          <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">تكلفة مصانع القص</div>
-          <div className="text-xl font-bold text-amber-500 font-mono leading-none">{totals.company.toLocaleString('ar-LY')}<span className="text-xs font-semibold mr-1">د.ل</span></div>
+
+        <div className="p-3.5 rounded-2xl border border-amber-500/20 bg-amber-500/[0.03] text-right">
+          <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">إجمالي تكلفة الشركات</div>
+          <div className="text-xl font-bold text-amber-600 flex items-center justify-start gap-1 leading-none">
+            <span>{totals.companyCost.toLocaleString('ar-LY')}</span>
+            <span className="text-xs font-semibold mr-0.5">د.ل</span>
+          </div>
         </div>
-        <div className="p-4 rounded-2xl bg-emerald-500/[0.03] border border-emerald-500/20 text-center hover:scale-[1.01] transition-transform duration-300 shadow-sm flex flex-col justify-center">
-          <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">قيمة مبيعات العميل</div>
-          <div className="text-xl font-bold text-emerald-500 font-mono leading-none">{totals.customer.toLocaleString('ar-LY')}<span className="text-xs font-semibold mr-1">د.ل</span></div>
+
+        <div className="p-3.5 rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.03] text-right">
+          <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">إجمالي سعر الزبائن</div>
+          <div className="text-xl font-bold text-emerald-600 flex items-center justify-start gap-1 leading-none">
+            <span>{totals.customerCost.toLocaleString('ar-LY')}</span>
+            <span className="text-xs font-semibold mr-0.5">د.ل</span>
+          </div>
         </div>
-        <div className={cn("p-4 rounded-2xl border text-center hover:scale-[1.01] transition-transform duration-300 shadow-sm flex flex-col justify-center", 
+
+        <div className={cn("p-3.5 rounded-2xl border text-right", 
           totals.profit >= 0 ? "bg-emerald-500/[0.03] border-emerald-500/20" : "bg-rose-500/[0.03] border-rose-500/20")}>
           <div className="text-xs font-semibold text-muted-foreground/80 mb-2 leading-relaxed">صافي أرباح القص</div>
-          <div className={cn("text-xl font-bold flex items-center justify-center gap-1 leading-none", 
+          <div className={cn("text-xl font-bold flex items-center justify-start gap-1 leading-none", 
             totals.profit >= 0 ? "text-emerald-500" : "text-rose-500")}>
             {totals.profit >= 0 ? <TrendingUp className="h-4.5 w-4.5 shrink-0" /> : <TrendingDown className="h-4.5 w-4.5 shrink-0" />}
             <span>{totals.profit.toLocaleString('ar-LY')}</span>
@@ -269,7 +302,31 @@ export const CutoutPerBillboardEditor: React.FC<Props> = ({ items, onChange, onE
       {/* Checklist to toggle cutout state per billboard */}
       {items.length > 0 && (
         <Card dir="rtl" className="p-5 border-dashed border-border/20 bg-muted/5 rounded-2xl text-right">
-          <Label className="text-sm font-semibold mb-3 block text-foreground leading-relaxed text-right">تفعيل أو إيقاف المجسم على لوحات المهمة:</Label>
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <Label className="text-sm font-semibold text-foreground leading-relaxed text-right">تفعيل أو إيقاف المجسم على لوحات المهمة:</Label>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] px-2.5 rounded-lg border-rose-200 text-rose-600 hover:bg-rose-50 font-semibold"
+                disabled={bulkApplying}
+                onClick={() => toggleAllCutouts(false)}
+              >
+                إيقاف المجسم على الجميع
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-[11px] px-2.5 rounded-lg border-purple-200 text-purple-600 hover:bg-purple-50 font-semibold"
+                disabled={bulkApplying}
+                onClick={() => toggleAllCutouts(true)}
+              >
+                تفعيل المجسم على الجميع
+              </Button>
+            </div>
+          </div>
           <div className="flex flex-wrap gap-2.5 max-h-32 overflow-y-auto p-1.5">
             {items.map(it => (
               <button

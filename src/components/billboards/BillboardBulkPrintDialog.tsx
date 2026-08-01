@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useQuery } from '@tanstack/react-query';
 import QRCode from 'qrcode';
 import { BackgroundSelector } from '@/components/billboard-print/BackgroundSelector';
+import { formatFacesCountArabic } from '@/lib/utils';
 
 // Print modes
 const PRINT_MODES = {
@@ -309,7 +310,7 @@ export function BillboardBulkPrintDialog({
           content = billboard.Size || '';
           break;
         case 'facesCount':
-          content = `عدد الأوجه: ${billboard.Faces_Count || 1}`;
+          content = formatFacesCountArabic(billboard.Faces_Count || 1);
           break;
         case 'locationInfo':
           content = `${billboard.Municipality || ''} - ${billboard.District || ''}`;
@@ -727,7 +728,7 @@ export function BillboardBulkPrintDialog({
                 const hasInstallation = bb.installed_image_face_a_url || bb.installed_image_url;
                 const hasTwoFaces = bb.installed_image_face_a_url && bb.installed_image_face_b_url;
                 const hasDesign = bb.design_face_a;
-                const hasCutout = bb.has_cutout || bb.cutout_image_url;
+                const hasCutout = bb.has_cutout === true;
                 
                 return (
                   <div 

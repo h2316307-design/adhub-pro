@@ -13,7 +13,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { toast } from '@/components/ui/sonner';
-import { Plus, Eye, Edit, Trash2, Calendar, User, DollarSign, Search, Filter, Building, AlertCircle, Clock, CheckCircle, Printer, RefreshCcw, Hammer, Wrench, Percent, PaintBucket, FileText, Send, FileSpreadsheet, LayoutGrid, List, SlidersHorizontal, Hash, SplitSquareVertical, Download, X, Loader2, CheckSquare, Square, Ruler, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Eye, Edit, Trash2, Calendar, User, DollarSign, Search, Filter, Building, AlertCircle, Clock, CheckCircle, Printer, RefreshCcw, Hammer, Wrench, Percent, PaintBucket, FileText, Send, FileSpreadsheet, LayoutGrid, List, SlidersHorizontal, Hash, SplitSquareVertical, Download, X, Loader2, CheckSquare, Square, Ruler, ChevronLeft, ChevronRight, AlertTriangle, Shield, ShieldCheck } from 'lucide-react';
 import { SendContractDialog } from '@/components/contracts/SendContractDialog';
 import { AddPaymentDialog } from '@/components/contracts/AddPaymentDialog';
 import { BillboardBulkPrintDialog } from '@/components/billboards/BillboardBulkPrintDialog';
@@ -22,6 +22,7 @@ import { SendAlertsDialog } from '@/components/contracts/SendAlertsDialog';
 import { SendContractReportDialog } from '@/components/contracts/SendContractReportDialog';
 import { QuickContractDialog } from '@/components/contracts/QuickContractDialog';
 import { ContractCard } from '@/components/contracts/ContractCard';
+import { DoubleBillboardDetector } from '@/components/contracts/DoubleBillboardDetector';
 import { ContractStats } from '@/components/contracts/ContractStats';
 import { SizesInvoicePrintDialog } from '@/components/contracts/SizesInvoicePrintDialog';
 import { ContractRangeSelector } from '@/components/contracts/ContractRangeSelector';
@@ -38,6 +39,7 @@ import {
   Contract,
   ContractCreate
 } from '@/services/contractService';
+import { checkBillboardConflicts, type BillboardConflict } from '@/utils/contractUtils';
 import { Billboard } from '@/types';
 import { ContractPDFDialog } from '@/components/Contract';
 import { supabase } from '@/integrations/supabase/client';
@@ -137,6 +139,9 @@ export default function Contracts() {
   const [renewEnd, setRenewEnd] = useState<string>('');
   const [durationMonths, setDurationMonths] = useState<number>(3);
   const [delayedContractIds, setDelayedContractIds] = useState<Set<number>>(new Set());
+  // ─── Renewal conflict state ───
+  const [renewConflicts, setRenewConflicts] = useState<BillboardConflict[]>([]);
+  const [renewChecking, setRenewChecking] = useState(false);
 
   const [bbSearch, setBbSearch] = useState('');
   const [editBbSearch, setEditBbSearch] = useState('');
@@ -892,6 +897,8 @@ export default function Contracts() {
     .map((id) => availableBillboards.find((b) => b.id === id))
     .filter(Boolean)) as Billboard[];
 
+
+
   // حساب التكلفة التقديرية حسب باقات الأسعار والفئة
   const estimatedTotal = useMemo(() => {
     const months = Number(durationMonths || 0);
@@ -1320,6 +1327,9 @@ export default function Contracts() {
           <ContractStats contracts={filteredContracts} />
         </CollapsibleContent>
       </Collapsible>
+
+      {/* كاشف اللوحات المتضاربة (التأجير المزدوج) */}
+      <DoubleBillboardDetector />
 
       {/* البحث والفلاتر المحسّنة */}
       <Card className="border-0 shadow-sm bg-gradient-to-l from-muted/30 to-background">
@@ -2594,38 +2604,193 @@ export default function Contracts() {
         contract={selectedContractForPDF}
       />
 
-      {/* Renew Dialog */}
-      <Dialog open={renewOpen} onOpenChange={setRenewOpen}>
-        <DialogContent className="max-w-md">
+      {/* Renew Dialog — مع كشف التعارضات */}
+      <Dialog open={renewOpen} onOpenChange={(o) => { setRenewOpen(o); if (!o) { setRenewConflicts([]); } }}>
+        <DialogContent className="max-w-lg" dir="rtl">
           <DialogHeader>
-            <DialogTitle>تجديد العقد #{String(renewSource?.id || '')}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <RefreshCcw className="h-5 w-5 text-primary" />
+              تجديد العقد #{String(renewSource?.id || '')}
+            </DialogTitle>
           </DialogHeader>
+
           <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* معلومات العقد الأصلي */}
+            {renewSource && (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-3 text-sm space-y-1">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <User className="h-3.5 w-3.5" />
+                  <span>{renewSource.customer_name}</span>
+                </div>
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>عدد اللوحات: <strong className="text-foreground">
+                    {(() => { const ids = renewSource.billboard_ids; if (!ids) return 0; if (Array.isArray(ids)) return ids.length; return String(ids).split(',').filter(Boolean).length; })()}
+                  </strong> لوحة</span>
+                </div>
+              </div>
+            )}
+
+            {/* تواريخ التجديد */}
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <Label>تاريخ البداية الجديد</Label>
-                <Input type="date" value={renewStart} onChange={(e) => setRenewStart(e.target.value)} />
+                <Label className="text-xs mb-1 block">تاريخ البداية الجديد</Label>
+                <Input
+                  type="date"
+                  value={renewStart}
+                  onChange={async (e) => {
+                    const newStart = e.target.value;
+                    setRenewStart(newStart);
+                    setRenewConflicts([]);
+                    if (newStart && renewEnd && renewSource) {
+                      setRenewChecking(true);
+                      try {
+                        const ids = renewSource.billboard_ids;
+                        const bbIds: string[] = Array.isArray(ids)
+                          ? ids.map(String)
+                          : String(ids || '').split(',').map(s => s.trim()).filter(Boolean);
+                        if (bbIds.length > 0) {
+                          const found = await checkBillboardConflicts(
+                            bbIds, newStart, renewEnd,
+                            String(renewSource.id || '')
+                          );
+                          setRenewConflicts(found);
+                        }
+                      } finally { setRenewChecking(false); }
+                    }
+                  }}
+                />
               </div>
               <div>
-                <label>تاريخ النهاية الجديد</label>
-                <Input type="date" value={renewEnd} onChange={(e) => setRenewEnd(e.target.value)} />
+                <Label className="text-xs mb-1 block">تاريخ النهاية الجديد</Label>
+                <Input
+                  type="date"
+                  value={renewEnd}
+                  onChange={async (e) => {
+                    const newEnd = e.target.value;
+                    setRenewEnd(newEnd);
+                    setRenewConflicts([]);
+                    if (renewStart && newEnd && renewSource) {
+                      setRenewChecking(true);
+                      try {
+                        const ids = renewSource.billboard_ids;
+                        const bbIds: string[] = Array.isArray(ids)
+                          ? ids.map(String)
+                          : String(ids || '').split(',').map(s => s.trim()).filter(Boolean);
+                        if (bbIds.length > 0) {
+                          const found = await checkBillboardConflicts(
+                            bbIds, renewStart, newEnd,
+                            String(renewSource.id || '')
+                          );
+                          setRenewConflicts(found);
+                        }
+                      } finally { setRenewChecking(false); }
+                    }
+                  }}
+                />
               </div>
             </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setRenewOpen(false)}>إلغاء</Button>
-              <Button onClick={async () => {
-                if (!renewSource) return;
-                try {
-                  const { renewContract } = await import('@/services/contractService');
-                  const created = await renewContract(String(renewSource.id), { start_date: renewStart, end_date: renewEnd, keep_cost: true });
-                  toast.success(`تم إنشاء عقد جديد برقم ${String(created?.Contract_Number ?? created?.id ?? '')}`);
-                  setRenewOpen(false); setRenewSource(null); setRenewStart(''); setRenewEnd('');
-                  loadData();
-                } catch (e) {
-                  console.error(e);
-                  toast.error('فشل تجديد العقد');
+
+            {/* حالة الفحص */}
+            {renewChecking && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>جاري فحص التعارضات...</span>
+              </div>
+            )}
+
+            {/* نتيجة الفحص — لا تعارض */}
+            {!renewChecking && renewStart && renewEnd && renewConflicts.length === 0 && (
+              <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <ShieldCheck className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-xs text-emerald-300">
+                  جميع لوحات العقد متاحة في هذه الفترة — يمكن التجديد بأمان
+                </p>
+              </div>
+            )}
+
+            {/* نتيجة الفحص — يوجد تعارض */}
+            {!renewChecking && renewConflicts.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20">
+                  <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                  <div>
+                    <p className="text-xs text-red-300 font-semibold">
+                      {renewConflicts.length} لوحة مؤجرة في هذه الفترة لزبائن آخرين
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      سيتم تجديد العقد بجميع اللوحات بما فيها المتعارضة — تأكد قبل المتابعة
+                    </p>
+                  </div>
+                </div>
+
+                {/* قائمة التعارضات */}
+                <div className="space-y-1.5 max-h-44 overflow-y-auto">
+                  {renewConflicts.map((c, i) => (
+                    <div
+                      key={c.billboardId + i}
+                      className="rounded-lg border border-red-500/20 bg-red-500/5 px-3 py-2"
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-sm font-semibold text-foreground truncate">{c.billboardName}</span>
+                        <span className={`text-xs font-bold shrink-0 ${
+                          c.daysRemaining <= 7 ? 'text-red-400' :
+                          c.daysRemaining <= 30 ? 'text-amber-400' : 'text-orange-400'
+                        }`}>
+                          {c.daysRemaining} يوم
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <Hash className="h-3 w-3 text-amber-400" />
+                          عقد #{c.activeContractNumber}
+                        </span>
+                        <span className="flex items-center gap-1 truncate">
+                          <User className="h-3 w-3 text-blue-400" />
+                          {c.activeContractCustomer || 'غير محدد'}
+                        </span>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <Calendar className="h-3 w-3 text-emerald-400" />
+                          {new Date(c.activeContractEndDate).toLocaleDateString('ar-LY', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* أزرار */}
+            <div className="flex justify-end gap-2 pt-1 border-t border-border/40">
+              <Button variant="outline" onClick={() => { setRenewOpen(false); setRenewConflicts([]); }}>إلغاء</Button>
+              <Button
+                disabled={!renewStart || !renewEnd || renewChecking}
+                variant={renewConflicts.length > 0 ? 'destructive' : 'default'}
+                className={renewConflicts.length > 0
+                  ? 'bg-red-600 hover:bg-red-700'
+                  : 'bg-primary hover:bg-primary/90'
                 }
-              }}>تجديد</Button>
+                onClick={async () => {
+                  if (!renewSource) return;
+                  try {
+                    const { renewContract } = await import('@/services/contractService');
+                    const created = await renewContract(String(renewSource.id), { start_date: renewStart, end_date: renewEnd, keep_cost: true });
+                    toast.success(`تم إنشاء عقد جديد برقم ${String(created?.Contract_Number ?? created?.id ?? '')}`);
+                    setRenewOpen(false); setRenewSource(null); setRenewStart(''); setRenewEnd('');
+                    setRenewConflicts([]);
+                    loadData();
+                  } catch (e) {
+                    console.error(e);
+                    toast.error('فشل تجديد العقد');
+                  }
+                }}
+              >
+                {renewConflicts.length > 0 ? (
+                  <><AlertTriangle className="h-4 w-4 ml-1" />تجديد رغم التحذير</>
+                ) : (
+                  <><RefreshCcw className="h-4 w-4 ml-1" />تجديد العقد</>
+                )}
+              </Button>
             </div>
           </div>
         </DialogContent>

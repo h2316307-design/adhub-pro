@@ -3,6 +3,7 @@ import { PrintCustomizationSettings } from '@/hooks/usePrintCustomization';
 import QRCode from 'qrcode';
 import DOMPurify from 'dompurify';
 import { supabase } from '@/integrations/supabase/client';
+import { formatFacesCountArabic } from '@/lib/utils';
 
 interface BillboardData {
   ID: number;
@@ -212,7 +213,7 @@ export function PrintPreview({
     // عدد الأوجه - يتبع موضع المقاس أفقياً، ويُزاح أسفله بمقدار faces_count_top
     html += `
       <div class="absolute-field faces-count" data-element-key="facesCount" style="top: calc(${s.size_top} + ${s.faces_count_top}); left: calc(${s.size_left} - 40mm${centerOffset(s.size_offset_x)}); width: 80mm; text-align: center; font-size: ${s.faces_count_font_size}; color: ${s.faces_count_color}; ${hl('facesCount')}">
-        ${billboard.has_cutout ? 'مجسم - ' : ''}عدد ${facesCount} ${facesCount === 1 ? 'وجه' : 'أوجه'}
+        ${billboard.has_cutout ? 'مجسم - ' : ''}${formatFacesCountArabic(facesCount)}
       </div>
     `;
 
