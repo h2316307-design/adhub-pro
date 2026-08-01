@@ -174,6 +174,7 @@ export interface PrintCustomizationSettings {
   cover_background_enabled: string;
   cover_background_url: string;
   calc_meters_by_faces: string;
+  calc_meters_as_single_face?: string;
 
   // إعدادات مستقلة لكل حالة
   status_overrides?: StatusOverrides;
@@ -322,6 +323,7 @@ const defaultSettings: PrintCustomizationSettings = {
   cover_background_enabled: 'true',
   cover_background_url: '',
   calc_meters_by_faces: 'false',
+  calc_meters_as_single_face: 'false',
 };
 
 export function usePrintCustomization(settingKey: string = 'default') {
@@ -353,10 +355,14 @@ export function usePrintCustomization(settingKey: string = 'default') {
 
       if (data) {
         const localDimLabels = localStorage.getItem('show_size_dimension_labels') || 'false';
+        const localSingleFace = localStorage.getItem('calc_meters_as_single_face') || 'false';
         // دمج البيانات مع الإعدادات الافتراضية للحقول الجديدة
-        setSettings({ ...defaultSettings, ...data, show_size_dimension_labels: localDimLabels, status_overrides: (data as any).status_overrides || undefined } as PrintCustomizationSettings);
+        setSettings({ ...defaultSettings, ...data, show_size_dimension_labels: localDimLabels, calc_meters_as_single_face: localSingleFace, status_overrides: (data as any).status_overrides || undefined } as PrintCustomizationSettings);
+      } else {
+        const localDimLabels = localStorage.getItem('show_size_dimension_labels') || 'false';
+        const localSingleFace = localStorage.getItem('calc_meters_as_single_face') || 'false';
+        setSettings(prev => ({ ...prev, show_size_dimension_labels: localDimLabels, calc_meters_as_single_face: localSingleFace }));
       }
-      // إذا لم توجد بيانات، نستخدم الإعدادات الافتراضية (تم تعيينها بالفعل)
     } catch (error) {
       console.error('Error in fetchSettings:', error);
     }
@@ -374,9 +380,12 @@ export function usePrintCustomization(settingKey: string = 'default') {
       if (resolvedNewSettings.show_size_dimension_labels !== undefined) {
         localStorage.setItem('show_size_dimension_labels', String(resolvedNewSettings.show_size_dimension_labels));
       }
+      if (resolvedNewSettings.calc_meters_as_single_face !== undefined) {
+        localStorage.setItem('calc_meters_as_single_face', String(resolvedNewSettings.calc_meters_as_single_face));
+      }
 
       // Strip fields not present in the DB schema (kept client-side only)
-      const { map_label_scale, show_size_dimension_labels, ...dbPayload } = updatedSettings as any;
+      const { map_label_scale, show_size_dimension_labels, calc_meters_as_single_face, ...dbPayload } = updatedSettings as any;
 
       const { error } = await supabase
         .from('billboard_print_customization')

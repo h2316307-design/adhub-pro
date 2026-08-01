@@ -475,43 +475,48 @@ export function UnifiedPrintAllDialog({
       const showPinFallback = contextType !== 'contract' && contextType !== 'offer' && contextType !== 'installation' && contextType !== 'removal';
       
       const ov = item.overlay_config || billboard?.overlay_config;
-      const isOverlayActive = ov && ov.enabled !== false;
+      const isImageActive = ov ? ov.show_image !== false : true;
+      const isOverlayActive = ov ? ov.enabled !== false : true;
       const sizeKey = size?.trim() || '';
       const sizeCutoutUrl = sizeCutoutMap[sizeKey] || sizeCutoutMap[sizeKey.replace(/×/g, 'x').replace(/X/g, 'x')] || null;
       const activeCutout = ov?.cutout_image_url || sizeCutoutUrl || null;
       
       let imageSection = '';
-      if (hasMainImage && isOverlayActive) {
-        const x = ov?.x_pct ?? 50;
-        const y = ov?.y_pct ?? 50;
-        const scale = (ov?.scale_pct ?? 100) / 100;
-        const rot = ov?.rotation_deg ?? 0;
-        const cropBottom = ov?.crop_bottom_pct || 0;
-        const isV2 = ov?.anchor_version === 'v2';
-        const translateY = isV2 ? '-100%' : '-50%';
-        const transformOrigin = isV2 ? 'bottom center' : 'center center';
-        
-        imageSection = `
-          <div class="overlay-container" style="position: relative; width: 100%; height: 100%; overflow: hidden; background: #fafafa;">
-            <img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
-            ${activeCutout ? `
-              <img src="${activeCutout}" class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="
-                position: absolute;
-                left: ${x}%;
-                top: ${y}%;
-                width: 27.15%;
-                height: auto;
-                display: block;
-                transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg);
-                transform-origin: ${transformOrigin};
-                clip-path: inset(0 0 ${cropBottom}% 0);
-                -webkit-clip-path: inset(0 0 ${cropBottom}% 0);
-                z-index: 10;
-              " />
-            ` : ''}
-          </div>
-        `;
-      } else if (hasMainImage) {
+      if (hasMainImage && isImageActive) {
+        if (isOverlayActive) {
+          const x = ov?.x_pct ?? 50;
+          const y = ov?.y_pct ?? 50;
+          const scale = (ov?.scale_pct ?? 100) / 100;
+          const rot = ov?.rotation_deg ?? 0;
+          const cropBottom = ov?.crop_bottom_pct || 0;
+          const isV2 = ov?.anchor_version === 'v2';
+          const translateY = isV2 ? '-100%' : '-50%';
+          const transformOrigin = isV2 ? 'bottom center' : 'center center';
+          
+          imageSection = `
+            <div class="overlay-container" style="position: relative; width: 100%; height: 100%; overflow: hidden; background: #fafafa;">
+              <img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" style="width: 100%; height: 100%; object-fit: contain; display: block;" />
+              ${activeCutout ? `
+                <img src="${activeCutout}" class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${scale}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}" style="
+                  position: absolute;
+                  left: ${x}%;
+                  top: ${y}%;
+                  width: 27.15%;
+                  height: auto;
+                  display: block;
+                  transform: translate(-50%, ${translateY}) scale(${scale}) rotate(${rot}deg);
+                  transform-origin: ${transformOrigin};
+                  clip-path: inset(0 0 ${cropBottom}% 0);
+                  -webkit-clip-path: inset(0 0 ${cropBottom}% 0);
+                  z-index: 10;
+                " />
+              ` : ''}
+            </div>
+          `;
+        } else {
+          imageSection = `<img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />`;
+        }
+      } else if (showPinFallback) {
         imageSection = `<img src="${mainImage}" alt="صورة اللوحة" class="billboard-image" />`;
       } else if (showPinFallback) {
         imageSection = `<div class="pin-fallback">

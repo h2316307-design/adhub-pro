@@ -338,15 +338,25 @@ export async function syncAvailableBillboardsToGoogleSheets(
       ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
     ].join('\n');
 
-    console.log('CSV data prepared for sync:', csvContent.substring(0, 200) + '...');
-    console.log(`Total billboards to sync: ${availableBillboards.length}`);
-    
-    // Note: Direct writing to Google Sheets requires Google Sheets API setup
-    // This would need backend implementation with proper OAuth
-    // For now, we just prepare the data and log success
-    // In production, you would send this to an edge function that handles the Google Sheets API
-    
-    throw new Error('وظيفة المزامنة مع Google Sheets تتطلب إعداد Google Sheets API. يرجى استخدام زر "تصدير المتاح Excel" كبديل.');
+    const webhookUrl = settings?.setting_value?.trim();
+    if (webhookUrl && (webhookUrl.startsWith('http://') || webhookUrl.startsWith('https://'))) {
+      const response = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'sync_billboards',
+          total: availableBillboards.length,
+          csv: csvContent,
+          rows: rows,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`فشلت المزامنة مع Webhook Google Sheets (رمز الاستجابة: ${response.status})`);
+      }
+      return;
+    }
+
+    throw new Error('لم يتم إعداد رابط Webhook لخدمة Google Sheets في إعدادات النظام. يرجى استخدام زر "تصدير المتاح Excel" كبديل ممتاز.');
   } catch (error: any) {
     console.error('Error syncing to Google Sheets:', error);
     throw error;

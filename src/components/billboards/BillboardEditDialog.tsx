@@ -368,6 +368,14 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
         console.error('❌ Error saving edit:', error);
         toast.error(`فشل حفظ التعديلات: ${error.message}`);
       } else {
+        // Sync municipality name in municipality_collection_items if linked
+        if (id && Municipality) {
+          await supabase
+            .from('municipality_collection_items')
+            .update({ municipality: Municipality })
+            .eq('billboard_id', Number(id));
+        }
+
         toast.success('تم حفظ التعديلات');
         setEditOpen(false);
         setEditing(null);

@@ -50,6 +50,7 @@ import { reverseGeocode, saveLandmarkToMemory } from '@/utils/geocoding';
 
 export interface BillboardOverlayConfig {
   enabled: boolean;
+  show_image?: boolean;      // تفعيل/إظهار صورة اللوحة الميدانية (Default: true)
   x_pct: number;            // 0-100% position X
   y_pct: number;            // 0-100% position Y
   scale_pct: number;        // scale % (100 default)
@@ -67,7 +68,8 @@ import { createPinSvgUrl } from '@/hooks/useMapMarkers';
 
 export function sanitizeOverlayConfig(config: BillboardOverlayConfig): BillboardOverlayConfig {
   const sanitized: BillboardOverlayConfig = {
-    enabled: !!config.enabled,
+    enabled: config.enabled !== false,
+    show_image: config.show_image !== false,
     x_pct: Number(config.x_pct ?? 50),
     y_pct: Number(config.y_pct ?? 50),
     scale_pct: Number(config.scale_pct ?? 100),
@@ -898,11 +900,13 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
             ...existingConfig,
             y_pct: adjustedY,
             anchor_version: 'v2',
-            enabled: true,
+            enabled: existingConfig.enabled !== false,
+            show_image: existingConfig.show_image !== false,
           };
         } else {
           initialConfig = {
             enabled: true,
+            show_image: true,
             x_pct: 50,
             y_pct: 78,
             scale_pct: 100,
@@ -1529,8 +1533,13 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
       canvas.width = nw;
       canvas.height = nh;
 
-      // Draw background site photo
-      ctx.drawImage(bgImg, 0, 0, nw, nh);
+      // Draw background site photo if show_image is enabled
+      if (config.show_image !== false) {
+        ctx.drawImage(bgImg, 0, 0, nw, nh);
+      } else {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, nw, nh);
+      }
 
       // If overlay is enabled and cutout URL exists, composite draw overlay image with scale, position, rotation, and bottom crop
       if (config.enabled && activeCutoutUrl) {
@@ -1609,7 +1618,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
   const overlayWidthPx = isV2
     ? (27.15 / 100) * renderedImgRect.width
     : (27.15 / 100) * (containerRef.current?.clientWidth || renderedImgRect.width);
-  const translateY = isV2 ? '-100%' : '-50%';
+      const translateY = isV2 ? '-100%' : '-50%';
   const transformOrigin = isV2 ? 'bottom center' : 'center center';
 
   return (
@@ -1635,12 +1644,28 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
           </div>
 
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 bg-muted/40 border border-border/40 px-4 py-2 rounded-2xl">
-              <Switch
-                checked={config.enabled}
-                onCheckedChange={val => setConfig(p => ({ ...p, enabled: val }))}
-              />
-              <span className="text-sm font-bold">تفعيل تراكب اللوحة</span>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <div className="flex items-center gap-2 bg-muted/40 border border-border/40 px-3 py-1.5 rounded-2xl shadow-xs">
+                <Switch
+                  id="toggle-mockup"
+                  checked={config.enabled}
+                  onCheckedChange={val => setConfig(p => ({ ...p, enabled: val }))}
+                />
+                <Label htmlFor="toggle-mockup" className="text-xs font-black cursor-pointer flex items-center gap-1.5">
+                  <span>تفعيل المجسم</span>
+                </Label>
+              </div>
+
+              <div className="flex items-center gap-2 bg-muted/40 border border-border/40 px-3 py-1.5 rounded-2xl shadow-xs">
+                <Switch
+                  id="toggle-image"
+                  checked={config.show_image !== false}
+                  onCheckedChange={val => setConfig(p => ({ ...p, show_image: val }))}
+                />
+                <Label htmlFor="toggle-image" className="text-xs font-black cursor-pointer flex items-center gap-1.5">
+                  <span>تفعيل صورة اللوحة</span>
+                </Label>
+              </div>
             </div>
 
             <Button
@@ -1681,7 +1706,7 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
               </div>
             </div>
 
-            {/* Canvas Container */}
+            {/* Canvas Interactive Overlay View */}
             <div
               ref={containerRef}
               className="relative w-full aspect-[16/9] max-h-[580px] rounded-2xl overflow-hidden bg-slate-900 border border-white/15 cursor-crosshair flex items-center justify-center shadow-lg"
@@ -1690,13 +1715,25 @@ export const BillboardPhotoOverlayEditor: React.FC<BillboardPhotoOverlayEditorPr
               onMouseUp={handleMouseUp}
             >
               {currentItem.image_url ? (
-                <img
-                  ref={imgRef}
-                  src={currentItem.image_url}
-                  alt="صورة الموقع"
-                  className="w-full h-full object-contain pointer-events-none"
-                  onLoad={handleImageLoad}
-                />
+                <div className="relative w-full h-full flex items-center justify-center">
+                  <img
+                    ref={imgRef}
+                    src={currentItem.image_url}
+                    alt="صورة الموقع"
+                    className={`w-full h-full object-contain pointer-events-none transition-all duration-200 ${
+                      config.show_image === false ? 'opacity-30 grayscale blur-[1px]' : 'opacity-100'
+                    }`}
+                    onLoad={handleImageLoad}
+                  />
+                  {config.show_image === false && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-slate-950/50 pointer-events-none z-10">
+                      <div className="bg-amber-500/10 border border-amber-500/40 text-amber-300 backdrop-blur-md px-4 py-2 rounded-2xl flex items-center gap-2 text-xs font-black shadow-xl">
+                        <Eye className="h-4 w-4 text-amber-400" />
+                        <span>صورة اللوحة معطلة (لن تُعرض في طباعة الكل)</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="text-center text-slate-500 py-20">
                   <Camera className="h-16 w-16 mx-auto mb-3 opacity-30" />

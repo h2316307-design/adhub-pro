@@ -74,10 +74,29 @@ interface Collection {
   items: CollectionItem[];
 }
 
+export const normalizeMuniName = (name: string | null | undefined): string => {
+  if (!name) return '';
+  const clean = String(name).trim();
+  const legacyMap: Record<string, string> = {
+    'قصر خيار': 'قصر الاخيار',
+    'قصر_خيار': 'قصر الاخيار',
+    'قصر الخيار': 'قصر الاخيار',
+    'القره بوللي': 'القره بوللي',
+    'القره_بوللي': 'القره بوللي',
+    'القرهبوللي': 'القره بوللي',
+    'طرابلس': 'طرابلس المركز',
+    'طرابلس القديمة': 'طرابلس المركز',
+    'صبراتة': 'صبراته',
+    'امسلاته': 'امسلاتة',
+    'مسلاتة': 'امسلاتة',
+  };
+  return legacyMap[clean] || clean;
+};
+
 const parseDimensions = (sizeStr: string) => {
   if (!sizeStr) return { length: '', width: '', height: '' };
   
-  const normalized = sizeStr.trim();
+  const normalized = String(sizeStr || '').trim();
   const lower = normalized.toLowerCase();
 
   // Specific preset mapping for non-numeric labels
@@ -132,9 +151,9 @@ const parseSizeDimensions = (sizeStr: string) => {
 };
 
 const formatDimensions = (length: string, width: string, height: string) => {
-  const l = length.trim();
-  const w = width.trim();
-  const h = height.trim();
+  const l = String(length || '').trim();
+  const w = String(width || '').trim();
+  const h = String(height || '').trim();
   if (!l && !w && !h) return '';
   return `${l}x${w}${h ? 'x' + h : ''}`;
 };
@@ -338,7 +357,7 @@ const DimensionInput = ({
           <span className="text-[10px] font-bold text-muted-foreground">مقاسات ونماذج الإعدادات:</span>
           <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto p-0.5">
             {activePresets.map((preset) => {
-              const isSelected = value?.trim().toLowerCase() === preset.toLowerCase();
+              const isSelected = String(value || '').trim().toLowerCase() === String(preset || '').trim().toLowerCase();
               const pDims = parseDimensions(preset);
               const pDimStr = pDims.length && pDims.width ? `${pDims.length}×${pDims.width}م` : '';
 
@@ -579,18 +598,25 @@ export default function MunicipalityBillboardOrganizer() {
   const [comparisonMunicipality, setComparisonMunicipality] = useState<string>('none');
 
   const totalAreaMeters = useMemo(() => {
-    const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
+    const facesHidden = customSettings.faces_count_show === 'false';
+    const localVal = localStorage.getItem('calc_meters_as_single_face');
+    const isSingleFaceMode = facesHidden && (localVal !== null ? localVal === 'true' : String(customSettings.calc_meters_as_single_face) === 'true');
+
     return currentCollection.items.reduce((sum, item) => {
       const { length, width } = parseDimensions(item.size);
-      const area = length * width;
-      const faces = getFacesCountNumber(item.faces_count);
-      return sum + (multiplyByFaces ? area * faces : area);
+      const l = typeof length === 'number' ? length : (parseFloat(length) || 0);
+      const w = typeof width === 'number' ? width : (parseFloat(width) || 0);
+      const area = l * w;
+      const faces = isSingleFaceMode ? 1 : getFacesCountNumber(item.faces_count);
+      return sum + (area * faces);
     }, 0);
-  }, [currentCollection.items, customSettings.calc_meters_by_faces]);
+  }, [currentCollection.items, customSettings.faces_count_show, customSettings.calc_meters_as_single_face]);
 
   const sizeStats = useMemo(() => {
     const stats: Record<string, { count: number; totalMeters: number }> = {};
-    const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
+    const facesHidden = customSettings.faces_count_show === 'false';
+    const localVal = localStorage.getItem('calc_meters_as_single_face');
+    const isSingleFaceMode = facesHidden && (localVal !== null ? localVal === 'true' : String(customSettings.calc_meters_as_single_face) === 'true');
     
     currentCollection.items.forEach(item => {
       const sizeStr = item.size || 'بدون مقاس';
@@ -600,9 +626,11 @@ export default function MunicipalityBillboardOrganizer() {
       stats[sizeStr].count += 1;
       
       const { length, width } = parseDimensions(item.size);
-      const area = length * width;
-      const faces = getFacesCountNumber(item.faces_count);
-      stats[sizeStr].totalMeters += multiplyByFaces ? area * faces : area;
+      const l = typeof length === 'number' ? length : (parseFloat(length) || 0);
+      const w = typeof width === 'number' ? width : (parseFloat(width) || 0);
+      const area = l * w;
+      const faces = isSingleFaceMode ? 1 : getFacesCountNumber(item.faces_count);
+      stats[sizeStr].totalMeters += area * faces;
     });
     
     return Object.entries(stats).map(([size, data]) => ({
@@ -610,11 +638,13 @@ export default function MunicipalityBillboardOrganizer() {
       count: data.count,
       totalMeters: data.totalMeters
     })).sort((a, b) => b.count - a.count);
-  }, [currentCollection.items, customSettings.calc_meters_by_faces]);
+  }, [currentCollection.items, customSettings.faces_count_show, customSettings.calc_meters_as_single_face]);
 
   const selectedItemsStats = useMemo(() => {
     const stats: Record<string, { count: number; totalMeters: number }> = {};
-    const multiplyByFaces = customSettings.calc_meters_by_faces === 'true';
+    const facesHidden = customSettings.faces_count_show === 'false';
+    const localVal = localStorage.getItem('calc_meters_as_single_face');
+    const isSingleFaceMode = facesHidden && (localVal !== null ? localVal === 'true' : String(customSettings.calc_meters_as_single_face) === 'true');
     
     const selItems = currentCollection.items.filter(item => selectedItems.has(item.sequence_number));
     selItems.forEach(item => {
@@ -625,9 +655,11 @@ export default function MunicipalityBillboardOrganizer() {
       stats[sizeStr].count += 1;
       
       const { length, width } = parseDimensions(item.size);
-      const area = length * width;
-      const faces = getFacesCountNumber(item.faces_count);
-      stats[sizeStr].totalMeters += multiplyByFaces ? area * faces : area;
+      const l = typeof length === 'number' ? length : (parseFloat(length) || 0);
+      const w = typeof width === 'number' ? width : (parseFloat(width) || 0);
+      const area = l * w;
+      const faces = isSingleFaceMode ? 1 : getFacesCountNumber(item.faces_count);
+      stats[sizeStr].totalMeters += area * faces;
     });
     
     const totalArea = Object.values(stats).reduce((sum, d) => sum + d.totalMeters, 0);
@@ -641,7 +673,7 @@ export default function MunicipalityBillboardOrganizer() {
         totalMeters: data.totalMeters
       })).sort((a, b) => b.count - a.count)
     };
-  }, [currentCollection.items, selectedItems, customSettings.calc_meters_by_faces]);
+  }, [currentCollection.items, selectedItems, customSettings.faces_count_show, customSettings.calc_meters_as_single_face]);
   const [collectionName, setCollectionName] = useState('');
   const [municipalityName, setMunicipalityName] = useState('');
   const [cityName, setCityName] = useState('');
@@ -880,6 +912,26 @@ export default function MunicipalityBillboardOrganizer() {
     }
   };
 
+  const toggleItemMockup = (seq: number) => {
+    const item = currentCollection.items.find(i => i.sequence_number === seq);
+    if (!item) return;
+    const currentOv = item.overlay_config || { enabled: true, show_image: true, x_pct: 50, y_pct: 78, scale_pct: 100, rotation_deg: 0 };
+    const newEnabled = !(currentOv.enabled !== false);
+    const updatedOv = { ...currentOv, enabled: newEnabled };
+    handleSaveItemOverlay(seq, updatedOv);
+    toast.success(newEnabled ? 'تم تفعيل مجسم اللوحة' : 'تم إلغاء تفعيل مجسم اللوحة');
+  };
+
+  const toggleItemPhoto = (seq: number) => {
+    const item = currentCollection.items.find(i => i.sequence_number === seq);
+    if (!item) return;
+    const currentOv = item.overlay_config || { enabled: true, show_image: true, x_pct: 50, y_pct: 78, scale_pct: 100, rotation_deg: 0 };
+    const newShowImage = !(currentOv.show_image !== false);
+    const updatedOv = { ...currentOv, show_image: newShowImage };
+    handleSaveItemOverlay(seq, updatedOv);
+    toast.success(newShowImage ? 'تم تفعيل صورة اللوحة' : 'تم إلغاء تفعيل صورة اللوحة');
+  };
+
   const handleBillboardLocationChange = async (id: number | string, newLat: number, newLng: number) => {
     const seq = Number(id);
     setCurrentCollection(prev => ({
@@ -1010,9 +1062,12 @@ export default function MunicipalityBillboardOrganizer() {
       
       setAllBillboards(allData);
       
-      // Derive municipalities and cities from the complete list of billboards
-      const uniqueMunicipalities = [...new Set(allData.map(b => b.Municipality).filter(Boolean))] as string[];
-      setMunicipalities(uniqueMunicipalities.sort());
+      // Derive municipalities and cities from DB table + billboards
+      const { data: dbMunis } = await supabase.from('municipalities').select('name').order('name');
+      const dbMuniNames = (dbMunis || []).map(m => normalizeMuniName(m.name)).filter(Boolean) as string[];
+      const billboardMunis = allData.map(b => normalizeMuniName(b.Municipality)).filter(Boolean) as string[];
+      const uniqueMunicipalities = [...new Set([...dbMuniNames, ...billboardMunis])];
+      setMunicipalities(uniqueMunicipalities.sort((a, b) => a.localeCompare(b, 'ar')));
 
       const uniqueCities = [...new Set(allData.map(b => b.City).filter(Boolean))] as string[];
       setCities(uniqueCities.sort());
@@ -1025,19 +1080,11 @@ export default function MunicipalityBillboardOrganizer() {
   };
 
   const loadMunicipalities = async () => {
-    if (allBillboards.length > 0) {
-      const unique = [...new Set(allBillboards.map(b => b.Municipality).filter(Boolean))] as string[];
-      setMunicipalities(unique.sort());
-    } else {
-      const { data } = await supabase
-        .from('billboards')
-        .select('Municipality')
-        .not('Municipality', 'is', null);
-      if (data) {
-        const unique = [...new Set(data.map(d => d.Municipality).filter(Boolean))] as string[];
-        setMunicipalities(unique.sort());
-      }
-    }
+    const { data: dbMunis } = await supabase.from('municipalities').select('name').order('name');
+    const dbMuniNames = (dbMunis || []).map(m => normalizeMuniName(m.name)).filter(Boolean) as string[];
+    const billboardMunis = (allBillboards || []).map(b => normalizeMuniName(b.Municipality)).filter(Boolean) as string[];
+    const combined = [...new Set([...dbMuniNames, ...billboardMunis])];
+    setMunicipalities(combined.sort((a, b) => a.localeCompare(b, 'ar')));
   };
 
   const loadCities = async () => {
@@ -1085,7 +1132,7 @@ export default function MunicipalityBillboardOrganizer() {
       if (collRes.data && itemsRes.data) {
         const name = collRes.data.name || '';
         const desc = collRes.data.description || '';
-        const muni = (collRes.data as any).municipality_name || desc || '';
+        const muni = normalizeMuniName((collRes.data as any).municipality_name || desc || '');
         const cty = (collRes.data as any).city || '';
         const dsize = (collRes.data as any).default_size || '';
         
@@ -2791,16 +2838,24 @@ export default function MunicipalityBillboardOrganizer() {
           }).join('');
 
           const totalColumnsCount = 6 + (showFacesCol ? 1 : 0) + (showStatusInPrint ? 1 : 0);
-          const multiplyByFaces = s.calc_meters_by_faces === 'true';
+          const facesHidden = s.faces_count_show === 'false';
+          const localSingleVal = localStorage.getItem('calc_meters_as_single_face');
+          const isSingleFaceMode = facesHidden && (localSingleVal !== null 
+            ? localSingleVal === 'true' 
+            : String((s as any).calc_meters_as_single_face) === 'true');
+          const showTotalMeters = !facesHidden || isSingleFaceMode;
+
           const totalAreaMeters = printItems.reduce((sum, item) => {
             const { length, width } = parseDimensions(item.size);
-            const area = length * width;
-            const faces = getFacesCountNumber(item.faces_count);
-            return sum + (multiplyByFaces ? area * faces : area);
+            const l = typeof length === 'number' ? length : (parseFloat(length) || 0);
+            const w = typeof width === 'number' ? width : (parseFloat(width) || 0);
+            const area = l * w;
+            const faces = isSingleFaceMode ? 1 : getFacesCountNumber(item.faces_count);
+            return sum + (area * faces);
           }, 0);
 
           const isLastPage = pIdx === totalSummaryPages - 1;
-          const tableFooterHtml = isLastPage ? `
+          const tableFooterHtml = (isLastPage && showTotalMeters) ? `
             <tfoot>
               <tr style="background-color: #f8fafc !important; font-weight: bold; border-top: 2px solid #000; height: ${rowHeight};">
                 <td colspan="${totalColumnsCount}" style="text-align: center; padding: 6px 8px; font-size: 13px; color: #000; background-color: #f8fafc !important; font-weight: 700;">
@@ -2850,9 +2905,9 @@ export default function MunicipalityBillboardOrganizer() {
               .summary-table thead th:first-child { border-right:none; }
               .summary-table thead th.qr-col-cell { width: ${rowHeight} !important; padding: 0 !important; text-align: center; }
               .summary-table tbody tr { height: ${rowHeight}; background:#ffffff !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; page-break-inside: avoid; }
-              .summary-table tbody td { padding:${rowPadding}; font-size:${rowFontSize}; border-bottom:1px solid #ccc; border-right:1px solid #ccc; text-align:center; color:#000; vertical-align:middle; line-height:1.25; }
+              .summary-table tbody td { padding:${rowPadding}; font-size:${rowFontSize}; border-bottom:1px solid #ccc; border-right:1px solid #ccc; text-align:center; color:#000; vertical-align:middle; line-height:1.55 !important; }
               .summary-table tbody td:first-child { border-right:none; }
-              .summary-table tbody td.loc { text-align:right; padding-right:10px; padding-left:10px; word-break:break-word; }
+              .summary-table tbody td.loc { text-align:right; padding-right:10px; padding-left:10px; word-break:break-word; line-height:1.55 !important; }
               .summary-table tbody td.num { font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-weight: 600; }
               .summary-table tbody td.coords { direction:ltr; font-family: '${s.coords_font_family || 'Manrope'}', sans-serif; font-size:${compactSummary ? '9px' : '10px'}; letter-spacing:0.1px; word-break:break-all; white-space:normal; font-weight: 600; line-height:1.4; }
               .summary-table tbody td.qr-col-cell { width: ${rowHeight} !important; height: ${rowHeight} !important; padding: 0 !important; vertical-align: middle; text-align: center; }
@@ -2928,9 +2983,9 @@ export default function MunicipalityBillboardOrganizer() {
                 overflow: hidden; z-index: 5;
                 display: flex; flex-direction: column;
               ">
-                ${hasUploadedImage ? (() => {
+                ${(hasUploadedImage && (item.overlay_config?.show_image !== false)) ? (() => {
                   const ov = item.overlay_config;
-                  const sizeKey = item.size?.trim() || '';
+                  const sizeKey = String(item.size || '').trim();
                   const sizeCutoutUrl = sizeCutoutMap[sizeKey] || sizeCutoutMap[sizeKey.replace(/×/g, 'x').replace(/X/g, 'x')] || null;
                   const activeCutout = ov?.cutout_image_url || sizeCutoutUrl || null;
                   const isOverlayActive = (ov?.enabled !== false);
@@ -3395,7 +3450,7 @@ export default function MunicipalityBillboardOrganizer() {
               </div>
               <div className="space-y-1.5">
                 <Label className="text-xs text-muted-foreground font-medium">البلدية المرتبطة *</Label>
-                <Select value={municipalityName || '__none__'} onValueChange={v => setMunicipalityName(v === '__none__' ? '' : v)}>
+                <Select value={normalizeMuniName(municipalityName) || '__none__'} onValueChange={v => setMunicipalityName(v === '__none__' ? '' : normalizeMuniName(v))}>
                   <SelectTrigger className="h-10 rounded-xl bg-background/50 border-border/15 focus:ring-indigo-500"><SelectValue placeholder="اختر البلدية" /></SelectTrigger>
                   <SelectContent className="rounded-xl border-border/15 bg-popover/95 backdrop-blur-md">
                     <SelectItem value="__none__">— بدون —</SelectItem>
@@ -4012,12 +4067,23 @@ export default function MunicipalityBillboardOrganizer() {
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => { setMoveSourceSeqs([item.sequence_number]); setMoveTargetSeq(''); setMovePosition('above'); setShowMoveDialog(true); }} title="نقل اللوحة">
                               <ArrowLeftRight className="h-3.5 w-3.5 text-indigo-500" />
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-amber-500/10 text-amber-500" onClick={() => {
-                              const idx = currentCollection.items.findIndex(i => i.sequence_number === item.sequence_number);
-                              setOverlayEditorIndex(Math.max(0, idx));
-                              setShowOverlayEditor(true);
-                            }} title="تراكي وتناسب اللوحة">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-8 w-8 rounded-lg ${item.overlay_config?.enabled !== false ? 'hover:bg-amber-500/10 text-amber-500' : 'hover:bg-muted text-muted-foreground line-through opacity-40'}`}
+                              onClick={() => toggleItemMockup(item.sequence_number)}
+                              title={item.overlay_config?.enabled !== false ? 'مجسم اللوحة: مفعل (اضغط للإلغاء)' : 'مجسم اللوحة: معطل (اضغط للتفعيل)'}
+                            >
                               <Sparkles className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-8 w-8 rounded-lg ${item.overlay_config?.show_image !== false ? 'hover:bg-blue-500/10 text-blue-500' : 'hover:bg-muted text-muted-foreground line-through opacity-40'}`}
+                              onClick={() => toggleItemPhoto(item.sequence_number)}
+                              title={item.overlay_config?.show_image !== false ? 'صورة اللوحة: مفعلة (اضغط للإلغاء)' : 'صورة اللوحة: معطلة (اضغط للتفعيل)'}
+                            >
+                              <Eye className="h-3.5 w-3.5" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-muted/80" onClick={() => setEditingItem(item)} title="تعديل">
                               <Edit2 className="h-3.5 w-3.5 text-slate-500" />
@@ -4135,6 +4201,37 @@ export default function MunicipalityBillboardOrganizer() {
                               {item.latitude?.toFixed(6)}, {item.longitude?.toFixed(6)}
                             </Badge>
                           )}
+                        </div>
+
+                        {/* Quick Overlay Toggles: Mockup & Image */}
+                        <div className="flex items-center gap-1.5 pt-1 flex-wrap" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            onClick={() => toggleItemMockup(item.sequence_number)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                              (item.overlay_config?.enabled !== false)
+                                ? 'bg-amber-500/15 border-amber-500/30 text-amber-600 dark:text-amber-400 shadow-xs'
+                                : 'bg-muted/40 border-border/20 text-muted-foreground line-through opacity-60'
+                            }`}
+                            title="تفعيل/إلغاء مجسم اللوحة في الطباعة"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            <span>المجسم: {(item.overlay_config?.enabled !== false) ? 'مفعل' : 'معطل'}</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => toggleItemPhoto(item.sequence_number)}
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-bold border transition-all cursor-pointer ${
+                              (item.overlay_config?.show_image !== false)
+                                ? 'bg-blue-500/15 border-blue-500/30 text-blue-600 dark:text-blue-400 shadow-xs'
+                                : 'bg-muted/40 border-border/20 text-muted-foreground line-through opacity-60'
+                            }`}
+                            title="تفعيل/إلغاء صورة اللوحة في الطباعة"
+                          >
+                            <Eye className="h-3 w-3" />
+                            <span>الصورة: {(item.overlay_config?.show_image !== false) ? 'مفعلة' : 'معطلة'}</span>
+                          </button>
                         </div>
 
                         {/* Size 3D Dimension Editor */}
@@ -5589,6 +5686,26 @@ export default function MunicipalityBillboardOrganizer() {
                       />
                     </div>
                   </div>
+
+                  {customSettings.faces_count_show === 'false' && (
+                    <div className="p-3.5 border border-amber-500/30 rounded-xl bg-amber-500/10 flex items-center justify-between animate-in fade-in duration-200">
+                      <div className="flex flex-col gap-0.5">
+                        <Label htmlFor="calc_meters_as_single_face" className="text-xs font-bold text-amber-700 dark:text-amber-300">
+                          حساب وإظهار إجمالي الأمتار (كوجه واحد)
+                        </Label>
+                        <span className="text-[10px] text-muted-foreground">
+                          عند التفعيل، يظهر إجمالي المساحة في المستند بحسابه كوجه واحد (طول × عرض). وعند إيقافه لا يظهر إجمالي الأمتار إطلاقاً.
+                        </span>
+                      </div>
+                      <Switch 
+                        id="calc_meters_as_single_face" 
+                        checked={customSettings.calc_meters_as_single_face === 'true'} 
+                        onCheckedChange={async (v) => {
+                          await saveSettings({ calc_meters_as_single_face: v ? 'true' : 'false' });
+                        }} 
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {/* Section: Status Config */}

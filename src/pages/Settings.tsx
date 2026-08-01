@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import {
   Plus, Edit, Trash2, Layers, Tag, Save, X, MapPin, RefreshCw, DollarSign, Ruler, Image as ImageIcon,
@@ -245,10 +245,37 @@ export default function BillboardSettings() {
     }
   };
 
-  // Sync municipalities from billboards
+  // Sync municipalities from billboards and normalize names across database
   const syncMunicipalitiesFromBillboards = async () => {
     setSyncing(true);
     try {
+      // 1. Normalize common municipality name variations across all tables
+      const mappingRules: Record<string, string> = {
+        'قصر خيار': 'قصر الاخيار',
+        'قصر_خيار': 'قصر الاخيار',
+        'قصر الخيار': 'قصر الاخيار',
+        'القره بوللي': 'القره بوللي',
+        'القره_بوللي': 'القره بوللي',
+        'القرهبوللي': 'القره بوللي',
+        'طرابلس': 'طرابلس المركز',
+        'طرابلس القديمة': 'طرابلس المركز',
+        'صبراتة': 'صبراته',
+        'امسلاته': 'امسلاتة',
+        'مسلاتة': 'امسلاتة',
+      };
+
+      for (const [raw, target] of Object.entries(mappingRules)) {
+        await Promise.allSettled([
+          supabase.from('billboards').update({ Municipality: target }).eq('Municipality', raw),
+          supabase.from('billboards').update({ Municipality: target }).ilike('Municipality', raw),
+          supabase.from('municipality_collections').update({ municipality_name: target }).eq('municipality_name', raw),
+          supabase.from('municipality_collections').update({ municipality_name: target }).ilike('municipality_name', raw),
+          supabase.from('municipality_collection_items').update({ municipality: target }).eq('municipality', raw),
+          supabase.from('municipality_collection_items').update({ municipality: target }).ilike('municipality', raw),
+        ]);
+      }
+
+      // 2. Query billboards table for unique municipality values
       const { data: billboardData, error: billboardError } = await supabase
         .from('billboards')
         .select('Municipality')
@@ -261,21 +288,20 @@ export default function BillboardSettings() {
       const existingNames = new Set((existingMunicipalities || []).map((m: any) => m.name));
       const newMunicipalities = uniqueMunicipalities.filter(name => !existingNames.has(name));
 
-      if (newMunicipalities.length === 0) {
-        toast.info('جميع البلديات مضافة بالفعل');
-        return;
+      if (newMunicipalities.length > 0) {
+        const toInsert = newMunicipalities.map((name, idx) => ({
+          name,
+          code: `AUTO-${String(municipalities.length + idx + 1).padStart(3, '0')}`,
+          sort_order: municipalities.length + idx + 1,
+        }));
+
+        const { error: insertError } = await supabase.from('municipalities').insert(toInsert);
+        if (insertError) throw insertError;
+        toast.success(`تم مزامنة وتوحيد أسماء البلديات وإضافة ${newMunicipalities.length} بلدية جديدة تلقائياً`);
+      } else {
+        toast.success('تمت مزامنة وتوحيد أسماء البلديات في جميع اللوحات والمجموعات بنجاح');
       }
 
-      const toInsert = newMunicipalities.map((name, idx) => ({
-        name,
-        code: `AUTO-${String(municipalities.length + idx + 1).padStart(3, '0')}`,
-        sort_order: municipalities.length + idx + 1,
-      }));
-
-      const { error: insertError } = await supabase.from('municipalities').insert(toInsert);
-      if (insertError) throw insertError;
-
-      toast.success(`تم إضافة ${newMunicipalities.length} بلدية جديدة تلقائياً`);
       loadData();
     } catch (err: any) {
       toast.error('فشل المزامنة: ' + (err?.message || ''));
@@ -322,18 +348,66 @@ export default function BillboardSettings() {
 
   // Municipality handlers
   const handleMunicipalitySubmit = async () => {
-    if (!municipalityForm.name || !municipalityForm.code) {
+    const name = String(municipalityForm.name || '').trim();
+    const code = String(municipalityForm.code || '').trim();
+    const logo_url = String(municipalityForm.logo_url || '').trim();
+
+    if (!name || !code) {
       toast.error('يرجى ملء الاسم والكود');
       return;
     }
     const payload = {
-      name: municipalityForm.name.trim(),
-      code: municipalityForm.code.trim(),
-      logo_url: municipalityForm.logo_url.trim() || null,
+      name,
+      code,
+      logo_url: logo_url || null,
       sort_order: municipalityForm.sort_order,
     };
-    if (editMode) await supabase.from('municipalities').update(payload).eq('id', municipalityForm.id);
-    else await supabase.from('municipalities').insert(payload);
+
+    try {
+      if (editMode && municipalityForm.id) {
+        // 1. Fetch old municipality record
+        const { data: oldData } = await supabase
+          .from('municipalities')
+          .select('name')
+          .eq('id', municipalityForm.id)
+          .single();
+
+        const oldName = oldData?.name?.trim();
+
+        // 2. Update municipalities table record
+        const { error: updateError } = await supabase
+          .from('municipalities')
+          .update(payload)
+          .eq('id', municipalityForm.id);
+
+        if (updateError) throw updateError;
+
+        // 3. Cascade update name across all related tables if name changed
+        if (oldName && oldName !== name) {
+          await Promise.allSettled([
+            supabase.from('billboards').update({ Municipality: name }).eq('Municipality', oldName),
+            supabase.from('billboards').update({ Municipality: name }).ilike('Municipality', oldName),
+            supabase.from('municipality_collections').update({ municipality_name: name }).eq('municipality_name', oldName),
+            supabase.from('municipality_collections').update({ municipality_name: name }).ilike('municipality_name', oldName),
+            supabase.from('municipality_collection_items').update({ municipality: name }).eq('municipality', oldName),
+            supabase.from('municipality_collection_items').update({ municipality: name }).ilike('municipality', oldName),
+            supabase.from('municipality_rent_prices').update({ municipality_name: name }).eq('municipality_name', oldName),
+            supabase.from('municipality_factors').update({ municipality_name: name }).eq('municipality_name', oldName),
+          ]);
+          toast.success(`تم تحديث اسم البلدية من "${oldName}" إلى "${name}" وتحديث كافة اللوحات والمجموعات بنجاح`);
+        } else {
+          toast.success('تم تحديث البلدية بنجاح');
+        }
+      } else {
+        const { error: insertError } = await supabase.from('municipalities').insert(payload);
+        if (insertError) throw insertError;
+        toast.success('تم إضافة البلدية بنجاح');
+      }
+    } catch (e: any) {
+      console.error('Error saving municipality:', e);
+      toast.error('حدث خطأ أثناء حفظ البلدية: ' + (e?.message || ''));
+    }
+
     setMunicipalityDialog(false);
     loadData();
   };
@@ -345,9 +419,10 @@ export default function BillboardSettings() {
 
   // City handlers
   const handleCitySubmit = async () => {
-    if (!cityForm.name.trim()) return;
-    if (editMode) await supabase.from('cities').update({ name: cityForm.name.trim() }).eq('id', cityForm.id);
-    else await supabase.from('cities').insert({ name: cityForm.name.trim() });
+    const cityName = String(cityForm.name || '').trim();
+    if (!cityName) return;
+    if (editMode) await supabase.from('cities').update({ name: cityName }).eq('id', cityForm.id);
+    else await supabase.from('cities').insert({ name: cityName });
     setCityDialog(false);
     loadData();
   };
@@ -805,7 +880,7 @@ export default function BillboardSettings() {
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      <Button size="icon" variant="ghost" onClick={() => { setMunicipalityForm(m); setEditMode(true); setMunicipalityDialog(true); }}><Edit className="h-4 w-4" /></Button>
+                      <Button size="icon" variant="ghost" onClick={() => { setMunicipalityForm({ id: m.id, name: m.name || '', code: m.code || '', logo_url: m.logo_url || '', sort_order: m.sort_order || 999 }); setEditMode(true); setMunicipalityDialog(true); }}><Edit className="h-4 w-4" /></Button>
                       <Button size="icon" variant="ghost" onClick={() => handleMunicipalityDelete(m.id)} className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
                     </div>
                   </div>
@@ -833,7 +908,7 @@ export default function BillboardSettings() {
                   <div key={c.id} className="p-3 rounded-xl border border-border/30 bg-muted/20 flex items-center justify-between text-xs">
                     <span className="font-bold">{c.name}</span>
                     <div className="flex items-center gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setCityForm(c); setEditMode(true); setCityDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
+                      <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => { setCityForm({ id: c.id, name: c.name || '' }); setEditMode(true); setCityDialog(true); }}><Edit className="h-3.5 w-3.5" /></Button>
                       <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive" onClick={() => handleCityDelete(c.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                     </div>
                   </div>
@@ -847,9 +922,12 @@ export default function BillboardSettings() {
       {/* ─── DIALOGS FOR FACES, TYPES, MUNICIPALITIES, CITIES ─── */}
       <Dialog open={faceDialog} onOpenChange={setFaceDialog}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader><DialogTitle>{editMode ? 'تعديل عدد الأوجه' : 'إضافة عدد أوجه جديد'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editMode ? 'تعديل عدد الأوجه' : 'إضافة عدد أوجه جديد'}</DialogTitle>
+            <DialogDescription className="sr-only">تعديل عدد الأوجه</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3 py-2">
-            <div><Label className="text-xs font-bold">اسم النوع *</Label><Input value={faceForm.name} onChange={e => setFaceForm(p => ({ ...p, name: e.target.value }))} placeholder="وجهين / وجه واحد" className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">اسم النوع *</Label><Input value={faceForm.name || ''} onChange={e => setFaceForm(p => ({ ...p, name: e.target.value }))} placeholder="وجهين / وجه واحد" className="rounded-xl h-10" /></div>
             <div><Label className="text-xs font-bold">العدد *</Label><Input type="number" value={faceForm.count} onChange={e => setFaceForm(p => ({ ...p, count: parseInt(e.target.value) || 1 }))} className="rounded-xl h-10" /></div>
           </div>
           <DialogFooter><Button onClick={handleFaceSubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
@@ -858,10 +936,13 @@ export default function BillboardSettings() {
 
       <Dialog open={typeDialog} onOpenChange={setTypeDialog}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader><DialogTitle>{editMode ? 'تعديل نوع اللوحة' : 'إضافة نوع جديد'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editMode ? 'تعديل نوع اللوحة' : 'إضافة نوع جديد'}</DialogTitle>
+            <DialogDescription className="sr-only">تعديل نوع اللوحة</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3 py-2">
-            <div><Label className="text-xs font-bold">اسم النوع *</Label><Input value={typeForm.name} onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))} placeholder="ميجالاين / يوني بول" className="rounded-xl h-10" /></div>
-            <div><Label className="text-xs font-bold">اللون المميز</Label><Input type="color" value={typeForm.color} onChange={e => setTypeForm(p => ({ ...p, color: e.target.value }))} className="rounded-xl h-10 p-1 cursor-pointer" /></div>
+            <div><Label className="text-xs font-bold">اسم النوع *</Label><Input value={typeForm.name || ''} onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))} placeholder="ميجالاين / يوني بول" className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">اللون المميز</Label><Input type="color" value={typeForm.color || '#3b82f6'} onChange={e => setTypeForm(p => ({ ...p, color: e.target.value }))} className="rounded-xl h-10 p-1 cursor-pointer" /></div>
           </div>
           <DialogFooter><Button onClick={handleTypeSubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
         </DialogContent>
@@ -869,11 +950,14 @@ export default function BillboardSettings() {
 
       <Dialog open={municipalityDialog} onOpenChange={setMunicipalityDialog}>
         <DialogContent className="max-w-md rounded-3xl">
-          <DialogHeader><DialogTitle>{editMode ? 'تعديل البلدية' : 'إضافة بلدية جديدة'}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>{editMode ? 'تعديل البلدية' : 'إضافة بلدية جديدة'}</DialogTitle>
+            <DialogDescription className="sr-only">تعديل أو إضافة بلدية</DialogDescription>
+          </DialogHeader>
           <div className="space-y-3 py-2">
-            <div><Label className="text-xs font-bold">اسم البلدية *</Label><Input value={municipalityForm.name} onChange={e => setMunicipalityForm(p => ({ ...p, name: e.target.value }))} className="rounded-xl h-10" /></div>
-            <div><Label className="text-xs font-bold">الكود *</Label><Input value={municipalityForm.code} onChange={e => setMunicipalityForm(p => ({ ...p, code: e.target.value }))} className="rounded-xl h-10" /></div>
-            <div><Label className="text-xs font-bold">رابط الشعار</Label><Input value={municipalityForm.logo_url} onChange={e => setMunicipalityForm(p => ({ ...p, logo_url: e.target.value }))} className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">اسم البلدية *</Label><Input value={municipalityForm.name || ''} onChange={e => setMunicipalityForm(p => ({ ...p, name: e.target.value }))} className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">الكود *</Label><Input value={municipalityForm.code || ''} onChange={e => setMunicipalityForm(p => ({ ...p, code: e.target.value }))} className="rounded-xl h-10" /></div>
+            <div><Label className="text-xs font-bold">رابط الشعار</Label><Input value={municipalityForm.logo_url || ''} onChange={e => setMunicipalityForm(p => ({ ...p, logo_url: e.target.value }))} className="rounded-xl h-10" /></div>
           </div>
           <DialogFooter><Button onClick={handleMunicipalitySubmit} className="rounded-xl bg-primary text-primary-foreground">حفظ</Button></DialogFooter>
         </DialogContent>

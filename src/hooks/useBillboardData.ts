@@ -4,6 +4,25 @@ import { toast } from 'sonner';
 import { fetchWithRetry } from '@/lib/fetchWithRetry';
 import { setSizeColorsFromData } from '@/hooks/useMapMarkers';
 
+export const normalizeMuniName = (name: string | null | undefined): string => {
+  if (!name) return '';
+  const clean = String(name).trim();
+  const legacyMap: Record<string, string> = {
+    'قصر خيار': 'قصر الاخيار',
+    'قصر_خيار': 'قصر الاخيار',
+    'قصر الخيار': 'قصر الاخيار',
+    'القره بوللي': 'القره بوللي',
+    'القره_بوللي': 'القره بوللي',
+    'القرهبوللي': 'القره بوللي',
+    'طرابلس': 'طرابلس المركز',
+    'طرابلس القديمة': 'طرابلس المركز',
+    'صبراتة': 'صبراته',
+    'امسلاته': 'امسلاتة',
+    'مسلاتة': 'امسلاتة',
+  };
+  return legacyMap[clean] || clean;
+};
+
 export const useBillboardData = () => {
   const retryCountRef = useRef(0);
   const maxAutoRetries = 3;
@@ -472,8 +491,12 @@ export const useBillboardData = () => {
         const matchedStartDate = customStartDate || activeContract?.start_date || activeContract?.['Contract Date'] || billboard.Rent_Start_Date || null;
         const matchedEndDate = customEndDate || activeContract?.end_date || activeContract?.['End Date'] || billboard.Rent_End_Date || null;
 
+        const normalizedMuni = normalizeMuniName(billboard.Municipality || billboard.municipality);
+
         return {
           ...billboard,
+          Municipality: normalizedMuni,
+          municipality: normalizedMuni,
           // ✅ ENHANCED: Better contract field mapping
           Contract_Number: activeContract?.Contract_Number || billboard.Contract_Number || '',
           contractNumber: activeContract?.Contract_Number || billboard.Contract_Number || '',
@@ -560,11 +583,9 @@ export const useBillboardData = () => {
       )];
 
       const municipalities = [...new Set(processedBillboards
-        .map((b: any) => b.Municipality || b.municipality)
+        .map((b: any) => normalizeMuniName(b.Municipality || b.municipality))
         .filter(Boolean)
-        .map((m: string) => m.trim())
-        .filter(Boolean)
-      )].sort();
+      )].sort((a, b) => a.localeCompare(b, 'ar'));
 
       loadCities();
       setDbMunicipalities(municipalities);
