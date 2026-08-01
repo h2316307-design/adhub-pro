@@ -290,17 +290,10 @@ export const useBillboardData = () => {
 
       // ✅ NEW: Load contracts to match with billboards (optimizing columns selected)
       const contractsResult = await fetchWithRetry<any[]>(async () => {
-        let res = await supabase
-          .from('contracts')
+        return await supabase
+          .from('Contract')
           .select('*')
           .order('id', { ascending: false });
-        if (res.error) {
-          res = await supabase
-            .from('Contract')
-            .select('*')
-            .order('id', { ascending: false });
-        }
-        return res;
       }, { maxRetries: 1, timeout: 15000 });
 
       const contractsData = contractsResult.data as any[] || [];

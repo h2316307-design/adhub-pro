@@ -224,13 +224,6 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
       toast.error('يرجى اختيار ملف صورة صحيح');
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('حجم الصورة يجب أن لا يتجاوز 10MB');
-      return;
-    if (!file.type.startsWith('image/')) {
-      toast.error('يرجى اختيار ملف صورة صحيح');
-      return;
-    }
     if (file.size > 25 * 1024 * 1024) {
       toast.error('حجم الصورة يجب أن لا يتجاوز 25MB');
       return;
