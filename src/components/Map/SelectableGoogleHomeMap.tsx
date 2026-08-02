@@ -764,7 +764,7 @@ export default function SelectableGoogleHomeMap({
           }
         });
         
-        console.log('[SelectableGoogleHomeMap] Google Map initialized successfully');
+
         
         // ✅ Signal that map is ready AFTER initialization
         if (isMounted) {
@@ -1073,7 +1073,7 @@ export default function SelectableGoogleHomeMap({
     
     // ✅ Wait for map to be ready using state flag
     if (!googleMapReady || !googleMapInstanceRef.current) {
-      console.log('[SelectableGoogleHomeMap] Map not ready yet, waiting...');
+
       return;
     }
     

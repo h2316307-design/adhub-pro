@@ -57,7 +57,7 @@ export const useBillboardData = () => {
         sizeOrderMap[size.name] = size.sort_order || 999;
       });
 
-      console.log('✅ Size order map from database:', sizeOrderMap);
+
       return sizeOrderMap;
     } catch (error) {
       console.error('Error loading size order from database:', error);
@@ -89,7 +89,7 @@ export const useBillboardData = () => {
         municipalityOrderMap[m.name] = m.sort_order || 999;
       });
 
-      console.log('✅ Municipality order map from database:', municipalityOrderMap);
+
       return municipalityOrderMap;
     } catch (error) {
       console.error('Error loading municipality order from database:', error);
@@ -134,7 +134,7 @@ export const useBillboardData = () => {
   // ✅ ENHANCED: Load contracts data with better field mapping
   const loadContractsData = useCallback(async () => {
     try {
-      console.log('🔄 Loading contracts data...');
+
 
       const result = await fetchWithRetry<any[]>(async () => {
         const res = await supabase
@@ -145,13 +145,13 @@ export const useBillboardData = () => {
       }, { maxRetries: 3, timeout: 45000 });
 
       if (result.error) {
-        console.log('❌ Error loading contracts:', result.error);
+
         return { customers: [], adTypes: [], contractNumbers: [] };
       }
 
       const contractsData = result.data as any[];
 
-      console.log('✅ Contracts data loaded:', contractsData?.length || 0);
+
 
       if (!contractsData || contractsData.length === 0) {
         return { customers: [], adTypes: [], contractNumbers: [] };
@@ -206,10 +206,7 @@ export const useBillboardData = () => {
         }
       });
 
-      console.log('✅ Extracted contract data:');
-      console.log('- Customers:', Array.from(customerNames).length);
-      console.log('- Ad types:', Array.from(adTypes).length, Array.from(adTypes).slice(0, 10));
-      console.log('- Contract numbers:', Array.from(contractNumbers).length);
+
 
       return {
         customers: Array.from(customerNames).sort(),
@@ -238,7 +235,7 @@ export const useBillboardData = () => {
       if (error) throw error;
       const names = data?.map(city => city.name).filter(Boolean) || [];
       setCitiesList(names);
-      console.log('✅ Loaded cities from cities table:', names);
+
     } catch (error: any) {
       console.error('Error loading cities:', error);
     }
@@ -248,7 +245,7 @@ export const useBillboardData = () => {
   const loadBillboards = useCallback(async (options?: { silent?: boolean }) => {
     try {
       if (!options?.silent) setLoading(true);
-      console.log('🔄 Loading billboards...');
+
 
       // Load billboards data with retry
       const billboardsResult = await fetchWithRetry<any[]>(async () => {
@@ -269,7 +266,7 @@ export const useBillboardData = () => {
         // Auto retry on network errors
         if (retryCountRef.current < maxAutoRetries) {
           retryCountRef.current++;
-          console.log(`🔄 Auto retry ${retryCountRef.current}/${maxAutoRetries}...`);
+
           toast.info(`جاري إعادة المحاولة... (${retryCountRef.current}/${maxAutoRetries})`);
           setTimeout(() => loadBillboards(), 2000);
           return;
@@ -281,7 +278,7 @@ export const useBillboardData = () => {
       retryCountRef.current = 0; // Reset on success
       const billboardsData = billboardsResult.data as any[];
 
-      console.log('✅ Billboards loaded:', billboardsData?.length || 0);
+
 
       if (!billboardsData) {
         setBillboards([]);
@@ -297,7 +294,7 @@ export const useBillboardData = () => {
       }, { maxRetries: 1, timeout: 15000 });
 
       const contractsData = contractsResult.data as any[] || [];
-      console.log('✅ Contracts loaded for matching:', contractsData?.length || 0);
+
 
       // ✅ Pre-build fast O(1) maps for contract matching
       const billboardToContractsMap = new Map<string, any[]>();
@@ -358,7 +355,7 @@ export const useBillboardData = () => {
       }, { maxRetries: 2, timeout: 30000 });
 
       const installationTasksData = installationTasksResult.data as any[] || [];
-      console.log('✅ Installation tasks loaded for design images:', installationTasksData?.length || 0);
+
 
       // Create a map of billboard_id to latest installation task
       const latestTaskByBillboard = new Map<number, any>();
@@ -411,18 +408,6 @@ export const useBillboardData = () => {
         const activeContract = activeContracts.length > 0 ? activeContracts[0] :
           (matchingContracts.length > 0 ? matchingContracts[0] : null);
 
-        // ✅ DEBUG: Log contract matching for specific billboard
-        if (billboardId === '954' || billboardId === '216' || billboardId === '160' || billboardId === '162') {
-          console.log(`🔍 Billboard ${billboardId} contract matching:`, {
-            matchingContracts: matchingContracts.length,
-            activeContract: activeContract ? {
-              id: activeContract.id,
-              Contract_Number: activeContract.Contract_Number,
-              'Ad Type': activeContract.ad_type || activeContract['Ad Type'],
-              'Customer Name': activeContract.customer_name || activeContract['Customer Name']
-            } : null
-          });
-        }
 
         // ✅ حساب سعر الإيجار والتواريخ من billboard_prices إذا كان متوفراً
         let billboardRentPrice = billboard.Price || 0;
@@ -596,14 +581,7 @@ export const useBillboardData = () => {
       const sizeColorData = sortedSizes.map((name, i) => ({ name, sort_order: sizeOrderMap[name] || 999 }));
       setSizeColorsFromData(sizeColorData);
 
-      console.log('✅ Billboards loaded successfully:');
-      console.log('- Total billboards:', processedBillboards.length);
-      console.log('- Cities:', cities.length);
-      console.log('- Sizes (sorted):', sortedSizes.length, sortedSizes);
-      console.log('- Municipalities:', municipalities.length);
-      console.log('- Ad types (from contracts):', adTypes.size);
-      console.log('- Customers (from contracts):', customerNames.size);
-      console.log('- Contract numbers:', contractNumbers.size);
+
 
     } catch (error: any) {
       console.error('❌ Error loading billboards:', error);
@@ -645,7 +623,7 @@ export const useBillboardData = () => {
 
       if (error) throw error;
       setMunicipalities(data || []);
-      console.log('✅ Municipalities loaded:', data?.length || 0);
+
     } catch (error: any) {
       console.error('Error loading municipalities:', error);
       toast.error('حدث خطأ أثناء تحميل قائمة البلديات');
@@ -669,7 +647,7 @@ export const useBillboardData = () => {
       const sortedSizeNames = data?.map(s => s.name) || [];
       setDbSizes(sortedSizeNames);
 
-      console.log('✅ Sizes loaded with database sort order:', sortedSizeNames);
+
     } catch (error: any) {
       console.error('Error loading sizes:', error);
       toast.error('حدث خطأ أثناء تحميل قائمة المقاسات');
@@ -688,7 +666,7 @@ export const useBillboardData = () => {
 
       const levelCodes = data?.map(level => level.level_code).filter(Boolean) || [];
       setLevels(levelCodes);
-      console.log('✅ Loaded levels from billboard_levels:', levelCodes);
+
     } catch (error: any) {
       console.error('Error loading levels:', error);
       toast.error('حدث خطأ أثناء تحميل مستويات اللوحات');
@@ -713,7 +691,7 @@ export const useBillboardData = () => {
       })) || [];
 
       setFaces(facesData);
-      console.log('✅ Loaded faces from billboard_faces:', facesData);
+
     } catch (error: any) {
       console.error('Error loading faces:', error);
       toast.error('حدث خطأ أثناء تحميل خيارات الأوجه');
@@ -737,7 +715,7 @@ export const useBillboardData = () => {
 
       const typeNames = data?.map(type => type.name).filter(Boolean) || [];
       setBillboardTypes(typeNames);
-      console.log('✅ Loaded billboard types from billboard_types:', typeNames);
+
     } catch (error: any) {
       console.error('Error loading billboard types:', error);
       toast.error('حدث خطأ أثناء تحميل أنواع اللوحات');

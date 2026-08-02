@@ -1020,15 +1020,7 @@ export function UnifiedTaskInvoice({
         // ===============================================
         // DEBUG: تتبع بيانات المهمة
         // ===============================================
-        console.log('Customer Invoice - Task Data:', {
-          id: task.id,
-          installation_task_id: task.installation_task_id,
-          print_task_id: task.print_task_id,
-          cutout_task_id: task.cutout_task_id,
-          customer_print_cost: task.customer_print_cost,
-          customer_installation_cost: task.customer_installation_cost,
-          customer_cutout_cost: task.customer_cutout_cost,
-        });
+
 
         // Customer invoice - جلب بيانات من installation_task_items للحصول على اللوحات
         if (allInstallIds.length > 0) {
@@ -1039,7 +1031,7 @@ export function UnifiedTaskInvoice({
             .in('task_id', allInstallIds)
             .neq('status', 'replaced'); // استبعاد اللوحات المستبدلة
 
-          console.log('Installation Items Query Result:', { installItems, installError });
+
 
           // ✅ جلب صور التركيب الأصلية وإعادات التركيب من الأرشيف للوحات المُعاد تركيبها
           const reinstalledItemIds = (installItems || []).filter((item: any) => (item.reinstall_count || 0) > 0).map((item: any) => item.id);
@@ -1072,7 +1064,7 @@ export function UnifiedTaskInvoice({
                 };
               }
             });
-            console.log('Photo history map by reinstall number:', photoHistoryByItemMap);
+
           }
 
           if (installItems && installItems.length > 0) {
@@ -1260,14 +1252,7 @@ export function UnifiedTaskInvoice({
               });
             });
 
-            console.log('Per-task aggregations (customer invoice):',
-              Array.from(perTaskAggMap.entries()).map(([k, v]) => ({
-                taskInstallId: k,
-                pricePerMeter: v.pricePerMeter,
-                installCostRatio: v.installCostRatio,
-                taskCutoutCostPerBillboard: v.taskCutoutCostPerBillboard,
-              }))
-            );
+
 
             // إضافة كل عنصر كصف في الفاتورة
             installItems.forEach((item: any) => {
@@ -1588,7 +1573,7 @@ export function UnifiedTaskInvoice({
               return a.face === 'a' ? -1 : 1;
             });
 
-            console.log('Generated Invoice Items:', items);
+
           }
         } else if (allPrintIds.length > 0) {
           // فولباك: من print_task_items (جميع المهام)
@@ -1725,7 +1710,7 @@ export function UnifiedTaskInvoice({
         // هذا يضمن دقة الإجمالي حتى لو كانت طريقة الحساب مختلفة (بالمتر/بالقطعة)
         if (items.length > 0) {
           totalCost = items.reduce((sum, item) => sum + item.totalCost, 0);
-          console.log(`✅ إجمالي فاتورة الزبون المحسوب: ${totalCost.toFixed(2)} د.ل (من ${items.length} عناصر)`);
+
         } else {
           // فولباك: استخدام القيم المخزنة من جميع المهام
           totalCost = aggCustomerTotal;
@@ -2021,12 +2006,7 @@ export function UnifiedTaskInvoice({
     const customerName = task.customer?.name || task.customer_name;
 
     // Debug log
-    console.log('Task customer data:', {
-      customer: task.customer,
-      customer_name: task.customer_name,
-      companyName,
-      customerName
-    });
+
 
     switch (invoiceType) {
       case 'customer':

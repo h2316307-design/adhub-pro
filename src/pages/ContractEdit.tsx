@@ -482,7 +482,6 @@ export default function ContractEdit() {
             .gte('End Date', today)
         ]);
 
-        console.log('[ContractEdit] ✅ تم تحميل', data.length, 'لوحة');
         setBillboards(data);
 
         const occupied = new Map<number, string>();
@@ -497,7 +496,6 @@ export default function ContractEdit() {
               });
             }
           }
-          console.log('[ContractEdit] ✅ عدد اللوحات المحجوزة بعقود نشطة:', occupied.size);
         } else if (activeContractsRes.error) {
           console.warn('[ContractEdit] ⚠️ فشل استعلام العقود النشطة:', activeContractsRes.error.message);
         }
@@ -567,7 +565,6 @@ export default function ContractEdit() {
 
         if (!pricingRes.error && Array.isArray(pricingRes.data)) {
           setPricingData(pricingRes.data);
-          console.log('✅ Loaded pricing data from database:', pricingRes.data.length, 'rows');
         } else {
           console.error('❌ Failed to load pricing data:', pricingRes.error);
         }
@@ -577,7 +574,6 @@ export default function ContractEdit() {
           setSizeNames(sizeMap);
           const dimMap = new Map(sizesRes.data.map((s: any) => [s.id, { width: Number(s.width) || 0, height: Number(s.height) || 0 }]));
           setSizeDimensions(dimMap);
-          console.log('✅ Loaded size names:', sizeMap.size, 'sizes');
         } else {
           console.error('❌ Failed to load size names:', sizesRes.error);
         }
@@ -585,15 +581,12 @@ export default function ContractEdit() {
         // ✅ Load factors pricing data
         if (!municipalitiesRes.error && Array.isArray(municipalitiesRes.data)) {
           setMunicipalityFactors(municipalitiesRes.data);
-          console.log('✅ Loaded municipality factors:', municipalitiesRes.data.length);
         }
         if (!categoriesRes.error && Array.isArray(categoriesRes.data)) {
           setCategoryFactors(categoriesRes.data);
-          console.log('✅ Loaded category factors:', categoriesRes.data.length);
         }
         if (!basePricesRes.error && Array.isArray(basePricesRes.data)) {
           setBasePrices(basePricesRes.data);
-          console.log('✅ Loaded base prices:', basePricesRes.data.length);
         }
       } catch (e) {
         console.warn('Failed to load pricing/size data:', e);
@@ -607,8 +600,6 @@ export default function ContractEdit() {
       if (!contractNumber) return;
       try {
         const c = await getContractWithBillboards(contractNumber);
-        console.log('Loaded contract data:', c);
-        console.log('installments_data from contract:', c.installments_data);
         
         setCurrentContract(c);
 
@@ -624,7 +615,6 @@ export default function ContractEdit() {
             if (!prevErr && prevContract && prevContract.billboard_ids) {
               const prevIds = prevContract.billboard_ids.split(',').map((id: string) => id.trim()).filter(Boolean);
               setPreviousContractBillboardIds(new Set(prevIds));
-              console.log('Loaded previous contract billboard IDs:', prevIds);
             } else {
               setPreviousContractBillboardIds(new Set());
             }
@@ -694,25 +684,14 @@ export default function ContractEdit() {
         // ✅ NEW: Load friend rental includes installation
         const savedFriendRentalIncludesInstallation = c.friend_rental_includes_installation === true;
         setFriendRentalIncludesInstallation(savedFriendRentalIncludesInstallation);
-        
-        console.log('✅ Loading cost inclusion settings:');
-        console.log('- Print cost enabled:', savedPrintEnabled);
-        console.log('- Print price per meter:', savedPrintPrice);
-        console.log('- Installation enabled:', savedInstallationEnabled);
-        console.log('- Include installation in price:', savedIncludeInstallation);
-        console.log('- Include print in price:', savedIncludePrint);
-        console.log('- Include operating in print:', savedIncludeOperatingInPrint);
-        console.log('- Include operating in installation:', savedIncludeOperatingInInstallation);
 
         // ✅ NEW: Load operating fee rate from contract
         const savedOperatingFeeRate = Number(c.operating_fee_rate || 3);
         setOperatingFeeRate(savedOperatingFeeRate);
-        console.log('✅ Loading operating fee rate:', savedOperatingFeeRate, '%');
         
         // ✅ NEW: Load partnership operating fee rate from contract
         const savedPartnershipOperatingFeeRate = Number(c.partnership_operating_fee_rate || 3);
         setPartnershipOperatingFeeRate(savedPartnershipOperatingFeeRate);
-        console.log('✅ Loading partnership operating fee rate:', savedPartnershipOperatingFeeRate, '%');
         
         // ✅ NEW: Load design data from contract
         const savedDesigns = c.design_data;
@@ -826,7 +805,6 @@ export default function ContractEdit() {
           setSavedBaseRent(baseRentFromDB);
           setRentCost(baseRentFromDB);
           setOriginalTotal(savedCustomerTotal);
-          console.log('✅ Loaded base_rent from DB:', baseRentFromDB);
         } else {
           const savedTotal = savedCustomerTotal || Number(c['Total Rent'] || 0);
           setRentCost(savedTotal);
@@ -834,7 +812,6 @@ export default function ContractEdit() {
         }
         // دائماً نستخدم الأسعار المحفوظة عند تعديل عقد موجود
         setUseStoredPrices(true);
-        console.log('✅ Using stored prices for existing contract (always)');
         
         const disc = Number(c.Discount ?? 0);
         if (!isNaN(disc) && disc > 0) {
@@ -870,7 +847,6 @@ export default function ContractEdit() {
               ? c.billboard_ids.split(',').map(id => id.trim()).filter(Boolean)
               : Array.isArray(c.billboard_ids) ? c.billboard_ids : [];
             setSelected(idsArray);
-            console.log('Loaded selected billboards from billboard_ids:', idsArray);
           } catch (e) {
             console.warn('Failed to parse billboard_ids:', e);
             // Fallback to old method
@@ -885,15 +861,12 @@ export default function ContractEdit() {
         let loadedInstallments: any[] = [];
 
         if (c.installments_data) {
-          console.log('installments_data exists:', typeof c.installments_data, c.installments_data);
-
           // Handle JSON string format (from database)
           if (typeof c.installments_data === 'string') {
             try {
               const parsed = JSON.parse(c.installments_data);
               if (Array.isArray(parsed)) {
                 loadedInstallments = parsed;
-                console.log('Successfully parsed installments from string:', loadedInstallments);
               }
             } catch (e) {
               console.warn('Failed to parse installments_data string:', e);
@@ -902,7 +875,6 @@ export default function ContractEdit() {
           // Handle array format (already parsed)
           else if (Array.isArray(c.installments_data)) {
             loadedInstallments = c.installments_data;
-            console.log('Using installments array directly:', loadedInstallments);
           }
         }
 
@@ -921,10 +893,8 @@ export default function ContractEdit() {
           const normalized = loadedInstallments.map(normalizeInstallment);
           setInstallments(normalized);
  setInstallmentsLoaded(true); // Mark installments as loaded from DB
-          console.log('Set installments from installments_data (normalized):', normalized);
         } else {
           // Fallback to old Payment 1, 2, 3 format
-          console.log('No installments_data found, using old Payment format');
           const payments = [];
           if (c['Payment 1'])
             payments.push({
@@ -955,7 +925,6 @@ export default function ContractEdit() {
             setInstallments(payments);
  setInstallmentsLoaded(true); // Mark installments as loaded from DB
           }
-          console.log('Set installments from old Payment format:', payments);
         }
 
         // ✅ NEW: Load installment distribution settings from DB
@@ -975,15 +944,6 @@ export default function ContractEdit() {
         setInstallmentAutoCalculate(savedAutoCalculate);
         setInstallmentFirstAtSigning(savedFirstAtSigning);
         setHasDifferentFirstPayment(savedFirstPaymentAmount > 0);
-        
-        console.log('✅ Loaded installment distribution settings:', {
-          distributionType: savedDistributionType,
-          firstPaymentAmount: savedFirstPaymentAmount,
-          firstPaymentType: savedFirstPaymentType,
-          interval: savedInterval,
-          count: savedCount,
-          autoCalculate: savedAutoCalculate
-        });
 
         // ✅ Load friend billboard rentals for this contract
         const { data: friendRentals } = await supabase
@@ -1004,7 +964,6 @@ export default function ContractEdit() {
             friendRentalCost: rental.friend_rental_cost || 0
           }));
           setFriendBillboardCosts(friendCosts);
-          console.log('✅ Loaded friend billboard costs:', friendCosts);
         }
 
         // ✅ NEW: Load friend rental operating fee settings
@@ -1012,7 +971,6 @@ export default function ContractEdit() {
         const friendFeeRate = Number(c.friend_rental_operating_fee_rate || 3);
         setFriendRentalOperatingFeeEnabled(friendFeeEnabled);
         setFriendRentalOperatingFeeRate(friendFeeRate);
-        console.log('✅ Loaded friend rental operating fee settings:', { enabled: friendFeeEnabled, rate: friendFeeRate });
         
       } catch (e: any) {
         console.error(e);
@@ -1040,7 +998,6 @@ export default function ContractEdit() {
           }
         });
         setIndividualDiscounts(discounts);
-        console.log('✅ Loaded individual discounts from contract billboard_prices:', discounts);
       }
     } catch (e) {
       console.warn('Failed to parse individual discounts from currentContract:', e);
@@ -1067,7 +1024,6 @@ export default function ContractEdit() {
           }
         });
         setBillboardCustomDates(dates);
-        console.log('✅ Loaded individual billboard custom dates:', dates);
       }
     } catch (e) {
       console.warn('Failed to parse individual custom dates from currentContract:', e);
@@ -1140,8 +1096,6 @@ export default function ContractEdit() {
           const result = await calculateInstallationCostFromIds(selected);
           setInstallationCost(result.totalInstallationCost);
           setInstallationDetails(result.installationDetails);
-          console.log('✅ installation_cost calculated:', result.totalInstallationCost);
-          console.log('✅ Installation details:', result.installationDetails);
         } catch (e) {
           console.warn('Failed to calculate installation_cost:', e);
           setInstallationCost(0);
@@ -1190,9 +1144,7 @@ export default function ContractEdit() {
                String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
       
-      if (dbRow) {
-        console.log(`✅ Found matching price row by size_id=${sizeId} (level=${dbRow.billboard_level}, category=${dbRow.customer_category})`);
-      } else {
+      if (!dbRow) {
         console.warn(`❌ No match by size_id=${sizeId} for level="${level}" & customer="${customer}". Trying fallback...`);
       }
     }
@@ -1208,9 +1160,7 @@ export default function ContractEdit() {
                String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
       
-      if (dbRow) {
-        console.log(`✅ Found matching price row by size name "${sizeName}" (level=${dbRow.billboard_level}, category=${dbRow.customer_category})`);
-      } else {
+      if (!dbRow) {
         console.warn(`❌ NO MATCH FOUND by size name "${sizeName}" (normalized: "${normalizedInputSize}") for level="${level}" & customer="${customer}"`);
       }
     }
@@ -1229,8 +1179,6 @@ export default function ContractEdit() {
         const price = Number(dbRow[column]) || 0;
         if (price === 0) {
           console.warn(`⚠️ WARNING: Found price is 0 LYD in column "${column}" for size_id=${sizeId}, level="${level}", category="${customer}"`);
-        } else {
-          console.log(`✅ SUCCESS: Found price ${price} LYD in column "${column}"`);
         }
         return price;
       } else {
@@ -1239,7 +1187,6 @@ export default function ContractEdit() {
     }
     
     if (customer !== 'عادي') {
-      console.log(`⚠️ No price found for category "${customer}". Falling back to default category "عادي"...`);
       return getPriceFromDatabase(sizeId, level, 'عادي', months, sizeName);
     }
     
@@ -1248,7 +1195,6 @@ export default function ContractEdit() {
   };
 
   const getDailyPriceFromDatabase = (sizeId: number | null, level: any, customer: string, sizeName?: string): number | null => {
-    console.log(`🔍 Looking for daily price: size_id=${sizeId}, sizeName=${sizeName}, level=${level}, customer=${customer}`);
     
     let dbRow = null;
     
@@ -1259,15 +1205,10 @@ export default function ContractEdit() {
         String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
         String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase()
       );
-      
-      if (dbRow) {
-        console.log('✅ Found matching row by size_id for daily price');
-      }
     }
     
     // ✅ FALLBACK: If no size_id or not found, try by size name with normalization
     if (!dbRow && sizeName) {
-      console.log('🔄 Trying fallback: matching by size name for daily price');
       const normalizedInputSize = normalizeSize(sizeName);
       
       dbRow = pricingData.find(p => {
@@ -1276,20 +1217,14 @@ export default function ContractEdit() {
                String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
                String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
-      
-      if (dbRow) {
-        console.log('✅ Found matching row by size name for daily price');
-      }
     }
     
     if (dbRow && dbRow.one_day !== null && dbRow.one_day !== undefined) {
       const dailyPrice = Number(dbRow.one_day) || 0;
-      console.log('✅ Found daily price:', dailyPrice);
       return dailyPrice;
     }
     
     if (customer !== 'عادي') {
-      console.log(`⚠️ No daily price found for category "${customer}". Falling back to default category "عادي"...`);
       return getDailyPriceFromDatabase(sizeId, level, 'عادي', sizeName);
     }
     
@@ -1407,14 +1342,6 @@ export default function ContractEdit() {
 
     // Final price = base price × municipality factor × category factor
     const finalPrice = priceValue * municipalityMultiplier * categoryMultiplier;
-    
-    console.log(`🔢 Factors pricing for billboard:`, {
-      size, level, municipality,
-      basePrice: priceValue,
-      municipalityFactor: municipalityMultiplier,
-      categoryFactor: categoryMultiplier,
-      finalPrice
-    });
 
     return finalPrice;
   };
@@ -1427,7 +1354,6 @@ export default function ContractEdit() {
     
     // ✅ NEW: Check for proportional distribution overrides first
     if (billboardPriceOverrides[billboardId] !== undefined) {
-      console.log(`📊 Using proportional override for billboard ${billboardId}:`, billboardPriceOverrides[billboardId]);
       return billboardPriceOverrides[billboardId];
     }
     
@@ -1437,7 +1363,6 @@ export default function ContractEdit() {
     if (useStoredPrices) {
       const storedPrice = getStoredPriceFromContract(billboardId);
       if (storedPrice !== null) {
-        console.log(`📦 Using stored price from contract for billboard ${billboardId}:`, storedPrice);
         basePrice = storedPrice;
         return applyExchangeRate(basePrice);
       }
@@ -1446,13 +1371,11 @@ export default function ContractEdit() {
     // ✅ NEW: Use factors pricing if enabled
     if (useFactorsPricing) {
       basePrice = calculateFactorsPrice(billboard);
-      console.log(`🔢 Using factors pricing for billboard ${billboardId}:`, basePrice);
       // ✅ FIXED: Don't add print cost here - it's handled separately
       return applyExchangeRate(basePrice);
     }
     
     // ✅ Calculate fresh price based on CURRENT billboard data (original pricing table)
-    console.log(`🔄 Calculating fresh price based on current billboard data for ${billboardId}`);
     
     // ✅ Get both size_id and size name for fallback - ENSURE IT'S A NUMBER!
     const rawSizeId = (billboard as any).size_id || (billboard as any).Size_ID || null;
@@ -1460,35 +1383,19 @@ export default function ContractEdit() {
     const level = ((billboard as any).level || (billboard as any).Level) as any;
     const size = (billboard.size || (billboard as any).Size || '') as string;
     
-    console.log(`🔍 Billboard details:`, {
-      billboardId,
-      rawSizeId,
-      sizeId,
-      sizeIdType: typeof sizeId,
-      size,
-      level,
-      category: pricingCategory,
-      mode: pricingMode,
-      duration: pricingMode === 'months' ? durationMonths : durationDays,
-      fullBillboard: billboard
-    });
-    
     if (pricingMode === 'months') {
       const months = Math.max(0, Number(durationMonths || 0));
       // ✅ Get price from database (with size name fallback)
       let price = getPriceFromDatabase(sizeId, level, pricingCategory, months, size);
       if (price === null) {
-        console.log('⚠️ No price from database, using fallback pricing system');
         price = getPriceFor(size, level, pricingCategory as CustomerType, months);
       }
       basePrice = price !== null ? price : 0;
-      console.log(`✅ Monthly price (${months} months):`, basePrice);
     } else {
       const days = Math.max(0, Number(durationDays || 0));
       // ✅ Get daily price from database (with size name fallback)
       let daily = getDailyPriceFromDatabase(sizeId, level, pricingCategory, size);
       if (daily === null) {
-        console.log('⚠️ No daily price from database, using fallback pricing system');
         daily = getDailyPriceFor(size, level, pricingCategory as CustomerType);
       }
       if (daily === null) {
@@ -1499,13 +1406,11 @@ export default function ContractEdit() {
         daily = monthlyPrice ? Math.round((monthlyPrice / 30) * 100) / 100 : 0;
       }
       basePrice = (daily || 0) * days;
-      console.log(`✅ Daily price (${days} days):`, basePrice);
     }
 
     // ✅ FIXED: Return BASE price only - print/installation costs handled separately
     const convertedPrice = applyExchangeRate(basePrice);
     
-    console.log(`✅ Base rental price for billboard ${billboardId}: ${basePrice} LYD -> ${convertedPrice} ${contractCurrency}`);
     return convertedPrice;
   }, [useStoredPrices, useFactorsPricing, pricingMode, durationMonths, durationDays, pricingCategory, pricingData, contractCurrency, exchangeRate, basePrices, municipalityFactors, categoryFactors, currentContract, billboardPriceOverrides]);
 
@@ -1571,7 +1476,6 @@ export default function ContractEdit() {
       setUserEditedRentCost(false);
       
       toast.success('تم تحديث الأسعار من المنظومة الحالية');
-      console.log('✅ Switched to fresh pricing system');
       
     } catch (e: any) {
       console.error('Failed to refresh prices:', e);
@@ -2164,7 +2068,6 @@ export default function ContractEdit() {
 
         lastSyncedSelectedPricesRef.current = json;
         setCurrentContract((prev: any) => prev ? { ...prev, billboard_prices: json } : prev);
-        console.log('🔄 Auto-resynced selected billboard_prices for contract', contractNumber);
       } catch (e) {
         console.warn('Auto-resync selected billboard_prices failed:', e);
       }
@@ -2248,14 +2151,6 @@ export default function ContractEdit() {
     
     const changePercent = ((ratio - 1) * 100).toFixed(1);
     toast.success(`تم توزيع ${newTotal.toLocaleString('ar-LY')} بنسبة ${changePercent}% على ${selectedBillboardsData.length} لوحة`);
-    
-    console.log('✅ Proportional distribution applied:', {
-      oldTotal: estimatedTotal,
-      newTotal,
-      ratio,
-      billboardCount: selectedBillboardsData.length,
-      overrides: newOverrides
-    });
   }, [estimatedTotal, billboards, selected, calculateBillboardPrice]);
 
   // ✅ NEW: Calculate rental cost for regular (non-partnership) billboards only
@@ -2303,7 +2198,6 @@ export default function ContractEdit() {
     }
     
     setOperatingFee(fee);
-    console.log(`✅ Operating fee: rental=${netRentalForCompany}×${operatingFeeRate}% + install=${includeOperatingInInstallation ? installationCostCombined + '×' + operatingFeeRateInstallation + '%' : 'off'} + print=${includeOperatingInPrint ? printCostTotalCombined + '×' + operatingFeeRatePrint + '%' : 'off'} = ${fee}`);
   }, [netRentalForCompany, operatingFeeRate, includeOperatingInInstallation, includeOperatingInPrint, installationCostCombined, printCostTotalCombined, installationEnabled, printCostEnabled, operatingFeeRateInstallation, operatingFeeRatePrint]);
   
   // ✅ NEW: Calculate partnership operating fee
@@ -2354,7 +2248,6 @@ export default function ContractEdit() {
           dueDate: calculateDueDate('بعد 20% من العقد', 1)
         },
       ]);
-      console.log('✅ Created default installments (first:', finalFirst, 'second:', finalSecond, ')');
     }
   }, [finalTotal, installmentsLoaded]);
 
@@ -2467,18 +2360,9 @@ export default function ContractEdit() {
 
   // ✅ REBUILT: Enhanced filtering with proper availability logic (same as Billboards page)
   const filtered = useMemo(() => {
-    console.log('🔄 Filtering billboards for contract edit...', {
-      totalBillboards: billboards.length,
-      searchQuery,
-      statusFilter,
-      cityFilter,
-      sizeFilter,
-      municipalityFilter
-    });
     
     // First apply search
     const searched = enhancedSearchBillboards(billboards, searchQuery);
-    console.log('🔍 After search:', searched.length, 'billboards');
     
     const filtered = searched.filter((billboard) => {
       const statusValue = String((billboard.Status ?? billboard.status ?? '')).trim();
@@ -2561,8 +2445,6 @@ export default function ContractEdit() {
       
       return matchesMunicipality && matchesCity && matchesSize && matchesStatus;
     });
-    
-    console.log('✅ After filtering:', filtered.length, 'billboards');
     
     // Sort: available first, then near expiry, then others
     return filtered.sort((a: any, b: any) => {
@@ -3401,10 +3283,6 @@ export default function ContractEdit() {
         }, 0);
       })();
       
-      console.log('💾 Saving base_rent (calculated from pricing table):', calculatedBaseRent);
-      console.log('💾 Saving Total Rent (net rental):', rentalCostOnly);
-      console.log('💾 Saving Total (customer pays):', finalTotal);
-
       // ✅ Smart rounding for per-billboard final price (fixes 11,594 -> 11,600 while keeping stable values like 12,915)
       const smartRoundContractPrice = (value: number): number => {
         if (!Number.isFinite(value)) return 0;
@@ -3537,14 +3415,6 @@ export default function ContractEdit() {
       updates['Remaining'] = String(Math.max(0, finalTotal - totalPaid));
       if (customerId) updates.customer_id = customerId;
 
-      console.log('✅ ContractEdit saving totals:');
-      console.log('- Customer total (Total):', finalTotal);
-      console.log('- Company net rental (Total Rent):', rentalCostOnly);
-      console.log('- Include installation in price:', includeInstallationInPrice);
-      console.log('- Include print in price:', includePrintInPrice);
-      console.log('- Installation cost (combined):', applyExchangeRate(installationCostCombined));
-      console.log('- Print cost (combined):', applyExchangeRate(printCostTotalCombined));
-
       await updateContract(contractNumber, updates);
 
       // ✅ NEW: Update capital_remaining for partnership billboards
@@ -3575,15 +3445,6 @@ export default function ContractEdit() {
         
         // Calculate new remaining capital (limited to 0)
         const newCapitalRemaining = Math.max(0, currentRemaining - capitalDeduction);
-        
-        console.log(`✅ Partnership billboard ${billboardId}:`, {
-          capital,
-          currentRemaining,
-          priceAfterDiscount,
-          capitalDeductionPct,
-          capitalDeduction,
-          newCapitalRemaining
-        });
         
         // Update billboard capital_remaining
         const { error: capitalError } = await supabase

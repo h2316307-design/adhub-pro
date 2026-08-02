@@ -631,10 +631,7 @@ export function SelectedBillboardsCard({
         return;
       }
       
-      console.log('🔍 Partnership data from DB:', {
-        total: selectedBillboards.length,
-        partnershipFromDB: dbPartnershipMap.size
-      });
+
       
       const newMap = new Map<string, PartnershipInfo>();
       
