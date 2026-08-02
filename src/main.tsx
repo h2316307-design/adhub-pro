@@ -1,5 +1,9 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import L from "leaflet";
+if (typeof window !== "undefined") {
+  (window as any).L = L;
+}
 import App from "./App.tsx";
 import "./index.css";
 import { prefetchInvoiceSettings } from "@/hooks/useInvoiceSettingsSync";

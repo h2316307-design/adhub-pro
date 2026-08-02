@@ -1,10 +1,4 @@
-import "leaflet/dist/leaflet.css";
-import "leaflet.markercluster/dist/MarkerCluster.css";
-import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-
-import { useEffect, useMemo, useRef, useState } from "react";
-import L from "leaflet";
-import "leaflet.markercluster";
+import L from "@/utils/leafletInit";
 import type { Billboard } from "@/types";
 import { parseCoords, getJitteredCoords } from '@/utils/parseCoords';
 import type { SatelliteProvider } from "@/types/map";

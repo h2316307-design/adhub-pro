@@ -21,7 +21,7 @@ export default defineConfig(({ mode }) => ({
         skipWaiting: true,
         clientsClaim: true,
         cleanupOutdatedCaches: true,
-        globPatterns: ["**/*.{js,css,ico,svg}"],
+        globPatterns: ["**/*.{js,css,html,ico,svg}"],
         globIgnores: ["**/*.{png,jpg,jpeg,otf,ttf,sql,csv,bat,ps1}"],
         navigateFallbackDenylist: [/^\/~oauth/],
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
