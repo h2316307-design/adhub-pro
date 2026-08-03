@@ -151,6 +151,64 @@ export function BillboardTaskCard({
   const [photoHistoryOpen, setPhotoHistoryOpen] = useState(false);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
+  const renderDesignPreview = () => {
+    const displayDesign = selectedDesign !== 'none' && selectedDesign ? taskDesigns.find(d => d.id === selectedDesign) : null;
+    const fallbackDesign = item.design_face_a || item.design_face_b ? {
+      design_name: 'التصميم المحفوظ',
+      design_face_a_url: item.design_face_a,
+      design_face_b_url: item.design_face_b
+    } : (billboard?.design_face_a || billboard?.design_face_b ? {
+      design_name: 'تصميم اللوحة',
+      design_face_a_url: billboard.design_face_a,
+      design_face_b_url: billboard.design_face_b
+    } : (taskDesigns[0] ? {
+      design_name: taskDesigns[0].design_name,
+      design_face_a_url: taskDesigns[0].design_face_a_url,
+      design_face_b_url: taskDesigns[0].design_face_b_url
+    } : null));
+
+    const finalDesign = displayDesign || fallbackDesign;
+    if (!finalDesign) return null;
+    const faceAUrl = finalDesign.design_face_a_url;
+    const faceBUrl = finalDesign.design_face_b_url;
+    if (!faceAUrl && !faceBUrl) return null;
+
+    const hasBoth = Boolean(faceAUrl && faceBUrl);
+
+    return (
+      <div className="mt-2.5 p-2 bg-muted/20 border border-border/40 rounded-2xl space-y-1.5" onClick={e => e.stopPropagation()}>
+        <div className="text-[10px] text-center text-foreground font-bold flex items-center justify-center gap-1">
+          <Palette className="h-3.5 w-3.5 text-primary" />
+          <span>التصميم المعتمد</span>
+        </div>
+        <div className={cn("grid gap-2", hasBoth ? "grid-cols-2" : "grid-cols-1")}>
+          {faceAUrl && (
+            <div className="space-y-1">
+              {hasBoth && <div className="text-[9px] text-center text-muted-foreground font-bold">الوجه الأول (الأمامي)</div>}
+              <div 
+                className="relative aspect-[16/10] max-h-[140px] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
+                onClick={() => setLightboxImage(faceAUrl)}
+              >
+                <img src={faceAUrl} alt="تصميم الوجه الأول" className="w-full h-full object-contain" />
+              </div>
+            </div>
+          )}
+          {faceBUrl && (
+            <div className="space-y-1">
+              {hasBoth && <div className="text-[9px] text-center text-muted-foreground font-bold">الوجه الثاني (الخلفي)</div>}
+              <div 
+                className="relative aspect-[16/10] max-h-[140px] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
+                onClick={() => setLightboxImage(faceBUrl)}
+              >
+                <img src={faceBUrl} alt="تصميم الوجه الثاني" className="w-full h-full object-contain" />
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
   const effectiveInstallationPrice = (() => {
     if (!installationPrice) return 0;
     const totalReinstalledFaces = item.total_reinstalled_faces || 0;
@@ -1429,33 +1487,6 @@ export function BillboardTaskCard({
                   </div>
                 )}
 
-                {/* Design Face Preview (One Face Only) */}
-                {(() => {
-                  const displayDesign = selectedDesign || (item.design_face_a || item.design_face_b ? {
-                    design_name: 'التصميم المحفوظ',
-                    design_face_a_url: item.design_face_a,
-                    design_face_b_url: item.design_face_b
-                  } : null);
-
-                  if (!displayDesign) return null;
-                  const singleFaceUrl = displayDesign.design_face_a_url || displayDesign.design_face_b_url;
-                  if (!singleFaceUrl) return null;
-
-                  return (
-                    <div className="mt-2 p-2 bg-muted/20 border border-border/30 rounded-2xl" onClick={e => e.stopPropagation()}>
-                      <div className="space-y-1">
-                        <div className="text-[9px] text-center text-muted-foreground font-bold">التصميم المعتمد (معاينة الوجه)</div>
-                        <div 
-                          className="relative aspect-[16/10] max-h-[140px] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
-                          onClick={() => setLightboxImage(singleFaceUrl)}
-                        >
-                          <img src={singleFaceUrl} alt="تصميم اللوحة" className="w-full h-full object-contain" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
                 {/* Installed photos display */}
                 {(item.installed_image_face_a_url || item.installed_image_face_b_url) && (
                   <div className="pt-2.5 border-t border-border/40 space-y-1.5" onClick={e => e.stopPropagation()}>
@@ -1492,6 +1523,9 @@ export function BillboardTaskCard({
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Design Face Preview (Always Visible directly on card) */}
+          {renderDesignPreview()}
 
           <Button
             variant="ghost"
@@ -1912,33 +1946,6 @@ export function BillboardTaskCard({
                   </div>
                 )}
 
-                {/* Active design face preview (One Face Only) */}
-                {(() => {
-                  const displayDesign = selectedDesign || (item.design_face_a || item.design_face_b ? {
-                    design_name: 'التصميم المحفوظ',
-                    design_face_a_url: item.design_face_a,
-                    design_face_b_url: item.design_face_b
-                  } : null);
-
-                  if (!displayDesign) return null;
-                  const singleFaceUrl = displayDesign.design_face_a_url || displayDesign.design_face_b_url;
-                  if (!singleFaceUrl) return null;
-
-                  return (
-                    <div className="mt-2 p-2 bg-muted/20 border border-border/30 rounded-2xl" onClick={e => e.stopPropagation()}>
-                      <div className="space-y-1">
-                        <div className="text-[9px] text-center text-muted-foreground font-bold">التصميم المعتمد (معاينة الوجه)</div>
-                        <div 
-                          className="relative aspect-[16/10] max-h-[140px] rounded-xl overflow-hidden bg-background border border-border/60 cursor-pointer hover:ring-2 hover:ring-primary/40 transition-all shadow-inner"
-                          onClick={() => setLightboxImage(singleFaceUrl)}
-                        >
-                          <img src={singleFaceUrl} alt="تصميم اللوحة" className="w-full h-full object-contain" />
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })()}
-
                 {/* Faces to install selection */}
                 {availableFacesCount >= 1 && (
                   <div className="pt-2 border-t border-border/40 space-y-1.5" onClick={(e) => e.stopPropagation()}>
@@ -2008,6 +2015,9 @@ export function BillboardTaskCard({
               </motion.div>
             )}
           </AnimatePresence>
+
+          {/* Design Face Preview (Always Visible directly on card) */}
+          {renderDesignPreview()}
 
           <Button
             variant="ghost"

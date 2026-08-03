@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ExportWithContractsDialog } from './billboards/ExportWithContractsDialog';
 import { ExportMunicipalityDialog } from './billboards/ExportMunicipalityDialog';
+import { UploadAvailablePreviewDialog } from './billboards/UploadAvailablePreviewDialog';
 
 interface BillboardActionsProps {
   exportToExcel: () => void;
@@ -44,6 +45,8 @@ interface BillboardActionsProps {
   setBatchPhotoImportOpen?: (open: boolean) => void;
   exportMunicipalityToExcel: (excludeHidden: boolean, selectedMunicipality: string) => void;
   municipalities: string[];
+  billboards?: any[];
+  isContractExpired?: (endDate: string | null) => boolean;
 }
 
 export const BillboardActions: React.FC<BillboardActionsProps> = ({
@@ -75,12 +78,15 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
   setBatchPhotoImportOpen,
   exportMunicipalityToExcel,
   municipalities,
+  billboards = [],
+  isContractExpired = () => false,
 }) => {
   const navigate = useNavigate();
   const [isSyncing, setIsSyncing] = useState(false);
   const [contractsDialogOpen, setContractsDialogOpen] = useState(false);
   const [upcomingContractsDialogOpen, setUpcomingContractsDialogOpen] = useState(false);
   const [municipalityDialogOpen, setMunicipalityDialogOpen] = useState(false);
+  const [uploadPreviewOpen, setUploadPreviewOpen] = useState(false);
   const [monthsAhead, setMonthsAhead] = useState<number>(4);
 
   const handleSync = async () => {
@@ -174,7 +180,7 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
             نسخ المتاح والقادمة ({monthsAhead})
           </DropdownMenuItem>
           {uploadAvailableAndUpcomingToSite && (
-            <DropdownMenuItem onClick={() => uploadAvailableAndUpcomingToSite(monthsAhead)} className="cursor-pointer gap-2">
+            <DropdownMenuItem onClick={() => setUploadPreviewOpen(true)} className="cursor-pointer gap-2">
               <Globe className="h-4 w-4 text-emerald-600" />
               تصدير المتاح والقادمة إلى الموقع ({monthsAhead})
             </DropdownMenuItem>
@@ -379,6 +385,20 @@ export const BillboardActions: React.FC<BillboardActionsProps> = ({
         onExport={exportMunicipalityToExcel}
         municipalities={municipalities}
       />
+
+      {/* Preview Dialog for Uploading Available + Upcoming Billboards & Active Contracts */}
+      {uploadAvailableAndUpcomingToSite && (
+        <UploadAvailablePreviewDialog
+          open={uploadPreviewOpen}
+          onOpenChange={setUploadPreviewOpen}
+          monthsAhead={monthsAhead}
+          billboards={billboards}
+          isContractExpired={isContractExpired}
+          onConfirmUpload={async (m) => {
+            await uploadAvailableAndUpcomingToSite(m);
+          }}
+        />
+      )}
     </div>
   );
 };

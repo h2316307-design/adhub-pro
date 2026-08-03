@@ -753,7 +753,7 @@ export const useBillboardExport = () => {
           const billboardName = billboard.Billboard_Name || billboard.name || '';
           const imageFileName = billboardName ? `${billboardName}.jpg` : (billboard.image_name || '');
           const hasActive = hasActiveContractForExport(billboard, isContractExpired);
-          const isForcedVisible = (billboard.is_visible_in_available === true) && !hasActive;
+          const isForcedVisible = (billboard.is_visible_in_available === true);
           const endDateDisplay = isForcedVisible ? '' : (hasActive ? (contractDates.endDate || '') : '');
           
           return {
@@ -911,7 +911,7 @@ export const useBillboardExport = () => {
         const billboardId = String(billboard.ID || billboard.id);
         const isFromContract = contractBillboardIds.includes(billboardId);
         const isAvailableNow = isAvailableForAvailableExports(billboard);
-        const isForcedVisible = (billboard.is_visible_in_available === true) && isAvailableNow;
+        const isForcedVisible = (billboard.is_visible_in_available === true);
         
         // Get end date for this billboard's contract
         let endDateDisplay = '';
@@ -1065,7 +1065,7 @@ export const useBillboardExport = () => {
           const billboardId = String(billboard.ID || billboard.id);
           const isFromContract = contractBillboardIds.includes(billboardId);
           const isAvailableNow = isAvailableForAvailableExports(billboard);
-          const isForcedVisible = (billboard.is_visible_in_available === true) && isAvailableNow;
+          const isForcedVisible = (billboard.is_visible_in_available === true);
           
           // Get contract dates
           let endDateDisplay = '';
@@ -1164,8 +1164,9 @@ export const useBillboardExport = () => {
   }
 
   function isAvailableForAvailableExports(billboard: any): boolean {
-    // ✅ Override: if there's an active contract for this billboard in the map,
-    // treat it as NOT available even if billboards.Rent_End_Date says it's expired.
+    if (isExcludedBillboard(billboard)) return false;
+    if (billboard.is_visible_in_available === false) return false;
+    if (billboard.is_visible_in_available === true) return true;
     if (getActiveContractForBillboard(billboard)) return false;
     return isBillboardAvailable(billboard);
   }
@@ -1199,6 +1200,7 @@ export const useBillboardExport = () => {
   ): boolean {
     if (isExcludedBillboard(billboard)) return false;
     if (billboard.is_visible_in_available === false) return false;
+    if (billboard.is_visible_in_available === true) return true;
 
     const activeInfo = getActiveContractForBillboard(billboard);
     const effectiveEndDate = activeInfo?.endDate
@@ -1216,7 +1218,6 @@ export const useBillboardExport = () => {
       } catch {}
     }
 
-    // علم is_visible_in_available لا يتجاوز العقد النشط الممتد بعد النافذة
     return false;
   }
 
@@ -1296,16 +1297,17 @@ export const useBillboardExport = () => {
       const rows = await Promise.all(sorted.map(async (b: any, index: number) => {
         const contractDates = await getContractDates(b);
         const hasActive = hasActiveContractForExport(b, isContractExpired);
+        const isForcedVisible = (b.is_visible_in_available === true);
         const billboardName = b.Billboard_Name || b.name || '';
         const imageFileName = billboardName ? `${billboardName}.jpg` : (b.image_name || '');
-        const endDateDisplay = hasActive ? (contractDates.endDate || '') : '';
+        const endDateDisplay = isForcedVisible ? '' : (hasActive ? (contractDates.endDate || '') : '');
         return [
           b.ID || b.id || '', billboardName, b.City || b.city || '',
           b.Municipality || b.municipality || '', b.District || b.district || '',
           b.Nearest_Landmark || b.location || '', b.Size || b.size || '', b.Level || b.level || '',
           b.GPS_Coordinates || b.gps_coordinates || '', b.billboard_type || 'غير محدد',
           getFaceCountText(b.Faces_Count || b.faces_count || b.faces || b.Number_of_Faces || b.Faces),
-          endDateDisplay, hasActive ? 'ستتاح قريباً' : 'متاح الآن',
+          endDateDisplay, isForcedVisible ? 'متاح الآن' : (hasActive ? 'ستتاح قريباً' : 'متاح الآن'),
           String(index + 1), imageFileName, b.Image_URL || b.image || '',
         ];
       }));
@@ -1488,7 +1490,7 @@ export const useBillboardExport = () => {
           const billboardName = billboard.Billboard_Name || billboard.name || '';
           const imageFileName = billboardName ? `${billboardName}.jpg` : (billboard.image_name || '');
           const hasActive = hasActiveContractForExport(billboard, isContractExpired);
-          const isForcedVisible = (billboard.is_visible_in_available === true) && !hasActive;
+          const isForcedVisible = (billboard.is_visible_in_available === true);
           const endDateDisplay = isForcedVisible ? '' : (hasActive ? (contractDates.endDate || '') : '');
           
           return {

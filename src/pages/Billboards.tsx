@@ -1393,6 +1393,8 @@ export default function Billboards() {
                 محرر التراكب والواقعية
               </Button>
               <BillboardActions
+                billboards={billboards}
+                isContractExpired={isContractExpired}
                 exportToExcel={() => billboardExport.exportToExcel(billboards)}
                 exportAvailableToExcel={() => billboardExport.exportAvailableToExcel(billboards, isContractExpired)}
                 exportMunicipalityToExcel={(excludeHidden, selectedMunicipality) => billboardExport.exportMunicipalityToExcel(billboards, excludeHidden, selectedMunicipality)}

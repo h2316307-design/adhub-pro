@@ -977,10 +977,24 @@ export const InstallationTasksTable: React.FC<Props> = ({
     const designs = siblingTaskIds
       .flatMap(id => designsByTask[id] || [])
       .filter((d: any, i: number, arr: any[]) => arr.findIndex((x: any) => x.id === d.id) === i);
-    const designThumb = designs[0]?.design_face_a_url || null;
-    const allDesignUrls = designs
-      .flatMap((d: any) => [d.design_face_a_url, d.design_face_b_url].filter(Boolean))
+
+    // 1. التصاميم من جدول task_designs (الوجهين الأول والثاني)
+    const taskDesignUrls = designs.flatMap((d: any) => [d.design_face_a_url, d.design_face_b_url].filter(Boolean));
+
+    // 2. التصاميم من عناصر المهمة واللوحات (الوجهين الأول والثاني)
+    const itemDesignUrls = items.flatMap((i: any) => [
+      i.design_face_a,
+      i.design_face_b,
+      billboardById[i.billboard_id]?.design_face_a,
+      billboardById[i.billboard_id]?.design_face_b
+    ].filter(Boolean));
+
+    // دمج كافة روابط التصاميم المتاحة دون تكرار
+    const combinedDesignUrls = [...taskDesignUrls, ...itemDesignUrls]
       .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+
+    const designThumb = combinedDesignUrls[0] || null;
+    const allDesignUrls = combinedDesignUrls;
     let h = 0;
     for (let i = 0; i < taskGroupKey.length; i++) h = taskGroupKey.charCodeAt(i) + ((h << 5) - h);
     const accent = `hsl(${Math.abs(h) % 360}, 55%, 58%)`;
@@ -991,7 +1005,11 @@ export const InstallationTasksTable: React.FC<Props> = ({
       : contract?.['Ad Type'];
     // حساب عدد صور التركيب والتصاميم المدخلة
     const itemsWithInstallPhotos = items.filter(i => i.installed_image_face_a_url || i.installed_image_face_b_url).length;
-    const itemsWithDesigns = items.filter(i => i.design_face_a || i.design_face_b).length;
+    const itemsWithDesigns = items.filter(i => 
+      i.design_face_a || i.design_face_b || 
+      billboardById[i.billboard_id]?.design_face_a || billboardById[i.billboard_id]?.design_face_b ||
+      combinedDesignUrls.length > 0
+    ).length;
     const hasAllInstallPhotos = items.length > 0 && itemsWithInstallPhotos === items.length;
     const hasAllDesigns = items.length > 0 && itemsWithDesigns === items.length;
 
@@ -1010,7 +1028,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
       hasAllDesigns,
       designDate: designs[0]?.created_at || null,
     };
-  }), [tasks, allTaskItems, contractById, teamById, installationPricingByBillboard, designsByTask, derivedContractIdsByTaskId]);
+  }), [tasks, allTaskItems, contractById, teamById, installationPricingByBillboard, designsByTask, derivedContractIdsByTaskId, billboardById]);
 
   const filtered = useMemo(() => {
     let r = enriched;

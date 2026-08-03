@@ -141,11 +141,12 @@ export function MobileTaskCard({
     i.installed_image_face_a_url || i.installed_image_face_b_url
   ).length;
 
-  // جمع كل صور التصميم من عناصر المهمة
-  const allDesignImages = taskItems
-    .flatMap(item => [item.design_face_a, item.design_face_b])
+  // جمع كل صور التصميم من تصاميم المهمة والعناصر
+  const taskDesignImages = (taskDesigns || []).flatMap((td: any) => [td.design_face_a_url, td.design_face_b_url]);
+  const itemDesignImages = taskItems.flatMap((item: any) => [item.design_face_a, item.design_face_b]);
+  const allDesignImages = [...taskDesignImages, ...itemDesignImages, designImage]
     .filter(Boolean) as string[];
-  const uniqueDesignImages = [...new Set(allDesignImages)].slice(0, 4);
+  const uniqueDesignImages = [...new Set(allDesignImages)];
 
   // أول صورة تصميم لاستخدامها كخلفية
   const primaryDesignImage = uniqueDesignImages[0];

@@ -8,7 +8,7 @@ import {
   ArrowRight, CheckCircle2, Clock, Package, Users, MapPin,
   Phone, FileText, Building2, ChevronDown, ChevronUp, Printer,
   Edit, Plus, RefreshCw, Save, AlertCircle, Image, XCircle,
-  Calendar as CalendarIcon, Layers, Wrench, Search, X
+  Calendar as CalendarIcon, Layers, Wrench, Search, X, Palette
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -133,7 +133,16 @@ export const InstallationTaskDetail: React.FC<Props> = ({
     const cost = hasCost ? item.company_installation_cost : (installationPricingByBillboard[item.billboard_id] || 0);
     return sum + cost;
   }, 0);
-  const designImage = taskDesigns[0]?.design_face_a_url || taskItems.find(i => i.design_face_a)?.design_face_a;
+  const faceAImage = taskDesigns[0]?.design_face_a_url || 
+    taskItems.find(i => i.design_face_a)?.design_face_a || 
+    taskItems.map(i => billboardById?.[i.billboard_id]?.design_face_a).find(Boolean);
+    
+  const faceBImage = taskDesigns[0]?.design_face_b_url || 
+    taskItems.find(i => i.design_face_b)?.design_face_b || 
+    taskItems.map(i => billboardById?.[i.billboard_id]?.design_face_b).find(Boolean);
+
+  const designImage = faceAImage || faceBImage;
+  const hasAnyDesign = Boolean(faceAImage || faceBImage);
   const firstInstallDate = taskItems.find(i => i.installation_date)?.installation_date;
 
   // Naming & Siblings states
@@ -536,37 +545,69 @@ export const InstallationTaskDetail: React.FC<Props> = ({
         <div className="w-full lg:w-80 xl:w-96 shrink-0 border-b lg:border-b-0 lg:border-l border-border bg-card flex flex-col">
 
           {/* Design Preview */}
-          <div className="aspect-video bg-muted/50 relative overflow-hidden border-b border-border shrink-0">
-            {designImage ? (
-              <div 
-                className="w-full h-full cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={() => setLightboxImage(designImage)}
-              >
-                <img
-                  src={designImage}
-                  alt="تصميم الإعلان"
-                  className="w-full h-full object-contain"
-                />
-              </div>
-            ) : (
-              <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-muted-foreground">
-                <Image className="h-10 w-10 opacity-30" />
-                <span className="text-xs">لا يوجد تصميم</span>
-                <Button variant="outline" size="sm" onClick={onManageDesigns} className="text-xs h-7 mt-1">
-                  إضافة تصميم
-                </Button>
-              </div>
-            )}
-            {designImage && (
-              <div className="absolute bottom-2 right-2">
+          <div className="bg-muted/40 p-3 relative border-b border-border shrink-0 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Palette className="h-3.5 w-3.5 text-primary" />
+                تصاميم المهمة
+              </span>
+              {hasAnyDesign && (
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
                   onClick={onManageDesigns}
-                  className="h-6 text-[10px] px-2 bg-black/60 text-white border-0 hover:bg-black/80"
+                  className="h-6 text-[10px] px-2 text-primary hover:bg-primary/10"
                 >
-                  <Edit className="h-2.5 w-2.5 mr-1" />
+                  <Edit className="h-2.5 w-2.5 ml-1" />
                   إدارة التصاميم
+                </Button>
+              )}
+            </div>
+
+            {hasAnyDesign ? (
+              <div className={cn("grid gap-2", faceAImage && faceBImage ? "grid-cols-2" : "grid-cols-1")}>
+                {faceAImage && (
+                  <div className="space-y-1">
+                    {faceAImage && faceBImage && (
+                      <div className="text-[10px] font-bold text-center text-muted-foreground">الوجه الأول (الأمامي)</div>
+                    )}
+                    <div 
+                      className="aspect-video bg-background rounded-lg overflow-hidden border border-border/80 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                      onClick={() => setLightboxImage(faceAImage)}
+                    >
+                      <img
+                        src={faceAImage}
+                        alt="الوجه الأول"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {faceBImage && (
+                  <div className="space-y-1">
+                    {faceAImage && faceBImage && (
+                      <div className="text-[10px] font-bold text-center text-muted-foreground">الوجه الثاني (الخلفي)</div>
+                    )}
+                    <div 
+                      className="aspect-video bg-background rounded-lg overflow-hidden border border-border/80 cursor-pointer hover:opacity-90 transition-opacity shadow-sm"
+                      onClick={() => setLightboxImage(faceBImage)}
+                    >
+                      <img
+                        src={faceBImage}
+                        alt="الوجه الثاني"
+                        className="w-full h-full object-contain"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="h-24 flex flex-col items-center justify-center gap-1.5 text-muted-foreground bg-background rounded-lg border border-dashed border-border/80">
+                <Image className="h-8 w-8 opacity-30" />
+                <span className="text-xs font-medium">لا يوجد تصميم</span>
+                <Button variant="outline" size="sm" onClick={onManageDesigns} className="text-xs h-6 px-2.5">
+                  إضافة تصميم
                 </Button>
               </div>
             )}
