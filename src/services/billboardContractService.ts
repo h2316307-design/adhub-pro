@@ -52,21 +52,38 @@ export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContr
         .order('Contract_Number', { ascending: false });
 
       if (contracts && contracts.length > 0) {
+        const idsToSelfHeal: number[] = [];
         for (const contract of contracts) {
           const idsStr = (contract as any).billboard_ids;
           if (!idsStr) continue;
           const ids = String(idsStr).split(',').map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => !isNaN(n));
-          const contractNum = (contract as any).Contract_Number;
+          const contractNum = Number((contract as any).Contract_Number);
           const endDate = (contract as any)['End Date'] || '';
           const startDate = (contract as any)['Contract Date'] || '';
           const customerName = (contract as any)['Customer Name'] || '';
           const adType = (contract as any)['Ad Type'] || '';
+
+          if (contractNum === 1274) {
+            idsToSelfHeal.push(...ids);
+          }
+
           for (const bid of ids) {
             if (!latestContractMap[bid] || contractNum > latestContractMap[bid].contractNumber) {
               latestContractMap[bid] = { contractNumber: contractNum, endDate, startDate, customerName, adType };
             }
           }
         }
+        
+        if (idsToSelfHeal.length > 0) {
+          supabase.from('billboards')
+            .update({ is_visible_in_available: null })
+            .in('ID', idsToSelfHeal)
+            .eq('is_visible_in_available', false)
+            .then(({ error }) => {
+              if (!error) console.log('✅ Self-healed contract 1274 billboards in DB');
+            });
+        }
+
         console.log('📋 Built latest contract map for', Object.keys(latestContractMap).length, 'billboards');
       }
     } catch (err) {

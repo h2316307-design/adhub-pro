@@ -72,7 +72,7 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
 
         if (error) console.warn('Error fetching contracts for preview:', error);
 
-        // ✅ Self-heal: Fix erroneous default is_visible_in_available=true for contracts 1185, 1287, 1278, 1286
+        // ✅ Self-heal: Fix erroneous default is_visible_in_available=true/false for misconfigured contracts
         const misConfiguredContracts = [1185, 1287, 1278, 1286];
         const idsToFix: number[] = [];
         (contractsData || []).forEach((c: any) => {
@@ -84,6 +84,29 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
             idsToFix.push(...ids);
           }
         });
+
+        // ✅ Self-heal: Reset contract 1274 billboards from false back to null
+        const contractsToResetToNull = [1274];
+        const idsToResetNull: number[] = [];
+        (contractsData || []).forEach((c: any) => {
+          if (contractsToResetToNull.includes(Number(c.Contract_Number))) {
+            const ids = String(c.billboard_ids || '')
+              .split(',')
+              .map((s) => Number(s.trim()))
+              .filter((n) => Number.isFinite(n) && n > 0);
+            idsToResetNull.push(...ids);
+          }
+        });
+
+        if (idsToResetNull.length > 0) {
+          await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', idsToResetNull).eq('is_visible_in_available', false);
+          (billboards || []).forEach((b: any) => {
+            const bId = Number(b.ID ?? b.id);
+            if (idsToResetNull.includes(bId) && b.is_visible_in_available === false) {
+              b.is_visible_in_available = null;
+            }
+          });
+        }
 
         // ✅ Self-heal: Ensure all friend company billboards (like أسعد and البركة) are hidden from available
         const { data: friendBBs } = await supabase

@@ -148,10 +148,20 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     if (!billboardIdsStr) return;
     const ids = billboardIdsStr.split(',').map((s: string) => Number(s.trim())).filter((n: number) => Number.isFinite(n) && n > 0);
     if (ids.length === 0) return;
-    supabase.from('billboards').select('is_visible_in_available').in('ID', ids)
-      .then(({ data }) => {
+    supabase.from('billboards').select('ID, is_visible_in_available').in('ID', ids)
+      .then(async ({ data }) => {
         if (data && data.length > 0) {
           setShowInAvailable(data.every(b => b.is_visible_in_available === true));
+          
+          // ✅ Self-heal: Automatic repair for contract 1274 billboards if marked as false by previous policy
+          const contractNum = Number((contract as any).Contract_Number ?? (contract as any)['Contract Number'] ?? contract.id);
+          if (contractNum === 1274) {
+            const falseIds = data.filter(b => b.is_visible_in_available === false).map(b => b.ID);
+            if (falseIds.length > 0) {
+              await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', falseIds);
+              console.log(`✅ Automatically restored billboard availability for contract ${contractNum}:`, falseIds);
+            }
+          }
         }
       });
   }, [isVisible, contract]);
@@ -1686,10 +1696,10 @@ export const ContractCard: React.FC<ContractCardProps> = ({
                     try {
                       setTogglingAvailable(true);
                       const newVal = !showInAvailable;
-                      const { error } = await supabase.from('billboards').update({ is_visible_in_available: newVal }).in('ID', ids);
+                      const { error } = await supabase.from('billboards').update({ is_visible_in_available: newVal ? true : null }).in('ID', ids);
                       if (error) throw error;
                       setShowInAvailable(newVal);
-                      toast.success(newVal ? 'تم إظهار اللوحات في المتاح' : 'تم إخفاء اللوحات من المتاح');
+                      toast.success(newVal ? 'تم إظهار اللوحات في المتاح' : 'تم إلغاء إظهار اللوحات في المتاح');
                       onRefresh();
                     } catch (e: any) {
                       console.error(e);

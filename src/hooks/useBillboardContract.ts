@@ -127,7 +127,7 @@ export const useBillboardContract = () => {
           Rent_Start_Date: contractData['Contract Date'],
           Rent_End_Date: contractData['End Date'],
           Status: 'rented',
-          is_visible_in_available: false
+          is_visible_in_available: null
         })
         .eq('ID', Number(billboardId));
       
