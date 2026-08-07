@@ -151,17 +151,19 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     supabase.from('billboards').select('ID, is_visible_in_available').in('ID', ids)
       .then(async ({ data }) => {
         if (data && data.length > 0) {
-          setShowInAvailable(data.every(b => b.is_visible_in_available === true));
-          
-          // ✅ Self-heal: Automatic repair for contract 1274 billboards if marked as false by previous policy
           const contractNum = Number((contract as any).Contract_Number ?? (contract as any)['Contract Number'] ?? contract.id);
-          if (contractNum === 1274) {
-            const falseIds = data.filter(b => b.is_visible_in_available === false).map(b => b.ID);
-            if (falseIds.length > 0) {
-              await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', falseIds);
-              console.log(`✅ Automatically restored billboard availability for contract ${contractNum}:`, falseIds);
+          
+          // ✅ Self-heal: If contract 1274 (or 1185, 1287, 1278, 1286) has forced is_visible_in_available values, clear them to null
+          if ([1274, 1185, 1287, 1278, 1286].includes(contractNum)) {
+            const forcedIds = data.filter(b => b.is_visible_in_available === true || b.is_visible_in_available === false).map(b => b.ID);
+            if (forcedIds.length > 0) {
+              await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', forcedIds);
+              setShowInAvailable(false);
+              console.log(`✅ Cleared forced availability for contract ${contractNum}:`, forcedIds);
+              return;
             }
           }
+          setShowInAvailable(data.every(b => b.is_visible_in_available === true));
         }
       });
   }, [isVisible, contract]);
@@ -1239,7 +1241,7 @@ export const ContractCard: React.FC<ContractCardProps> = ({
           <button
             onClick={(e) => { e.stopPropagation(); setShowDesignFullscreen(false); }}
             aria-label="إغلاق"
-            className="absolute top-4 right-4 z-[60] h-11 w-11 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-lg transition-all hover:scale-110"
+            className="absolute top-4 left-4 z-[60] h-11 w-11 flex items-center justify-center rounded-full bg-white/10 hover:bg-white/25 backdrop-blur-md border border-white/20 shadow-lg transition-all hover:scale-110"
           >
             <X className="h-5 w-5 text-white" strokeWidth={2.5} />
           </button>

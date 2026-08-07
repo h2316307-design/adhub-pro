@@ -78,9 +78,8 @@ export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContr
           supabase.from('billboards')
             .update({ is_visible_in_available: null })
             .in('ID', idsToSelfHeal)
-            .eq('is_visible_in_available', false)
             .then(({ error }) => {
-              if (!error) console.log('✅ Self-healed contract 1274 billboards in DB');
+              if (!error) console.log('✅ Self-healed contract 1274 billboards in DB to null');
             });
         }
 

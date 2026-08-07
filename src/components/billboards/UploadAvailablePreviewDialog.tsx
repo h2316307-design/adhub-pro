@@ -72,21 +72,8 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
 
         if (error) console.warn('Error fetching contracts for preview:', error);
 
-        // ✅ Self-heal: Fix erroneous default is_visible_in_available=true/false for misconfigured contracts
-        const misConfiguredContracts = [1185, 1287, 1278, 1286];
-        const idsToFix: number[] = [];
-        (contractsData || []).forEach((c: any) => {
-          if (misConfiguredContracts.includes(Number(c.Contract_Number))) {
-            const ids = String(c.billboard_ids || '')
-              .split(',')
-              .map((s) => Number(s.trim()))
-              .filter((n) => Number.isFinite(n) && n > 0);
-            idsToFix.push(...ids);
-          }
-        });
-
-        // ✅ Self-heal: Reset contract 1274 billboards from false back to null
-        const contractsToResetToNull = [1274];
+        // ✅ Self-heal: Reset contract 1274 and misconfigured contracts billboards to null so they do not erroneously force-show in available
+        const contractsToResetToNull = [1274, 1185, 1287, 1278, 1286];
         const idsToResetNull: number[] = [];
         (contractsData || []).forEach((c: any) => {
           if (contractsToResetToNull.includes(Number(c.Contract_Number))) {
@@ -99,10 +86,10 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
         });
 
         if (idsToResetNull.length > 0) {
-          await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', idsToResetNull).eq('is_visible_in_available', false);
+          await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', idsToResetNull);
           (billboards || []).forEach((b: any) => {
             const bId = Number(b.ID ?? b.id);
-            if (idsToResetNull.includes(bId) && b.is_visible_in_available === false) {
+            if (idsToResetNull.includes(bId)) {
               b.is_visible_in_available = null;
             }
           });
