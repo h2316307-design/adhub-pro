@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Download, Search, Clock, Plus, Minus, CalendarX } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { smartArabicMatch } from '@/lib/arabicSearch';
 
 interface ExportWithContractsDialogProps {
   open: boolean;
@@ -121,10 +122,9 @@ export const ExportWithContractsDialog: React.FC<ExportWithContractsDialogProps>
   }, [activeTab, expiringContracts, contracts, showWithoutDate]);
 
   const filteredContracts = displayedContracts.filter(contract => {
-    const query = searchQuery.toLowerCase();
-    return (
-      String(contract.Contract_Number).includes(query) ||
-      contract.customerName.toLowerCase().includes(query)
+    return smartArabicMatch(
+      [contract.Contract_Number, contract.customerName],
+      searchQuery
     );
   });
 

@@ -92,14 +92,15 @@ export function MultiSelect({
         </Button>
       </PopoverTrigger>
       <PopoverContent
-        className="w-[--radix-popover-trigger-width] p-0 bg-popover border-border shadow-xl z-[10000]"
+        className="w-[--radix-popover-trigger-width] min-w-[200px] p-0 bg-popover border-border shadow-xl z-[10000]"
         align="start"
+        dir="rtl"
       >
-        <Command>
-          <CommandInput placeholder="ابحث..." className="text-xs" dir="rtl" />
-          <CommandList className="max-h-[250px]">
+        <Command dir="rtl">
+          <CommandInput placeholder="ابحث..." className="text-xs text-right" dir="rtl" />
+          <CommandList className="max-h-[250px]" dir="rtl">
             <CommandEmpty className="py-4 text-xs text-center text-muted-foreground">{emptyText}</CommandEmpty>
-            <CommandGroup>
+            <CommandGroup dir="rtl">
               {/* Select all / clear all */}
               {options.length > 1 && (
                 <CommandItem
@@ -110,17 +111,20 @@ export function MultiSelect({
                       onChange(options.map(o => o.value));
                     }
                   }}
-                  className="text-xs font-semibold border-b border-border/30 mb-1"
+                  className="text-xs font-semibold border-b border-border/30 mb-1 flex items-center justify-between"
+                  dir="rtl"
                 >
-                  <div className={cn(
-                    'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border',
-                    value.length === options.length ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/30'
-                  )}>
-                    {value.length === options.length && <Check className="h-3 w-3" />}
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      'flex h-4 w-4 items-center justify-center rounded-sm border shrink-0',
+                      value.length === options.length ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/30'
+                    )}>
+                      {value.length === options.length && <Check className="h-3 w-3" />}
+                    </div>
+                    <span>{value.length === options.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}</span>
                   </div>
-                  <span>{value.length === options.length ? 'إلغاء تحديد الكل' : 'تحديد الكل'}</span>
                   {value.length > 0 && value.length < options.length && (
-                    <span className="mr-auto text-[10px] text-muted-foreground">{value.length}/{options.length}</span>
+                    <span className="text-[10px] text-muted-foreground font-manrope">{value.length}/{options.length}</span>
                   )}
                 </CommandItem>
               )}
@@ -131,13 +135,12 @@ export function MultiSelect({
                     key={option.value}
                     value={option.label}
                     onSelect={() => toggle(option.value)}
-                    className="text-xs"
+                    className="text-xs flex items-center gap-2"
+                    dir="rtl"
                   >
                     <div className={cn(
-                      'mr-2 flex h-4 w-4 items-center justify-center rounded-sm border transition-colors',
-                      checked
-                        ? 'bg-primary text-primary-foreground border-primary'
-                        : 'border-muted-foreground/30 hover:border-primary/50'
+                      'flex h-4 w-4 items-center justify-center rounded-sm border shrink-0',
+                      checked ? 'bg-primary text-primary-foreground border-primary' : 'border-muted-foreground/30'
                     )}>
                       {checked && <Check className="h-3 w-3" />}
                     </div>

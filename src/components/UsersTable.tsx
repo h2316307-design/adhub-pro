@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Users, Search, Plus, Shield, UserCheck, Mail, Phone, Save, Check, Trash2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { smartArabicMatch } from '@/lib/arabicSearch';
 import { toast } from '@/hooks/use-toast';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
@@ -88,9 +89,18 @@ export const UsersTable = () => {
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         user.company?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = smartArabicMatch(
+      [
+        user.name,
+        user.email,
+        user.company,
+        (user as any).phone,
+        user.role,
+        user.pricing_category,
+        ...(user.allowed_customers || []),
+      ],
+      searchTerm
+    );
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
 
     const selectedNames = selectedCustomersInput
@@ -253,7 +263,7 @@ export const UsersTable = () => {
       </div>
 
       {/* إحصائيات سريعة */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

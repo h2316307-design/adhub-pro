@@ -35,6 +35,7 @@ interface BillboardFiltersProps {
   setCityFilters?: (cities: string[]) => void;
   municipalityFilters?: string[];
   setMunicipalityFilters?: (municipalities: string[]) => void;
+  isMapOpen?: boolean;
 }
 
 const STATUS_OPTIONS = [
@@ -74,8 +75,15 @@ export function BillboardFilters({
   setCityFilters,
   municipalityFilters,
   setMunicipalityFilters,
+  isMapOpen = false,
 }: BillboardFiltersProps) {
   const [filtersOpen, setFiltersOpen] = React.useState(true);
+
+  React.useEffect(() => {
+    if (isMapOpen) {
+      setFiltersOpen(false);
+    }
+  }, [isMapOpen]);
 
   const useMultiSize = !!(sizeFilters !== undefined && setSizeFilters);
   const useMultiCity = !!(cityFilters !== undefined && setCityFilters);
@@ -272,30 +280,35 @@ export function BillboardFilters({
 
             {/* Active filter badges + clear */}
             {hasActiveFilters && (
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex flex-wrap gap-1">
+              <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/30" dir="rtl">
+                <div className="flex flex-wrap gap-1.5 items-center">
                   {activeBadges.map((badge, i) => (
                     <Badge
                       key={i}
                       variant="secondary"
-                      className="gap-1 text-[10px] h-5 bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-colors"
+                      className="inline-flex items-center gap-1.5 text-[11px] font-bold px-2 py-0.5 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded-lg hover:bg-amber-500/25 transition-colors cursor-pointer"
+                      dir="rtl"
                     >
-                      {badge.label}
-                      <button onClick={badge.onRemove} className="hover:text-destructive transition-colors">
-                        <X className="h-2.5 w-2.5" />
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); badge.onRemove(); }} 
+                        className="hover:text-red-400 p-0.5 rounded-full hover:bg-black/30 transition-colors"
+                        title="إزالة الفلتر"
+                      >
+                        <X className="h-3 w-3" />
                       </button>
+                      <span className="truncate">{badge.label}</span>
                     </Badge>
                   ))}
                 </div>
 
-                <div className="flex gap-1 shrink-0">
+                <div className="flex items-center gap-1.5 shrink-0" dir="rtl">
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={clearAllFilters}
-                    className="h-5 text-[10px] text-muted-foreground hover:text-foreground gap-1 px-1.5"
+                    className="h-6 text-[11px] font-bold text-muted-foreground hover:text-foreground hover:bg-muted/50 gap-1 px-2 rounded-lg cursor-pointer"
                   >
-                    <X className="h-2.5 w-2.5" />
+                    <X className="h-3 w-3" />
                     مسح الكل
                   </Button>
                   {onCleanup && (
@@ -303,9 +316,9 @@ export function BillboardFilters({
                       variant="ghost"
                       size="sm"
                       onClick={onCleanup}
-                      className="h-5 text-[10px] text-muted-foreground hover:text-destructive gap-1 px-1.5"
+                      className="h-6 text-[11px] font-bold text-muted-foreground hover:text-destructive hover:bg-destructive/10 gap-1 px-2 rounded-lg cursor-pointer"
                     >
-                      <Trash2 className="h-2.5 w-2.5" />
+                      <Trash2 className="h-3 w-3" />
                       تنظيف
                     </Button>
                   )}

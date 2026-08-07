@@ -537,8 +537,6 @@ export default function Billboards() {
         }
         return;
       }
-      
-      // Deleted successfully
       toast.success(`تم حذف "${billboardName}" بنجاح`);
       await loadBillboards();
     } catch (error: any) {
@@ -547,95 +545,50 @@ export default function Billboards() {
     }
   };
 
-  // ✅ ENHANCED: Search function with support for billboard names and nearest landmark
-  const enhancedSearchBillboards = (billboards: any[], query: string) => {
-    if (!query.trim()) return billboards;
-    
-    const searchTerm = query.toLowerCase().trim();
-    
-    
-    return billboards.filter((billboard) => {
-      // ✅ Billboard name search with multiple field variations
-      const billboardName = String(
-        billboard.Billboard_Name || 
-        billboard.billboardName || 
-        billboard.billboard_name ||
-        billboard.name ||
-        ''
-      ).toLowerCase();
-      
-      // ✅ ENHANCED: Nearest landmark search with multiple field variations
-      const nearestLandmark = String(
-        billboard['Nearest Landmark'] ||
-        billboard.nearestLandmark ||
-        billboard.nearest_landmark ||
-        billboard.Nearest_Landmark ||
-        billboard['أقرب نقطة دالة'] ||
-        billboard.landmark ||
-        billboard.Location ||
-        billboard.location ||
-        billboard.Address ||
-        billboard.address ||
-        ''
-      ).toLowerCase();
-      
-      // Municipality search
-      const municipality = String(
-        billboard.Municipality || 
-        billboard.municipality || 
-        billboard.Municipality_Name ||
-        billboard.municipality_name ||
-        ''
-      ).toLowerCase();
-      
-      // City search
-      const city = String(
-        billboard.City || 
-        billboard.city || 
-        billboard.City_Name ||
-        billboard.city_name ||
-        ''
-      ).toLowerCase();
-      
-      // Contract number search
-      const contractNumber = String(getCurrentContractNumber(billboard)).toLowerCase();
-      
-      // Ad type search
-      const adType = String(
-        billboard.Ad_Type || 
-        billboard.adType || 
-        billboard.ad_type || 
-        billboard.AdType || 
-        (billboard.contracts && billboard.contracts[0]?.['Ad Type']) || 
-        ''
-      ).toLowerCase();
-      
-      // Customer name search
-      const customerName = String(
-        billboard.Customer_Name || 
-        billboard.clientName || 
-        billboard.customer_name ||
-        (billboard.contracts && billboard.contracts[0]?.['Customer Name']) || 
-        ''
-      ).toLowerCase();
-      
-      // Size search
-      const size = String(
-        billboard.Size || 
-        billboard.size || 
-        ''
-      ).toLowerCase();
-      
-      // ✅ ENHANCED: Comprehensive search matching including nearest landmark
-      const matches = billboardName.includes(searchTerm) ||
-                     nearestLandmark.includes(searchTerm) ||
-                     municipality.includes(searchTerm) ||
-                     city.includes(searchTerm) ||
-                     contractNumber.includes(searchTerm) ||
-                     adType.includes(searchTerm) ||
-                     customerName.includes(searchTerm) ||
-                     size.includes(searchTerm);
-      return matches;
+  // ✅ ENHANCED: Universal Smart Arabic Search with all billboard metadata & codes
+  const enhancedSearchBillboards = (billboardsList: Billboard[], query: string) => {
+    if (!query || !query.trim()) return billboardsList;
+
+    return billboardsList.filter((billboard: any) => {
+      const contractNo = getCurrentContractNumber(billboard);
+      const bId = String(billboard.ID || billboard.id || '');
+      const code = billboard.code || billboard.Code || `TR-${bId.padStart(4, '0')}`;
+
+      return smartArabicMatch(
+        [
+          code,
+          billboard.Code,
+          billboard.name,
+          billboard.Billboard_Name,
+          billboard.location,
+          billboard.Nearest_Landmark,
+          billboard.municipality,
+          billboard.Municipality,
+          billboard.city,
+          billboard.City,
+          billboard.District,
+          billboard.district,
+          billboard.Customer_Name,
+          billboard.clientName,
+          billboard.customer_name,
+          billboard.contracts?.[0]?.['Customer Name'],
+          billboard.contracts?.[0]?.customer_name,
+          billboard.Size,
+          billboard.size,
+          billboard.Level,
+          billboard.level,
+          billboard.Ad_Type,
+          billboard.adType,
+          billboard.ad_type,
+          billboard.contracts?.[0]?.['Ad Type'],
+          billboard.contracts?.[0]?.ad_type,
+          contractNo,
+          billboard.Contract_Number,
+          billboard.contractNumber,
+          bId
+        ],
+        query
+      );
     });
   };
 
@@ -835,36 +788,11 @@ export default function Billboards() {
     return 9999;
   };
 
-  // ✅ FIXED: Use useMemo for sorted filtered billboards
+  // ✅ FIXED: Strict Multi-Level Billboard Sorting matching everywhere
   const sortedFilteredBillboards = useMemo(() => {
     if (filteredBillboards.length === 0) return [];
-
-    return [...filteredBillboards].sort((a, b) => {
-      const sizeA = (a as any).Size || a.size || '';
-      const sizeB = (b as any).Size || b.size || '';
-
-      const orderA = getSizeRank(sizeA);
-      const orderB = getSizeRank(sizeB);
-
-      if (orderA !== orderB) {
-        return orderA - orderB;
-      }
-
-      const munA = (a as any).Municipality || a.municipality || '';
-      const munB = (b as any).Municipality || b.municipality || '';
-
-      const munOrderA = getMunicipalityRank(munA);
-      const munOrderB = getMunicipalityRank(munB);
-
-      if (munOrderA !== munOrderB) {
-        return munOrderA - munOrderB;
-      }
-
-      const idA = (a as any).ID || a.id || 0;
-      const idB = (b as any).ID || b.id || 0;
-      return idA - idB;
-    });
-  }, [filteredBillboards, sizeRankMap, municipalityRankMap]);
+    return sortBillboardsStandardSync(filteredBillboards, sizes, municipalities);
+  }, [filteredBillboards, sizes, municipalities]);
 
   // Billboard Photo Overlay Editor state & helpers
   const [overlayEditorOpen, setOverlayEditorOpen] = useState(false);
@@ -1486,6 +1414,7 @@ export default function Billboards() {
         selectedOwnerCompanies={selectedOwnerCompanies}
         setSelectedOwnerCompanies={setSelectedOwnerCompanies}
         ownerCompanies={ownerCompanies}
+        isMapOpen={mapOpen}
       />
 
       {/* Collapsible Summary Cards */}

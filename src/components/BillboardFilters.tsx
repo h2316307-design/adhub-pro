@@ -48,6 +48,7 @@ interface BillboardFiltersProps {
   uniqueAdTypes: string[];
   uniqueCustomers: string[];
   uniqueContractNumbers: string[];
+  isMapOpen?: boolean;
 }
 
 // ✅ مكون فلتر مخصص مع تصميم محسن
@@ -163,9 +164,17 @@ export const BillboardFilters: React.FC<BillboardFiltersProps> = ({
   billboardDistricts = [],
   uniqueAdTypes,
   uniqueCustomers,
-  uniqueContractNumbers
+  uniqueContractNumbers,
+  isMapOpen = false
 }) => {
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+
+  // ✅ طي الفلاتر تلقائياً عند فتح الخريطة لتوفير مساحة كاملة للخريطة
+  React.useEffect(() => {
+    if (isMapOpen) {
+      setIsAdvancedOpen(false);
+    }
+  }, [isMapOpen]);
 
   // ✅ ترتيب أرقام العقود من الأعلى للأقل
   const sortedContractNumbers = [...uniqueContractNumbers]

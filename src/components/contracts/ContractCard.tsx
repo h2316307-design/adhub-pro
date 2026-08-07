@@ -149,20 +149,9 @@ export const ContractCard: React.FC<ContractCardProps> = ({
     const ids = billboardIdsStr.split(',').map((s: string) => Number(s.trim())).filter((n: number) => Number.isFinite(n) && n > 0);
     if (ids.length === 0) return;
     supabase.from('billboards').select('ID, is_visible_in_available').in('ID', ids)
-      .then(async ({ data }) => {
+      .then(({ data }) => {
         if (data && data.length > 0) {
-          const contractNum = Number((contract as any).Contract_Number ?? (contract as any)['Contract Number'] ?? contract.id);
-          
-          // ✅ Self-heal: If contract 1274 (or 1185, 1287, 1278, 1286) has forced is_visible_in_available values, clear them to null
-          if ([1274, 1185, 1287, 1278, 1286].includes(contractNum)) {
-            const forcedIds = data.filter(b => b.is_visible_in_available === true || b.is_visible_in_available === false).map(b => b.ID);
-            if (forcedIds.length > 0) {
-              await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', forcedIds);
-              setShowInAvailable(false);
-              console.log(`✅ Cleared forced availability for contract ${contractNum}:`, forcedIds);
-              return;
-            }
-          }
+          // العقد مفعّل "إظهار في المتاح" إذا كانت جميع لوحاته قيمتها true
           setShowInAvailable(data.every(b => b.is_visible_in_available === true));
         }
       });

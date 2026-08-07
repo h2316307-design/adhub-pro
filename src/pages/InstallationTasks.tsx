@@ -4,6 +4,7 @@ import { generateFallbackPath } from '@/utils/fallbackPathGenerator';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { smartArabicMatch } from '@/lib/arabicSearch';
 import { uploadToImgbb } from '@/services/imgbbService';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -781,11 +782,11 @@ export default function InstallationTasks() {
   // Filter contracts by search term
   const filteredContracts = useMemo(() => {
     if (!contractSearchTerm) return availableContracts;
-    const search = contractSearchTerm.toLowerCase();
-    return availableContracts.filter(c => 
-      String(c.Contract_Number).includes(search) ||
-      c['Customer Name']?.toLowerCase().includes(search) ||
-      c['Ad Type']?.toLowerCase().includes(search)
+    return availableContracts.filter((c) =>
+      smartArabicMatch(
+        [c.Contract_Number, c['Customer Name'], c['Ad Type']],
+        contractSearchTerm
+      )
     );
   }, [availableContracts, contractSearchTerm]);
 
@@ -820,25 +821,32 @@ export default function InstallationTasks() {
       filteredTasks = filteredTasks.filter(t => t.team_id === filterTeam);
     }
     if (searchTerm) {
-      const search = searchTerm.toLowerCase();
-      filteredTasks = filteredTasks.filter(t => {
+      filteredTasks = filteredTasks.filter((t) => {
         const contract = contractById[t.contract_id];
         const taskBillboards = allTaskItems
-          .filter(item => item.task_id === t.id)
-          .map(item => billboardById[item.billboard_id])
+          .filter((item) => item.task_id === t.id)
+          .map((item) => billboardById[item.billboard_id])
           .filter(Boolean);
-        
-        return (
-          String(t.contract_id).includes(search) ||
-          (t.task_name || '').toLowerCase().includes(search) ||
-          contract?.['Customer Name']?.toLowerCase().includes(search) ||
-          contract?.['Ad Type']?.toLowerCase().includes(search) ||
-          taskBillboards.some(b => 
-            b?.Billboard_Name?.toLowerCase().includes(search) ||
-            b?.Municipality?.toLowerCase().includes(search) ||
-            b?.District?.toLowerCase().includes(search) ||
-            String(b?.ID || '').includes(search)
-          )
+
+        const billboardFields = taskBillboards.flatMap((b) => [
+          b?.Billboard_Name,
+          b?.Municipality,
+          b?.District,
+          b?.ID,
+          b?.City,
+          b?.Location,
+        ]);
+
+        return smartArabicMatch(
+          [
+            t.contract_id,
+            t.task_name,
+            t.notes,
+            contract?.['Customer Name'],
+            contract?.['Ad Type'],
+            ...billboardFields,
+          ],
+          searchTerm
         );
       });
     }

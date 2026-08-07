@@ -43,44 +43,32 @@ export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContr
       return [];
     }
 
-    // جلب أحدث عقد لكل لوحة من جدول العقود
+    // جلب أحدث عقد نشط لكل لوحة من جدول العقود
     const latestContractMap: Record<number, { contractNumber: number; endDate: string; startDate: string; customerName: string; adType: string }> = {};
     try {
       const { data: contracts } = await supabase
         .from('Contract')
-        .select('Contract_Number, "End Date", "Contract Date", "Customer Name", "Ad Type", billboard_ids')
-        .order('Contract_Number', { ascending: false });
+        .select('Contract_Number, "End Date", "Contract Date", "Customer Name", "Ad Type", ad_type, billboard_ids')
+        .order('End Date', { ascending: false });
 
       if (contracts && contracts.length > 0) {
-        const idsToSelfHeal: number[] = [];
         for (const contract of contracts) {
           const idsStr = (contract as any).billboard_ids;
           if (!idsStr) continue;
           const ids = String(idsStr).split(',').map((s: string) => parseInt(s.trim(), 10)).filter((n: number) => !isNaN(n));
           const contractNum = Number((contract as any).Contract_Number);
-          const endDate = (contract as any)['End Date'] || '';
-          const startDate = (contract as any)['Contract Date'] || '';
-          const customerName = (contract as any)['Customer Name'] || '';
-          const adType = (contract as any)['Ad Type'] || '';
-
-          if (contractNum === 1274) {
-            idsToSelfHeal.push(...ids);
-          }
+          const endDate = (contract as any)['End Date'] || (contract as any).end_date || '';
+          const startDate = (contract as any)['Contract Date'] || (contract as any).start_date || '';
+          const customerName = (contract as any)['Customer Name'] || (contract as any).customer_name || '';
+          const adType = (contract as any)['Ad Type'] || (contract as any).ad_type || '';
 
           for (const bid of ids) {
-            if (!latestContractMap[bid] || contractNum > latestContractMap[bid].contractNumber) {
+            const existing = latestContractMap[bid];
+            // العقد النشط صاحب أبعد تاريخ نهاية يكون له الأولوية
+            if (!existing || (endDate && (!existing.endDate || endDate > existing.endDate))) {
               latestContractMap[bid] = { contractNumber: contractNum, endDate, startDate, customerName, adType };
             }
           }
-        }
-        
-        if (idsToSelfHeal.length > 0) {
-          supabase.from('billboards')
-            .update({ is_visible_in_available: null })
-            .in('ID', idsToSelfHeal)
-            .then(({ error }) => {
-              if (!error) console.log('✅ Self-healed contract 1274 billboards in DB to null');
-            });
         }
 
         console.log('📋 Built latest contract map for', Object.keys(latestContractMap).length, 'billboards');

@@ -5,6 +5,9 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { loadBillboards } from '@/services/billboardService';
+import { smartArabicMatch } from '@/lib/arabicSearch';
+import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
+import { useQuery } from '@tanstack/react-query';
 import { calculateInstallationCostFromIds } from '@/services/installationService';
 import { getPriceFor, getDailyPriceFor, CustomerType } from '@/data/pricing';
 import { useContractPricing } from '@/hooks/useContractPricing';
@@ -812,27 +815,45 @@ export default function OfferEdit() {
     } as Billboard;
   };
 
-  // ✅ Enhanced search - matches billboard name, ID, location, municipality, city, customer, size
+  const { data: dbSizesData = [] } = useQuery({
+    queryKey: ['offer-edit-sizes-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('sizes').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
+  const { data: dbMunisData = [] } = useQuery({
+    queryKey: ['offer-edit-munis-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('municipalities').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
   const enhancedSearchMatch = (b: any, query: string): boolean => {
-    if (!query) return true;
-    const q = query.toLowerCase().trim();
-    const fields = [
-      b.name, b.Billboard_Name, b.billboard_name,
-      b.location, b.Nearest_Landmark, b.nearest_landmark,
-      b.municipality, b.Municipality,
-      b.city, b.City,
-      b.Customer_Name, b.clientName, b.customer_name,
-      b.Size, b.size,
-      b.Ad_Type, b.adType,
-      String(b.Contract_Number || b.contractNumber || ''),
-      String(b.ID || b.id || ''),
-    ];
-    return fields.some(f => f && String(f).toLowerCase().includes(q));
+    if (!query || !query.trim()) return true;
+    const bIdStr = String(b.ID || b.id || '');
+    const code = b.code || b.Code || `TR-${bIdStr.padStart(4, '0')}`;
+
+    return smartArabicMatch(
+      [
+        code, b.code, b.Code,
+        b.name, b.Billboard_Name, b.location, b.Nearest_Landmark,
+        b.municipality, b.Municipality, b.city, b.City, b.District, b.district,
+        b.Customer_Name, b.clientName, b.customer_name,
+        b.Size, b.size, b.Level, b.level,
+        b.Ad_Type, b.adType, b.ad_type, b.new_ad_type,
+        b.Contract_Number, b.contractNumber,
+        b.ID, b.id, bIdStr
+      ],
+      query
+    );
   };
 
   // Show rented + near-expiry billboards for offers
   const filtered = useMemo(() => {
-    return billboards.filter((b: any) => {
+    const list = billboards.filter((b: any) => {
       const c = String(b.city || b.City || '');
       const m = String(b.municipality || b.Municipality || '');
       const s = String(b.size || b.Size || '').trim();
@@ -845,7 +866,7 @@ export default function OfferEdit() {
 
       const isAvail = isAvailableEffective(b);
       const isNear = isNearExpiring(b);
-      const isInSelection = selected.includes(String(b.ID));
+      const isInSelection = selected.includes(String(b.ID || b.id));
 
       const statusValue = String((b.Status ?? b.status ?? '')).trim();
       const statusLower = statusValue.toLowerCase();
@@ -859,40 +880,31 @@ export default function OfferEdit() {
         maintenanceStatus === 'قيد الصيانة' || 
         maintenanceStatus === 'متضررة اللوحة';
 
+      const hasSearch = searchQuery.trim().length > 0;
       let shouldShow = false;
-      if (statusFilter === 'all') {
-        shouldShow = !isHidden && !isUnderMaintenance;
+      if (hasSearch) {
+        shouldShow = true; // Search overrides status tabs to find any matching billboard!
+      } else if (statusFilter === 'all') {
+        shouldShow = true; // "الكل" matches all billboards
       } else if (statusFilter === 'available') {
-        shouldShow = isAvail && !isHidden && !isUnderMaintenance;
+        shouldShow = (isAvail || isInSelection) && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'nearExpiry') {
-        shouldShow = isNear && !isHidden && !isUnderMaintenance;
+        shouldShow = isNear;
       } else if (statusFilter === 'rented') {
-        shouldShow = !isAvail && !isHidden && !isUnderMaintenance;
+        shouldShow = !isAvail;
       } else if (statusFilter === 'maintenance') {
         shouldShow = isUnderMaintenance;
       } else if (statusFilter === 'hidden') {
-        shouldShow = isHidden && !isUnderMaintenance;
+        shouldShow = isHidden;
       }
 
       if (isInSelection) shouldShow = true;
 
       return matchesQ && matchesCity && matchesMunicipality && matchesSize && shouldShow;
-    }).sort((a: any, b: any) => {
-      const aAvail = isAvailableEffective(a);
-      const bAvail = isAvailableEffective(b);
-      const aNear = isNearExpiring(a);
-      const bNear = isNearExpiring(b);
-      
-      if (aAvail && !bAvail) return -1;
-      if (!aAvail && bAvail) return 1;
-      if (aNear && !bNear) return -1;
-      if (!aNear && bNear) return 1;
-      
-      const aEnd = a.Rent_End_Date || '';
-      const bEnd = b.Rent_End_Date || '';
-      return aEnd.localeCompare(bEnd);
     });
-  }, [billboards, searchQuery, cityFilter, municipalityFilter, sizeFilter, sizeFilters, statusFilter, selected, occupiedBillboardIds]);
+
+    return sortBillboardsStandardSync(list, dbSizesData, dbMunisData);
+  }, [billboards, searchQuery, cityFilter, municipalityFilter, sizeFilter, sizeFilters, statusFilter, selected, occupiedBillboardIds, dbSizesData, dbMunisData]);
 
   // ========== HANDLERS ==========
 
@@ -1664,6 +1676,9 @@ export default function OfferEdit() {
                       durationMonths={durationMonths}
                       durationDays={durationDays}
                       pricingCategory={pricingCategory}
+                      onSelectCityFilter={(c) => setCityFilter(c)}
+                      onSelectMunicipalityFilter={(m) => setMunicipalityFilter(m)}
+                      onSelectSizeFilter={(s) => setSizeFilter(s)}
                     />
                   </div>
                 </TabsContent>

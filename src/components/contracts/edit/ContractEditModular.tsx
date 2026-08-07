@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { smartArabicMatch } from '@/lib/arabicSearch';
+import { getBillboardsSortMaps, sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import { loadBillboards } from '@/services/billboardService';
 import { addBillboardsToContract, getContractWithBillboards, removeBillboardFromContract, updateContract } from '@/services/contractService';
 import { calculateInstallationCostFromIds } from '@/services/installationService';
@@ -887,7 +889,29 @@ export default function ContractEditModular() {
     }
   }, [finalTotal]);
 
-  // ✅ FIXED: Filter billboards with proper contract expiry checking
+  const [sortMaps, setSortMaps] = useState<{ sizeOrderMap: Record<string, number>; municipalityOrderMap: Record<string, number> }>({ sizeOrderMap: {}, municipalityOrderMap: {} });
+
+  useEffect(() => {
+    getBillboardsSortMaps().then((maps) => setSortMaps(maps));
+  }, []);
+
+  const { data: dbSizesData = [] } = useQuery({
+    queryKey: ['contract-edit-sizes-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('sizes').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
+  const { data: dbMunisData = [] } = useQuery({
+    queryKey: ['contract-edit-munis-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('municipalities').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
+  // ✅ FIXED: Filter billboards with proper contract expiry checking and standard sorting
   const filtered = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -909,25 +933,44 @@ export default function ContractEditModular() {
     };
 
 
-    const list = billboards.filter((b: any) => {
+    const enrichedBillboards = billboards.map((b: any) => {
+      const bId = String(b.ID || b.id || '');
+      const isInThisContract = selected.includes(bId);
+      const activeAdType = adType || currentContract?.['Ad Type'] || currentContract?.ad_type || b.Ad_Type || b.ad_type || '';
+      const activeCustomer = customerName || currentContract?.['Customer Name'] || currentContract?.customer_name || b.Customer_Name || '';
+
+      return {
+        ...b,
+        isSelected: isInThisContract,
+        selected: isInThisContract,
+        new_ad_type: isInThisContract ? activeAdType : (b.new_ad_type || b.Ad_Type),
+        contract: isInThisContract ? {
+          ...(b.contract || {}),
+          ad_type: activeAdType,
+          'Ad Type': activeAdType,
+          customer_name: activeCustomer
+        } : b.contract
+      };
+    });
+
+    const list = enrichedBillboards.filter((b: any) => {
       const c = String(b.city || b.City || '');
       const m = String(b.municipality || b.Municipality || '');
       const s = String(b.size || b.Size || '').trim();
       const isHidden = b.is_visible_in_available === false;
 
-      // ✅ Enhanced search - matches name, ID, location, municipality, city, customer, size
-      const matchesQ = !searchQuery || (() => {
-        const q = searchQuery.toLowerCase().trim();
-        const fields = [
+      // ✅ Smart Arabic Search — tokenized fuzzy matching across all fields
+      const matchesQ = smartArabicMatch(
+        [
           b.name, b.Billboard_Name, b.location, b.Nearest_Landmark,
           b.municipality, b.Municipality, b.city, b.City,
           b.Customer_Name, b.clientName, b.Size, b.size,
-          b.Ad_Type, b.adType,
-          String(b.Contract_Number || b.contractNumber || ''),
-          String(b.ID || b.id || ''),
-        ];
-        return fields.some(f => f && String(f).toLowerCase().includes(q));
-      })();
+          b.Ad_Type, b.adType, b.new_ad_type,
+          b.Contract_Number, b.contractNumber,
+          b.ID, b.id,
+        ],
+        searchQuery
+      );
       const matchesCity = cityFilter === 'all' || c === cityFilter;
       const matchesMunicipality = municipalityFilter === 'all' || m === municipalityFilter;
       const matchesSize = sizeFilters.length > 0 ? sizeFilters.includes(s) : (sizeFilter === 'all' || s === sizeFilter);
@@ -936,15 +979,19 @@ export default function ContractEditModular() {
       const isNear = isNearExpiring(b);
       const isInContract = selected.includes(String(b.ID));
       
+      const hasSearch = searchQuery.trim().length > 0;
       let shouldShow = false;
-      if (statusFilter === 'all') {
-        shouldShow = !isHidden; // hide hidden by default in 'all'
+
+      if (hasSearch) {
+        shouldShow = true; // Search overrides status tabs to find any matching billboard!
+      } else if (statusFilter === 'all') {
+        shouldShow = true; // "الكل" matches all billboards
       } else if (statusFilter === 'available') {
-        shouldShow = isAvailable && !isHidden;
+        shouldShow = (isAvailable || isInContract) && !isHidden;
       } else if (statusFilter === 'nearExpiry') {
-        shouldShow = isNear && !isHidden;
+        shouldShow = isNear;
       } else if (statusFilter === 'rented') {
-        shouldShow = !isAvailable && !isHidden;
+        shouldShow = !isAvailable;
       } else if (statusFilter === 'hidden') {
         shouldShow = isHidden;
       }
@@ -955,21 +1002,8 @@ export default function ContractEditModular() {
       return matchesQ && matchesCity && matchesMunicipality && matchesSize && shouldShow;
     });
 
-    return list.sort((a: any, b: any) => {
-      const aAvailable = isBillboardAvailable(a);
-      const bAvailable = isBillboardAvailable(b);
-      const aNear = isNearExpiring(a);
-      const bNear = isNearExpiring(b);
-      
-      // ترتيب: متاح > قريب الانتهاء > مؤجر
-      if (aAvailable && !bAvailable) return -1;
-      if (!aAvailable && bAvailable) return 1;
-      if (aNear && !bNear) return -1;
-      if (!aNear && bNear) return 1;
-      
-      return 0;
-    });
-  }, [billboards, searchQuery, cityFilter, municipalityFilter, sizeFilter, sizeFilters, statusFilter, selected]);
+    return sortBillboardsStandardSync(list, dbSizesData, dbMunisData);
+  }, [billboards, searchQuery, cityFilter, municipalityFilter, sizeFilter, sizeFilters, statusFilter, selected, adType, customerName, currentContract, dbSizesData, dbMunisData]);
 
   // Event handlers
   const toggleSelect = (b: Billboard) => {
@@ -1709,6 +1743,9 @@ export default function ContractEditModular() {
               onToggleSelect={toggleSelect}
               loading={loading}
               occupiedBillboardIds={occupiedBillboardIds}
+              onSelectCityFilter={(c) => setCityFilter(c)}
+              onSelectMunicipalityFilter={(m) => setMunicipalityFilter(m)}
+              onSelectSizeFilter={(s) => setSizeFilter(s)}
             />
           </div>
 

@@ -8,6 +8,7 @@ interface BillboardImageProps {
   alt?: string;
   onClick?: () => void;
   fallbackPath?: string | null;
+  objectFit?: 'cover' | 'contain' | 'fill';
 }
 
 export const BillboardImage: React.FC<BillboardImageProps> = ({ 
@@ -15,7 +16,8 @@ export const BillboardImage: React.FC<BillboardImageProps> = ({
   className = '', 
   alt = 'صورة اللوحة',
   onClick,
-  fallbackPath
+  fallbackPath,
+  objectFit = 'cover'
 }) => {
   const [currentSrc, setCurrentSrc] = useState<string>('');
   const [hasError, setHasError] = useState(false);
@@ -121,7 +123,7 @@ export const BillboardImage: React.FC<BillboardImageProps> = ({
       onLoad={handleImageLoad}
       loading="lazy"
       style={{ 
-        objectFit: 'contain',
+        objectFit: objectFit,
         objectPosition: 'center',
         backgroundColor: '#1a1a2e'
       }}

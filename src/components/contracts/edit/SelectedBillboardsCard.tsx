@@ -1163,7 +1163,6 @@ export function SelectedBillboardsCard({
                 // Renewal check
                 const isRenewed = previousContractBillboardIds.has(billboardId);
 
-
                 return (
                   <div 
                     key={(b as any).ID} 
@@ -1179,15 +1178,27 @@ export function SelectedBillboardsCard({
                     onClick={bulkSelectMode ? () => toggleBulkSelect(billboardId) : undefined}
                     style={bulkSelectMode ? { cursor: 'pointer' } : undefined}
                   >
-                    {/* Header: Billboard Name, ID & Dropdown Actions */}
-                    <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-muted/20 shrink-0">
-                      <div className="flex items-center gap-1.5 overflow-hidden">
-                        <span className="text-[10px] bg-primary/10 text-primary font-manrope font-extrabold px-2 py-0.5 rounded-full border border-primary/20 shrink-0">
-                          {billboardId}
+                    {/* Header: Prominent Size Badge, Billboard Code & Actions */}
+                    <div className="px-3.5 py-2.5 flex items-center justify-between border-b border-border/50 bg-[#0d0d1a] shrink-0" dir="rtl">
+                      <div className="flex items-center gap-2 overflow-hidden">
+                        {/* Prominent Size Badge at Top Header */}
+                        <Badge 
+                          variant="outline"
+                          className="font-extrabold text-[#f4c25a] bg-[#1a172e] border border-[#d6ac40]/50 px-3 py-1 text-xs sm:text-sm font-manrope shadow-md shrink-0"
+                        >
+                          {getDisplaySize(b)}
+                        </Badge>
+
+                        {/* Billboard Code Badge */}
+                        <span className="font-extrabold text-foreground tracking-wide text-xs sm:text-sm font-manrope bg-muted/40 px-2.5 py-0.5 rounded-lg border border-border/40 shrink-0">
+                          {(b as any).code || (b as any).Code || `TR-${String(billboardId).padStart(4, '0')}`}
                         </span>
-                        <h4 className="text-sm font-bold text-foreground truncate max-w-[90px]" title={(b as any).name || (b as any).Billboard_Name}>
-                          {(b as any).name || (b as any).Billboard_Name}
-                        </h4>
+
+                        {/* ID Pill */}
+                        <span className="text-[10px] bg-amber-500/15 text-amber-400 font-manrope font-bold px-2 py-0.5 rounded-md border border-amber-500/20 shrink-0">
+                          #{billboardId}
+                        </span>
+
                         {isRenewed && (
                           <Badge className="bg-emerald-500/10 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 text-[9px] font-bold px-1.5 py-0.5 shrink-0 select-none flex items-center gap-1">
                             <RefreshCw className="h-2.5 w-2.5 ml-1" />
@@ -1364,39 +1375,46 @@ export function SelectedBillboardsCard({
                     </div>
 
                     {/* Content Section */}
-                    <div className="p-4 flex-1 flex flex-col justify-between space-y-4">
+                    <div className="p-4 flex-1 flex flex-col justify-between space-y-4" dir="rtl">
                       {/* Location / Nearest Landmark */}
-                      <div className="flex items-start gap-2 bg-muted/30 p-2.5 rounded-xl border border-border/40 shrink-0">
-                        <MapPin className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                        <div className="space-y-0.5">
+                      <div className="flex items-start gap-2 bg-muted/30 p-2.5 rounded-xl border border-border/40 shrink-0 text-right" dir="rtl">
+                        <MapPin className="h-4 w-4 text-amber-500 shrink-0 mt-0.5" />
+                        <div className="space-y-0.5 text-right">
                           <span className="text-[10px] text-muted-foreground block font-medium">أقرب نقطة دالة</span>
-                          <p className="text-sm font-extrabold text-foreground leading-snug">
+                          <p className="text-sm font-extrabold text-foreground leading-snug text-right">
                             {(b as any).location || (b as any).Nearest_Landmark || (b as any).Nearest_landmark || 'غير محدد'}
                           </p>
                         </div>
                       </div>
 
-                      {/* Details Grid - Using site identity colors (4 columns) */}
-                      <div className="grid grid-cols-4 gap-1.5 shrink-0">
-                        <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
-                          <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المقاس</div>
-                          <div className="text-xs font-extrabold text-foreground font-manrope">{getDisplaySize(b)}</div>
-                        </div>
-                        <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
-                          <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المنطقة</div>
-                          <div className="text-xs font-bold text-foreground truncate" title={(b as any).District || (b as any).district || '-'}>
-                            {(b as any).District || (b as any).district || '-'}
+                      {/* Details Row: Municipality, District, City & Level */}
+                      {(() => {
+                        const cityName = (b as any).city || (b as any).City || '-';
+                        const muniName = (b as any).municipality || (b as any).Municipality || '-';
+                        const districtName = (b as any).district || (b as any).District || (b as any).area || (b as any).Area || '-';
+                        const levelVal = (b as any).level || (b as any).Level || '-';
+
+                        return (
+                          <div className="grid grid-cols-4 gap-1.5 shrink-0" dir="rtl">
+                            <div className="text-center bg-amber-500/10 border border-amber-500/30 rounded-xl py-1.5 px-1">
+                              <div className="text-[9px] text-amber-500/90 mb-0.5 font-bold">البلدية</div>
+                              <div className="text-xs font-bold text-amber-400 truncate" title={muniName}>{muniName}</div>
+                            </div>
+                            <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-1.5 px-1">
+                              <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المنطقة</div>
+                              <div className="text-xs font-bold text-foreground truncate" title={districtName}>{districtName}</div>
+                            </div>
+                            <div className="text-center bg-[#0d0d1a] border border-[#d6ac40]/40 rounded-xl py-1.5 px-1">
+                              <div className="text-[9px] text-[#f4c25a]/70 mb-0.5 font-medium">المدينة</div>
+                              <div className="text-xs font-extrabold text-[#f4c25a] truncate" title={cityName}>{cityName}</div>
+                            </div>
+                            <div className="text-center bg-amber-500/10 border border-amber-500/30 rounded-xl py-1.5 px-1">
+                              <div className="text-[9px] text-amber-400/80 mb-0.5 font-medium">المستوى</div>
+                              <div className="text-xs font-extrabold text-amber-400 font-manrope">{levelVal}</div>
+                            </div>
                           </div>
-                        </div>
-                        <div className="text-center bg-muted/40 border border-border/40 rounded-xl py-2 px-1">
-                          <div className="text-[9px] text-muted-foreground mb-0.5 font-medium">المدينة</div>
-                          <div className="text-xs font-bold text-foreground truncate">{(b as any).city || (b as any).City || '-'}</div>
-                        </div>
-                        <div className="text-center bg-primary/5 border border-primary/20 rounded-xl py-2 px-1">
-                          <div className="text-[9px] text-primary/70 mb-0.5 font-medium">المستوى</div>
-                          <div className="text-xs font-extrabold text-primary font-manrope">{(b as any).level || (b as any).Level || '-'}</div>
-                        </div>
-                      </div>
+                        );
+                      })()}
 
                       {/* Interactive Segmented Selector for Face Count - Replaces redundant displays */}
                       {onToggleSingleFace && (

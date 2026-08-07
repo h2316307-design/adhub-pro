@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DollarSign, Search, Plus, Edit, Trash2, Download, Save, X } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
+import { smartArabicMatch } from '@/lib/arabicSearch';
 import { useAuth } from '@/contexts/AuthContext';
 
 export const PricingTable = () => {
@@ -50,7 +51,17 @@ export const PricingTable = () => {
   const uniqueLevels = Array.from(new Set(pricing.map(p => p.Billboard_Level))).filter(Boolean).sort();
 
   const filteredPricing = pricing.filter(item => {
-    const matchesSearch = item.size?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = smartArabicMatch(
+      [
+        item.size,
+        item.Billboard_Level,
+        item.Customer_Category,
+        item.Full_Year,
+        item.Monthly,
+        item.Daily,
+      ],
+      searchTerm
+    );
     const matchesLevel = levelFilter === 'all' || item.Billboard_Level === levelFilter;
     const categoryToUse = enforcedCategory ?? categoryFilter;
     const matchesCategory = categoryToUse === 'all' || item.Customer_Category === categoryToUse;
@@ -204,7 +215,7 @@ export const PricingTable = () => {
       </div>
 
       {/* إحصائيات سريعة */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

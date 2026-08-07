@@ -7,6 +7,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Globe, Search, Eye, Clock, Building2, Calendar, CheckCircle2, Loader2, FileSpreadsheet, AlertCircle } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { smartArabicMatch } from '@/lib/arabicSearch';
 
 interface ActiveContractItem {
   contractNumber: number | string;
@@ -72,64 +73,67 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
 
         if (error) console.warn('Error fetching contracts for preview:', error);
 
-        // ✅ Self-heal: Reset contract 1274 and misconfigured contracts billboards to null so they do not erroneously force-show in available
-        const contractsToResetToNull = [1274, 1185, 1287, 1278, 1286];
-        const idsToResetNull: number[] = [];
+        // جمع IDs جميع لوحات العقود النشطة
+        const allContractBillboardIds: number[] = [];
         (contractsData || []).forEach((c: any) => {
-          if (contractsToResetToNull.includes(Number(c.Contract_Number))) {
-            const ids = String(c.billboard_ids || '')
-              .split(',')
-              .map((s) => Number(s.trim()))
-              .filter((n) => Number.isFinite(n) && n > 0);
-            idsToResetNull.push(...ids);
-          }
+          const ids = String(c.billboard_ids || '')
+            .split(',')
+            .map((s) => Number(s.trim()))
+            .filter((n) => Number.isFinite(n) && n > 0);
+          allContractBillboardIds.push(...ids);
         });
 
-        if (idsToResetNull.length > 0) {
-          await supabase.from('billboards').update({ is_visible_in_available: null }).in('ID', idsToResetNull);
-          (billboards || []).forEach((b: any) => {
-            const bId = Number(b.ID ?? b.id);
-            if (idsToResetNull.includes(bId)) {
-              b.is_visible_in_available = null;
-            }
+        // جلب is_visible_in_available مباشرةً من DB لجميع لوحات العقود
+        const forcedVisibleSet = new Set<string>(); // IDs اللوحات المُفعَّل فيها الإظهار
+        const hiddenSet = new Set<string>();         // IDs اللوحات المخفية يدوياً
+
+        if (allContractBillboardIds.length > 0) {
+          const { data: bbVisibility } = await supabase
+            .from('billboards')
+            .select('ID, is_visible_in_available')
+            .in('ID', allContractBillboardIds);
+
+          (bbVisibility || []).forEach((b: any) => {
+            if (b.is_visible_in_available === true) forcedVisibleSet.add(String(b.ID));
+            if (b.is_visible_in_available === false) hiddenSet.add(String(b.ID));
           });
         }
 
-        // ✅ Self-heal: Ensure all friend company billboards (like أسعد and البركة) are hidden from available
-        const { data: friendBBs } = await supabase
-          .from('billboards')
-          .select('ID')
-          .not('friend_company_id', 'is', null)
-          .neq('is_visible_in_available', false);
+        // بناء خريطة per-contract: العقد مُفعَّل الإظهار فقط إذا كانت جميع لوحاته الخاصة به true
+        // هذا يمنع اللوحات المشتركة بين عقود متعددة من تعليم عقود أخرى كـ "مُفعَّل الإظهار" خطأً
+        const contractForcedMap = new Map<string, boolean>();
+        (contractsData || []).forEach((c: any) => {
+          const contractNum = String(c.Contract_Number);
+          const cIds = String(c.billboard_ids || '')
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean);
+          if (cIds.length === 0) {
+            contractForcedMap.set(contractNum, false);
+            return;
+          }
+          // العقد مُفعَّل فقط إذا كانت جميع لوحاته true في DB
+          const allForced = cIds.length > 0 && cIds.every((id) => forcedVisibleSet.has(id));
+          contractForcedMap.set(contractNum, allForced);
+        });
 
-        if (friendBBs && friendBBs.length > 0) {
-          const friendIds = friendBBs.map((b: any) => Number(b.ID));
-          idsToFix.push(...friendIds);
-        }
-
-        if (idsToFix.length > 0) {
-          await supabase.from('billboards').update({ is_visible_in_available: false }).in('ID', idsToFix);
-          (billboards || []).forEach((b: any) => {
-            const bId = Number(b.ID ?? b.id);
-            if (idsToFix.includes(bId)) {
-              b.is_visible_in_available = false;
-            }
-          });
-        }
-
-        // Map billboardId -> Active Contract Info
-        const billboardToContractMap = new Map<string, {
+        // Map billboardId -> Array of active contracts
+        const billboardActiveContractsMap = new Map<string, Array<{
           contractNumber: number | string;
           customerName: string;
           adType: string;
           endDate: string;
-        }>();
+          isUpcoming: boolean;
+          isContractForced: boolean;
+        }>>();
 
         (contractsData || []).forEach((c: any) => {
           const cEndDate = c['End Date'] || '';
-          // Check if contract is active (end date >= today or no end date)
           const isExpired = cEndDate ? isContractExpired(cEndDate) : false;
           if (isExpired) return;
+
+          const contractNumber = c.Contract_Number;
+          const isContractForced = contractForcedMap.get(String(contractNumber)) === true;
 
           const ids = String(c.billboard_ids || '')
             .split(',')
@@ -155,12 +159,26 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
             const effectiveEnd = customEnd || cEndDate;
             if (effectiveEnd && isContractExpired(effectiveEnd)) return;
 
-            billboardToContractMap.set(String(id), {
-              contractNumber: c.Contract_Number,
+            let isUpcoming = false;
+            if (effectiveEnd) {
+              try {
+                const ed = new Date(effectiveEnd);
+                if (ed <= futureLimit) {
+                  isUpcoming = true;
+                }
+              } catch {}
+            }
+
+            const existingList = billboardActiveContractsMap.get(String(id)) || [];
+            existingList.push({
+              contractNumber,
               customerName: c['Customer Name'] || 'غير محدد',
               adType: c['Ad Type'] || '',
               endDate: effectiveEnd,
+              isUpcoming,
+              isContractForced,
             });
+            billboardActiveContractsMap.set(String(id), existingList);
           });
         });
 
@@ -176,22 +194,34 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
           const status = String(b.Status || b.status || '').trim();
           const maint = String(b.maintenance_status || '').trim();
 
-          // Excluded billboards check
-          if (b.is_visible === false || b.is_visible_in_available === false || status === 'مخفي' || maint === 'hidden' || maint === 'مخفي') {
-            return;
-          }
+          // استخدام قيم DB المُحدَّثة مباشرةً بدلاً من props
+          const isHiddenByUser = hiddenSet.has(bId) || b.is_visible === false || status === 'مخفي' || maint === 'hidden' || maint === 'مخفي';
+          if (isHiddenByUser) return;
 
-          const isForced = b.is_visible_in_available === true;
-          const activeContract = billboardToContractMap.get(bId);
-          const hasActive = Boolean(activeContract || (b.Contract_Number && String(b.Contract_Number) !== '0' && !isContractExpired(b.Rent_End_Date || b.rent_end_date)));
+          const activeContracts = billboardActiveContractsMap.get(bId) || [];
+          const hasActive = activeContracts.length > 0 || Boolean(b.Contract_Number && String(b.Contract_Number) !== '0' && !isContractExpired(b.Rent_End_Date || b.rent_end_date));
 
-          const contractNumber = activeContract?.contractNumber || b.Contract_Number;
-          const endDateStr = activeContract?.endDate || b.Rent_End_Date || b.rent_end_date || '';
-          const customerName = activeContract?.customerName || b.Customer_Name || b.customer_name || 'غير محدد';
-          const adType = activeContract?.adType || b.Ad_Type || b.ad_type || '';
+          // ✅ قاعدة اللوحات المشتركة: الإخفاء يغلب الإظهار!
+          // إذا كانت اللوحة مرتبطة بأي عقد نشط (ساري المفعول، غير قادم الانتهاء، وغير مُفعَّل الإظهار)،
+          // تُعتبر اللوحة مخفية وتُستثنى من التصدير للمتاح
+          const isHiddenByActiveContract = activeContracts.some(
+            (ac) => !ac.isUpcoming && !ac.isContractForced
+          );
 
-          let isUpcoming = false;
-          if (hasActive && endDateStr) {
+          if (isHiddenByActiveContract) return;
+
+          const firstActive = activeContracts[0];
+          const contractNumber = firstActive?.contractNumber || b.Contract_Number;
+          const endDateStr = firstActive?.endDate || b.Rent_End_Date || b.rent_end_date || '';
+          const customerName = firstActive?.customerName || b.Customer_Name || b.customer_name || 'غير محدد';
+          const adType = firstActive?.adType || b.Ad_Type || b.ad_type || '';
+
+          const isBillboardForced = forcedVisibleSet.has(bId);
+          const isContractForced = contractNumber ? contractForcedMap.get(String(contractNumber)) === true : false;
+          const isForced = isContractForced;
+
+          let isUpcoming = activeContracts.some((ac) => ac.isUpcoming);
+          if (!isUpcoming && hasActive && endDateStr) {
             try {
               const ed = new Date(endDateStr);
               if (ed <= futureLimit) {
@@ -200,13 +230,13 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
             } catch {}
           }
 
-          // Included in Available + Upcoming export?
-          const isIncluded = isForced || !hasActive || isUpcoming;
+          // تضمين اللوحة: مُعلَّمة بشكل فردي true OR ليس لها عقد نشط OR عقدها قادم الانتهاء
+          const isIncluded = isBillboardForced || !hasActive || isUpcoming;
           if (!isIncluded) return;
 
           total++;
 
-          if (isForced) {
+          if (isBillboardForced) {
             forcedCount++;
           } else if (!hasActive) {
             availNoContract++;
@@ -293,11 +323,11 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
     }
 
     if (!searchQuery.trim()) return source;
-    const q = searchQuery.toLowerCase().trim();
     return source.filter((c) =>
-      String(c.contractNumber).toLowerCase().includes(q) ||
-      c.customerName.toLowerCase().includes(q) ||
-      c.adType.toLowerCase().includes(q)
+      smartArabicMatch(
+        [c.contractNumber, c.customerName, c.adType],
+        searchQuery
+      )
     );
   }, [activeContractsList, forcedContracts, expiringContracts, contractTab, searchQuery]);
 
@@ -377,7 +407,7 @@ export const UploadAvailablePreviewDialog: React.FC<UploadAvailablePreviewDialog
               <div className="space-y-2.5">
                 <Tabs value={contractTab} onValueChange={(val) => setContractTab(val as any)} className="w-full">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                    <TabsList className="bg-slate-100 dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800 grid grid-cols-3 w-full sm:w-auto">
                       <TabsTrigger
                         value="forced"
                         className="text-xs gap-1.5 font-bold data-[state=active]:bg-purple-600 data-[state=active]:text-white rounded-lg transition-all"

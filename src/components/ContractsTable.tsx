@@ -55,11 +55,16 @@ export const ContractsTable = () => {
 
   const bySearch = (list: Contract[]) =>
     list.filter((contract) => {
-      const searchOk =
-        contract['Customer Name']?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (contract.Contract_Number ?? contract['Contract Number'] ?? '').toString().includes(searchTerm) ||
-        contract['Ad Type']?.toLowerCase().includes(searchTerm.toLowerCase());
-      const numberOk = !contractNumberFilter || (contract.Contract_Number ?? contract['Contract Number'] ?? '').toString().includes(contractNumberFilter);
+      const contractNum = contract.Contract_Number ?? contract['Contract Number'] ?? contract.id ?? '';
+      const customerName = contract['Customer Name'] ?? (contract as any).customer_name ?? '';
+      const adType = contract['Ad Type'] ?? (contract as any).ad_type ?? '';
+      const billboardIds = (contract as any).billboard_ids ?? '';
+
+      const searchOk = smartArabicMatch(
+        [contractNum, customerName, adType, billboardIds],
+        searchTerm
+      );
+      const numberOk = !contractNumberFilter || String(contractNum).includes(contractNumberFilter);
       return searchOk && numberOk;
     });
 
@@ -224,7 +229,7 @@ export const ContractsTable = () => {
       </div>
 
       {/* إحصائيات سريعة */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
         <Card>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

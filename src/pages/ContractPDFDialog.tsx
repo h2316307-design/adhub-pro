@@ -891,8 +891,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           : contract.installments_data;
 
         if (Array.isArray(installmentsData) && installmentsData.length > 0) {
-          console.log('Using installments_data for PDF:', installmentsData);
-
           return installmentsData.map((installment, index) => {
             // Format due date with Arabic month names
             const formatArabicDate = (dateString: string): string => {

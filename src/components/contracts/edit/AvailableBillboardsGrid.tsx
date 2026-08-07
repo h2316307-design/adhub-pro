@@ -6,12 +6,12 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Calendar, Camera, ChevronLeft, ChevronRight, CheckCircle2, Clock, XCircle, Layers, Pencil, MapPin, Tag, Check, Square, CheckSquare, Wrench } from 'lucide-react';
+import { Calendar, Camera, ChevronLeft, ChevronRight, CheckCircle2, Clock, XCircle, Layers, Pencil, MapPin, Tag, Check, Square, CheckSquare, Wrench, Lock, Unlock, AlertTriangle, User, FileText } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
-import type { Billboard } from '@/types';
 import { isBillboardAvailable, getDaysUntilExpiry } from '@/utils/contractUtils';
+import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import { cn } from '@/lib/utils';
 import { BillboardImage } from '@/components/BillboardImage';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,9 @@ interface AvailableBillboardsGridProps {
   durationDays?: number;
   pricingCategory?: string;
   occupiedBillboardIds?: Set<number>;
+  onSelectCityFilter?: (city: string) => void;
+  onSelectMunicipalityFilter?: (muni: string) => void;
+  onSelectSizeFilter?: (size: string) => void;
 }
 
 const PAGE_SIZE = 12;
@@ -49,7 +52,10 @@ export function AvailableBillboardsGrid({
   durationMonths,
   durationDays,
   pricingCategory,
-  occupiedBillboardIds
+  occupiedBillboardIds,
+  onSelectCityFilter,
+  onSelectMunicipalityFilter,
+  onSelectSizeFilter,
 }: AvailableBillboardsGridProps) {
   const { map: activeLoansByBillboard } = useActiveLoansByBillboard();
   const [currentPage, setCurrentPage] = useState(1);
@@ -57,6 +63,11 @@ export function AvailableBillboardsGrid({
   const [editingBillboard, setEditingBillboard] = useState<any>(null);
   const [editPrice, setEditPrice] = useState<string>('');
   const [editLevel, setEditLevel] = useState<string>('');
+  
+  // State for unlocking rented billboards with warning alert
+  const [unlockedIds, setUnlockedIds] = useState<Set<string>>(new Set());
+  const [unlockDialogOpen, setUnlockDialogOpen] = useState(false);
+  const [pendingUnlockBillboard, setPendingUnlockBillboard] = useState<any>(null);
 
   // ✅ Reset to first page whenever the filtered list size changes (filters/search),
   //    so a stale page index never makes the grid look empty after switching filters.
@@ -132,28 +143,32 @@ export function AvailableBillboardsGrid({
     }
   };
 
-  const totalPages = Math.ceil(billboards.length / PAGE_SIZE);
+  const sortedBillboards = React.useMemo(() => {
+    return sortBillboardsStandardSync(billboards);
+  }, [billboards]);
+
+  const totalPages = Math.ceil(sortedBillboards.length / PAGE_SIZE);
   const startIndex = (currentPage - 1) * PAGE_SIZE;
   const endIndex = startIndex + PAGE_SIZE;
-  const pagedBillboards = billboards.slice(startIndex, endIndex);
+  const pagedBillboards = sortedBillboards.slice(startIndex, endIndex);
 
-  // Get status colors
+  // Get status colors - Ultra High-Contrast Dark Badges for guaranteed readability on any image background
   const getStatusStyle = (isAvailable: boolean, isNearExpiring: boolean, daysUntilExpiry: number | null) => {
     if (isAvailable) {
       return {
-        bg: 'bg-green-500',
-        text: 'text-white',
-        border: 'border-green-500/30',
-        glow: 'shadow-green-500/20',
+        bg: 'bg-[#062419] text-[#34d399]',
+        text: 'text-[#34d399] font-black tracking-wide',
+        border: 'border-[#10b981]',
+        glow: 'shadow-[0_4px_14px_rgba(0,0,0,0.6)]',
         label: 'متاح'
       };
     }
     if (isNearExpiring) {
       return {
-        bg: 'bg-amber-500',
-        text: 'text-white',
-        border: 'border-amber-500/30',
-        glow: 'shadow-amber-500/20',
+        bg: 'bg-[#2e1d08] text-[#fbbf24]',
+        text: 'text-[#fbbf24] font-black tracking-wide',
+        border: 'border-[#f59e0b]',
+        glow: 'shadow-[0_4px_14px_rgba(0,0,0,0.6)]',
         label: `${daysUntilExpiry} يوم`
       };
     }
@@ -162,18 +177,83 @@ export function AvailableBillboardsGrid({
       ? `مؤجر • ${daysUntilExpiry} يوم` 
       : 'مؤجر';
     return {
-      bg: 'bg-red-500',
-      text: 'text-white',
-      border: 'border-red-500/30',
-      glow: 'shadow-red-500/20',
+      bg: 'bg-[#310c14] text-[#f87171]',
+      text: 'text-[#f87171] font-black tracking-wide',
+      border: 'border-[#ef4444]',
+      glow: 'shadow-[0_4px_14px_rgba(0,0,0,0.6)]',
       label: rentedLabel
     };
+  };
+
+  // Helper for rendering interactive pagination controls in Arabic RTL order
+  const renderPaginationBar = (isTop = false) => {
+    if (totalPages <= 1) return null;
+    return (
+      <div className={cn("flex justify-between sm:justify-center items-center gap-2 sm:gap-3", isTop ? "pt-1 pb-3" : "pt-6 pb-2")} dir="rtl">
+        {/* Rightmost: Next Page in Arabic flow */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+          disabled={currentPage === 1}
+          className="h-9.5 px-3 sm:px-4 gap-1.5 font-bold cursor-pointer border-slate-800 bg-[#0c0d18] hover:bg-[#16182a] text-slate-200 shadow-md"
+        >
+          <ChevronRight className="h-4 w-4 text-[#f4c25a]" />
+          <span>السابق</span>
+        </Button>
+        
+        {/* Middle Page Numbers in RTL Order: 1 on Right, 5 on Left */}
+        <div className="flex items-center gap-1 sm:gap-1.5" dir="rtl">
+          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+            let pageNum: number;
+            if (totalPages <= 5) {
+              pageNum = i + 1;
+            } else if (currentPage <= 3) {
+              pageNum = i + 1;
+            } else if (currentPage >= totalPages - 2) {
+              pageNum = totalPages - 4 + i;
+            } else {
+              pageNum = currentPage - 2 + i;
+            }
+            
+            return (
+              <Button
+                key={pageNum}
+                variant={currentPage === pageNum ? "default" : "outline"}
+                size="sm"
+                className={cn(
+                  "h-9.5 w-9.5 sm:h-10 sm:w-10 p-0 font-extrabold font-manrope cursor-pointer border-slate-800 transition-all",
+                  currentPage === pageNum 
+                    ? "bg-[#f4c25a] hover:bg-[#d6ac40] text-slate-950 font-black shadow-lg border-[#f4c25a] scale-105" 
+                    : "bg-[#0c0d18] text-slate-300 hover:bg-[#16182a]"
+                )}
+                onClick={() => setCurrentPage(pageNum)}
+              >
+                {pageNum}
+              </Button>
+            );
+          })}
+        </div>
+        
+        {/* Leftmost: Previous Page in Arabic flow */}
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+          disabled={currentPage === totalPages}
+          className="h-9.5 px-3 sm:px-4 gap-1.5 font-bold cursor-pointer border-slate-800 bg-[#0c0d18] hover:bg-[#16182a] text-slate-200 shadow-md"
+        >
+          <span>التالي</span>
+          <ChevronLeft className="h-4 w-4 text-[#f4c25a]" />
+        </Button>
+      </div>
+    );
   };
 
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between bg-gradient-to-r from-primary/5 via-transparent to-primary/5 rounded-xl p-4 border border-primary/10">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-gradient-to-r from-primary/5 via-transparent to-primary/5 rounded-xl p-4 border border-primary/10">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-gradient-to-br from-primary to-primary/80 shadow-lg shadow-primary/25">
             <Layers className="h-5 w-5 text-primary-foreground" />
@@ -188,7 +268,7 @@ export function AvailableBillboardsGrid({
           </div>
         </div>
         
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto justify-end">
           {/* Multi-select controls */}
           {onSelectAll && (
             <Button
@@ -214,7 +294,7 @@ export function AvailableBillboardsGrid({
           )}
           
           {totalPages > 1 && (
-            <div className="text-sm font-medium bg-muted/50 px-4 py-2 rounded-lg border border-border">
+            <div className="text-xs font-bold bg-[#0c0d18] text-[#f4c25a] px-3 py-1.5 rounded-lg border border-slate-800 font-manrope">
               صفحة {currentPage} من {totalPages}
             </div>
           )}
@@ -233,10 +313,14 @@ export function AvailableBillboardsGrid({
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {/* ✅ TOP PAGINATION BAR */}
+          {renderPaginationBar(true)}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5">
             {pagedBillboards.map((b) => {
-              const billboardId = String((b as any).ID);
+              const billboardId = String((b as any).ID || (b as any).id);
               const isSelected = selected.includes(billboardId);
+              const isUnlocked = unlockedIds.has(billboardId);
               const baseAvailable = isBillboardAvailable(b);
               const bId = Number((b as any).ID ?? (b as any).id);
               const isOccupied = occupiedBillboardIds ? occupiedBillboardIds.has(bId) : false;
@@ -244,7 +328,11 @@ export function AvailableBillboardsGrid({
               const endDate = (b as any).Rent_End_Date || (b as any).rent_end_date || (b as any).rentEndDate;
               const daysUntilExpiry = getDaysUntilExpiry(endDate);
               const isNearExpiring = !isAvailable && daysUntilExpiry !== null && daysUntilExpiry > 0 && daysUntilExpiry <= 30;
-              const canSelect = allowAllSelection || isAvailable || isNearExpiring || isSelected;
+              const canSelect = allowAllSelection || isAvailable || isNearExpiring || isSelected || isUnlocked;
+
+              const code = (b as any).code || (b as any).Code || `TR-${String(bId).padStart(4, '0')}`;
+              const level = (b as any).Level || (b as any).level || '';
+              const faces = (b as any).Faces_Count || (b as any).faces_count || (b as any).Faces || '1';
 
               const maintStatus = String((b as any).maintenance_status || '').trim().toLowerCase();
               const isUnderMaint = 
@@ -257,58 +345,135 @@ export function AvailableBillboardsGrid({
 
               const statusStyle = isUnderMaint 
                 ? {
-                    bg: 'bg-orange-500',
-                    text: 'text-white',
-                    border: 'border-orange-500/30',
-                    glow: 'shadow-orange-500/20',
+                    bg: 'bg-[#2e1d08] text-[#fbbf24]',
+                    text: 'text-[#fbbf24] font-black tracking-wide',
+                    border: 'border-[#f59e0b]',
+                    glow: 'shadow-[0_4px_14px_rgba(0,0,0,0.6)]',
                     label: 'صيانة'
                   }
                 : getStatusStyle(isAvailable, isNearExpiring, daysUntilExpiry);
-              
+
+              const handleCardClick = () => {
+                if (canSelect) {
+                  onToggleSelect(b as any);
+                } else {
+                  setPendingUnlockBillboard(b as any);
+                  setUnlockDialogOpen(true);
+                }
+              };
+
               return (
                 <Card 
-                  key={(b as any).ID}
-                  onClick={() => canSelect && onToggleSelect(b as any)}
+                  key={(b as any).ID || (b as any).id}
+                  onClick={handleCardClick}
+                  dir="rtl"
                   className={cn(
-                    "group relative overflow-hidden transition-all duration-300 cursor-pointer",
-                    "hover:shadow-xl",
-                    !canSelect && "opacity-50 cursor-not-allowed grayscale",
+                    "group relative overflow-hidden transition-all duration-300 cursor-pointer rounded-[1.25rem] text-right shadow-md",
+                    "border border-slate-800/60 bg-[#0b0c16]/90 backdrop-blur-md",
+                    "hover:shadow-2xl hover:shadow-amber-500/10 hover:border-[#d6ac40]/40",
+                    !canSelect && "border-rose-500/30 hover:border-amber-400/60 bg-[#12080a]/90 opacity-90",
                     isSelected 
-                      ? "ring-2 ring-primary ring-offset-2 ring-offset-background shadow-xl shadow-primary/20 scale-[1.02]" 
-                      : "hover:ring-1 hover:ring-primary/30 hover:shadow-lg"
+                      ? "ring-2 ring-[#d6ac40] ring-offset-2 ring-offset-background border-[#d6ac40] shadow-[0_0_30px_rgba(214,172,64,0.35)] scale-[1.02] bg-[#131122]" 
+                      : "hover:scale-[1.01]"
                   )}
                 >
+                  {/* Top Header Strip with Code, Size, Level & Faces */}
+                  <div className="flex items-center justify-between px-3 py-2 bg-[#06070f] border-b border-slate-800/60 text-xs" dir="rtl">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-extrabold text-[#f4c25a] tracking-wider font-manrope bg-[#0a0a14] px-2.5 py-1 rounded-lg border border-[#d6ac40]/30 shadow-inner">
+                        {code}
+                      </span>
+                      {(b as any).Size && (
+                        <Badge 
+                          variant="outline" 
+                          onClick={(e) => {
+                            if (onSelectSizeFilter) {
+                              e.stopPropagation();
+                              onSelectSizeFilter((b as any).Size);
+                            }
+                          }}
+                          className={cn(
+                            "font-extrabold border-[#d6ac40]/50 text-[#f4c25a] bg-[#1a172e] px-2 py-0.5 rounded-md text-[11px] font-manrope transition-all",
+                            onSelectSizeFilter && "cursor-pointer hover:bg-amber-500/20 hover:scale-105"
+                          )}
+                          dir="ltr"
+                          title={onSelectSizeFilter ? `تصفية بالمقاس ${(b as any).Size}` : undefined}
+                        >
+                          {(b as any).Size}
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      {level && (
+                        <Badge variant="outline" className="font-bold border-[#d6ac40]/40 text-[#f4c25a] bg-[#d6ac40]/10 px-2 py-0.5 rounded-md text-[11px] inline-flex items-center gap-1" dir="rtl">
+                          <span>مستوى</span>
+                          <span className="font-manrope font-extrabold">{level}</span>
+                        </Badge>
+                      )}
+                      <span className="text-slate-300 font-semibold text-[11px] bg-slate-900/80 px-2 py-0.5 rounded-md border border-slate-800">
+                        {String(faces) === '2' ? 'وجهين' : String(faces) === '1' ? 'وجه واحد' : `${faces} أوجه`}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* Image Section */}
-                  <div className="relative h-40 overflow-hidden bg-gradient-to-br from-muted to-muted/50">
+                  <div className="relative w-full aspect-[16/10] overflow-hidden bg-slate-950">
                     <BillboardImage
                       billboard={b}
-                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+                      className="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                       alt={(b as any).name || (b as any).Billboard_Name}
+                      objectFit="cover"
                     />
                     
-                    {/* Gradient overlay */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    {/* Dark top/bottom gradient overlay for maximum contrast */}
+                    <div className="absolute inset-0 bg-gradient-to-b from-black/85 via-transparent to-black/90 opacity-80 group-hover:opacity-60 transition-opacity duration-300 pointer-events-none" />
                     
-                    {/* Status Badge */}
-                    <Badge 
-                      className={cn(
-                        "absolute top-3 right-3 px-3 py-1.5 font-bold text-xs shadow-lg",
-                        statusStyle.bg, statusStyle.text
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        {isUnderMaint ? (
-                          <Wrench className="h-3.5 w-3.5" />
-                        ) : isAvailable ? (
-                          <CheckCircle2 className="h-3.5 w-3.5" />
-                        ) : isNearExpiring ? (
-                          <Clock className="h-3.5 w-3.5" />
-                        ) : (
-                          <XCircle className="h-3.5 w-3.5" />
+                    {/* Status Badge / Unlock Prompt */}
+                    {!canSelect ? (
+                      <Badge 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPendingUnlockBillboard(b as any);
+                          setUnlockDialogOpen(true);
+                        }}
+                        className="absolute top-3 right-3 px-3 py-1 font-extrabold text-xs shadow-xl border bg-gradient-to-r from-red-600 to-rose-700 text-white border-red-400/80 hover:from-amber-500 hover:to-amber-600 transition-all cursor-pointer flex items-center gap-1.5 z-20"
+                        dir="rtl"
+                        title="انقر لفك القفل وإظهار تفاصيل العقد المرتبط"
+                      >
+                        <Lock className="h-3.5 w-3.5" />
+                        <span>مؤجرة (فك القفل)</span>
+                      </Badge>
+                    ) : isUnlocked ? (
+                      <Badge 
+                        className="absolute top-3 right-3 px-3 py-1 font-extrabold text-xs shadow-xl border bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-400/80 flex items-center gap-1.5 z-20"
+                        dir="rtl"
+                      >
+                        <Unlock className="h-3.5 w-3.5" />
+                        <span>تم فك القفل</span>
+                      </Badge>
+                    ) : (
+                      <Badge 
+                        className={cn(
+                          "absolute top-3 right-3 px-3 py-1.5 font-black text-xs shadow-xl border z-20 rounded-lg",
+                          statusStyle.bg, statusStyle.text, statusStyle.border, statusStyle.glow
                         )}
-                        {statusStyle.label}
-                      </span>
-                    </Badge>
+                        dir="rtl"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          {isUnderMaint ? (
+                            <Wrench className="h-3.5 w-3.5" />
+                          ) : isAvailable ? (
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                          ) : isNearExpiring ? (
+                            <Clock className="h-3.5 w-3.5" />
+                          ) : (
+                            <XCircle className="h-3.5 w-3.5" />
+                          )}
+                          {statusStyle.label}
+                        </span>
+                      </Badge>
+                    )}
 
                     {activeLoansByBillboard.get(billboardId) && (
                       <div className="absolute top-12 right-3">
@@ -316,40 +481,34 @@ export function AvailableBillboardsGrid({
                       </div>
                     )}
 
-                    {/* Selection indicator */}
-                    {isSelected && (
-                      <div className="absolute inset-0 bg-primary/20 backdrop-blur-[1px] flex items-center justify-center">
-                        <div className="bg-primary rounded-full p-3 shadow-xl animate-in zoom-in duration-200">
-                          <Check className="h-8 w-8 text-primary-foreground" />
-                        </div>
+                    {/* Selection Checkbox Badge */}
+                    <div className="absolute top-3 left-3 z-20">
+                      <div className={cn(
+                        "w-8 h-8 rounded-xl flex items-center justify-center shadow-xl backdrop-blur-md transition-all duration-300 border cursor-pointer",
+                        isSelected 
+                          ? "bg-gradient-to-br from-[#f59e0b] to-[#d97706] text-white border-white/40 scale-110 shadow-[0_0_20px_rgba(245,158,11,0.7)]" 
+                          : "bg-black/50 text-white/50 border-white/20 hover:border-amber-400/80 hover:text-white hover:scale-105"
+                      )}>
+                        <Check className={cn("h-4 w-4 transition-transform", isSelected ? "scale-110 stroke-[3]" : "scale-90 opacity-60")} />
                       </div>
-                    )}
-
-                    {/* Action buttons - appear on hover */}
-                    <div className="absolute top-3 left-3 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                      <Button 
-                        size="icon" 
-                        variant={(b as any).needs_rephotography ? "destructive" : "secondary"}
-                        onClick={(e) => handleMarkForRephotography(b as any, e)}
-                        className="h-8 w-8 shadow-lg"
-                      >
-                        <Camera className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="secondary"
-                        onClick={(e) => handleQuickEdit(b, e)}
-                        className="h-8 w-8 shadow-lg"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
                     </div>
 
-                    {/* Size badge */}
+                    {/* Size Badge - Clickable to filter */}
                     {(b as any).Size && (
                       <Badge 
                         variant="secondary" 
-                        className="absolute bottom-3 left-3 bg-black/60 text-white backdrop-blur-sm border-0"
+                        onClick={(e) => {
+                          if (onSelectSizeFilter) {
+                            e.stopPropagation();
+                            onSelectSizeFilter((b as any).Size);
+                          }
+                        }}
+                        className={cn(
+                          "absolute bottom-3 right-3 bg-black/80 text-white backdrop-blur-md border border-white/20 font-extrabold px-2.5 py-0.5 rounded-lg text-xs font-manrope transition-all duration-200",
+                          onSelectSizeFilter && "cursor-pointer hover:scale-110 hover:border-amber-400 hover:text-amber-400 active:scale-95 shadow-md"
+                        )}
+                        dir="ltr"
+                        title={onSelectSizeFilter ? `انقر للفلترة بـ ${(b as any).Size}` : undefined}
                       >
                         {(b as any).Size}
                       </Badge>
@@ -357,55 +516,119 @@ export function AvailableBillboardsGrid({
                   </div>
 
                   {/* Content Section */}
-                  <CardContent className="p-4 space-y-3">
-                    {/* Maintenance info if under maintenance */}
+                  <CardContent className="p-4 space-y-2.5 text-right" dir="rtl">
+                    {/* Maintenance Info */}
                     {isUnderMaint && (
-                      <div className="bg-orange-500/10 dark:bg-orange-500/20 border border-orange-500/30 rounded-xl p-2.5 space-y-1 text-xs mb-2">
-                        <p className="font-bold text-orange-600 dark:text-orange-400">
+                      <div className="bg-amber-500/10 dark:bg-amber-500/20 border border-amber-500/30 rounded-xl p-2 space-y-1 text-xs text-right" dir="rtl">
+                        <p className="font-bold text-amber-600 dark:text-amber-400">
                           تحت الصيانة: <span className="font-extrabold text-foreground">{(b as any).maintenance_type || 'صيانة عامة'}</span>
                         </p>
-                        {String((b as any).maintenance_notes || '').trim() && (
-                          <p className="text-muted-foreground font-semibold">
-                            السبب: <span className="text-foreground font-medium">{(b as any).maintenance_notes}</span>
-                          </p>
-                        )}
                       </div>
                     )}
-                    {/* Billboard name */}
-                    <div className="flex items-start justify-between gap-2">
-                      <h4 className="font-bold text-foreground line-clamp-1 flex-1">
-                        {(b as any).name || (b as any).Billboard_Name}
-                      </h4>
-                      {(b as any).Level && (
-                        <Badge variant="outline" className="shrink-0 text-xs font-bold border-primary/50 text-primary">
-                          {(b as any).Level}
-                        </Badge>
-                      )}
-                    </div>
+
+                    {/* Title & Landmark without duplicating the code */}
+                    {(() => {
+                      const rawName = String((b as any).name || (b as any).Billboard_Name || '').trim();
+                      const rawLandmark = String((b as any).location || (b as any).Nearest_Landmark || '').trim();
+                      
+                      // Check if rawName is just the billboard code (e.g. TR-HA0090)
+                      const isCodeOnly = !rawName || 
+                        rawName.toLowerCase() === code.toLowerCase() || 
+                        rawName.replace(/[^a-zA-Z0-9]/g, '') === code.replace(/[^a-zA-Z0-9]/g, '') || 
+                        (rawName.startsWith('TR-') && rawName.length <= 12);
+
+                      const displayTitle = !isCodeOnly ? rawName : (rawLandmark || 'لوحة إعلانية');
+                      const displaySubText = (!isCodeOnly && rawLandmark && rawLandmark !== rawName) ? rawLandmark : null;
+
+                      return (
+                        <div className="space-y-1 text-right" dir="rtl">
+                          <h4 className="font-extrabold text-foreground text-sm sm:text-base line-clamp-1 group-hover:text-amber-400 transition-colors text-right">
+                            {displayTitle}
+                          </h4>
+                          {displaySubText && (
+                            <div className="flex items-center gap-1.5 text-xs text-muted-foreground text-right" dir="rtl">
+                              <MapPin className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                              <p className="line-clamp-1 font-medium text-right">
+                                {displaySubText}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    {/* City, Municipality and District/Area Badges - Clickable to filter */}
+                    {(() => {
+                      const cityName = (b as any).city || (b as any).City || (b as any).City_Name || '';
+                      const muniName = (b as any).municipality || (b as any).Municipality || (b as any).Municipality_Name || '';
+                      const districtName = (b as any).district || (b as any).District || (b as any).area || (b as any).Area || (b as any).neighborhood || (b as any).Neighborhood || '';
+
+                      return (
+                        <div className="flex items-center justify-between gap-1.5 pt-1 w-full" dir="rtl">
+                          {/* Right group: Municipality & District */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {muniName && (
+                              <Badge 
+                                variant="outline" 
+                                onClick={(e) => {
+                                  if (onSelectMunicipalityFilter) {
+                                    e.stopPropagation();
+                                    onSelectMunicipalityFilter(muniName);
+                                  }
+                                }}
+                                className={cn(
+                                  "font-bold text-xs border-amber-500/40 text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-lg transition-all duration-200",
+                                  onSelectMunicipalityFilter && "cursor-pointer hover:bg-amber-500/25 hover:scale-105 active:scale-95"
+                                )}
+                                title={onSelectMunicipalityFilter ? `انقر للفلترة ببلدية ${muniName}` : undefined}
+                              >
+                                {muniName}
+                              </Badge>
+                            )}
+                            {districtName && districtName !== muniName && (
+                              <Badge 
+                                variant="secondary" 
+                                onClick={(e) => {
+                                  if (onSelectMunicipalityFilter) {
+                                    e.stopPropagation();
+                                    onSelectMunicipalityFilter(districtName);
+                                  }
+                                }}
+                                className={cn(
+                                  "font-bold text-xs bg-muted/60 text-foreground px-2.5 py-0.5 rounded-lg border border-border/40 transition-all duration-200",
+                                  onSelectMunicipalityFilter && "cursor-pointer hover:border-amber-400/60 hover:text-amber-300 hover:scale-105 active:scale-95"
+                                )}
+                                title={onSelectMunicipalityFilter ? `انقر للفلترة بـ ${districtName}` : undefined}
+                              >
+                                {districtName}
+                              </Badge>
+                            )}
+                          </div>
+
+                          {/* Far Left: City */}
+                          {cityName && (
+                            <Badge 
+                              variant="secondary" 
+                              onClick={(e) => {
+                                if (onSelectCityFilter) {
+                                  e.stopPropagation();
+                                  onSelectCityFilter(cityName);
+                                }
+                              }}
+                              className={cn(
+                                "font-extrabold text-xs bg-[#0d0d1a] text-[#f4c25a] border border-[#d6ac40]/40 px-2.5 py-0.5 rounded-lg shrink-0 mr-auto transition-all duration-200",
+                                onSelectCityFilter && "cursor-pointer hover:scale-105 hover:bg-amber-500/20 hover:border-amber-400 active:scale-95"
+                              )}
+                              title={onSelectCityFilter ? `انقر للفلترة بمدينة ${cityName}` : undefined}
+                            >
+                              {cityName}
+                            </Badge>
+                          )}
+                        </div>
+                      );
+                    })()}
                     
-                    {/* Location */}
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <MapPin className="h-3.5 w-3.5 shrink-0" />
-                      <p className="line-clamp-1">
-                        {(b as any).location || (b as any).Nearest_Landmark || 'موقع غير محدد'}
-                      </p>
-                    </div>
-                    
-                    {/* City and info */}
-                    <div className="flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="font-medium">
-                          {(b as any).city || (b as any).City}
-                        </Badge>
-                        {(b as any).Municipality && (
-                          <Badge variant="outline" className="font-medium">
-                            {(b as any).Municipality}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Price */}
+                    {/* Pricing Badge Footer */}
                     {(() => {
                       const calculatedPrice = calculateBillboardPrice ? calculateBillboardPrice(b as Billboard) : null;
                       const displayPrice = calculatedPrice && calculatedPrice > 0 ? calculatedPrice : (b as any).Price;
@@ -416,14 +639,12 @@ export function AvailableBillboardsGrid({
                       
                       if (!displayPrice) return null;
                       return (
-                        <div className="flex items-center justify-between pt-2 border-t border-border/50">
-                          <div className="flex flex-col">
-                            <span className="text-xs text-muted-foreground">
-                              {isCalculated ? `السعر (${pricingCategory || 'عادي'} - ${durationLabel})` : 'السعر'}
-                            </span>
-                          </div>
-                          <span className={cn("font-bold text-lg", isCalculated ? "text-green-600 dark:text-green-400" : "text-primary")}>
-                            {Number(displayPrice).toLocaleString('ar-LY')} 
+                        <div className="flex items-center justify-between pt-2.5 border-t border-border/50 text-right" dir="rtl">
+                          <span className="text-xs text-muted-foreground font-medium truncate text-right">
+                            {isCalculated ? `السعر (${pricingCategory || 'عادي'} - ${durationLabel})` : 'السعر الإجمالي'}
+                          </span>
+                          <span className={cn("font-extrabold text-base sm:text-lg font-manrope shrink-0", isCalculated ? "text-emerald-500 dark:text-emerald-400" : "text-[#f4c25a]")}>
+                            {Number(displayPrice).toLocaleString('en-US')} 
                             <span className="text-xs font-normal text-muted-foreground mr-1">د.ل</span>
                           </span>
                         </div>
@@ -435,62 +656,8 @@ export function AvailableBillboardsGrid({
             })}
           </div>
           
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex justify-center items-center gap-3 pt-6">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                className="h-10 px-4 gap-2"
-              >
-                <ChevronRight className="h-4 w-4" />
-                السابق
-              </Button>
-              
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  let pageNum: number;
-                  if (totalPages <= 5) {
-                    pageNum = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNum = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNum = totalPages - 4 + i;
-                  } else {
-                    pageNum = currentPage - 2 + i;
-                  }
-                  
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={currentPage === pageNum ? "default" : "ghost"}
-                      size="sm"
-                      className={cn(
-                        "h-10 w-10 p-0 font-bold",
-                        currentPage === pageNum && "shadow-md"
-                      )}
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-              </div>
-              
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                className="h-10 px-4 gap-2"
-              >
-                التالي
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
+          {/* Bottom Pagination */}
+          {renderPaginationBar(false)}
         </>
       )}
       
@@ -547,6 +714,106 @@ export function AvailableBillboardsGrid({
               حفظ التغييرات
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rented Billboard Unlock Warning Dialog */}
+      <Dialog open={unlockDialogOpen} onOpenChange={setUnlockDialogOpen}>
+        <DialogContent className="max-w-md bg-slate-950 text-foreground border border-amber-500/40 rounded-2xl p-6 shadow-2xl space-y-4" dir="rtl">
+          <DialogHeader className="text-right space-y-2">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 shrink-0">
+                <AlertTriangle className="h-6 w-6" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-extrabold text-amber-400">
+                  تنبيه: اللوحة مرتبطة بعقد آخر
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  هذه اللوحة مؤجرة حالياً، ولكن يمكنك فك القفل وتحديدها للعقد الجاري
+                </p>
+              </div>
+            </div>
+          </DialogHeader>
+
+          {pendingUnlockBillboard && (() => {
+            const code = pendingUnlockBillboard.code || pendingUnlockBillboard.Code || `TR-${String(pendingUnlockBillboard.ID || pendingUnlockBillboard.id).padStart(4, '0')}`;
+            const customer = pendingUnlockBillboard.Customer_Name || pendingUnlockBillboard.customer_name || pendingUnlockBillboard.clientName || 'اسم الزبون غير مسجل';
+            const adType = pendingUnlockBillboard.Ad_Type || pendingUnlockBillboard.ad_type || pendingUnlockBillboard.new_ad_type || 'نوع الإعلان غير محدد';
+            const contractNum = pendingUnlockBillboard.Contract_Number || pendingUnlockBillboard.contractNumber || 'عقد نشط';
+            const endDate = pendingUnlockBillboard.Rent_End_Date || pendingUnlockBillboard.rent_end_date || pendingUnlockBillboard.expiryDate || 'تاريخ غير محدد';
+
+            return (
+              <div className="space-y-3.5 pt-2">
+                {/* Billboard Code Badge */}
+                <div className="flex items-center justify-between bg-muted/40 p-3 rounded-xl border border-border/50">
+                  <span className="text-xs text-muted-foreground font-medium">كود اللوحة المطلوب فك قفلها</span>
+                  <Badge className="font-extrabold text-[#f4c25a] bg-[#0d0d1a] border border-[#d6ac40]/40 text-xs font-manrope">
+                    {code}
+                  </Badge>
+                </div>
+
+                {/* Linked Contract Details Card */}
+                <div className="bg-amber-500/10 border border-amber-500/25 rounded-xl p-3.5 space-y-2.5 text-xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-amber-500" />
+                      اسم الزبون الحالي:
+                    </span>
+                    <span className="font-extrabold text-amber-400">{customer}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-amber-500" />
+                      نوع الإعلان:
+                    </span>
+                    <span className="font-extrabold text-foreground">{adType}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                      <FileText className="h-3.5 w-3.5 text-amber-500" />
+                      رقم العقد المرتبط:
+                    </span>
+                    <span className="font-manrope font-bold text-foreground">{contractNum}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1.5 border-t border-amber-500/20">
+                    <span className="text-muted-foreground font-medium flex items-center gap-1.5">
+                      <Calendar className="h-3.5 w-3.5 text-amber-500" />
+                      تاريخ انتهاء العقد:
+                    </span>
+                    <span className="font-manrope font-bold text-amber-400">{endDate}</span>
+                  </div>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 pt-2">
+                  <Button
+                    className="flex-1 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white font-extrabold gap-2 rounded-xl h-10 shadow-lg shadow-amber-500/20 cursor-pointer"
+                    onClick={() => {
+                      const idStr = String(pendingUnlockBillboard.ID || pendingUnlockBillboard.id);
+                      setUnlockedIds((prev) => new Set([...prev, idStr]));
+                      onToggleSelect(pendingUnlockBillboard);
+                      setUnlockDialogOpen(false);
+                      toast.success(`تم فك قفل اللوحة ${code} وتحديدها بنجاح!`);
+                    }}
+                  >
+                    <Unlock className="h-4 w-4" />
+                    فك القفل وتحديد اللوحة
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="border-border text-muted-foreground hover:text-foreground rounded-xl h-10 px-4 cursor-pointer"
+                    onClick={() => setUnlockDialogOpen(false)}
+                  >
+                    إلغاء
+                  </Button>
+                </div>
+              </div>
+            );
+          })()}
         </DialogContent>
       </Dialog>
     </div>

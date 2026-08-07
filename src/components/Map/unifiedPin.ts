@@ -74,13 +74,14 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
   
   // Decide top badge content: in organizer show sequence number (e.g. "#1"), in normal mode show ad type
   const adTypeStr = String(
+    billboard?.new_ad_type ||
+    billboard?.contract?.['Ad Type'] ||
+    billboard?.contract?.ad_type ||
+    (Array.isArray(billboard?.contracts) && (billboard.contracts[0]?.['Ad Type'] || billboard.contracts[0]?.ad_type)) ||
     billboard?.Ad_Type ||
     billboard?.ad_type ||
     billboard?.adType ||
     billboard?.AdType ||
-    billboard?.contract?.ad_type ||
-    billboard?.contract?.['Ad Type'] ||
-    (Array.isArray(billboard?.contracts) && (billboard.contracts[0]?.ad_type || billboard.contracts[0]?.['Ad Type'])) ||
     ''
   ).trim();
   const topBadgeText = showSeq ? `#${billboard.sequence_number}` : adTypeStr;
@@ -93,11 +94,11 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
   const start = isTemp ? '#6366f1' : sizeColor.bg; // Indigo body for temporary pin
   const end = isTemp ? '#4f46e5' : adjustColor(sizeColor.bg, -35);
 
-  const W = isSelected ? 60 : 52;
-  const H = isSelected ? 76 : 66;
+  const W = isSelected ? 66 : 52;
+  const H = isSelected ? 82 : 66;
   const cx = W / 2;
   const topPad = showTopBadge ? 16 : 4;
-  const r = isSelected ? 22 : 19;
+  const r = isSelected ? 23 : 19;
   const innerR = r - 4.5;
   const headCy = topPad + r;
   const tipY = H - 2;
@@ -124,21 +125,28 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
         <stop offset="100%" stop-color="white" stop-opacity="0"/>
       </radialGradient>
       <filter id="s${uid}" x="-40%" y="-20%" width="180%" height="160%">
-        <feDropShadow dx="0" dy="3" stdDeviation="2.5" flood-color="rgba(0,0,0,0.45)"/>
+        <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="${isSelected ? 'rgba(245,158,11,0.75)' : 'rgba(0,0,0,0.45)'}"/>
       </filter>
     </defs>
     <g opacity="${isFaded ? '0.35' : '1'}">
+      <!-- Pulsing Gold Ring when Selected -->
+      ${isSelected ? `
+        <circle cx="${cx}" cy="${headCy}" r="${r + 4}" fill="none" stroke="#f59e0b" stroke-width="2.5" opacity="0.85">
+          <animate attributeName="r" values="${r + 3};${r + 11};${r + 3}" dur="1.6s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="0.9;0.1;0.9" dur="1.6s" repeatCount="indefinite"/>
+        </circle>` : ''}
+
       <ellipse cx="${cx}" cy="${tipY + 0.5}" rx="${r * 0.55}" ry="2.2" fill="rgba(0,0,0,0.3)"/>
       ${showTopBadge ? `
         <g>
-          <rect x="${cx - 28}" y="0" width="56" height="14" rx="7" fill="#0a0a14" stroke="#d6ac40" stroke-width="1"/>
-          <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="8.5" font-weight="900" fill="#f4c25a">${displayTopBadge}</text>
+          <rect x="${cx - 28}" y="0" width="56" height="14" rx="7" fill="#0a0a14" stroke="${isSelected ? '#f59e0b' : '#d6ac40'}" stroke-width="${isSelected ? '1.5' : '1'}"/>
+          <text x="${cx}" y="10" text-anchor="middle" font-family="'Tajawal','Manrope',sans-serif" font-size="8.5" font-weight="900" fill="${isSelected ? '#fbbf24' : '#f4c25a'}">${displayTopBadge}</text>
         </g>` : ''}
       <g filter="url(#s${uid})" opacity="${isHidden ? '0.7' : '1'}">
-        <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#f4c25a' : 'white'}" stroke-width="${isSelected ? 2.2 : 1.6}"/>
+        <path d="${path}" fill="url(#b${uid})" stroke="${isSelected ? '#fbbf24' : 'white'}" stroke-width="${isSelected ? 3.2 : 1.6}"/>
         <path d="${path}" fill="url(#g${uid})"/>
         <!-- Inner core (white fill with thick status-colored stroke border ring) -->
-        <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${statusColor}" stroke-width="2.8"/>
+        <circle cx="${cx}" cy="${headCy}" r="${innerR}" fill="#ffffff" stroke="${statusColor}" stroke-width="${isSelected ? 3.4 : 2.8}"/>
         <text x="${cx}" y="${headCy + 3.4}" text-anchor="middle" font-family="'Manrope','Tajawal',sans-serif" font-size="${innerR > 11 ? 9.5 : 8.5}" font-weight="900" fill="#0f172a" letter-spacing="0.1">${label}</text>
       </g>
       ${status.label === 'متاحة' || status.label === 'متاح' ? `
@@ -147,8 +155,8 @@ export function createUnifiedPin(billboard: any, isSelected = false): UnifiedPin
           <animate attributeName="opacity" values="0.6;0;0.6" dur="2s" repeatCount="indefinite"/>
         </circle>` : ''}
       ${isSelected ? `
-        <circle cx="${cx + r - 4}" cy="${topPad + 4}" r="6" fill="#10b981" stroke="#fff" stroke-width="1.2"/>
-        <path d="M ${cx + r - 7} ${topPad + 4} l 2 2 l 4 -4" stroke="#fff" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
+        <circle cx="${cx + r - 3}" cy="${topPad + 3}" r="7.5" fill="#10b981" stroke="#ffffff" stroke-width="1.8"/>
+        <path d="M ${cx + r - 7} ${topPad + 3} l 2.5 2.5 l 5 -5" stroke="#ffffff" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"/>` : ''}
     </g>
   </svg>`;
 

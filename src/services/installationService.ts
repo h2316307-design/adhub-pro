@@ -120,36 +120,28 @@ function normalizeSizeFormat(size: string): string[] {
   return [cleanSize];
 }
 
-// ✅ FIXED: Enhanced billboard size matching with sizes table
+// Enhanced billboard size matching with sizes table
 async function findSizeInDatabase(billboardSize: string): Promise<{ id: number; name: string; installation_price: number | null } | null> {
   try {
-    console.log(`🔍 Looking for size "${billboardSize}" in sizes table...`);
-    
-    // ✅ FIXED: Query sizes table for matching size - include null values
     const { data: sizesData, error } = await supabase
       .from('sizes')
       .select('id, name, installation_price');
 
     if (error || !sizesData) {
-      console.warn('Failed to fetch sizes data:', error);
       return null;
     }
 
-    console.log('📊 Available sizes in database:', sizesData.map(s => ({ name: s.name, price: s.installation_price })));
-
-    // ✅ FIXED: Try exact match first
+    // Try exact match first
     let matchedSize = sizesData.find(s => 
       s.name.toLowerCase() === billboardSize.toLowerCase()
     );
 
     if (matchedSize) {
-      console.log(`✅ Exact match found: ${matchedSize.name} -> ${matchedSize.installation_price} د.ل`);
       return matchedSize;
     }
 
-    // ✅ FIXED: Try normalized format matching
+    // Try normalized format matching
     const possibleFormats = normalizeSizeFormat(billboardSize);
-    console.log(`🔄 Trying normalized formats:`, possibleFormats);
 
     for (const format of possibleFormats) {
       matchedSize = sizesData.find(s => {
@@ -158,17 +150,13 @@ async function findSizeInDatabase(billboardSize: string): Promise<{ id: number; 
       });
 
       if (matchedSize) {
-        console.log(`✅ Format match found: ${format} -> ${matchedSize.name} -> ${matchedSize.installation_price} د.ل`);
         return matchedSize;
       }
     }
 
-    console.warn(`❌ No size match found for "${billboardSize}"`);
-    console.log('Available sizes:', sizesData.map(s => s.name));
     return null;
 
   } catch (e) {
-    console.error('Error finding size in database:', e);
     return null;
   }
 }

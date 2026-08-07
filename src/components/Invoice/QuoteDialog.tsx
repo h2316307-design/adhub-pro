@@ -13,6 +13,7 @@ import { CUSTOMERS, CustomerType, getPriceFor } from '@/data/pricing';
 import { addMonths, format as fmt } from 'date-fns';
 import { generateQuoteHTML } from '@/lib/quoteGenerator';
 import type { QuoteData, QuoteItem } from '@/lib/quoteGenerator';
+import { getBillboardsSortMaps, sortBillboardsStandardSync } from '@/lib/billboardSorter';
 
 export type QuoteMeta = {
   contractNumber?: string;
@@ -69,7 +70,10 @@ export default function QuoteDialog(props: Props) {
         durationMonths: props.meta?.durationMonths || Math.max(1, Math.max(...items.map(b => monthsById[b.id] || 1))),
       };
 
-      const quoteItems: QuoteItem[] = items.map((b, i) => {
+      const { sizeOrderMap, municipalityOrderMap } = await getBillboardsSortMaps();
+      const sortedItems = sortBillboardsStandardSync(items, sizeOrderMap, municipalityOrderMap);
+
+      const quoteItems: QuoteItem[] = sortedItems.map((b, i) => {
         const months = monthsById[b.id] || 1;
         const customer = customerById[b.id] || CUSTOMERS[0];
         const unit = getPriceFor(b.size, (b as any).level, customer, months) ?? 0;

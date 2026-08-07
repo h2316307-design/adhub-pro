@@ -2721,32 +2721,74 @@ export default function GoogleHomeMap({
   }, [selectedBillboardForCard, mapProvider, isMobile]);
 
   // Fetch contract data for selected billboard (lazy + cached)
+  // Fetch contract data for selected billboard (active contract by end date first)
   useEffect(() => {
     setContractData(null);
     setCardImageState('loading');
     if (!selectedBillboardForCard) return;
     const bb: any = selectedBillboardForCard;
+    const billboardId = bb.ID || bb.id;
     const cn = bb.Contract_Number || bb.contract_number;
-    if (!cn) return;
-    const key = String(cn);
-    const cached = contractCacheRef.current.get(key);
-    if (cached) { setContractData(cached); return; }
+
     let cancelled = false;
     setContractLoading(true);
     (async () => {
       try {
-        const { data, error } = await (supabase as any)
-          .from('Contract')
-          .select('*')
-          .eq('Contract_Number', cn)
-          .maybeSingle();
-        if (cancelled) return;
-        if (!error && data) {
-          contractCacheRef.current.set(key, data);
-          setContractData(data);
+        const todayStr = new Date().toISOString().slice(0, 10);
+        let activeContract: any = null;
+
+        // 1. Try finding active contract containing this billboardId by End Date
+        if (billboardId) {
+          const { data } = await (supabase as any)
+            .from('Contract')
+            .select('*')
+            .or(`billboard_ids.ilike."%,${billboardId},%",billboard_ids.ilike."${billboardId},%",billboard_ids.ilike."%,${billboardId}",billboard_ids.eq.${billboardId}`)
+            .gte('End Date', todayStr)
+            .order('End Date', { ascending: false })
+            .limit(1);
+          if (data && data.length > 0) {
+            activeContract = data[0];
+          }
         }
-      } catch { /* ignore */ }
-      finally { if (!cancelled) setContractLoading(false); }
+
+        // 2. Fallback to Contract_Number if no active contract found by billboardId
+        if (!activeContract && cn) {
+          const key = String(cn);
+          const cached = contractCacheRef.current.get(key);
+          if (cached) {
+            setContractData(cached);
+            setContractLoading(false);
+            return;
+          }
+          const { data } = await (supabase as any)
+            .from('Contract')
+            .select('*')
+            .eq('Contract_Number', cn)
+            .maybeSingle();
+          if (data) activeContract = data;
+        }
+
+        // 3. Fallback to most recent contract by billboardId
+        if (!activeContract && billboardId) {
+          const { data } = await (supabase as any)
+            .from('Contract')
+            .select('*')
+            .or(`billboard_ids.ilike."%,${billboardId},%",billboard_ids.ilike."${billboardId},%",billboard_ids.ilike."%,${billboardId}",billboard_ids.eq.${billboardId}`)
+            .order('End Date', { ascending: false })
+            .limit(1);
+          if (data && data.length > 0) activeContract = data[0];
+        }
+
+        if (cancelled) return;
+        if (activeContract) {
+          if (cn) contractCacheRef.current.set(String(cn), activeContract);
+          setContractData(activeContract);
+        }
+      } catch (err) {
+        console.error('Error fetching contract for card:', err);
+      } finally {
+        if (!cancelled) setContractLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [selectedBillboardForCard]);

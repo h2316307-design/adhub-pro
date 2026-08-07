@@ -1,10 +1,12 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Search, Calendar, X, Wrench } from 'lucide-react';
 import type { Billboard } from '@/types';
+import { smartArabicMatch } from '@/lib/arabicSearch';
+import { getBillboardsSortMaps, sortBillboardsStandardSync } from '@/lib/billboardSorter';
 
 interface BillboardSelectorProps {
   billboards: Billboard[];
@@ -73,9 +75,31 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
     [billboards]
   );
 
+  const [sortMaps, setSortMaps] = useState<{ sizeOrderMap: Record<string, number>; municipalityOrderMap: Record<string, number> }>({ sizeOrderMap: {}, municipalityOrderMap: {} });
+  useEffect(() => {
+    getBillboardsSortMaps();
+  }, []);
+
+  const { data: dbSizesData = [] } = useQuery({
+    queryKey: ['selector-sizes-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('sizes').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
+  const { data: dbMunisData = [] } = useQuery({
+    queryKey: ['selector-munis-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('municipalities').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
   // Filter billboards
   const filtered = useMemo(() => {
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const NEAR_DAYS = 30;
 
     const isNearExpiring = (b: any) => {
@@ -88,13 +112,27 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
     };
 
     const list = billboards.filter((b: any) => {
-      const text = b.name || b.Billboard_Name || '';
-      const loc = b.location || b.Nearest_Landmark || '';
       const c = String(b.city || b.City || '');
       const s = String(b.size || b.Size || '');
       const st = String(b.status || b.Status || '').toLowerCase();
+      const bIdStr = String(b.ID || b.id || '');
+      const code = b.code || b.Code || `TR-${bIdStr.padStart(4, '0')}`;
 
-      const matchesQ = !searchQuery || text.toLowerCase().includes(searchQuery.toLowerCase()) || loc.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesQ = smartArabicMatch(
+        [
+          code, b.code, b.Code,
+          b.name, b.Billboard_Name,
+          b.location, b.Nearest_Landmark,
+          b.city, b.City,
+          b.municipality, b.Municipality,
+          b.Customer_Name, b.clientName, b.customer_name,
+          b.Ad_Type, b.adType, b.ad_type,
+          b.Contract_Number, b.contractNumber,
+          b.Level, b.level,
+          b.ID, b.id, bIdStr, b.Size, b.size
+        ],
+        searchQuery
+      );
       const matchesCity = cityFilter === 'all' || c === cityFilter;
       const matchesSize = sizeFilter === 'all' || s === sizeFilter;
 
@@ -102,7 +140,7 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
       const isAvailable = st === 'available' || (!hasContract && st !== 'rented');
       const isNear = isNearExpiring(b);
       const isRented = hasContract || st === 'rented';
-      const isInContract = selected.includes(String(b.ID));
+      const isInContract = selected.includes(String(b.ID || b.id));
 
       let shouldShow = false;
       if (statusFilter === 'all') {
@@ -116,26 +154,8 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
       return matchesQ && matchesCity && matchesSize && shouldShow;
     });
 
-    return list.sort((a: any, b: any) => {
-      const aHasContract = !!(a.contractNumber || a.Contract_Number || a.contract_number);
-      const bHasContract = !!(b.contractNumber || b.Contract_Number || b.contract_number);
-      const aStatus = (a.status || a.Status || '').toLowerCase();
-      const bStatus = (b.status || b.Status || '').toLowerCase();
-      
-      const aAvailable = aStatus === 'available' || (!aHasContract && aStatus !== 'rented');
-      const bAvailable = bStatus === 'available' || (!bHasContract && bStatus !== 'rented');
-      
-      const aNear = isNearExpiring(a);
-      const bNear = isNearExpiring(b);
-      
-      if (aAvailable && !bAvailable) return -1;
-      if (!aAvailable && bAvailable) return 1;
-      if (aNear && !bNear) return -1;
-      if (!aNear && bNear) return 1;
-      
-      return 0;
-    }).slice(0, 20);
-  }, [billboards, searchQuery, cityFilter, sizeFilter, statusFilter, selected]);
+    return sortBillboardsStandardSync(list, dbSizesData, dbMunisData);
+  }, [billboards, searchQuery, cityFilter, sizeFilter, statusFilter, selected, dbSizesData, dbMunisData]);
 
   return (
     <div className="flex-1 space-y-6">
@@ -204,12 +224,12 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
         </CardHeader>
         <CardContent>
           <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 relative min-w-[220px]">
+            <div className="flex-1 relative min-w-[200px] w-full">
               <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-primary" />
               <Input placeholder="بحث عن لوحة" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pr-9" />
             </div>
             <Select value={cityFilter} onValueChange={setCityFilter}>
-              <SelectTrigger className="w-[180px]"><SelectValue placeholder="المدينة" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="المدينة" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل المدن</SelectItem>
                 {cities.map((c) => (
@@ -218,7 +238,7 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
               </SelectContent>
             </Select>
             <Select value={sizeFilter} onValueChange={setSizeFilter}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="المقاس" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="المقاس" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">كل المقاسات</SelectItem>
                 {sizes.map((s) => (
@@ -227,7 +247,7 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
               </SelectContent>
             </Select>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="الحالة" /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">الكل</SelectItem>
                 <SelectItem value="available">المتاحة فقط</SelectItem>
@@ -235,7 +255,7 @@ export const BillboardSelector: React.FC<BillboardSelectorProps> = ({
               </SelectContent>
             </Select>
             <Select value={pricingCategory} onValueChange={setPricingCategory}>
-              <SelectTrigger className="w-[160px]"><SelectValue placeholder="فئة السعر" /></SelectTrigger>
+              <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="فئة السعر" /></SelectTrigger>
               <SelectContent>
                 {pricingCategories.map((c) => (
                   <SelectItem key={c} value={c}>{c}</SelectItem>

@@ -4,6 +4,9 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { loadBillboards } from '@/services/billboardService';
+import { smartArabicMatch } from '@/lib/arabicSearch';
+import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
+import { useQuery } from '@tanstack/react-query';
 import { normalizeSize } from '@/lib/utils';
 import { addBillboardsToContract, getContractWithBillboards, removeBillboardFromContract, updateContract } from '@/services/contractService';
 import { checkLinkedTasks, removeBillboardFromAllTasks, addBillboardToExistingTasks, type BillboardTaskLinks, type TaskTypeSelection } from '@/services/smartBillboardService';
@@ -145,6 +148,22 @@ export default function ContractEdit() {
   // ✅ NEW: Print pricing state with enable/disable toggle
   const [printCostEnabled, setPrintCostEnabled] = useState<boolean>(false);
   const [printPricePerMeter, setPrintPricePerMeter] = useState<number>(0);
+
+  const { data: dbSizesData = [] } = useQuery({
+    queryKey: ['contract-edit-page-sizes-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('sizes').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
+
+  const { data: dbMunisData = [] } = useQuery({
+    queryKey: ['contract-edit-page-munis-sorting'],
+    queryFn: async () => {
+      const { data } = await supabase.from('municipalities').select('name, sort_order').order('sort_order', { ascending: true });
+      return data || [];
+    }
+  });
 
   // ✅ NEW: Installation enable/disable toggle
   const [installationEnabled, setInstallationEnabled] = useState<boolean>(true);
@@ -485,13 +504,21 @@ export default function ContractEdit() {
         setBillboards(data);
 
         const occupied = new Map<number, string>();
+        const currentUrlParams = new URLSearchParams(location.search);
+        const currentCN = currentUrlParams.get('contract');
+
         if (!activeContractsRes.error && activeContractsRes.data) {
           for (const contract of activeContractsRes.data) {
+            const cNum = String((contract as any).Contract_Number || '').trim();
+            // Exclude current contract being edited
+            if (currentCN && cNum === String(currentCN).trim()) {
+              continue;
+            }
             const ids = (contract as any).billboard_ids;
             const endDate = (contract as any)['End Date'] || '';
             if (ids && typeof ids === 'string') {
-              ids.split(',').forEach((id: string) => {
-                const num = parseInt(id.trim(), 10);
+              ids.split(',').forEach((bIdStr: string) => {
+                const num = parseInt(bIdStr.trim(), 10);
                 if (!isNaN(num)) occupied.set(num, endDate);
               });
             }
@@ -1144,12 +1171,9 @@ export default function ContractEdit() {
                String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
       
-      if (!dbRow) {
-        console.warn(`❌ No match by size_id=${sizeId} for level="${level}" & customer="${customer}". Trying fallback...`);
-      }
     }
     
-    // ✅ FALLBACK: If no size_id or not found, try by size name with normalization
+    // FALLBACK: If no size_id or not found, try by size name with normalization
     if (!dbRow && sizeName) {
       const normalizedInputSize = normalizeSize(sizeName);
       
@@ -1159,10 +1183,6 @@ export default function ContractEdit() {
                String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
                String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase();
       });
-      
-      if (!dbRow) {
-        console.warn(`❌ NO MATCH FOUND by size name "${sizeName}" (normalized: "${normalizedInputSize}") for level="${level}" & customer="${customer}"`);
-      }
     }
     
     if (dbRow) {
@@ -1176,13 +1196,7 @@ export default function ContractEdit() {
       
       const column = monthColumnMap[months];
       if (column && dbRow[column] !== null && dbRow[column] !== undefined) {
-        const price = Number(dbRow[column]) || 0;
-        if (price === 0) {
-          console.warn(`⚠️ WARNING: Found price is 0 LYD in column "${column}" for size_id=${sizeId}, level="${level}", category="${customer}"`);
-        }
-        return price;
-      } else {
-        console.error(`❌ Column "${column}" is null/undefined in matched row:`, dbRow);
+        return Number(dbRow[column]) || 0;
       }
     }
     
@@ -1190,7 +1204,6 @@ export default function ContractEdit() {
       return getPriceFromDatabase(sizeId, level, 'عادي', months, sizeName);
     }
     
-    console.error(`❌ FINAL RESULT: No price found for size_id=${sizeId}, sizeName="${sizeName}", level="${level}", customer="${customer}", months=${months}`);
     return null;
   };
 
@@ -2277,84 +2290,50 @@ export default function ContractEdit() {
     return String(contractNum).trim();
   };
 
-  // ✅ REBUILT: Enhanced search function (same as Billboards page)
-  const enhancedSearchBillboards = (billboards: any[], query: string) => {
-    if (!query.trim()) return billboards;
-    
-    const searchTerm = query.toLowerCase().trim();
-    
-    return billboards.filter((billboard) => {
-      const billboardName = String(
-        billboard.Billboard_Name || 
-        billboard.billboardName || 
-        billboard.billboard_name ||
-        billboard.name ||
-        ''
-      ).toLowerCase();
-      
-      const nearestLandmark = String(
-        billboard['Nearest Landmark'] ||
-        billboard.nearestLandmark ||
-        billboard.nearest_landmark ||
-        billboard.Nearest_Landmark ||
-        billboard['أقرب نقطة دالة'] ||
-        billboard.landmark ||
-        billboard.Location ||
-        billboard.location ||
-        billboard.Address ||
-        billboard.address ||
-        ''
-      ).toLowerCase();
-      
-      const municipality = String(
-        billboard.Municipality || 
-        billboard.municipality || 
-        billboard.Municipality_Name ||
-        billboard.municipality_name ||
-        ''
-      ).toLowerCase();
-      
-      const city = String(
-        billboard.City || 
-        billboard.city || 
-        billboard.City_Name ||
-        billboard.city_name ||
-        ''
-      ).toLowerCase();
-      
-      const contractNumber = String(getCurrentContractNumber(billboard)).toLowerCase();
-      
-      const adType = String(
-        billboard.Ad_Type || 
-        billboard.adType || 
-        billboard.ad_type || 
-        billboard.AdType || 
-        (billboard.contracts && billboard.contracts[0]?.['Ad Type']) || 
-        ''
-      ).toLowerCase();
-      
-      const customerName = String(
-        billboard.Customer_Name || 
-        billboard.clientName || 
-        billboard.customer_name ||
-        (billboard.contracts && billboard.contracts[0]?.['Customer Name']) || 
-        ''
-      ).toLowerCase();
-      
-      const size = String(
-        billboard.Size || 
-        billboard.size || 
-        ''
-      ).toLowerCase();
-      
-      return billboardName.includes(searchTerm) ||
-             nearestLandmark.includes(searchTerm) ||
-             municipality.includes(searchTerm) ||
-             city.includes(searchTerm) ||
-             contractNumber.includes(searchTerm) ||
-             adType.includes(searchTerm) ||
-             customerName.includes(searchTerm) ||
-             size.includes(searchTerm);
+  // ✅ ENHANCED: Universal Smart Arabic Search with code, adType, customer, landmark, size & level support
+  const enhancedSearchBillboards = (billboardsList: any[], query: string) => {
+    if (!query || !query.trim()) return billboardsList;
+
+    return billboardsList.filter((billboard: any) => {
+      const contractNo = getCurrentContractNumber(billboard);
+      const bId = String(billboard.ID || billboard.id || '');
+      const code = billboard.code || billboard.Code || `TR-${bId.padStart(4, '0')}`;
+
+      return smartArabicMatch(
+        [
+          code,
+          billboard.Code,
+          billboard.name,
+          billboard.Billboard_Name,
+          billboard.location,
+          billboard.Nearest_Landmark,
+          billboard.municipality,
+          billboard.Municipality,
+          billboard.city,
+          billboard.City,
+          billboard.District,
+          billboard.district,
+          billboard.Customer_Name,
+          billboard.clientName,
+          billboard.customer_name,
+          billboard.contracts?.[0]?.['Customer Name'],
+          billboard.contracts?.[0]?.customer_name,
+          billboard.Size,
+          billboard.size,
+          billboard.Level,
+          billboard.level,
+          billboard.Ad_Type,
+          billboard.adType,
+          billboard.ad_type,
+          billboard.contracts?.[0]?.['Ad Type'],
+          billboard.contracts?.[0]?.ad_type,
+          contractNo,
+          billboard.Contract_Number,
+          billboard.contractNumber,
+          bId
+        ],
+        query
+      );
     });
   };
 
@@ -2424,20 +2403,24 @@ export default function ContractEdit() {
       // Check if billboard is in current contract selection
       const isInContract = selected.includes(String((billboard as any).ID ?? (billboard as any).id));
 
+      const hasSearch = searchQuery.trim().length > 0;
+
       // Status filter logic
       let matchesStatus = false;
-      if (statusFilter === 'all') {
-        matchesStatus = !isHidden && !isUnderMaintenance;
+      if (hasSearch) {
+        matchesStatus = true; // Search overrides status tabs to find any matching billboard!
+      } else if (statusFilter === 'all') {
+        matchesStatus = true; // "الكل" matches all billboards
       } else if (statusFilter === 'available') {
-        matchesStatus = isAvailable && !isHidden && !isUnderMaintenance;
+        matchesStatus = (isAvailable || isInContract) && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'nearExpiry') {
-        matchesStatus = isNearExpiry && !isHidden && !isUnderMaintenance;
+        matchesStatus = isNearExpiry;
       } else if (statusFilter === 'rented') {
-        matchesStatus = isBooked && !isHidden && !isUnderMaintenance;
+        matchesStatus = isBooked;
       } else if (statusFilter === 'maintenance') {
         matchesStatus = isUnderMaintenance;
       } else if (statusFilter === 'hidden') {
-        matchesStatus = isHidden && !isUnderMaintenance;
+        matchesStatus = isHidden;
       }
 
       // Always keep selected billboards visible
@@ -2446,54 +2429,9 @@ export default function ContractEdit() {
       return matchesMunicipality && matchesCity && matchesSize && matchesStatus;
     });
     
-    // Sort: available first, then near expiry, then others
-    return filtered.sort((a: any, b: any) => {
-      const aContractNum = getCurrentContractNumber(a);
-      const bContractNum = getCurrentContractNumber(b);
-      const aHasContract = !!(aContractNum && aContractNum !== '0');
-      const bHasContract = !!(bContractNum && bContractNum !== '0');
-      const aExpired = isContractExpired(a.Rent_End_Date ?? a.rent_end_date);
-      const bExpired = isContractExpired(b.Rent_End_Date ?? b.rent_end_date);
-      
-      const aAvailable = !aHasContract || aExpired;
-      const bAvailable = !bHasContract || bExpired;
-      
-      // Check near expiry
-      const aNearExpiry = (() => {
-        const aId = Number((a as any).ID ?? (a as any).id);
-        const end = a.Rent_End_Date ?? a.rent_end_date ?? (occupiedBillboardIds.has(aId) ? occupiedBillboardIds.get(aId) : null);
-        if (!end || aExpired) return false;
-        try {
-          const endDate = new Date(end);
-          const diffDays = Math.ceil((endDate.getTime() - Date.now()) / 86400000);
-          return diffDays > 0 && diffDays <= 30;
-        } catch {
-          return false;
-        }
-      })();
-      
-      const bNearExpiry = (() => {
-        const bId = Number((b as any).ID ?? (b as any).id);
-        const end = b.Rent_End_Date ?? b.rent_end_date ?? (occupiedBillboardIds.has(bId) ? occupiedBillboardIds.get(bId) : null);
-        if (!end || bExpired) return false;
-        try {
-          const endDate = new Date(end);
-          const diffDays = Math.ceil((endDate.getTime() - Date.now()) / 86400000);
-          return diffDays > 0 && diffDays <= 30;
-        } catch {
-          return false;
-        }
-      })();
-      
-      // Sort priority: available > near expiry > rented
-      if (aAvailable && !bAvailable) return -1;
-      if (!aAvailable && bAvailable) return 1;
-      if (aNearExpiry && !bNearExpiry) return -1;
-      if (!aNearExpiry && bNearExpiry) return 1;
-      
-      return 0;
-    });
-  }, [billboards, searchQuery, cityFilter, sizeFilter, sizeFilters, statusFilter, municipalityFilter, selected]);
+    // ✅ Strict Multi-Level Sorting: 1. Size Area (4x12 > 4x10 > 3x8 > 3x6 > 3x4), 2. Level (A > B > C > D), 3. Municipality, 4. ID
+    return sortBillboardsStandardSync(filtered, dbSizesData, dbMunisData);
+  }, [billboards, searchQuery, cityFilter, sizeFilter, sizeFilters, statusFilter, municipalityFilter, selected, dbSizesData, dbMunisData]);
 
   // Event handlers
   const toggleSelect = async (b: Billboard) => {
@@ -3861,6 +3799,9 @@ export default function ContractEdit() {
                       durationMonths={durationMonths}
                       durationDays={durationDays}
                       pricingCategory={pricingCategory}
+                      onSelectCityFilter={(c) => setCityFilter(c)}
+                      onSelectMunicipalityFilter={(m) => setMunicipalityFilter?.(m)}
+                      onSelectSizeFilter={(s) => setSizeFilter(s)}
                     />
                   </div>
                 </TabsContent>

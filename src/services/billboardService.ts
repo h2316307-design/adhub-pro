@@ -207,31 +207,12 @@ export async function loadBillboards(): Promise<Billboard[]> {
       return [];
     }
 
-    console.log('[Service] محاولة تحميل اللوحات من Supabase...');
-    let { data: rows, error: dbError } = await supabase
+    const { data: rows, error: dbError } = await supabase
       .from('billboards')
-      .select('*, friend_companies(*)');
-
-    // Fallback: إذا فشل الـ join نحاول بدونه
-    if (dbError) {
-      console.warn('[Service] فشل الاستعلام مع join، محاولة بدون join:', dbError.message);
-      const fallback = await supabase.from('billboards').select('*');
-      rows = fallback.data;
-      dbError = fallback.error;
-    }
+      .select('*');
 
     if (!dbError && Array.isArray(rows) && rows.length > 0) {
-      console.log(`[Service] ✅ تم استلام ${rows.length} لوحة من Supabase`);
-      const billboards = rows.map((row: any, index: number) => processBillboardFromSupabase(row, index));
-      // Debug: check is_visible_in_available mapping
-      const visibleTrue = billboards.filter((b: any) => b.is_visible_in_available === true);
-      const visibleFalse = billboards.filter((b: any) => b.is_visible_in_available === false);
-      const visibleNull = billboards.filter((b: any) => b.is_visible_in_available === null);
-      console.log(`[Service] 🔍 is_visible_in_available: true=${visibleTrue.length}, false=${visibleFalse.length}, null=${visibleNull.length}`);
-      if (visibleTrue.length > 0) {
-        console.log(`[Service] 🔍 Sample visible=true IDs:`, visibleTrue.slice(0, 5).map((b: any) => b.ID));
-      }
-      return billboards;
+      return rows.map((row: any, index: number) => processBillboardFromSupabase(row, index));
     }
 
     if (dbError) {

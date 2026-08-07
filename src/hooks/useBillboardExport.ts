@@ -224,17 +224,30 @@ export const useBillboardExport = () => {
       const todayStr = new Date().toISOString().slice(0, 10);
       const { data, error } = await supabase
         .from('Contract')
-        .select('"Ad Type", "End Date"')
+        .select('"Ad Type", ad_type, "End Date"')
         .or(`billboard_ids.ilike."%,${billboardId},%",billboard_ids.ilike."${billboardId},%",billboard_ids.ilike."%,${billboardId}",billboard_ids.eq.${billboardId}`)
         .gte('End Date', todayStr)
         .order('End Date', { ascending: false })
         .limit(1);
 
       if (error || !data || data.length === 0) {
+        // Fallback: fetch most recent contract regardless of end date
+        const { data: fallbackData } = await supabase
+          .from('Contract')
+          .select('"Ad Type", ad_type, "End Date"')
+          .or(`billboard_ids.ilike."%,${billboardId},%",billboard_ids.ilike."${billboardId},%",billboard_ids.ilike."%,${billboardId}",billboard_ids.eq.${billboardId}`)
+          .order('End Date', { ascending: false })
+          .limit(1);
+
+        if (fallbackData && fallbackData.length > 0) {
+          const adType = (fallbackData[0] as any)['Ad Type'] || (fallbackData[0] as any).ad_type || '';
+          if (adType) return adType;
+        }
         return billboard.Ad_Type || billboard.adType || '';
       }
 
-      return (data[0] as any)['Ad Type'] || billboard.Ad_Type || billboard.adType || '';
+      const activeAdType = (data[0] as any)['Ad Type'] || (data[0] as any).ad_type || '';
+      return activeAdType || billboard.Ad_Type || billboard.adType || '';
     } catch (error) {
       console.error('Error getting current ad type:', error);
       return billboard.Ad_Type || billboard.adType || '';
