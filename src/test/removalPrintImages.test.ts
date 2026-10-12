@@ -14,6 +14,21 @@ describe('removal print image selection', () => {
     expect(matchesRemovalDesignBillboard({ billboardId: 'ZL0900' }, billboard)).toBe(true);
     expect(matchesRemovalDesignBillboard({ billboardId: 901, billboardCode: 'ZL0900' }, billboard)).toBe(false);
     expect(matchesRemovalDesignBillboard({ designFaceA: '/general.jpg' }, billboard)).toBe(false);
+
+    // TR-JZ0952: An unrelated design whose primary key or object id happens to be 952 must NOT match billboard 952
+    const billboard952 = { ID: 952, Billboard_Name: 'TR-JZ0952' };
+    expect(matchesRemovalDesignBillboard({ id: 952, designFaceA: '/unrelated.jpg' }, billboard952)).toBe(false);
+    expect(matchesRemovalDesignBillboard({ ID: 952, billboardCode: 'TR-JZ0317', designFaceA: '/unrelated.jpg' }, billboard952)).toBe(false);
+
+    // Disabled designs must NEVER match
+    expect(matchesRemovalDesignBillboard({ billboardId: 952, enabled: false, designFaceA: '/disabled.jpg' }, billboard952)).toBe(false);
+    expect(matchesRemovalDesignBillboard({ billboardCode: 'TR-JZ0952', active: false, designFaceA: '/disabled.jpg' }, billboard952)).toBe(false);
+    expect(matchesRemovalDesignBillboard({ billboardId: 'TR-JZ0952', status: 'disabled', designFaceA: '/disabled.jpg' }, billboard952)).toBe(false);
+
+    // Grouped billboardIds array matching
+    expect(matchesRemovalDesignBillboard({ billboardIds: ['317', '400'], designFaceA: '/other.jpg' }, billboard952)).toBe(false);
+    expect(matchesRemovalDesignBillboard({ billboardIds: ['952', '317'], designFaceA: '/valid.jpg' }, billboard952)).toBe(true);
+
     const source = verifiedRemovalDesignSource({}, { design_face_a: '/eid-design.jpg' });
     expect(removalPrintImages(source, { Image_URL: '/site.jpg' })).toEqual({ faceA: '/eid-design.jpg', faceB: null, main: '/site.jpg' });
   });

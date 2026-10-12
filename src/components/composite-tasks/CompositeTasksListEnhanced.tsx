@@ -1,3 +1,4 @@
+import { applyOperationDisplayOrder, OPERATION_ORDER_PREFIX } from '@/lib/compositeOperationDisplayOrder';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { usePersistedFilters } from '@/hooks/usePersistedFilters';
@@ -95,6 +96,21 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: operationOrders = {} } = useQuery({
+    queryKey: ['composite-operation-display-order'],
+    queryFn: async () => {
+      const orders: Record<string, string[]> = {};
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('system_settings').select('setting_key, setting_value').like('setting_key', OPERATION_ORDER_PREFIX + '%').order('setting_key').range(offset, offset + 499);
+        if (error) throw error;
+        for (const row of data || []) {
+          try { const value = JSON.parse(row.setting_value || '[]'); if (Array.isArray(value) && value.every(key => typeof key === 'string')) orders[row.setting_key.slice(OPERATION_ORDER_PREFIX.length)] = value; } catch {}
+        }
+        if (!data || data.length < 500) return orders;
+      }
+    },
+  });
+
   const { filters: persistedFilters, setFilter: setPersisted } = usePersistedFilters('composite-tasks', {
     search: '',
     filterStatus: 'all',
@@ -1364,7 +1380,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       });
 
       // عرض الأحدث أولاً
-      const operations = sequencedOperations.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+      const operations = applyOperationDisplayOrder(sequencedOperations.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()), operationOrders[key]);
 
       const breakdownMap = new Map<number, { contractId: number; count: number; adType?: string }>();
       let unmatchedBillboards = 0;
@@ -1407,7 +1423,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
     });
 
     return groups.sort((a, b) => new Date(b.latestActivity || 0).getTime() - new Date(a.latestActivity || 0).getTime());
-  }, [sorted]);
+  }, [sorted, operationOrders]);
 
   const typeCounts = useMemo(() => ({
     all: grouped.length,

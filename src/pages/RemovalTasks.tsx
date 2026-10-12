@@ -1,5 +1,5 @@
 import { QuickRemovalDialog } from '@/components/removal/QuickRemovalDialog';
-import { removalPrintImages, verifiedRemovalDesignSource, matchesRemovalDesignBillboard } from '@/services/removalPrintImages';
+import { removalPrintImages, verifiedRemovalDesignSource, matchesRemovalDesignBillboard, isRemovalDesignEnabled } from '@/services/removalPrintImages';
 import { excludePreviouslyCompletedRemovals } from '@/services/removalTaskHistory';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -330,7 +330,7 @@ export default function RemovalTasks() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('Contract')
-        .select('Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", design_data, billboard_ids')
+        .select('Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", design_data, billboard_ids, installation_enabled')
         .in('Contract_Number', contractIds);
       if (error) throw error;
       return (data || []) as any[];
@@ -352,6 +352,7 @@ export default function RemovalTasks() {
     // A. Parse Contract.design_data for each contract
     const contractDesignMap = new Map<string, { design_face_a?: string | null; design_face_b?: string | null }>();
     taskContracts.forEach((c: any) => {
+      if (c.installation_enabled === false) return;
       if (!c.design_data) return;
       try {
         let dd = typeof c.design_data === 'string' ? JSON.parse(c.design_data) : c.design_data;
@@ -369,34 +370,36 @@ export default function RemovalTasks() {
         };
 
         if (Array.isArray(dd)) {
+          const contractBillboardIds = c.billboard_ids
+            ? String(c.billboard_ids).split(',').map((s: string) => Number(s.trim())).filter((n: number) => Number.isFinite(n) && n > 0)
+            : [];
+          const contractBillboards = billboardsDetails.filter((b: any) => {
+            if (contractBillboardIds.length > 0) {
+              return contractBillboardIds.includes(Number(b.ID));
+            }
+            return true;
+          });
+
           dd.forEach((d: any) => {
-            const bId = d.billboardId || d.billboard_id || d.ID || d.id;
+            if (!isRemovalDesignEnabled(d)) return;
+
             const faceA = cleanUrl(d.designFaceA) || cleanUrl(d.design_face_a) || cleanUrl(d.faceA) || cleanUrl(d.face_a) ||
                           cleanUrl(d.design_face_a_url) || cleanUrl(d.designFaceAUrl);
 
             const faceB = cleanUrl(d.designFaceB) || cleanUrl(d.design_face_b) || cleanUrl(d.faceB) || cleanUrl(d.face_b) ||
                           cleanUrl(d.design_face_b_url) || cleanUrl(d.designFaceBUrl);
 
-            const matchedBillboard = billboardsDetails.find(billboard => matchesRemovalDesignBillboard(d, billboard));
-            if (matchedBillboard) {
-              contractDesignMap.set(`${Number(c.Contract_Number)}:${Number(matchedBillboard.ID)}`, {
-                design_face_a: faceA || null,
-                design_face_b: faceB || null,
-              });
-            }
-            if (!bId && !d.billboardName && !d.billboard_name && !contractDesignMap.has(`${Number(c.Contract_Number)}:general`) && (faceA || faceB)) {
-              contractDesignMap.set(`${Number(c.Contract_Number)}:general`, {
-                design_face_a: faceA || null,
-                design_face_b: faceB || null,
-              });
-            }
-          });
-        } else if (dd && typeof dd === 'object') {
-          const faceA = cleanUrl(dd.designFaceA) || cleanUrl(dd.design_face_a) || cleanUrl(dd.faceA) || cleanUrl(dd.face_a) || cleanUrl(dd.design_face_a_url) || cleanUrl(dd.designFaceAUrl);
-          const faceB = cleanUrl(dd.designFaceB) || cleanUrl(dd.design_face_b) || cleanUrl(dd.faceB) || cleanUrl(dd.face_b) || cleanUrl(dd.design_face_b_url) || cleanUrl(dd.designFaceBUrl);
-          contractDesignMap.set(`${Number(c.Contract_Number)}:general`, {
-            design_face_a: faceA || null,
-            design_face_b: faceB || null,
+            // Only map when the design actually contains an image
+            if (!faceA && !faceB) return;
+
+            contractBillboards.forEach((billboard: any) => {
+              if (matchesRemovalDesignBillboard(d, billboard)) {
+                contractDesignMap.set(`${Number(c.Contract_Number)}:${Number(billboard.ID)}`, {
+                  design_face_a: faceA || null,
+                  design_face_b: faceB || null,
+                });
+              }
+            });
           });
         }
       } catch (err) {

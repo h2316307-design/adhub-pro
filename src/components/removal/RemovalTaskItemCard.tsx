@@ -43,10 +43,11 @@ export function RemovalTaskItemCard({
   const [selectedFace, setSelectedFace] = useState<'a' | 'b'>('a');
   const isCompleted = item.status === 'completed';
 
-  // استخراج جميع الصور المتاحة (التصميم مستقل تماماً عن صورة هيكل اللوحة)
+  // استخراج جميع الصور المتاحة (التصميم مستقل تماماً عن صورة هيكل اللوحة ويظهر فقط لو مفعل ولها تصميم يخص هذه اللوحة)
+  const isDesignDisabled = item?.design_enabled === false || item?.is_design_enabled === false || contract?.installation_enabled === false;
   const billboardStreetUrl = (billboard?.Image_URL || '').trim();
   const sanitizeDesignCandidate = (url?: string | null) => {
-    if (!url) return null;
+    if (isDesignDisabled || !url) return null;
     const norm = normalizeGoogleImageUrl(url);
     if (!norm) return null;
     if (billboardStreetUrl && (norm === billboardStreetUrl || url.trim() === billboardStreetUrl)) return null;

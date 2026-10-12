@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
 import { completeRemovalItems } from '@/services/completeRemovalItems';
+import { matchesRemovalDesignBillboard, isRemovalDesignEnabled } from '@/services/removalPrintImages';
 import { toast } from 'sonner';
 
 interface QuickRemovalDialogProps {
@@ -178,29 +179,30 @@ export function QuickRemovalDialog({
         const contract = contracts[task.contract_id] || {};
         const teamName = teams[task.team_id]?.team_name || 'بدون فرقة';
 
-        // استخراج صورة التصميم المخصص للإزالة
+        // استخراج صورة التصميم المخصص للإزالة (فقط لو مفعل ولها تصميم يخص هذه اللوحة بالتحديد)
         let designUrl: string | null = null;
-        if (item.design_face_a && typeof item.design_face_a === 'string' && item.design_face_a.trim().length > 5) {
-          designUrl = item.design_face_a.trim();
-        } else if (item.design_face_b && typeof item.design_face_b === 'string' && item.design_face_b.trim().length > 5) {
-          designUrl = item.design_face_b.trim();
-        } else if (contract.design_data) {
-          try {
-            let dd = typeof contract.design_data === 'string' ? JSON.parse(contract.design_data) : contract.design_data;
-            if (typeof dd === 'string') {
-              try { dd = JSON.parse(dd); } catch {}
-            }
-            if (Array.isArray(dd)) {
-              const bIdStr = String(item.billboard_id);
-              const match = dd.find((d: any) => String(d.billboardId || d.billboard_id || d.ID || d.id) === bIdStr);
-              if (match) {
-                const face = match.designFaceA || match.design_face_a || match.faceA || match.designFaceAUrl;
-                if (face && typeof face === 'string' && face.trim().length > 5) {
-                  designUrl = face.trim();
+        if (contract?.installation_enabled !== false) {
+          if (item.design_face_a && typeof item.design_face_a === 'string' && item.design_face_a.trim().length > 5) {
+            designUrl = item.design_face_a.trim();
+          } else if (item.design_face_b && typeof item.design_face_b === 'string' && item.design_face_b.trim().length > 5) {
+            designUrl = item.design_face_b.trim();
+          } else if (contract.design_data) {
+            try {
+              let dd = typeof contract.design_data === 'string' ? JSON.parse(contract.design_data) : contract.design_data;
+              if (typeof dd === 'string') {
+                try { dd = JSON.parse(dd); } catch {}
+              }
+              if (Array.isArray(dd)) {
+                const match = dd.find((d: any) => isRemovalDesignEnabled(d) && matchesRemovalDesignBillboard(d, billboard));
+                if (match) {
+                  const face = match.designFaceA || match.design_face_a || match.faceA || match.designFaceAUrl || match.design_face_a_url;
+                  if (face && typeof face === 'string' && face.trim().length > 5) {
+                    designUrl = face.trim();
+                  }
                 }
               }
-            }
-          } catch {}
+            } catch {}
+          }
         }
 
         // عزل صورة الهيكل عن صورة التصميم لضمان عدم التكرار
@@ -326,7 +328,7 @@ export function QuickRemovalDialog({
       >
         <DialogContent
           dir="rtl"
-          className="max-w-6xl w-[95vw] max-h-[92dvh] flex flex-col gap-3.5 overflow-hidden p-4 sm:p-6"
+          className="max-w-7xl w-[95vw] h-[92dvh] max-h-[92dvh] flex flex-col gap-3.5 overflow-hidden p-4 sm:p-6"
         >
           {/* رأس النافذة */}
           <DialogHeader className="pb-1 text-right">
@@ -439,10 +441,9 @@ export function QuickRemovalDialog({
                 <p className="text-sm font-medium">لا توجد لوحات معلّقة تطابق خيارات البحث.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3.5 pb-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pb-2">
                 {visible.map((row) => {
                   const isSelected = selected.has(row.id);
-                  const hasBothImages = Boolean(row.billboardImage && row.designImage);
 
                   return (
                     <div
@@ -479,127 +480,15 @@ export function QuickRemovalDialog({
                           #{row.billboard.ID || row.billboard_id}
                         </div>
 
-                        {/* عرض الصور: متجاور (التصميم على اليمين واللوحة على اليسار في RTL) */}
-                        {hasBothImages ? (
-                          <div className="grid grid-cols-2 gap-1.5 h-44 sm:h-48">
-                            {/* صورة تصميم الإعلان (على اليمين) */}
-                            <div className="relative rounded-xl overflow-hidden bg-muted group/img border border-amber-500/30">
-                              <img
-                                src={row.designImage}
-                                alt="تصميم الإعلان"
-                                loading="lazy"
-                                className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
-                                }}
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                              <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/90 text-white backdrop-blur-md border-0 pointer-events-none gap-1">
-                                <Palette className="w-2.5 h-2.5 text-white" />
-                                التصميم
-                              </Badge>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewImage({
-                                    url: row.designImage,
-                                    title: `تصميم الإعلان: عقد #${row.task.contract_id} (${row.contract['Customer Name'] || ''})`,
-                                  });
-                                }}
-                                className="absolute top-1.5 left-1.5 p-1 rounded-md bg-black/60 text-white/90 hover:bg-black/90 opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer z-10"
-                                title="تكبير التصميم"
-                              >
-                                <Maximize2 className="w-3 h-3" />
-                              </button>
-                            </div>
-
-                            {/* صورة هيكل اللوحة (على اليسار) */}
-                            <div className="relative rounded-xl overflow-hidden bg-muted group/img">
-                              <img
-                                src={row.billboardImage}
-                                alt="صورة اللوحة"
-                                loading="lazy"
-                                className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
-                                }}
-                              />
-                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                              <Badge className="absolute bottom-1.5 right-1.5 text-[9px] font-bold px-1.5 py-0.5 bg-black/80 text-white backdrop-blur-md border-0 pointer-events-none gap-1">
-                                <ImageIcon className="w-2.5 h-2.5 text-slate-300" />
-                                اللوحة
-                              </Badge>
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewImage({
-                                    url: row.billboardImage,
-                                    title: `صورة اللوحة: ${row.billboard.Billboard_Name || row.billboard_id}`,
-                                  });
-                                }}
-                                className="absolute top-1.5 left-1.5 p-1 rounded-md bg-black/60 text-white/90 hover:bg-black/90 opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer z-10"
-                                title="تكبير صورة اللوحة"
-                              >
-                                <Maximize2 className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ) : row.billboardImage || row.designImage ? (
-                          <div className="relative h-44 sm:h-48 rounded-xl overflow-hidden bg-muted group/img">
-                            <img
-                              src={row.billboardImage || row.designImage}
-                              alt="صورة المعاينة"
-                              loading="lazy"
-                              className="w-full h-full object-cover transition-transform duration-300 group-hover/img:scale-105"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-                            <Badge
-                              className={`absolute bottom-1.5 right-1.5 text-[9px] font-bold px-2 py-0.5 backdrop-blur-md border-0 pointer-events-none gap-1 ${
-                                row.designImage && !row.billboardImage
-                                  ? 'bg-amber-500/90 text-white'
-                                  : 'bg-black/80 text-white'
-                              }`}
-                            >
-                              {row.designImage && !row.billboardImage ? (
-                                <>
-                                  <Palette className="w-2.5 h-2.5 text-white" />
-                                  تصميم الإعلان
-                                </>
-                              ) : (
-                                <>
-                                  <ImageIcon className="w-2.5 h-2.5 text-slate-300" />
-                                  صورة اللوحة
-                                </>
-                              )}
-                            </Badge>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewImage({
-                                  url: (row.billboardImage || row.designImage)!,
-                                  title: row.designImage && !row.billboardImage
-                                    ? `تصميم الإعلان: عقد #${row.task.contract_id}`
-                                    : `صورة اللوحة: ${row.billboard.Billboard_Name || row.billboard_id}`,
-                                });
-                              }}
-                              className="absolute top-1.5 left-1.5 p-1.5 rounded-md bg-black/60 text-white/90 hover:bg-black/90 opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer z-10"
-                              title="تكبير الصورة"
-                            >
-                              <Maximize2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="h-44 sm:h-48 rounded-xl flex flex-col items-center justify-center bg-muted/40 border border-dashed border-border/60 text-muted-foreground gap-2">
-                            <ImageIcon className="w-8 h-8 opacity-40 text-muted-foreground" />
-                            <span className="text-xs font-medium">لا تتوفر صورة للوحة أو التصميم</span>
-                          </div>
-                        )}
+                        <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-muted group/img">
+                          {row.billboardImage ? <button type="button" className="h-full w-full cursor-pointer focus-visible:ring-2 focus-visible:ring-primary" aria-label={`تكبير صورة ${row.billboard.Billboard_Name || row.billboard_id}`} onClick={event => { event.stopPropagation(); setPreviewImage({ url: row.billboardImage, title: `صورة اللوحة: ${row.billboard.Billboard_Name || row.billboard_id}` }); }}>
+                            <img src={row.billboardImage} alt={`صورة اللوحة ${row.billboard.Billboard_Name || row.billboard_id}`} loading="lazy" className="h-full w-full object-contain" />
+                            <Maximize2 className="absolute bottom-2 left-2 h-7 w-7 rounded bg-background/90 p-1 text-foreground" />
+                          </button> : <div className="h-full flex flex-col items-center justify-center gap-2 text-muted-foreground"><ImageIcon className="h-8 w-8 opacity-40" /><span className="text-xs">صورة اللوحة غير متوفرة</span></div>}
+                        </div>
+                        {row.designImage && <button type="button" className="mt-2 flex w-full items-center gap-3 rounded-lg border bg-background p-2 cursor-pointer transition-all duration-200 hover:border-primary" onClick={event => { event.stopPropagation(); setPreviewImage({ url: row.designImage, title: `تصميم عقد ${row.task.contract_id}` }); }}>
+                          <img src={row.designImage} alt="تصميم الإعلان" loading="lazy" className="h-14 w-24 object-contain" /><span className="text-xs text-muted-foreground">تصميم الإعلان</span>
+                        </button>}
                       </div>
 
                       {/* بيانات اللوحة والعقد أسفل الصورة */}
