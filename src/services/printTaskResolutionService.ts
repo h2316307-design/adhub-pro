@@ -173,8 +173,8 @@ export function resolveItemDesign(
     });
 
     if (matchingDesign) {
-      const faceA = (matchingDesign.designFaceA || matchingDesign.design_face_a || matchingDesign.billboardImage || matchingDesign.image_url)?.trim() || null;
-      const faceB = (matchingDesign.designFaceB || matchingDesign.design_face_b)?.trim() || null;
+      const faceA = (matchingDesign.designFaceA || matchingDesign.design_face_a || matchingDesign.design_face_a_url)?.trim() || null;
+      const faceB = (matchingDesign.designFaceB || matchingDesign.design_face_b || matchingDesign.design_face_b_url)?.trim() || null;
       if (faceA || faceB) {
         return {
           faceA,
@@ -188,7 +188,7 @@ export function resolveItemDesign(
 
   // Precedence 4: Direct billboard record design fields
   if (billboard) {
-    const bFaceA = (billboard.designFaceA || billboard.imageUrl)?.trim() || null;
+    const bFaceA = billboard.designFaceA?.trim() || null;
     const bFaceB = billboard.designFaceB?.trim() || null;
     if (bFaceA || bFaceB) {
       return {

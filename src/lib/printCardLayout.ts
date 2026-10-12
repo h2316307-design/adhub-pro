@@ -37,7 +37,7 @@ export function resolvePrintCardLayout(settings: Record<string, any>, options: {
 }) {
   const s = settings;
   const Z = PRINT_TEMPLATE_ZONES;
-  const zones = options.templateZones !== false;
+  const zones = Boolean(options.templateZones);
   const dimensions = String(options.size || '').match(/\d+(?:\.\d+)?/g)?.map(Number) || [];
   const portraitDesign = dimensions.length >= 2 && dimensions[1] > dimensions[0];
 

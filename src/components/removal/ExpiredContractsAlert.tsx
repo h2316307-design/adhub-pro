@@ -170,52 +170,51 @@ export function ExpiredContractsAlert({
         const extraIds = contractBillboardsFromMap.map((b: any) => b.ID);
         const allUniqueIds = Array.from(new Set([...contractBillboardIds, ...extraIds]));
 
-        if (allUniqueIds.length === 0) return;
+        const endDate = contract['End Date'] ? new Date(contract['End Date']) : null;
+        const isExpired = endDate ? endDate <= today : false;
 
-        // فحص كل لوحة بمنطق تصدير المتاح الموحد (Single Source of Truth)
+        // مهام الإزالة مخصصة حصراً للعقود المنتهية فعلياً - العقود النشطة لا يجوز إزالتها إطلاقاً
+        if (!isExpired) return;
+
+        // فحص كل لوحة: اللوحة تُضاف للإزالة فقط إذا لم تكن مشغولة بعقد نشط آخر
         const availableBillboardIds: number[] = [];
 
         allUniqueIds.forEach((id: number) => {
           if (existingTaskBillboardIds.has(id)) return;
           const billboard = allBillboardsMap.get(id);
-          if (!billboard) return; // لوحة غير موجودة في قاعدة البيانات
+          if (!billboard) return;
 
-          // ✅ المنطق الموحد: اللوحة تُضاف فقط إذا كانت متاحة (غير مؤجرة/غير محجوبة/غير تحت صيانة)
-          const isAvailable = checkIsAvailableForAvailableExports(billboard, allContracts || []);
-          if (isAvailable) {
+          // التحقق من عدم وجود عقد سارٍ آخر على نفس اللوحة
+          const isCurrentlyOccupied = (allContracts || []).some((otherC: any) => {
+            if (otherC.Contract_Number === contract.Contract_Number) return false;
+            const otherEnd = otherC['End Date'] ? new Date(otherC['End Date']) : null;
+            if (!otherEnd || otherEnd <= today) return false;
+            const otherStatus = String(otherC.Status || otherC.status || '').toLowerCase();
+            if (otherStatus === 'canceled' || otherStatus === 'ملغي' || otherC.billboards_released === true) return false;
+            const otherIds = String(otherC.billboard_ids || '').split(',').map((s: string) => parseInt(s.trim())).filter(Boolean);
+            return otherIds.includes(id);
+          });
+
+          if (!isCurrentlyOccupied) {
             availableBillboardIds.push(id);
           }
         });
 
-        // العقد لا يظهر إذا لم يكن لديه ولو لوحة واحدة متاحة
+        // العقد لا يظهر إذا لم يكن لديه أي لوحة تحتاج إزالة
         if (availableBillboardIds.length === 0) return;
 
-        const endDate = contract['End Date'] ? new Date(contract['End Date']) : null;
-        const isExpired = endDate ? endDate <= today : true;
-
-        // ✅ القاعدة الجديدة:
-        // - العقد المنتهي: يظهر دائماً طالما لديه لوحات متاحة، بغض النظر عن is_visible_in_available
-        // - العقد النشط: يظهر فقط إذا كان is_visible_in_available = true (مفعّل يدوياً)
-        const isContractVisibleInAvailable = contract.is_visible_in_available === true;
-        const isActiveButVisibleInAvailable = !isExpired && isContractVisibleInAvailable;
-
-        // is_visible_in_available لا اعتبار لها للعقود المنتهية - تُعامل كعقد عادي محتاج إزالة
-        const isVisibleInAvailable = isActiveButVisibleInAvailable;
-
-        if (isExpired || isActiveButVisibleInAvailable) {
-          processedContracts.set(contract.Contract_Number, {
-            Contract_Number: contract.Contract_Number,
-            'Customer Name': contract['Customer Name'] || 'غير محدد',
-            'Ad Type': contract['Ad Type'] || '—',
-            'End Date': contract['End Date'] || todayStr,
-            billboard_ids: availableBillboardIds.join(','),
-            originalBillboardCount: allUniqueIds.length,
-            availableBillboardCount: availableBillboardIds.length,
-            daysExpired: isExpired ? differenceInDays(today, new Date(contract['End Date'] || today)) : 0,
-            isExpired,
-            isVisibleInAvailable,
-          });
-        }
+        processedContracts.set(contract.Contract_Number, {
+          Contract_Number: contract.Contract_Number,
+          'Customer Name': contract['Customer Name'] || 'غير محدد',
+          'Ad Type': contract['Ad Type'] || '—',
+          'End Date': contract['End Date'] || todayStr,
+          billboard_ids: availableBillboardIds.join(','),
+          originalBillboardCount: allUniqueIds.length,
+          availableBillboardCount: availableBillboardIds.length,
+          daysExpired: differenceInDays(today, new Date(contract['End Date'] || today)),
+          isExpired: true,
+          isVisibleInAvailable: false,
+        });
       });
 
       const result = Array.from(processedContracts.values()).sort((a, b) => b.Contract_Number - a.Contract_Number);

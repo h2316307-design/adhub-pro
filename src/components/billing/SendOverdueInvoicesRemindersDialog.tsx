@@ -103,7 +103,7 @@ const getTaskTypeLabel = (type: string) => {
 const getTypeLabel = (type: string) => {
   if (type === 'sales') return 'مبيعات';
   if (type === 'print') return 'طباعة';
-  return 'مجمعة';
+  return 'خدمات';
 };
 
 function ManualInvoiceRow({
@@ -363,10 +363,10 @@ export function SendOverdueInvoicesRemindersDialog({
         }
       }
 
-      // 3. المهام المجمعة
+      // 3. فواتير التركيب والطباعة والقص
       const { data: tasks } = await supabase
         .from('composite_tasks')
-        .select('id, task_number, task_type, customer_name, customer_id, customer_total, paid_amount, created_at, status')
+        .select('id, task_number, task_type, customer_name, customer_id, customer_print_cost, customer_installation_cost, customer_cutout_cost, customer_total, paid_amount, created_at, status, installation_task_id, print_task_id, cutout_task_id')
         .not('status', 'eq', 'cancelled');
 
       for (const task of tasks || []) {
@@ -379,10 +379,32 @@ export function SendOverdueInvoicesRemindersDialog({
         const diffDays = Math.ceil((today.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
         
         if (diffDays > 15) {
+          const printCost = Number(task.customer_print_cost) || 0;
+          const installCost = Number(task.customer_installation_cost) || 0;
+          const cutoutCost = Number(task.customer_cutout_cost) || 0;
+
+          const hasPrint = printCost > 0 || !!task.print_task_id || task.task_type === 'print' || task.task_type === 'installation_print' || task.task_type === 'installation_print_cutout' || task.task_type === 'print_cutout';
+          const hasInstall = installCost > 0 || !!task.installation_task_id || task.task_type === 'installation' || task.task_type === 'new_installation' || task.task_type === 'reinstallation' || task.task_type === 'installation_print' || task.task_type === 'installation_print_cutout' || task.task_type === 'installation_cutout';
+          const hasCutout = cutoutCost > 0 || !!task.cutout_task_id || task.task_type === 'cutout' || task.task_type === 'installation_print_cutout' || task.task_type === 'installation_cutout' || task.task_type === 'print_cutout';
+          const isReinstall = task.task_type === 'reinstallation' || (Number(task.reinstallation_number || 0) > 0);
+
+          let invoiceTitle = 'تركيب';
+          if (hasPrint && hasInstall) {
+            invoiceTitle = hasCutout ? 'طباعة وتركيب وقص' : 'طباعة وتركيب';
+          } else if (hasInstall && !hasPrint) {
+            invoiceTitle = hasCutout ? (isReinstall ? 'إعادة تركيب وقص' : 'تركيب وقص') : (isReinstall ? 'إعادة تركيب' : 'تركيب');
+          } else if (hasPrint && !hasInstall) {
+            invoiceTitle = hasCutout ? 'طباعة وقص' : 'طباعة';
+          } else if (hasCutout) {
+            invoiceTitle = 'قص مجسمات';
+          } else {
+            invoiceTitle = isReinstall ? 'إعادة تركيب' : 'تركيب';
+          }
+
           addInvoiceToCustomer({
             id: task.id,
             invoiceNumber: String(task.task_number),
-            invoiceName: getTaskTypeLabel(task.task_type),
+            invoiceName: invoiceTitle,
             customerName: task.customer_name || 'غير معروف',
             customerId: task.customer_id,
             totalAmount: customerTotal,
@@ -506,7 +528,8 @@ export function SendOverdueInvoicesRemindersDialog({
       const typeBadge = getTypeLabel(inv.type);
       const nameLabel = inv.invoiceName ? ` - ${inv.invoiceName}` : '';
       if (inv.type === 'composite') {
-        details += `\n${idx}. مهمة مجمعة #${inv.invoiceNumber}${nameLabel}\n`;
+        const title = inv.invoiceName ? `فاتورة ${inv.invoiceName}` : 'فاتورة خدمات';
+        details += `\n${idx}. ${title} #${inv.invoiceNumber}\n`;
       } else {
         details += `\n${idx}. فاتورة ${typeBadge} #${inv.invoiceNumber}${nameLabel}\n`;
       }

@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import ts from 'typescript';
-import { resolvePrintCardLayout, fitPrintCardText } from '@/lib/printCardLayout';
+import { resolvePrintCardLayout, fitPrintCardText, isTemplateBackground } from '@/lib/printCardLayout';
 import { resolveInstallationFacesCount } from '@/lib/installationFaces';
+import { removalPrintImages } from '@/services/removalPrintImages';
 
 const source = readFileSync('src/components/shared/printing/UnifiedPrintAllDialog.tsx', 'utf8');
 const settingsSource = readFileSync('src/hooks/usePrintCustomization.ts', 'utf8');
@@ -59,7 +60,8 @@ export function createPrintGeneratorFixture(overrides: Record<string, any> = {})
     formatFacesCountArabic: (count: number) => count === 2 ? 'وجهين' : 'وجه واحد',
     QRCode: { toDataURL: async () => 'data:image/png;base64,qr' },
     getCleanDocumentTitle: () => 'اختبار الطباعة', getContextLabel: () => 'العقد',
-    resolvePrintCardLayout, fitPrintCardText,
+    getTeamName: (id: any) => 'الفريق التجريبي',
+    resolvePrintCardLayout, fitPrintCardText, isTemplateBackground, removalPrintImages,
     ...overrides,
   };
   const keys = Object.keys(env).join(',');

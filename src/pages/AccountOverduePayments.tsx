@@ -29,6 +29,8 @@ interface UnpaidInvoice {
   invoiceNumber?: string;
   notes?: string;
   invoiceName?: string;
+  invoiceTitle?: string;
+  serviceLabel?: string;
 }
 
 interface CustomerAccountOverdue {
@@ -84,7 +86,7 @@ export default function AccountOverduePayments() {
           .eq('paid', false),
         supabase
           .from('composite_tasks')
-          .select(`id, task_number, customer_name, customer_id, customer_total, paid_amount, discount_amount, created_at, status, contract_id, combined_invoice_id, installation_task_id`)
+          .select(`id, task_number, task_type, customer_name, customer_id, customer_print_cost, customer_installation_cost, customer_cutout_cost, customer_total, paid_amount, discount_amount, created_at, status, contract_id, combined_invoice_id, installation_task_id, print_task_id, cutout_task_id`)
           .is('combined_invoice_id', null)
           .neq('status', 'cancelled')
       ]);
@@ -413,6 +415,52 @@ export default function AccountOverduePayments() {
         });
 
         const cNumStr = taskContracts.length > 0 ? taskContracts.join(',') : null;
+
+        const printCost = Number(ct.customer_print_cost) || 0;
+        const installCost = realInstallTotal !== null ? realInstallTotal : (Number(ct.customer_installation_cost) || 0);
+        const cutoutCost = Number(ct.customer_cutout_cost) || 0;
+
+        // مصفوفة التسمية الدقيقة بحسب التكاليف ونوع العمليات
+        const hasPrint = printCost > 0 || !!ct.print_task_id || ct.task_type === 'print' || ct.task_type === 'installation_print' || ct.task_type === 'installation_print_cutout' || ct.task_type === 'print_cutout';
+        const hasInstall = installCost > 0 || !!ct.installation_task_id || ct.task_type === 'installation' || ct.task_type === 'new_installation' || ct.task_type === 'reinstallation' || ct.task_type === 'installation_print' || ct.task_type === 'installation_print_cutout' || ct.task_type === 'installation_cutout';
+        const hasCutout = cutoutCost > 0 || !!ct.cutout_task_id || ct.task_type === 'cutout' || ct.task_type === 'installation_print_cutout' || ct.task_type === 'installation_cutout' || ct.task_type === 'print_cutout';
+        const isReinstall = ct.task_type === 'reinstallation' || (Number(ct.reinstallation_number || 0) > 0);
+
+        let invoiceTitle = 'فاتورة تركيب';
+        let serviceLabel = 'تركيب';
+
+        if (hasPrint && hasInstall) {
+          if (hasCutout) {
+            invoiceTitle = 'فاتورة طباعة وتركيب وقص';
+            serviceLabel = 'طباعة وتركيب وقص';
+          } else {
+            invoiceTitle = 'فاتورة طباعة وتركيب';
+            serviceLabel = 'طباعة وتركيب';
+          }
+        } else if (hasInstall && !hasPrint) {
+          if (hasCutout) {
+            invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب وقص' : 'فاتورة تركيب وقص';
+            serviceLabel = isReinstall ? 'إعادة تركيب وقص' : 'تركيب وقص';
+          } else {
+            invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
+            serviceLabel = isReinstall ? 'إعادة تركيب' : 'تركيب';
+          }
+        } else if (hasPrint && !hasInstall) {
+          if (hasCutout) {
+            invoiceTitle = 'فاتورة طباعة وقص';
+            serviceLabel = 'طباعة وقص';
+          } else {
+            invoiceTitle = 'فاتورة طباعة';
+            serviceLabel = 'طباعة';
+          }
+        } else if (hasCutout) {
+          invoiceTitle = 'فاتورة قص مجسمات';
+          serviceLabel = 'قص مجسمات';
+        } else {
+          invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
+          serviceLabel = isReinstall ? 'إعادة تركيب' : 'تركيب';
+        }
+
         const item: UnpaidInvoice = {
           invoiceId: ct.id,
           contractNumber: cNumStr,
@@ -424,6 +472,8 @@ export default function AccountOverduePayments() {
           adType: getAdTypeDisplay(cNumStr, ct.customer_id, ct.customer_name),
           type: 'composite',
           invoiceNumber: ct.task_number ? `مهمة #${ct.task_number}` : undefined,
+          invoiceTitle,
+          serviceLabel,
         };
 
         const key = item.customerId || item.customerName;
@@ -749,8 +799,8 @@ export default function AccountOverduePayments() {
       if (inv.notes) typeName += ` (${inv.notes})`;
       if (inv.invoiceNumber) docRef = `\n- رقم الفاتورة: ${inv.invoiceNumber}`;
     } else if (inv.type === 'composite') {
-      typeName = 'مهمة مجمعة غير مسددة';
-      if (inv.invoiceNumber) docRef = `\n- مرجع المهمة: ${inv.invoiceNumber}`;
+      typeName = `${inv.invoiceTitle || 'فاتورة خدمات'} غير مسددة`;
+      if (inv.invoiceNumber) docRef = `\n- رقم الفاتورة / المهمة: ${inv.invoiceNumber}`;
       if (inv.contractNumber) {
         docRef += inv.contractNumber.includes(',')
           ? `\n- عقود رقم: #${inv.contractNumber.split(',').join(', #')}`
@@ -782,7 +832,7 @@ export default function AccountOverduePayments() {
         if (inv.notes) typeName += ` (${inv.notes})`;
         if (inv.invoiceNumber) details.push(`رقم ${inv.invoiceNumber}`);
       } else if (inv.type === 'composite') {
-        typeName = 'مهمة مجمعة';
+        typeName = inv.invoiceTitle || 'فاتورة خدمات';
         if (inv.invoiceNumber) details.push(`${inv.invoiceNumber}`);
         if (inv.contractNumber) {
           details.push(inv.contractNumber.includes(',')
@@ -895,7 +945,7 @@ export default function AccountOverduePayments() {
 
   return (
     <div dir="rtl">
-      <OverdueWorkspace title="الفواتير والحسابات المتأخرة" description="راجع فواتير الطباعة والمبيعات والمهام المجمعة، مع المستحق الفعلي بعد احتساب رصيد الحساب." itemLabel="فواتير غير مسددة" totalAmount={totalAmount} totalItems={totalInvoices}
+      <OverdueWorkspace title="الفواتير والحسابات المتأخرة" description="راجع فواتير الطباعة والمبيعات وخدمات التركيب والقص، مع المستحق الفعلي بعد احتساب رصيد الحساب." itemLabel="فواتير غير مسددة" totalAmount={totalAmount} totalItems={totalInvoices}
         headerAction={<BrowserWhatsAppBatchDialog recipients={sortedAndFiltered.map(customer=>({id:customer.customerId||customer.customerName,name:customer.customerName,phone:getPhone(customer),message:getComprehensiveMessageText(customer)}))}/>}
         search={searchTerm} onSearch={setSearchTerm} minDays={minDays} onMinDays={setMinDays} minAmount={minAmount} onMinAmount={setMinAmount} sort={sortBy} onSort={setSortBy} onRefresh={loadData}
         customers={sortedAndFiltered.map(customer=>({key:customer.customerId || customer.customerName,name:customer.customerName,amount:customer.totalOverdue,count:customer.invoicesCount,days:customer.oldestDaysOverdue,phone:getPhone(customer),
@@ -903,7 +953,7 @@ export default function AccountOverduePayments() {
           onReminder:()=>setWhatsappChoiceDialog({open:true,invoice:null,customer}),reminderDisabled:sendingId===(customer.customerId||customer.customerName)||!getPhone(customer),
           extra:customer.invoices.reduce((sum,invoice)=>sum+invoice.amount,0)-customer.totalOverdue>0.5?<div className="rounded-lg border border-info/25 bg-info/5 p-3 text-xs"><p className="font-semibold">رصيد الحساب محسوب في المستحق</p><p className="mt-1 leading-relaxed text-muted-foreground">مجموع أرصدة الفواتير {customer.invoices.reduce((sum,invoice)=>sum+invoice.amount,0).toLocaleString('ar-LY')} د.ل، والمستحق بعد تسوية رصيد الحساب {customer.totalOverdue.toLocaleString('ar-LY')} د.ل.</p></div>:undefined,
           items:customer.invoices.slice().sort((a,b)=>b.daysOverdue-a.daysOverdue).map(invoice=>({key:`${invoice.type}-${invoice.invoiceId}`,
-            title:invoice.type==='printed'?'فاتورة طباعة':invoice.type==='sales'?`فاتورة مبيعات ${invoice.invoiceNumber||''}`:`مهمة مجمعة ${invoice.invoiceNumber?.replace(/^مهمة\s*/,'')||''}`,
+            title:invoice.type==='printed'?'فاتورة طباعة':invoice.type==='sales'?`فاتورة مبيعات ${invoice.invoiceNumber||''}`:`${invoice.invoiceTitle || 'فاتورة'} ${invoice.invoiceNumber?.replace(/^مهمة\s*/,'#')||''}`,
             subtitle:[invoice.invoiceName,invoice.adType,invoice.notes].filter(Boolean).join(' · '),contract:invoice.contractNumber?`عقد #${invoice.contractNumber.split(',').join('، #')}`:undefined,amount:invoice.amount,date:invoice.createdAt,dateLabel:'تاريخ الإصدار',amountLabel:'متبقي الفاتورة',days:invoice.daysOverdue,
             onSettle:()=>markItemPaid(invoice),onReminder:()=>setWhatsappChoiceDialog({open:true,invoice,customer:null}),reminderDisabled:sendingId===invoice.invoiceId||!getPhone(invoice),
           })),

@@ -109,11 +109,11 @@ export const DEBT_TEMPLATE_VARIABLES = [
   { key: '{نسبة_السداد}', description: 'نسبة السداد المئوية' },
   { key: '{المستحق}', description: 'المبلغ المستحق' },
   { key: '{تفاصيل_العقود}', description: 'تفاصيل العقود (نوع الإعلان، التواريخ، المدة)' },
-  { key: '{تفاصيل_المصادر}', description: 'تفصيل الديون حسب المصدر (عقود، مبيعات، طباعة، مجمعة)' },
+  { key: '{تفاصيل_المصادر}', description: 'تفصيل الديون حسب المصدر (عقود، مبيعات، طباعة، خدمات وتركيب)' },
   { key: '{مستحق_العقود}', description: 'مستحق العقود فقط' },
   { key: '{مستحق_المبيعات}', description: 'مستحق فواتير المبيعات' },
   { key: '{مستحق_الطباعة}', description: 'مستحق فواتير الطباعة' },
-  { key: '{مستحق_المجمعة}', description: 'مستحق الفواتير المجمعة' },
+  { key: '{مستحق_المجمعة}', description: 'مستحق فواتير الخدمات والتركيب' },
   { key: '{خصم_المشتريات}', description: 'خصم فواتير المشتريات' },
 ];
 
@@ -186,7 +186,7 @@ function buildSourceDetailsText(sources: DebtSourceBreakdown): string {
   if (sources.contractsDebt > 0) lines.push(`   - العقود: ${sources.contractsDebt.toLocaleString('en-US')} د.ل`);
   if (sources.salesInvoicesDebt > 0) lines.push(`   - فواتير المبيعات: ${sources.salesInvoicesDebt.toLocaleString('en-US')} د.ل`);
   if (sources.printedInvoicesDebt > 0) lines.push(`   - فواتير الطباعة: ${sources.printedInvoicesDebt.toLocaleString('en-US')} د.ل`);
-  if (sources.compositeTasksDebt > 0) lines.push(`   - الفواتير المجمعة: ${sources.compositeTasksDebt.toLocaleString('en-US')} د.ل`);
+  if (sources.compositeTasksDebt > 0) lines.push(`   - فواتير الخدمات والتركيب: ${sources.compositeTasksDebt.toLocaleString('en-US')} د.ل`);
   if (sources.purchaseInvoicesCredit > 0) lines.push(`   - خصم المشتريات: -${sources.purchaseInvoicesCredit.toLocaleString('en-US')} د.ل`);
   if (sources.otherDebts > 0) lines.push(`   - أخرى: ${sources.otherDebts.toLocaleString('en-US')} د.ل`);
   return lines.length > 0 ? lines.join('\n') : '';
@@ -254,8 +254,9 @@ export function applyContractExpiryAlertTemplate(
     daysLeft: number;
   }
 ): string {
-  const status = data.daysLeft <= 0 
-    ? 'منتهي' 
+  const status = data.daysLeft < 0 
+    ? 'منتهي'
+    : data.daysLeft === 0 ? 'ينتهي اليوم' 
     : data.daysLeft <= 7 
       ? `قارب على الانتهاء (${data.daysLeft} يوم)` 
       : `ينتهي خلال ${data.daysLeft} يوم`;

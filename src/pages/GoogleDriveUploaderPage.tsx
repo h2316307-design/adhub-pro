@@ -1,3 +1,4 @@
+import APPS_SCRIPT_CODE from '../../public/downloads/GoogleDriveUploader.gs?raw';
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { 
   CloudUpload, 
@@ -67,122 +68,6 @@ interface HistoryItem {
 
 const DEFAULT_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw-RN9EpZzCAyuFlV32sRgT_c-plrDgz7nuvO-h1Kf1blhABst6NnCwFCImpFpql-Zw/exec';
 
-const APPS_SCRIPT_CODE = `function doPost(e) {
-  try {
-    var MAIN_FOLDER_ID = "1slgjSJK29P5JtqNRGyAfkfCh4buspZVF";
-    var data = JSON.parse(e.postData.contents);
-
-    var mimeType = data.type || "image/jpeg";
-    var fileName = data.name || "file";
-    var blob = Utilities.newBlob(
-      Utilities.base64Decode(data.file), 
-      mimeType, 
-      fileName
-    );
-
-    // 1. الوصول للمجلد الرئيسي وإنشاء المجلدات الفرعية إن لزم الأمر
-    var currentFolder = DriveApp.getFolderById(MAIN_FOLDER_ID);
-    if (data.folder) {
-      var folderNames = data.folder.split('/');
-      for (var i = 0; i < folderNames.length; i++) {
-        var folderName = folderNames[i].trim();
-        if (folderName !== "") {
-          var folders = currentFolder.getFoldersByName(folderName);
-          if (folders.hasNext()) {
-            currentFolder = folders.next();
-          } else {
-            currentFolder = currentFolder.createFolder(folderName);
-          }
-        }
-      }
-    }
-
-    // 2. 🔄 ميزة الاستبدال السحري (Overwrite) للحفاظ على نفس الرابط
-    var existingFiles = currentFolder.getFilesByName(fileName);
-    var file;
-    var fileId = "";
-    var isUpdated = false;
-
-    if (existingFiles.hasNext()) {
-      // ✅ الملف موجود: نقوم بتحديث محتواه من الداخل دون تغيير الـ ID
-      file = existingFiles.next();
-      fileId = file.getId();
-      
-      var token = ScriptApp.getOAuthToken();
-      var updateUrl = "https://www.googleapis.com/upload/drive/v3/files/" + fileId + "?uploadType=media";
-      
-      var options = {
-        method: "PATCH",
-        headers: {
-          Authorization: "Bearer " + token,
-          "Content-Type": mimeType
-        },
-        payload: blob.getBytes(),
-        muteHttpExceptions: true
-      };
-      
-      // إرسال البيانات الجديدة للملف القديم
-      UrlFetchApp.fetch(updateUrl, options);
-      isUpdated = true;
-      
-    } else {
-      // 🆕 الملف غير موجود: نقوم بإنشاء ملف جديد
-      file = currentFolder.createFile(blob);
-      fileId = file.getId();
-      
-      try {
-        file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-      } catch (err) {
-        console.log("Sharing error: " + err);
-      }
-    }
-
-    // 3. 🖼️ تحديد الرابط النهائي (lh3 للصور، وتنزيل مباشر للملفات)
-    var finalUrl = "";
-    
-    if (mimeType.indexOf("image") !== -1) {
-      // إيقاف السكربت ثانيتين لضمان توليد سيرفرات جوجل لرابط lh3
-      Utilities.sleep(2000); 
-      try {
-        var thumbUrl = file.getThumbnailLink();
-        if (thumbUrl) {
-          finalUrl = thumbUrl.replace(/\\=s\\d+/, "=s2048"); // الحصول على أقصى جودة
-        } else {
-          finalUrl = "https://drive.google.com/uc?id=" + fileId;
-        }
-      } catch (thumbErr) {
-        finalUrl = "https://drive.google.com/uc?id=" + fileId;
-      }
-    } else {
-      // للملفات غير الصور (مثل Excel و PDF)
-      finalUrl = "https://drive.google.com/uc?export=download&id=" + fileId;
-    }
-
-    // 4. إرجاع النتيجة للواجهة
-    return ContentService
-      .createTextOutput(JSON.stringify({ 
-        success: true, 
-        url: finalUrl,
-        fileId: fileId,
-        updated: isUpdated // سيعطيك true إذا تم استبدال ملف قديم
-      }))
-      .setMimeType(ContentService.MimeType.JSON);
-
-  } catch (err) {
-    return ContentService
-      .createTextOutput(JSON.stringify({ success: false, error: err.toString() }))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
-
-function doOptions(e) {
-  return ContentService.createTextOutput("OK").setMimeType(ContentService.MimeType.TEXT);
-}
-
-function forceAllPermissions() {
-  DriveApp.getFiles(); // لإجبار جوجل على طلب صلاحية Drive
-  UrlFetchApp.fetch("https://www.google.com"); // لإجبار جوجل على طلب صلاحية الاتصال الخارجي
-}`;
 
 export default function GoogleDriveUploaderPage() {
   const [activeTab, setActiveTab] = useState<'upload' | 'history' | 'settings'>('upload');
@@ -383,7 +268,7 @@ export default function GoogleDriveUploaderPage() {
 
         const result = await response.json();
 
-        if (response.ok && (result?.url || result?.fileId || result?.id || result?.success)) {
+        if (response.ok && result?.success !== false && (result?.url || result?.fileId || result?.id || result?.success)) {
           const rawUrl = result.url || '';
           let fileId = result.fileId || result.id || '';
           if (!fileId && rawUrl) {
@@ -509,7 +394,7 @@ export default function GoogleDriveUploaderPage() {
         }),
       });
       const data = await res.json();
-      if (res.ok && (data.url || data.fileId || data.success)) {
+      if (res.ok && data.success !== false && (data.url || data.fileId || data.success)) {
         setTestResult({ ok: true, msg: 'الاتصال ناجح! الخدمة تعمل وجاهزة لاستقبال الملفات وتوليد الروابط.' });
       } else {
         throw new Error(data.error || 'استجابة غير صالحة');
@@ -1113,7 +998,7 @@ export default function GoogleDriveUploaderPage() {
                 </p>
                 <ol className="list-decimal list-inside space-y-1.5 text-[11.5px] text-muted-foreground leading-relaxed mr-1">
                   <li>افتح <a href="https://drive.google.com" target="_blank" rel="noreferrer" className="text-primary hover:underline font-bold">Google Drive</a> وأنشئ مجلداً جديداً لاستقبال الملفات، ثم افتحه وانسخ معرف المجلد (Folder ID) من شريط العنوان.</li>
-                  <li>ضع الـ ID المنسوخ مكان قيمة <code className="bg-muted px-1 py-0.5 rounded text-amber-500 font-mono">MAIN_FOLDER_ID</code> في السطر الثالث من الكود.</li>
+                  <li>ضع الـ ID المنسوخ مكان قيمة <code className="bg-muted px-1 py-0.5 rounded text-amber-500 font-mono">MAIN_FOLDER_ID</code> في بداية الكود.</li>
                   <li>افتح <a href="https://script.new" target="_blank" rel="noreferrer" className="text-primary hover:underline font-bold">Google Apps Script (script.new)</a> والصق الكود بالكامل، ثم اضغط على حفظ.</li>
                   <li>من قائمة الدوال في الأعلى، اختر الدالة <code className="bg-muted px-1 py-0.5 rounded text-emerald-500 font-mono">forceAllPermissions</code> واضغط <strong>Run (تشغيل)</strong> لمنح الصلاحيات لحسابك.</li>
                   <li>اضغط على <strong>Deploy (نشر)</strong> في الزاوية العلوية ثم <strong>New deployment (نشر جديد)</strong>.</li>

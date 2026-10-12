@@ -27,7 +27,8 @@ import { SendDebtRemindersDialog } from '@/components/billing/SendDebtRemindersD
 import { SendOverdueInvoicesRemindersDialog } from '@/components/billing/SendOverdueInvoicesRemindersDialog';
 import { BulkAccountStatementDialog } from '@/components/customers/BulkAccountStatementDialog';
 import { SendDebtReportDialog } from '@/components/customers/SendDebtReportDialog';
-import { Mail, AlertTriangle, DollarSign, Send, Receipt } from 'lucide-react';
+import { Mail, AlertTriangle, DollarSign, Send, Receipt, Calendar, Bell } from 'lucide-react';
+import { CustomerAlertsSyncDialog } from '@/components/customers/CustomerAlertsSyncDialog';
 import { getMergedInvoiceStylesAsync } from '@/hooks/useInvoiceSettingsSync';
 import { calculateCustomerFinancials } from '@/hooks/useCustomerFinancials';
 import { filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
@@ -61,6 +62,7 @@ interface CustomerSummary {
   id: string;
   name: string;
   phone: string | null;
+  email?: string | null;
   company: string | null;
   pricingCategory?: string | null;
   contractsCount: number;
@@ -90,6 +92,7 @@ function CustomerRow({
   remaining, 
   paymentPercentage,
   onViewBilling,
+  onAlerts,
   onEdit,
   onDelete
 }: { 
@@ -97,6 +100,7 @@ function CustomerRow({
   remaining: number;
   paymentPercentage: number;
   onViewBilling: () => void;
+  onAlerts: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -176,6 +180,12 @@ function CustomerRow({
               {customer.phone ? (
                 <span className="inline-flex items-center gap-1.5" dir="ltr">
                   <PhoneIcon className="h-3.5 w-3.5" />{customer.phone}
+                </span>
+              ) : null}
+              {customer.email ? (
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-primary/80" dir="ltr">
+                  <Mail className="h-3.5 w-3.5 shrink-0" />
+                  <span className="max-w-44 truncate" title={customer.email}>{customer.email}</span>
                 </span>
               ) : null}
               {customer.company ? (
@@ -300,6 +310,17 @@ function CustomerRow({
             type="button"
             size="icon"
             variant="outline" 
+            onClick={onAlerts}
+            className="h-10 w-10 cursor-pointer text-primary transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-primary active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
+            aria-label={`تنبيهات وتقويم ${customer.name}`}
+            title="تنبيهات وتقويم الزبون (Google Calendar)"
+          >
+            <Calendar className="h-4 w-4" />
+          </Button>
+          <Button 
+            type="button"
+            size="icon"
+            variant="outline" 
             onClick={onEdit}
             className="h-10 w-10 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-primary active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"
             aria-label={`تعديل بيانات ${customer.name}`}
@@ -330,6 +351,7 @@ function CustomerMobileCard({
   remaining,
   paymentPercentage,
   onViewBilling,
+  onAlerts,
   onEdit,
   onDelete
 }: {
@@ -337,6 +359,7 @@ function CustomerMobileCard({
   remaining: number;
   paymentPercentage: number;
   onViewBilling: () => void;
+  onAlerts: () => void;
   onEdit: () => void;
   onDelete: () => void;
 }) {
@@ -381,9 +404,10 @@ function CustomerMobileCard({
           )}
         </div>
 
-        {(customer.phone || customer.company) && (
+        {(customer.phone || customer.email || customer.company) && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 rounded-xl border border-border/45 bg-background/35 px-3 py-2 text-xs text-muted-foreground">
             {customer.phone && <span className="inline-flex items-center gap-1.5" dir="ltr"><PhoneIcon className="h-3.5 w-3.5" />{customer.phone}</span>}
+            {customer.email && <span className="inline-flex min-w-0 items-center gap-1.5 text-primary/80" dir="ltr"><Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate max-w-44">{customer.email}</span></span>}
             {customer.company && <span className="inline-flex min-w-0 items-center gap-1.5"><Building2 className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{customer.company}</span></span>}
           </div>
         )}
@@ -404,6 +428,7 @@ function CustomerMobileCard({
           <span className="inline-flex h-9 items-center rounded-xl border border-primary/20 bg-primary/10 px-3 text-xs font-bold text-primary">{customer.contractsCount} عقد</span>
           <div className="flex flex-wrap items-center gap-2">
             <Button type="button" size="sm" onClick={onViewBilling} className="h-10 cursor-pointer gap-1.5 transition-all duration-200 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none"><Wallet className="h-4 w-4" />حساب العميل</Button>
+            <Button type="button" size="icon" variant="outline" onClick={onAlerts} className="h-10 w-10 cursor-pointer text-primary transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-primary active:scale-95 motion-reduce:transform-none motion-reduce:transition-none" aria-label={`تنبيهات وتقويم ${customer.name}`} title="تنبيهات وتقويم الزبون"><Calendar className="h-4 w-4" /></Button>
             <Button type="button" size="icon" variant="outline" onClick={onEdit} className="h-10 w-10 cursor-pointer transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 hover:text-primary active:scale-95 motion-reduce:transform-none motion-reduce:transition-none" aria-label={`تعديل بيانات ${customer.name}`} title="تعديل بيانات العميل"><Edit className="h-4 w-4" /></Button>
             <Button type="button" size="icon" variant="outline" onClick={onDelete} className="h-10 w-10 cursor-pointer text-destructive transition-all duration-200 hover:border-destructive/40 hover:bg-destructive/10 hover:text-destructive active:scale-95 motion-reduce:transform-none motion-reduce:transition-none" aria-label={`حذف ${customer.name}`} title="حذف العميل"><Trash2 className="h-4 w-4" /></Button>
             <SendAccountStatementDialog customer={customerData} overdueInfo={overdueInfo} />
@@ -421,7 +446,8 @@ export default function Customers() {
   const [payments, setPayments] = useState<PaymentRow[]>([]);
   const navigate = useNavigate();
   const [contracts, setContracts] = useState<ContractRow[]>([]);
-  const [customers, setCustomers] = useState<{id:string; name:string; phone?: string | null; company?: string | null}[]>([]);
+  const [customers, setCustomers] = useState<{id:string; name:string; phone?: string | null; email?: string | null; company?: string | null}[]>([]);
+  const [selectedCustomerForAlerts, setSelectedCustomerForAlerts] = useState<CustomerSummary | null>(null);
   
   // ✅ بيانات إضافية للحساب الصحيح
   const [salesInvoices, setSalesInvoices] = useState<any[]>([]);
@@ -458,6 +484,7 @@ export default function Customers() {
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null);
   const [customerNameInput, setCustomerNameInput] = useState('');
   const [customerPhoneInput, setCustomerPhoneInput] = useState('');
+  const [customerEmailInput, setCustomerEmailInput] = useState('');
   const [customerCompanyInput, setCustomerCompanyInput] = useState('');
   const [pricingCategoryInput, setPricingCategoryInput] = useState<string>('عادي');
   const [pricingCategories, setPricingCategories] = useState<string[]>([]);
@@ -541,7 +568,7 @@ export default function Customers() {
       ] = await Promise.all([
         supabase.from('customer_payments').select('id, amount, contract_number, customer_id, customer_name, entry_type, paid_at, sales_invoice_id, printed_invoice_id, purchase_invoice_id, distributed_payment_id, notes').order('paid_at', { ascending: false }).range(0, 9999),
         supabase.from('Contract').select('Contract_Number, "Customer Name", "Ad Type", Total, "Contract Date", "End Date", customer_id, friend_rental_data, base_rent, fee, billboard_ids, print_cost, installation_cost').range(0, 9999),
-        supabase.from('customers').select('id, name, phone, company, is_supplier, is_customer, supplier_type, linked_friend_company_id, pricing_category').order('name', { ascending: true }).range(0, 9999),
+        supabase.from('customers').select('id, name, phone, email, company, is_supplier, is_customer, supplier_type, linked_friend_company_id, pricing_category').order('name', { ascending: true }).range(0, 9999),
         supabase.from('sales_invoices').select('id, customer_id, total_amount').range(0, 9999),
         supabase.from('printed_invoices').select('id, customer_id, total_amount, invoice_type, included_in_contract').range(0, 9999),
         supabase.from('purchase_invoices').select('id, customer_id, total_amount, used_as_payment').range(0, 9999),
@@ -771,11 +798,13 @@ export default function Customers() {
       const id = c.id;
       const name = c.name || '—';
       const phone = c.phone || null;
+      const email = c.email || null;
       const company = c.company || null;
       map.set(id, { 
         id, 
         name, 
         phone, 
+        email,
         company, 
         contractsCount: 0, 
         totalRent: 0, 
@@ -811,6 +840,7 @@ export default function Customers() {
             id: key, 
             name, 
             phone: null, 
+            email: null,
             company: null, 
             contractsCount: 0, 
             totalRent: 0, 
@@ -1004,6 +1034,7 @@ export default function Customers() {
             id: key, 
             name, 
             phone: null, 
+            email: null,
             company: null, 
             contractsCount: 0, 
             totalRent: 0, 
@@ -1653,17 +1684,19 @@ export default function Customers() {
     setEditingCustomerId(customer.id);
     setCustomerNameInput(customer.name);
     setCustomerPhoneInput(customer.phone || '');
+    setCustomerEmailInput(customer.email || '');
     setCustomerCompanyInput(customer.company || '');
     setDuplicateNameWarning(null);
 
     if (!customer.id.startsWith('name:')) {
       const { data } = await supabase
         .from('customers')
-        .select('is_customer, is_supplier, supplier_type, printer_id, pricing_category')
+        .select('email, is_customer, is_supplier, supplier_type, printer_id, pricing_category')
         .eq('id', customer.id)
         .single();
 
       if (data) {
+        if (data.email) setCustomerEmailInput(data.email);
         setIsCustomerChecked(data.is_customer ?? true);
         setIsSupplierChecked(data.is_supplier ?? false);
         setSupplierTypeInput(data.supplier_type || '');
@@ -1715,7 +1748,7 @@ export default function Customers() {
             <Button type="button" variant="outline" onClick={() => setDebtReportOpen(true)} className="h-10 cursor-pointer gap-2 transition-all duration-200 hover:border-primary/40 hover:bg-primary/10 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
               <Send className="h-4 w-4" />تقرير الديون
             </Button>
-            <Button type="button" onClick={() => { setEditingCustomerId(null); setNewCustomerOpen(true); setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerCompanyInput(''); setPricingCategoryInput('عادي'); setIsCustomerChecked(true); setIsSupplierChecked(false); setSupplierTypeInput(''); setSelectedPrinterId(''); }} className="h-10 cursor-pointer gap-2 shadow-md transition-all duration-200 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
+            <Button type="button" onClick={() => { setEditingCustomerId(null); setNewCustomerOpen(true); setCustomerNameInput(''); setCustomerPhoneInput(''); setCustomerEmailInput(''); setCustomerCompanyInput(''); setPricingCategoryInput('عادي'); setIsCustomerChecked(true); setIsSupplierChecked(false); setSupplierTypeInput(''); setSelectedPrinterId(''); }} className="h-10 cursor-pointer gap-2 shadow-md transition-all duration-200 active:scale-95 motion-reduce:transform-none motion-reduce:transition-none">
               <Plus className="h-4 w-4" />إضافة عميل
             </Button>
           </div>
@@ -1864,6 +1897,7 @@ export default function Customers() {
               setEditingCustomerId(null);
               setCustomerNameInput('');
               setCustomerPhoneInput('');
+              setCustomerEmailInput('');
               setCustomerCompanyInput('');
               setPricingCategoryInput('عادي');
               setIsCustomerChecked(true);
@@ -1905,6 +1939,14 @@ export default function Customers() {
                   )}
                 </div>
                 <Input placeholder="هاتف" value={customerPhoneInput} onChange={(e)=>setCustomerPhoneInput(e.target.value)} />
+                <Input 
+                  type="email" 
+                  placeholder="البريد الإلكتروني للعميل (لتنبيهات وتقويم Google)" 
+                  value={customerEmailInput} 
+                  onChange={(e)=>setCustomerEmailInput(e.target.value)} 
+                  dir="ltr"
+                  className="text-right"
+                />
                 <Input placeholder="اسم الشركة" value={customerCompanyInput} onChange={(e)=>setCustomerCompanyInput(e.target.value)} />
                 
                 <div>
@@ -1990,6 +2032,7 @@ export default function Customers() {
                   <Button onClick={async () => {
                     const name = customerNameInput.trim();
                     const phone = customerPhoneInput.trim();
+                    const email = customerEmailInput.trim();
                     const company = customerCompanyInput.trim();
                     
                     if (!name) {
@@ -2016,6 +2059,7 @@ export default function Customers() {
                       const customerData = {
                         name,
                         phone: phone || null,
+                        email: email || null,
                         company: company || null,
                         is_customer: isCustomerChecked,
                         is_supplier: isSupplierChecked,
@@ -2045,6 +2089,7 @@ export default function Customers() {
                           setEditingCustomerId(null);
                           setCustomerNameInput('');
                           setCustomerPhoneInput('');
+                          setCustomerEmailInput('');
                           setCustomerCompanyInput('');
                           setIsCustomerChecked(true);
                           setIsSupplierChecked(false);
@@ -2073,6 +2118,7 @@ export default function Customers() {
                           setNewCustomerOpen(false);
                           setCustomerNameInput('');
                           setCustomerPhoneInput('');
+                          setCustomerEmailInput('');
                           setCustomerCompanyInput('');
                           setIsCustomerChecked(true);
                           setIsSupplierChecked(false);
@@ -2101,6 +2147,7 @@ export default function Customers() {
                 remaining={customer.remainingDebt}
                 paymentPercentage={customer.repaymentPercentage}
                 onViewBilling={() => openCustomerBilling(customer)}
+                onAlerts={() => setSelectedCustomerForAlerts(customer)}
                 onEdit={() => openCustomerEditor(customer)}
                 onDelete={() => requestCustomerDelete(customer)}
               />
@@ -2138,6 +2185,7 @@ export default function Customers() {
                       remaining={remaining}
                       paymentPercentage={paymentPercentage}
                       onViewBilling={() => openCustomerBilling(c)}
+                      onAlerts={() => setSelectedCustomerForAlerts(c)}
                       onEdit={() => openCustomerEditor(c)}
                       onDelete={() => requestCustomerDelete(c)}
                     />
@@ -2774,6 +2822,23 @@ export default function Customers() {
         deleteCheckResult={deleteCheckResult}
         onSuccess={loadData}
       />
+
+      {/* Customer Alerts & Google Calendar Sync Dialog */}
+      {selectedCustomerForAlerts && (
+        <CustomerAlertsSyncDialog
+          customerId={selectedCustomerForAlerts.id}
+          customerName={selectedCustomerForAlerts.name}
+          customerEmail={selectedCustomerForAlerts.email}
+          open={!!selectedCustomerForAlerts}
+          onOpenChange={(open) => {
+            if (!open) setSelectedCustomerForAlerts(null);
+          }}
+          onEmailUpdated={(newEmail) => {
+            setSelectedCustomerForAlerts(prev => prev ? { ...prev, email: newEmail } : null);
+            setCustomers(prev => prev.map(c => c.id === selectedCustomerForAlerts.id ? { ...c, email: newEmail } : c));
+          }}
+        />
+      )}
     </div>
   );
 }

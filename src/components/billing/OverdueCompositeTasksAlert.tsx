@@ -197,7 +197,7 @@ export function OverdueCompositeTasksAlert() {
       setOverdueTasks(overdue.slice(0, 10));
     } catch (error) {
       console.error('Error loading overdue composite tasks:', error);
-      toast.error('خطأ في تحميل المهام المجمعة المتأخرة');
+      toast.error('خطأ في تحميل فواتير الخدمات المتأخرة');
     } finally {
       setLoading(false);
     }
@@ -205,13 +205,13 @@ export function OverdueCompositeTasksAlert() {
 
   const getTaskTypeLabel = (type: string) => {
     const map: Record<string, string> = {
-      'installation_print': 'تركيب + طباعة',
-      'installation_print_cutout': 'تركيب + طباعة + قص',
-      'installation_cutout': 'تركيب + قص',
-      'print_cutout': 'طباعة + قص',
+      'installation_print': 'طباعة وتركيب',
+      'installation_print_cutout': 'طباعة وتركيب وقص',
+      'installation_cutout': 'تركيب وقص',
+      'print_cutout': 'طباعة وقص',
       'installation': 'تركيب',
       'print': 'طباعة',
-      'cutout': 'قص',
+      'cutout': 'قص مجسمات',
     };
     return map[type] || type;
   };
@@ -237,7 +237,7 @@ export function OverdueCompositeTasksAlert() {
         ? `\nنوع الإعلان: ${task.adTypes.join(' / ')}`
         : '';
 
-      const message = `مرحباً ${task.customerName},\nنود تذكيركم بوجود مبلغ متأخر قدره ${formatAmount(task.remainingAmount)} د.ل على مهمة ${getTaskTypeLabel(task.taskType)} رقم #${task.taskNumber}.${contractText}${adTypeText}\nعدد أيام التأخير: ${task.daysOverdue} يوم.\nنرجو التواصل معنا لتسوية المبلغ.\nشكراً لتعاونكم.`;
+      const message = `مرحباً ${task.customerName},\nنود تذكيركم بوجود مبلغ متأخر قدره ${formatAmount(task.remainingAmount)} د.ل على فاتورة ${getTaskTypeLabel(task.taskType)} رقم #${task.taskNumber}.${contractText}${adTypeText}\nعدد أيام التأخير: ${task.daysOverdue} يوم.\nنرجو التواصل معنا لتسوية المبلغ.\nشكراً لتعاونكم.`;
 
       await sendMessage({ phone: customer.phone, message });
     } catch (error) {
@@ -253,7 +253,7 @@ export function OverdueCompositeTasksAlert() {
         <CardContent className="p-6">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Clock className="h-5 w-5 animate-spin" />
-            <span>جاري تحميل المهام المجمعة المتأخرة...</span>
+            <span>جاري تحميل فواتير الخدمات المتأخرة...</span>
           </div>
         </CardContent>
       </Card>
@@ -267,7 +267,7 @@ export function OverdueCompositeTasksAlert() {
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-purple-600 dark:text-purple-400 text-base">
           <Layers className="h-5 w-5" />
-          مهام مجمعة متأخرة ({overdueTasks.length})
+          فواتير خدمات وتركيب متأخرة ({overdueTasks.length})
         </CardTitle>
       </CardHeader>
       <CardContent>

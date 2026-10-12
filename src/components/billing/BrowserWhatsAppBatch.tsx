@@ -44,11 +44,15 @@ export function BrowserWhatsAppBatch({recipients}: {recipients: BrowserRecipient
       <h3 className="font-bold">الإرسال من واتساب المفتوح</h3>
       <p className="mt-1 text-sm leading-6 text-muted-foreground">حدد المستلمين، راجع الرسائل، ثم ابدأ الدفعة من الإضافة. تستمر المتابعة هنا ويمكنك إيقاف المتبقي.</p>
       <div className="mt-3 flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" asChild><a href="/downloads/alfares-whatsapp.zip" download><Download className="h-4 w-4"/>تحميل الإضافة</a></Button>
+        <Button variant="outline" size="sm" className="cursor-pointer transition-all duration-200" asChild><a href="/downloads/alfares-whatsapp.zip" download><Download className="h-4 w-4"/>تنزيل ملفات الإضافة (ZIP)</a></Button>
         <Button variant="outline" size="sm" onClick={()=>request('STATUS')} disabled={busy}><Link2 className="h-4 w-4"/>{connected?'تحديث الاتصال':'فحص الاتصال'}</Button>
         {connected&&<span className="self-center text-xs text-primary">الإضافة متصلة</span>}
       </div>
-      <details className="mt-3 text-xs leading-6 text-muted-foreground"><summary className="cursor-pointer">تركيب الإضافة لأول مرة</summary><ol className="list-inside list-decimal"><li>فك ضغط الملف، وافتح إدارة الإضافات في Chrome أو Edge.</li><li>فعّل وضع المطوّر واختر «تحميل إضافة غير مضغوطة»، ثم اختر مجلد الإضافة.</li><li>افتح واتساب ويب وسجّل الدخول. ارجع إلى النظام وافتح أيقونة الإضافة ثم «ربط صفحة النظام المفتوحة».</li><li>اضغط «فحص الاتصال» هنا. أعد الربط عند تحديث صفحة النظام.</li></ol></details>
+      <details open={!connected} className="mt-3 rounded-lg border bg-background p-3 text-sm leading-7"><summary className="cursor-pointer font-semibold">تثبيت إضافة واتساب في Chrome</summary>
+        <p className="mt-2 text-muted-foreground">التنزيل ملف ZIP يحتوي الإضافة المحلية. فك الضغط أولًا؛ لا تفتح الملف المضغوط في كروم ولا تغيّر امتداده إلى CRX.</p>
+        <ol className="mt-2 list-inside list-decimal space-y-1"><li>نزّل الملف واختر «استخراج الكل» واحفظ المجلد في مكان ثابت.</li><li>اكتب <code dir="ltr" className="select-all rounded bg-muted px-1">chrome://extensions</code> في شريط عنوان كروم.</li><li>فعّل «وضع المطوّر» ثم اضغط «تحميل إضافة غير مضغوطة» (Load unpacked).</li><li>اختر المجلد المستخرج الذي يحتوي ملف <code dir="ltr">manifest.json</code>، وليس ملف ZIP.</li><li>ثبّت أيقونة الإضافة في شريط كروم. افتح واتساب ويب وسجّل الدخول، ثم ارجع للنظام واختر من الإضافة «ربط صفحة النظام المفتوحة».</li><li>اضغط «فحص الاتصال» هنا. أعد الربط عند تحديث صفحة النظام.</li></ol>
+        <p className="mt-2 text-xs text-muted-foreground">التثبيت المباشر بزر «إضافة إلى Chrome» يتطلب نشر الإضافة في متجر كروم. الإضافة الحالية محلية وغير منشورة في المتجر.</p>
+      </details>
     </div>
     {error&&<p role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">{error}</p>}
     {batch&&<div className="space-y-3 rounded-xl border p-4" aria-live="polite">

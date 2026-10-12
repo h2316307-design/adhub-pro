@@ -477,7 +477,7 @@ export function SendDebtRemindersDialog({
             if (s.contractsDebt > 0) r += `     - عقود: ${s.contractsDebt.toLocaleString("en-US")} د.ل\n`;
             if (s.salesInvoicesDebt > 0) r += `     - مبيعات: ${s.salesInvoicesDebt.toLocaleString("en-US")} د.ل\n`;
             if (s.printedInvoicesDebt > 0) r += `     - طباعة: ${s.printedInvoicesDebt.toLocaleString("en-US")} د.ل\n`;
-            if (s.compositeTasksDebt > 0) r += `     - مجمعة: ${s.compositeTasksDebt.toLocaleString("en-US")} د.ل\n`;
+            if (s.compositeTasksDebt > 0) r += `     - خدمات وتركيب: ${s.compositeTasksDebt.toLocaleString("en-US")} د.ل\n`;
             if (s.purchaseInvoicesCredit > 0) r += `     - خصم مشتريات: -${s.purchaseInvoicesCredit.toLocaleString("en-US")} د.ل\n`;
           }
           r += `   - العقود: ${c.contractsCount} | التحصيل: ${c.totalRent > 0 ? ((c.totalPaid / c.totalRent) * 100).toFixed(0) : "0"}%\n\n`;

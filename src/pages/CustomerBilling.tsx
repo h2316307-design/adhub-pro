@@ -11,7 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { toast } from '@/components/ui/sonner';
-import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft, Layers, Trash2, Wallet, Coins, DollarSign } from 'lucide-react';
+import { Printer, Calculator, Receipt, Info, FileText, AlertCircle, Building2, ArrowRightLeft, Layers, Trash2, Wallet, Coins, DollarSign, Mail, Bell, Calendar } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { fetchAllBillboards } from '@/services/supabaseService';
 // Legacy print imports removed - unified engine used via PrintInvoicePrint
@@ -32,6 +32,7 @@ import { PurchaseInvoicesSection } from '@/components/billing/PurchaseInvoicesSe
 import ReceiptPrintDialog from '@/components/billing/ReceiptPrintDialog';
 import AccountStatementDialog from '@/components/billing/AccountStatementDialog';
 import { SendAccountStatementDialog } from '@/components/customers/SendAccountStatementDialog';
+import { CustomerAlertsSyncDialog } from '@/components/customers/CustomerAlertsSyncDialog';
 import { BulkPaymentDialog } from '@/components/billing/BulkPaymentDialog';
 import GeneralDiscountsSection from '@/components/billing/GeneralDiscountsSection';
 import { EnhancedDistributePaymentDialog } from '@/components/billing/EnhancedDistributePaymentDialog';
@@ -141,6 +142,7 @@ export default function CustomerBilling() {
   const [selectedPaymentForReceipt, setSelectedPaymentForReceipt] = useState<any>(null);
   const [accountStatementOpen, setAccountStatementOpen] = useState(false);
   const [sendAccountStatementOpen, setSendAccountStatementOpen] = useState(false);
+  const [alertsSyncDialogOpen, setAlertsSyncDialogOpen] = useState(false);
   
   // ✅ NEW: Bulk payment dialog state
   const [bulkPaymentOpen, setBulkPaymentOpen] = useState(false);
@@ -1772,6 +1774,28 @@ export default function CustomerBilling() {
                   {customerPhone && (
                     <span className="text-sm text-muted-foreground" dir="ltr">{customerPhone}</span>
                   )}
+                  {customerData?.email ? (
+                    <button
+                      type="button"
+                      onClick={() => setAlertsSyncDialogOpen(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-mono bg-primary/10 text-primary border border-primary/20 px-2.5 py-0.5 rounded-full hover:bg-primary/20 transition-colors cursor-pointer"
+                      title="بريد العميل لتنبيهات وتقويم Google (انقر لإدارة التنبيهات والمزامنة)"
+                    >
+                      <Mail className="h-3 w-3" />
+                      <span>{customerData.email}</span>
+                      <Bell className="h-3 w-3 opacity-70" />
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAlertsSyncDialogOpen(true)}
+                      className="inline-flex items-center gap-1 text-xs border border-dashed border-primary/40 text-primary bg-primary/5 px-2 py-0.5 rounded-full hover:bg-primary/15 transition-colors cursor-pointer"
+                      title="إدخال بريد العميل لتلقي تنبيهات ودعوات Google Calendar"
+                    >
+                      <Mail className="h-3 w-3" />
+                      <span>+ إضافة إيميل التنبيهات</span>
+                    </button>
+                  )}
                   {customerType.isCustomer && (
                     <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 text-xs">
                       زبون
@@ -1812,6 +1836,15 @@ export default function CustomerBilling() {
                 size="sm"
               >
                 رجوع للزبائن
+              </Button>
+              <Button 
+                onClick={() => setAlertsSyncDialogOpen(true)}
+                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground shadow-md transition-all duration-200 cursor-pointer"
+                size="sm"
+                title="تنبيهات ومزامنة تقويم جوجل للعميل"
+              >
+                <Calendar className="h-4 w-4" />
+                تنبيهات وتقويم الزبون
               </Button>
               <Button 
                 onClick={openAccountStatement}
@@ -3295,6 +3328,18 @@ export default function CustomerBilling() {
           onSuccess={loadData}
         />
       )}
+
+      {/* Customer Alerts & Calendar Sync Dialog */}
+      <CustomerAlertsSyncDialog
+        open={alertsSyncDialogOpen}
+        onOpenChange={setAlertsSyncDialogOpen}
+        customerId={customerId}
+        customerName={customerName}
+        initialEmail={customerData?.email}
+        onEmailUpdated={(newEmail) => {
+          setCustomerData((prev: any) => prev ? ({ ...prev, email: newEmail }) : ({ email: newEmail }));
+        }}
+      />
     </div>
   );
 }

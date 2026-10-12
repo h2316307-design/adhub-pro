@@ -4,6 +4,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { removalPrintImages } from '@/services/removalPrintImages';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -239,8 +240,16 @@ export const resolveBillboardDesigns = async (
   items.forEach(item => {
     const idKey = String(item.billboard_id);
     const b = billboardsMap[item.billboard_id] || billboardsMap[Number(item.billboard_id)];
-    const faceA = item.design_face_a || b?.design_face_a || b?.installed_design_face_a || undefined;
-    const faceB = item.design_face_b || b?.design_face_b || b?.installed_design_face_b || undefined;
+    const bImg = (b?.Image_URL || '').trim();
+    const cleanDesign = (u?: string | null) => {
+      if (!u) return undefined;
+      const t = String(u).trim();
+      if (!t || t.length < 5) return undefined;
+      if (bImg && t === bImg) return undefined;
+      return t;
+    };
+    const faceA = cleanDesign(item.design_face_a) || cleanDesign(b?.design_face_a) || cleanDesign(b?.installed_design_face_a);
+    const faceB = cleanDesign(item.design_face_b) || cleanDesign(b?.design_face_b) || cleanDesign(b?.installed_design_face_b);
     const dName = item.ad_type || b?.ad_type || b?.design_name || b?.ad_name || b?.current_ad || undefined;
     if (faceA || faceB || dName) set(idKey, { design_face_a: faceA, design_face_b: faceB, design_name: dName });
   });
@@ -280,8 +289,17 @@ export const resolveBillboardDesigns = async (
     (taskDesigns || []).forEach((row: any) => {
       const idKey = String(row.billboard_id);
       if (taken.has(idKey)) return; // الأحدث فقط
-      const faceA = row.design_face_a || row.task_designs?.design_face_a_url || undefined;
-      const faceB = row.design_face_b || row.task_designs?.design_face_b_url || undefined;
+      const b = billboardsMap[row.billboard_id] || billboardsMap[Number(row.billboard_id)];
+      const bImg = (b?.Image_URL || '').trim();
+      const cleanDesign = (u?: string | null) => {
+        if (!u) return undefined;
+        const t = String(u).trim();
+        if (!t || t.length < 5) return undefined;
+        if (bImg && t === bImg) return undefined;
+        return t;
+      };
+      const faceA = cleanDesign(row.design_face_a) || cleanDesign(row.task_designs?.design_face_a_url);
+      const faceB = cleanDesign(row.design_face_b) || cleanDesign(row.task_designs?.design_face_b_url);
       if (!faceA && !faceB) return;
       taken.add(idKey);
       const prev = result[idKey];
@@ -323,10 +341,11 @@ export function UnifiedPrintAllDialog({
   const PDF_LANDSCAPE_WIDTH_PX = 3508;
   const PDF_LANDSCAPE_HEIGHT_PX = 2480;
 
+  const isFieldOperation = contextType === 'installation' || contextType === 'removal';
   const [includeDesigns, setIncludeDesigns] = useState(true);
   const [showDesignName, setShowDesignName] = useState(false);
-  const [showTeamInContent, setShowTeamInContent] = useState(false);
-  const [showTeamInHeader, setShowTeamInHeader] = useState(false);
+  const [showTeamInContent, setShowTeamInContent] = useState(isFieldOperation);
+  const [showTeamInHeader, setShowTeamInHeader] = useState(isFieldOperation);
   const [hideCustomerName, setHideCustomerName] = useState(true);
   const [hideInstallDate, setHideInstallDate] = useState(true);
   const [hideAdType, setHideAdType] = useState(false);
@@ -523,17 +542,31 @@ export function UnifiedPrintAllDialog({
 
   // دالة مساعدة لتحديد معرف الفرقة للبند مع مطابقة احتياطية بمدينة اللوحة
   const resolveItemTeamId = (item: BillboardPrintItem): string => {
-    if (item.team_id) return item.team_id;
+    if (item.team_id) return String(item.team_id);
     if (teams && billboards) {
       const bb = billboards[item.billboard_id];
       if (bb?.City) {
-        const matchedTeam = Object.values(teams).find(
+        const teamsList = Array.isArray(teams) ? teams : Object.values(teams);
+        const matchedTeam = teamsList.find(
           (t: any) => Array.isArray(t?.cities) && t.cities.includes(bb.City)
         );
-        if (matchedTeam) return (matchedTeam as any).id;
+        if (matchedTeam) return String((matchedTeam as any).id);
       }
     }
     return 'unknown';
+  };
+
+  const getTeam = (id: string | number | undefined | null): any => {
+    if (!id || id === 'unknown' || !teams) return null;
+    const strId = String(id);
+    if (Array.isArray(teams)) {
+      return teams.find((t: any) => String(t?.id) === strId) || null;
+    }
+    return teams[strId] || teams[id as any] || null;
+  };
+
+  const getTeamName = (id: string | number | undefined | null): string => {
+    return getTeam(id)?.team_name || '';
   };
 
   // تجميع العناصر حسب الفريق
@@ -859,7 +892,7 @@ export function UnifiedPrintAllDialog({
     if (respectCityLimits && selectedTeamIds.size > 0) {
       result = result.filter(item => {
         const teamId = resolveItemTeamId(item);
-        const team = teams[teamId];
+        const team = getTeam(teamId);
         const billboard = billboards[item.billboard_id];
         if (!team || !billboard) return true;
         const teamCities: string[] = team.cities || [];
@@ -928,15 +961,16 @@ export function UnifiedPrintAllDialog({
     let selectedTeamStr = '';
     if (showTeamInHeader) {
       if (selectedTeamIds.size > 0) {
-        selectedTeamStr = Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ');
+        selectedTeamStr = Array.from(selectedTeamIds).map(id => getTeamName(id)).filter(Boolean).join(' - ');
       } else {
         const isTeam = allTeamNames.some(tn => tn === rawCust);
         if (isTeam) {
           selectedTeamStr = rawCust;
         } else {
           const firstTeamId = items.find(i => i.team_id)?.team_id;
-          if (firstTeamId && teams[firstTeamId]?.team_name) {
-            selectedTeamStr = teams[firstTeamId].team_name;
+          const firstTeamName = getTeamName(firstTeamId);
+          if (firstTeamName) {
+            selectedTeamStr = firstTeamName;
           }
         }
       }
@@ -969,7 +1003,7 @@ export function UnifiedPrintAllDialog({
     const sortedItems = await sortBillboardsBySize(filteredItems);
     const [freshPrevAds, freshDesigns] = await Promise.all([
       resolveBillboardPreviousAds(sortedItems, contextNumber, billboards),
-      resolveBillboardDesigns(sortedItems, billboards, { contractNumber: contextType === 'contract' ? contextNumber : null })
+      contextType === 'removal' ? Promise.resolve({} as Record<string, { design_face_a?: string; design_face_b?: string; design_name?: string }>) : resolveBillboardDesigns(sortedItems, billboards, { contractNumber: contextType === 'contract' ? contextNumber : null })
     ]);
     // في طباعة العقد: التصميم المطبّق في مهام التركيب (المهام المجمعة) له الأولوية على تصميم العقد
     if (contextType === 'contract') {
@@ -999,17 +1033,29 @@ export function UnifiedPrintAllDialog({
       const facesCount = resolveFacesCount(item, billboard);
       const supportsBackFace = facesCount > 1;
       const dynDesign = freshDesigns[bIdKey] || dynamicDesignsMap[item.billboard_id] || dynamicDesignsMap[Number(item.billboard_id)];
-      const designFaceA = item.design_face_a || billboard.design_face_a || billboard.installed_design_face_a || dynDesign?.design_face_a || null;
-      const designFaceB = supportsBackFace
-        ? item.design_face_b || billboard.design_face_b || billboard.installed_design_face_b || dynDesign?.design_face_b || null
-        : null;
+      const bStreetPhoto = (billboard.Image_URL || '').trim();
+      const sanitizePrintDesign = (url?: string | null) => {
+        if (!url) return null;
+        const cleaned = String(url).trim();
+        if (!cleaned || cleaned.length < 5) return null;
+        if (bStreetPhoto && cleaned === bStreetPhoto) return null;
+        return cleaned;
+      };
+
+      const removalImages = removalPrintImages(item, billboard, supportsBackFace, Object.values(billboards).map((b: any) => b.Image_URL));
+      const designFaceA = contextType === 'removal' ? removalImages.faceA : sanitizePrintDesign(
+        item.design_face_a || dynDesign?.design_face_a || (contextType !== 'removal' ? (billboard.design_face_a || billboard.installed_design_face_a) : null)
+      );
+      const designFaceB = contextType === 'removal' ? removalImages.faceB : supportsBackFace ? sanitizePrintDesign(
+        item.design_face_b || dynDesign?.design_face_b || (contextType !== 'removal' ? (billboard.design_face_b || billboard.installed_design_face_b) : null)
+      ) : null;
       const itemPreviousAd = (item as any).previous_ad || (item as any).previous_ad_type || 
                              freshPrevAds[bIdKey] || 
                              previousAdsData[item.billboard_id] || previousAdsData[bIdKey] || previousAdsData[Number(item.billboard_id)] || 
                              billboards[item.billboard_id]?.previous_ad || billboards[item.billboard_id]?.previous_ad_type || '';
 
       // صور التركيب: يتم جلبها أو استخدامها فقط إذا لم يتم تفعيل خيار إخفاء صور التركيب
-      const allowInstalledImages = !hideInstalledImages;
+      const allowInstalledImages = contextType !== 'removal' && !hideInstalledImages;
       const fetchedInstalled = (allowInstalledImages && showInstalledImages) ? installedImagesData[item.billboard_id] : null;
       const installedImageFaceA = allowInstalledImages
         ? (item.installed_image_face_a_url || fetchedInstalled?.face_a || null)
@@ -1018,7 +1064,7 @@ export function UnifiedPrintAllDialog({
         ? (item.installed_image_face_b_url || fetchedInstalled?.face_b || null)
         : null;
 
-      const mainImage = (installedImageFaceA || installedImageFaceB) && !(installedImageFaceA && installedImageFaceB)
+      const mainImage = contextType === 'removal' ? removalImages.main : (installedImageFaceA || installedImageFaceB) && !(installedImageFaceA && installedImageFaceB)
         ? (installedImageFaceA || installedImageFaceB)
         : (billboard.Image_URL || '');
 
@@ -1071,9 +1117,9 @@ export function UnifiedPrintAllDialog({
       const billboardStatusOffsetY = (s as any).billboard_status_offset_y || '6mm';
 
       const resolvedTId = resolveItemTeamId(item);
-      const itemTeamName = resolvedTId && teams[resolvedTId]?.team_name ? teams[resolvedTId].team_name : '';
+      const itemTeamName = getTeamName(resolvedTId);
       const displayTeamNames = itemTeamName || (showTeamFilter 
-        ? Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ')
+        ? Array.from(selectedTeamIds).map(id => getTeamName(id)).filter(Boolean).join(' - ')
         : '');
 
       const itemContractNumber = item.contract_number || contextNumber;
@@ -1117,7 +1163,7 @@ export function UnifiedPrintAllDialog({
 
       const ov = item.overlay_config || billboard?.overlay_config;
       const isImageActive = ov ? ov.show_image !== false : true;
-      const isOverlayActive = ov ? ov.enabled !== false : true;
+      const isOverlayActive = contextType !== 'removal' && (ov ? ov.enabled !== false : true);
       const isCutoutEnabled = item.has_cutout === true || (item.has_cutout !== false && Boolean(billboard?.has_cutout));
       const sizeKey = size?.trim() || '';
       const sizeCutoutUrl = sizeCutoutMap[sizeKey] || sizeCutoutMap[sizeKey.replace(/×/g, 'x').replace(/X/g, 'x')] || null;
@@ -1588,7 +1634,7 @@ export function UnifiedPrintAllDialog({
     const sortedItems = await sortBillboardsBySize(filteredItems);
     const [freshPrevAds, freshDesigns] = await Promise.all([
       resolveBillboardPreviousAds(sortedItems, contextNumber, billboards),
-      resolveBillboardDesigns(sortedItems, billboards, { contractNumber: contextType === 'contract' ? contextNumber : null })
+      contextType === 'removal' ? Promise.resolve({} as Record<string, { design_face_a?: string; design_face_b?: string; design_name?: string }>) : resolveBillboardDesigns(sortedItems, billboards, { contractNumber: contextType === 'contract' ? contextNumber : null })
     ]);
     // في طباعة العقد: التصميم المطبّق في مهام التركيب (المهام المجمعة) له الأولوية على تصميم العقد
     if (contextType === 'contract') {
@@ -1615,11 +1661,11 @@ export function UnifiedPrintAllDialog({
     };
 
     const selectedTeamNames = showTeamFilter
-      ? Array.from(selectedTeamIds).map(id => teams[id]?.team_name).filter(Boolean).join(' - ')
+      ? Array.from(selectedTeamIds).map(id => getTeamName(id)).filter(Boolean).join(' - ')
       : '';
 
     const enabledColumns = [...s.columns_order]
-      .filter(c => c.enabled && (!hideInstalledImages || c.id !== 'installed_images') && (!hideInstallDate || c.id !== 'installation_date') && (s.show_qr_code || c.id !== 'qr_code'))
+      .filter(c => c.enabled && ((contextType !== 'removal' && !hideInstalledImages) || c.id !== 'installed_images') && (!hideInstallDate || c.id !== 'installation_date') && (s.show_qr_code || c.id !== 'qr_code'))
       .sort((a, b) => a.order - b.order);
 
     const columnHasData: Record<string, boolean> = {};
@@ -1633,7 +1679,7 @@ export function UnifiedPrintAllDialog({
       enabledColumns.forEach(col => {
         switch (col.id) {
           case 'row_number': columnHasData[col.id] = true; break;
-          case 'billboard_image': if (billboard.Image_URL) columnHasData[col.id] = true; break;
+          case 'billboard_image': if (contextType === 'removal' ? removalPrintImages(item, billboard, supportsBackFace, Object.values(billboards).map((b: any) => b.Image_URL)).main : billboard.Image_URL) columnHasData[col.id] = true; break;
           case 'billboard_name': if (billboard.Billboard_Name) columnHasData[col.id] = true; break;
           case 'size': if (billboard.Size) columnHasData[col.id] = true; break;
           case 'faces_count': columnHasData[col.id] = true; break;
@@ -1642,6 +1688,7 @@ export function UnifiedPrintAllDialog({
           case 'contract_number': if (item.contract_number || contextNumber) columnHasData[col.id] = true; break;
           case 'installation_date': if (!hideInstallDate && item.installation_date) columnHasData[col.id] = true; break;
           case 'design_images': {
+            if (contextType === 'removal') { const images = removalPrintImages(item, billboard, supportsBackFace, Object.values(billboards).map((b: any) => b.Image_URL)); columnHasData[col.id] ||= Boolean(images.faceA || images.faceB); break; }
             const design = freshDesigns[String(item.billboard_id)] || dynamicDesignsMap[item.billboard_id];
             if (item.design_face_a || billboard.design_face_a || billboard.installed_design_face_a || design?.design_face_a ||
               (supportsBackFace && (item.design_face_b || billboard.design_face_b || billboard.installed_design_face_b || design?.design_face_b))) columnHasData[col.id] = true;
@@ -1703,10 +1750,22 @@ export function UnifiedPrintAllDialog({
 
         const bIdKey = String(item.billboard_id);
         const dynDesign = freshDesigns[bIdKey] || dynamicDesignsMap[item.billboard_id] || dynamicDesignsMap[Number(item.billboard_id)];
-        const tblDesignFaceA = item.design_face_a || billboard.design_face_a || billboard.installed_design_face_a || dynDesign?.design_face_a || null;
-        const tblDesignFaceB = supportsBackFace
-          ? item.design_face_b || billboard.design_face_b || billboard.installed_design_face_b || dynDesign?.design_face_b || null
-          : null;
+        const bStreetPhoto = (billboard.Image_URL || '').trim();
+        const sanitizePrintDesign = (url?: string | null) => {
+          if (!url) return null;
+          const cleaned = String(url).trim();
+          if (!cleaned || cleaned.length < 5) return null;
+          if (bStreetPhoto && cleaned === bStreetPhoto) return null;
+          return cleaned;
+        };
+
+        const removalImages = removalPrintImages(item, billboard, supportsBackFace, Object.values(billboards).map((b: any) => b.Image_URL));
+        const tblDesignFaceA = contextType === 'removal' ? removalImages.faceA : sanitizePrintDesign(
+          item.design_face_a || dynDesign?.design_face_a || (contextType !== 'removal' ? (billboard.design_face_a || billboard.installed_design_face_a) : null)
+        );
+        const tblDesignFaceB = contextType === 'removal' ? removalImages.faceB : supportsBackFace ? sanitizePrintDesign(
+          item.design_face_b || dynDesign?.design_face_b || (contextType !== 'removal' ? (billboard.design_face_b || billboard.installed_design_face_b) : null)
+        ) : null;
         const tblPreviousAd = (item as any).previous_ad || (item as any).previous_ad_type || 
                               freshPrevAds[bIdKey] || 
                               previousAdsData[item.billboard_id] || previousAdsData[bIdKey] || previousAdsData[Number(item.billboard_id)] || 
@@ -1720,10 +1779,10 @@ export function UnifiedPrintAllDialog({
               const fetchedInstImg = (!hideInstalledImages && showInstalledImages) ? installedImagesData[item.billboard_id] : null;
               const instImgA = !hideInstalledImages ? (item.installed_image_face_a_url || fetchedInstImg?.face_a || null) : null;
               const instImgB = !hideInstalledImages && supportsBackFace ? (item.installed_image_face_b_url || fetchedInstImg?.face_b || null) : null;
-              const tblImage = instImgA || instImgB || billboard.Image_URL || '';
+              const tblImage = contextType === 'removal' ? removalImages.main : instImgA || instImgB || billboard.Image_URL || '';
               return `<td class="image-cell">${tblImage 
                 ? `<img src="${tblImage}" alt="${name}" class="billboard-image" onerror="this.style.display='none'">`
-                : `<div class="image-placeholder"><span>صورة</span></div>`}</td>`;
+                : contextType === 'removal' ? '' : `<div class="image-placeholder"><span>صورة</span></div>`}</td>`;
             case 'billboard_name':
               return `<td style="font-weight: 600; text-align: right; padding: 4px; font-size: ${s.row_font_size};">${name}</td>`;
             case 'size':
@@ -2583,7 +2642,7 @@ export function UnifiedPrintAllDialog({
               <div className="flex flex-wrap gap-1.5">
                 {Object.entries(itemsByTeam).map(([teamId, teamItems]) => {
                   const isSelected = selectedTeamIds.has(teamId);
-                  const team = teams[teamId];
+                  const team = getTeam(teamId);
                   const teamCities: string[] = team?.cities || [];
                   const cityFilteredCount = respectCityLimits && teamCities.length > 0
                     ? teamItems.filter(item => {
@@ -2609,7 +2668,7 @@ export function UnifiedPrintAllDialog({
                       }`}>
                         {isSelected && <Check className="h-2.5 w-2.5 text-primary-foreground" />}
                       </div>
-                      <span>{teams[teamId]?.team_name || (teamId === 'unknown' ? 'بدون فرقة' : 'غير محدد')}</span>
+                      <span>{team?.team_name || (teamId === 'unknown' ? 'بدون فرقة' : 'غير محدد')}</span>
                       <Badge variant="secondary" className="text-[11px] h-4 px-1">
                         {respectCityLimits && cityFilteredCount !== teamItems.length
                           ? `${cityFilteredCount}/${teamItems.length}`
@@ -2936,7 +2995,7 @@ export function UnifiedPrintAllDialog({
               {/* أزرار الواتساب */}
               {selectedTeamIds.size > 0 && (() => {
                 const teamsWithPhone = Array.from(selectedTeamIds)
-                  .map(id => teams[id])
+                  .map(id => getTeam(id))
                   .filter(t => t?.phone_number || t?.phone);
                 const firstTeam = teamsWithPhone[0];
                 const savedPhone = firstTeam?.phone_number || firstTeam?.phone;

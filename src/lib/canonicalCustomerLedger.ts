@@ -366,34 +366,44 @@ export function buildCanonicalCustomerLedger(
     const taskNum = task.task_number || task.id?.slice(0, 8) || '—';
     
     // مصفوفة التسمية المحاسبية المعتمدة (Composite Task Naming Matrix):
-    let invoiceTitle = 'فاتورة طباعة';
-    let badgeTitle = 'فاتورة طباعة';
+    const hasPrint = printAmount > 0 || !!task.print_task_id || task.task_type === 'print' || task.task_type === 'installation_print' || task.task_type === 'installation_print_cutout' || task.task_type === 'print_cutout';
+    const hasInstall = installAmount > 0 || !!task.installation_task_id || task.task_type === 'installation' || task.task_type === 'new_installation' || task.task_type === 'reinstallation' || task.task_type === 'installation_print' || task.task_type === 'installation_print_cutout' || task.task_type === 'installation_cutout';
+    const hasCutout = cutoutAmount > 0 || !!task.cutout_task_id || task.task_type === 'cutout' || task.task_type === 'installation_print_cutout' || task.task_type === 'installation_cutout' || task.task_type === 'print_cutout';
+    const isReinstall = task.task_type === 'reinstallation' || (Number(task.reinstallation_number || 0) > 0);
 
-    // الحالة A: طباعة + تركيب (print > 0 && install > 0)
-    if (printAmount > 0 && installAmount > 0) {
-      invoiceTitle = 'فاتورة طباعة وتركيب';
-      badgeTitle = 'فاتورة طباعة وتركيب';
-    }
-    // الحالة B: طباعة فقط (print > 0 && install == 0)
-    else if (printAmount > 0 && installAmount <= 0) {
-      invoiceTitle = 'فاتورة طباعة';
-      badgeTitle = 'فاتورة طباعة';
-    }
-    // الحالة C: تركيب فقط (print == 0 && install > 0)
-    else if (printAmount <= 0 && installAmount > 0) {
-      const isReinstall = task.task_type === 'reinstallation';
-      invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
-      badgeTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
-    }
-    // حالة قص مجسمات فقط
-    else if (cutoutAmount > 0 && printAmount <= 0 && installAmount <= 0) {
+    let invoiceTitle = 'فاتورة تركيب';
+    let badgeTitle = 'فاتورة تركيب';
+
+    if (hasPrint && hasInstall) {
+      if (hasCutout) {
+        invoiceTitle = 'فاتورة طباعة وتركيب وقص';
+        badgeTitle = 'فاتورة طباعة وتركيب وقص';
+      } else {
+        invoiceTitle = 'فاتورة طباعة وتركيب';
+        badgeTitle = 'فاتورة طباعة وتركيب';
+      }
+    } else if (hasInstall && !hasPrint) {
+      if (hasCutout) {
+        invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب وقص' : 'فاتورة تركيب وقص';
+        badgeTitle = isReinstall ? 'فاتورة إعادة تركيب وقص' : 'فاتورة تركيب وقص';
+      } else {
+        invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
+        badgeTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
+      }
+    } else if (hasPrint && !hasInstall) {
+      if (hasCutout) {
+        invoiceTitle = 'فاتورة طباعة وقص';
+        badgeTitle = 'فاتورة طباعة وقص';
+      } else {
+        invoiceTitle = 'فاتورة طباعة';
+        badgeTitle = 'فاتورة طباعة';
+      }
+    } else if (hasCutout) {
       invoiceTitle = 'فاتورة قص مجسمات';
       badgeTitle = 'فاتورة قص مجسمات';
-    }
-    // حالة احتياطية
-    else if (task.task_type === 'reinstallation') {
-      invoiceTitle = 'فاتورة إعادة تركيب';
-      badgeTitle = 'فاتورة إعادة تركيب';
+    } else {
+      invoiceTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
+      badgeTitle = isReinstall ? 'فاتورة إعادة تركيب' : 'فاتورة تركيب';
     }
 
     const taskContractNum = task.contract_id ? Number(task.contract_id) : null;
