@@ -302,21 +302,23 @@ export default function InstallationTasks() {
   const autoCompleteLinkedTasks = async (taskId: string) => {
     try {
       // تحقق من أن جميع العناصر في مهمة التركيب مكتملة
-      const { data: items } = await supabase
-        .from('installation_task_items')
-        .select('status')
-        .eq('task_id', taskId);
-      
-      if (!items || items.length === 0) return;
-      const allCompleted = items.every(i => i.status === 'completed');
-      if (!allCompleted) return;
+      const [totalResult, pendingResult] = await Promise.all([
+        supabase.from('installation_task_items').select('id', { count: 'exact', head: true }).eq('task_id', taskId),
+        supabase.from('installation_task_items').select('id', { count: 'exact', head: true }).eq('task_id', taskId).neq('status', 'completed'),
+      ]);
+      if (totalResult.error) throw totalResult.error;
+      if (pendingResult.error) throw pendingResult.error;
+      if (!totalResult.count || pendingResult.count !== 0) return;
+      const { error: parentError } = await supabase.from('installation_tasks').update({ status: 'completed' }).eq('id', taskId);
+      if (parentError) throw parentError;
 
       // البحث عن المهمة المجمعة المرتبطة
-      const { data: composites } = await supabase
+      const { data: composites, error: compositesError } = await supabase
         .from('composite_tasks')
         .select('id, print_task_id, cutout_task_id')
         .eq('installation_task_id', taskId);
 
+      if (compositesError) throw compositesError;
       if (!composites || composites.length === 0) {
         // بحث بديل: من installation_tasks مباشرة
         const { data: installTask } = await supabase
@@ -344,15 +346,14 @@ export default function InstallationTasks() {
           await supabase.from('cutout_tasks').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', ct.cutout_task_id);
         }
         // تحديث حالة المهمة المجمعة أيضاً
-        await supabase.from('composite_tasks').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', ct.id);
+        const { error: compositeError } = await supabase.from('composite_tasks').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', ct.id);
+        if (compositeError) throw compositeError;
       }
-
-      // تحديث حالة مهمة التركيب نفسها
-      await supabase.from('installation_tasks').update({ status: 'completed' }).eq('id', taskId);
 
       console.log(`✅ Auto-completed linked tasks for installation ${taskId}`);
     } catch (error) {
       console.error('Error auto-completing linked tasks:', error);
+      throw error;
     }
   };
 
@@ -407,6 +408,9 @@ export default function InstallationTasks() {
       queryClient.invalidateQueries({ queryKey: ['installation-task-items'] });
       queryClient.invalidateQueries({ queryKey: ['billboards-for-tasks'] });
       queryClient.invalidateQueries({ queryKey: ['printer-print-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['composite-task-extras'] });
       refetchTaskItems();
     } catch (error) {
       console.error('Error completing tasks:', error);
@@ -1163,6 +1167,9 @@ export default function InstallationTasks() {
     },
     onSuccess: () => {
       toast.success('تم إكمال اللوحة');
+      queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['composite-task-extras'] });
       refetchTaskItems();
       queryClient.invalidateQueries({ queryKey: ['printer-print-tasks'] });
     },
@@ -1176,7 +1183,8 @@ export default function InstallationTasks() {
         .from('installation_task_items')
         .update({ 
           status: 'pending',
-          installation_date: null 
+          installation_date: null,
+          completed_at: null
         })
         .eq('id', itemId);
 
@@ -1196,10 +1204,15 @@ export default function InstallationTasks() {
           .from('installation_tasks')
           .update({ status: 'in_progress' })
           .eq('id', taskId);
+        const { error: compositeError } = await supabase.from('composite_tasks').update({ status: 'in_progress', updated_at: new Date().toISOString() }).eq('installation_task_id', taskId).neq('status', 'cancelled');
+        if (compositeError) throw compositeError;
       }
     },
     onSuccess: () => {
       toast.success('تم التراجع عن إكمال اللوحة');
+      queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['composite-task-extras'] });
       refetchTaskItems();
     },
   });

@@ -1,3 +1,4 @@
+import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
 import { CompanyPriceEditor } from '@/components/pricing/CompanyPriceEditor';
 import { normalizePrintLevels, resolvePrintLevels, type PrintLevelSelection } from '@/utils/pricingPrintLevels';
 import { escapePrintText, printSizeCatalog } from '@/utils/printSizeCatalog';
@@ -188,6 +189,7 @@ interface SizeData {
 }
 
 export default function PricingList() {
+  const { category: defaultPricingCategory, save: saveDefaultCategory } = useDefaultPricingCategory();
   const queryClient = useQueryClient();
   // البيانات من قاعدة البيانات
   const [levels, setLevels] = useState<BillboardLevel[]>([]);
@@ -2019,6 +2021,13 @@ export default function PricingList() {
                 <span>طباعة وتصدير</span>
               </Button>
             </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-primary/25 bg-primary/5 p-3">
+            <span className="text-sm font-semibold">فئة السعر الافتراضية</span>
+            <select aria-label="فئة السعر الافتراضية" value={defaultPricingCategory} disabled={saveDefaultCategory.isPending} className="rounded-md border bg-background p-2 cursor-pointer" onChange={async event => { try { await saveDefaultCategory.mutateAsync(event.target.value); toast.success('تم حفظ فئة السعر الافتراضية للعقود الجديدة'); } catch (error: any) { toast.error(error.message || 'تعذر حفظ الفئة'); } }}>
+              {[...new Set(['عادي', ...categories.map(category => category.name)])].map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+            <span className="text-xs text-muted-foreground">تُستخدم للعقود الجديدة، مع أولوية الفئة الخاصة بالزبون عند توفرها.</span>
           </div>
           <div className="space-y-4">
             <section aria-labelledby="pricing-category-heading" className="rounded-xl border border-border p-3 sm:p-4 space-y-3">

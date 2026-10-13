@@ -6,7 +6,7 @@ import { HubContractDetail } from '@/components/composite-tasks/list/HubContract
 import { TaskCardRow } from '@/components/composite-tasks/list/TaskCardRow';
 
 vi.mock('@/lib/contractDesignUtils', () => ({ fetchContractDesignUrls: vi.fn(async () => []) }));
-vi.mock('@/components/composite-tasks/list/DesignPanel', () => ({ DesignPanel: () => <span>صورة</span> }));
+vi.mock('@/components/composite-tasks/list/DesignPanel', () => ({ DesignPanel: ({ urls = [], label }: any) => <div aria-label={label}>{urls.map((url: string) => <img key={url} src={url} alt="صورة" />)}</div> }));
 
 describe('Composite task workspace navigation', () => {
   let host: HTMLDivElement;
@@ -75,5 +75,23 @@ describe('Composite task workspace navigation', () => {
     expect(distribute).toHaveBeenCalledWith(task, ids);
     expect(open).toHaveBeenCalledWith(task);
     expect(print).toHaveBeenCalledWith(task);
+  });
+
+  it('keeps installed photos and completed markers attached to their operation after reordering', () => {
+    const props = renderGroup();
+    const doneTask = { ...task, id: 'finished', status: 'completed', installationImages: ['/finished-installation.jpg'] };
+    const pendingTask = { ...task, id: 'pending', installationImages: ['/pending-installation.jpg'] };
+    const operations = [
+      { key: 'finished-operation', label: 'تركيب 1', tasks: [doneTask] },
+      { key: 'pending-operation', label: 'تركيب 2', tasks: [pendingTask] },
+    ];
+    const group = { ...props.group, operations };
+    act(() => render(<HubContractDetail {...props} group={group} />));
+    expect(host.querySelector('[aria-label="صور تركيب تركيب 1"] img')?.getAttribute('src')).toBe('/finished-installation.jpg');
+    expect(host.querySelectorAll('section')[0].textContent).toContain('مكتملة');
+    act(() => render(<HubContractDetail {...props} group={{ ...group, operations: [{ ...operations[1], label: 'تركيب 1' }, { ...operations[0], label: 'تركيب 2' }] }} />));
+    expect(host.querySelector('[aria-label="صور تركيب تركيب 2"] img')?.getAttribute('src')).toBe('/finished-installation.jpg');
+    expect(host.querySelector('[aria-label="صور تركيب تركيب 1"] img')?.getAttribute('src')).toBe('/pending-installation.jpg');
+    expect(Array.from(host.querySelectorAll('section')).find(section => section.textContent?.includes('صور تركيب تركيب 2'))?.textContent).toContain('مكتملة');
   });
 });

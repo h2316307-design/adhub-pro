@@ -1,3 +1,4 @@
+import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
 import { usePricingDurations } from '@/hooks/usePricingDurations';
 import { durationEnd, durationPrice } from '@/utils/pricingDuration';
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -30,6 +31,7 @@ export interface Installment {
 }
 
 export const useContractForm = (initialData?: Partial<ContractFormData>) => {
+  const { category: defaultPricingCategory, loaded: defaultCategoryLoaded } = useDefaultPricingCategory();
   const { data: durations } = usePricingDurations();
   // Form state
   const [formData, setFormData] = useState<ContractFormData>({
@@ -74,6 +76,12 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
 
   // يتعقّب ما إذا كان المستخدم اختار الفئة السعرية يدوياً (لتجنّب الكتابة فوقها)
   const userPickedCategoryRef = useRef<boolean>(false);
+  useEffect(() => {
+    if (defaultCategoryLoaded && !initialData?.pricingCategory && !formData.customerId && !formData.customerName && !userPickedCategoryRef.current) {
+      setFormData(previous => ({ ...previous, pricingCategory: defaultPricingCategory }));
+    }
+  }, [defaultPricingCategory, defaultCategoryLoaded]);
+
 
   // Load pricing data
   useEffect(() => {

@@ -38,6 +38,7 @@ export interface SizeSortItem {
 
 export interface ComputeRelativePricingParams {
   customer: string;
+  referenceCategory?: string;
   targetLevel: string;
   referenceLevel: string; // other level code (e.g. 'A') or '__SAME__'
   records: PricingRow[];
@@ -66,6 +67,7 @@ export interface RelativePricingResult {
  */
 export function computeRelativePricingPlan({
   customer,
+  referenceCategory,
   targetLevel,
   referenceLevel,
   records,
@@ -118,7 +120,22 @@ export function computeRelativePricingPlan({
 
   const plan: RelativePricingPlanItem[] = [];
 
-  if (isCompany) {
+  if (referenceCategory) {
+    const sourceLevel = referenceLevel === '__SAME__' ? targetLevel : referenceLevel;
+    const fullLevel = scope === 'level_all' || scope === 'all' || scope === 'level';
+    const sizeSet = new Set(records.filter(row => (row.customer_category === referenceCategory && row.billboard_level === sourceLevel) || (row.customer_category === customer && row.billboard_level === targetLevel)).map(row => row.size));
+    const targetSizes = targetSize && scope.startsWith('single') && !fullLevel ? [targetSize] : [...sizeSet].sort(compareSizes);
+    for (const size of targetSizes) {
+      const benchmark = records.find(row => row.customer_category === referenceCategory && row.billboard_level === sourceLevel && row.size === size);
+      const current = records.find(row => row.customer_category === customer && row.billboard_level === targetLevel && row.size === size);
+      for (const period of periodsToUse) {
+        const base = readDurationPrice(benchmark, period.dbColumn);
+        const before = readDurationPrice(current, period.dbColumn);
+        const after = valid ? relativeCompanyPrice(base, mode, rate) : null;
+        plan.push({ size, level: targetLevel, customer, period, current, base, before, after, diff: after != null && before != null ? after - before : null, referenceLabel: `${referenceCategory} · المستوى ${sourceLevel}`, sizeOrder: getSizeOrder(size) });
+      }
+    }
+  } else if (isCompany) {
     // Determine sizes to include, sorted by defined size rank
     let sizesToInclude: string[] = [];
     if (targetSize && scope !== 'level_all' && scope !== 'all') {

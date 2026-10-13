@@ -1,3 +1,4 @@
+import { installationCompletionStatus } from '@/lib/installationCompletion';
 import { applyOperationDisplayOrder, OPERATION_ORDER_PREFIX } from '@/lib/compositeOperationDisplayOrder';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
@@ -510,18 +511,19 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           (chunk) =>
             supabase
               .from('installation_tasks')
-              .select('id, task_type, reinstallation_number, contract_id, contract_ids')
+              .select('id, task_type, reinstallation_number, contract_id, contract_ids, status')
               .in('id', chunk)
         );
 
-        const reinstallInfoMap = new Map<string, { number: number | null; taskType: string; contractId: number | null; contractIds: number[] }>();
+        const reinstallInfoMap = new Map<string, { number: number | null; taskType: string; contractId: number | null; contractIds: number[]; status: string }>();
         (installTasksData || []).forEach((it: any) => {
           const cIds = (it.contract_ids || []).map(normalizeContractId).filter((id): id is number => id !== null);
           const directC = normalizeContractId(it.contract_id);
           if (directC && !cIds.includes(directC)) cIds.push(directC);
 
           reinstallInfoMap.set(it.id, { 
-            number: it.reinstallation_number, 
+            number: it.reinstallation_number,
+            status: it.status,
             taskType: normalizeCompositeTaskType(it.task_type),
             contractId: directC,
             contractIds: cIds,
@@ -530,6 +532,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
         tasks.forEach((t: any) => {
           const reinstallInfo = t.installation_task_id ? reinstallInfoMap.get(t.installation_task_id) : undefined;
+          t._installationStatus = reinstallInfo?.status;
           const directContract = normalizeContractId(t.contract_id) || reinstallInfo?.contractId;
           const normalizedTaskType = normalizeCompositeTaskType(reinstallInfo?.taskType || t.task_type);
           
@@ -680,7 +683,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
                     (chunk) =>
                       supabase
                         .from('installation_task_items')
-                        .select('id, task_id, billboard_id, status, installation_date, installed_image_face_a_url, installed_image_face_b_url, design_face_a, design_face_b, selected_design_id')
+                        .select('id, task_id, billboard_id, status, installation_date, installed_image_url, installed_image_face_a_url, installed_image_face_b_url, design_face_a, design_face_b, selected_design_id')
                         .in('task_id', chunk)
                   ),
                   batchInQuery(
@@ -984,7 +987,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         const installationImages = task.installation_task_id
           ? installDesigns
               .filter((item: any) => item.task_id === task.installation_task_id)
-              .flatMap((item: any) => [item.installed_image_face_a_url, item.installed_image_face_b_url])
+              .flatMap((item: any) => [item.installed_image_face_a_url, item.installed_image_face_b_url, item.installed_image_url])
               .filter((url: unknown): url is string => typeof url === 'string' && url.trim().length > 0)
           : [];
 
@@ -1121,6 +1124,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
     return {
       ...task,
+      status: installationCompletionStatus(task.status, extra.installationItemCount || 0, extra.completedItemCount || 0, (task as any)._installationStatus),
       customer_name: resolvedCustomerName,
       customer_id: resolvedCustomerId,
       task_type: normalizedTaskType,

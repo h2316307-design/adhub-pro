@@ -43,10 +43,12 @@ export function CompanyPriceEditor({
 }: CompanyPriceEditorProps) {
   const [customer, setCustomer] = useState(target.customer || 'شركات');
   const isCompany = customer === 'شركات';
+  const [referenceCategory, setReferenceCategory] = useState('شركات');
 
   const isTargetSousset = target.size && (target.size.includes('سوسيت') || target.size.toLowerCase().includes('societ'));
   const [targetLevel, setTargetLevel] = useState<string>(target.level || (isTargetSousset ? 'B' : (level || levels[0]?.code || 'A')));
   const [referenceLevel, setReferenceLevel] = useState<string>(() => {
+    if (target.customer !== 'شركات') return '__SAME__';
     const curLevel = target.level || level;
     const others = levels.filter(l => l.code !== curLevel);
     if (others.some(l => l.code === 'A')) return 'A';
@@ -58,7 +60,7 @@ export function CompanyPriceEditor({
   const [percent, setPercent] = useState('10');
   const [scope, setScope] = useState<string>(() => {
     if (target.size) return 'single_current';
-    return 'current';
+    return 'level_all';
   });
   const [busy, setBusy] = useState(false);
 
@@ -79,6 +81,7 @@ export function CompanyPriceEditor({
   const { plan, changes, skipped } = useMemo(() => {
     return computeRelativePricingPlan({
       customer,
+      referenceCategory,
       targetLevel,
       referenceLevel,
       records,
@@ -91,7 +94,7 @@ export function CompanyPriceEditor({
       valid,
       sizes,
     });
-  }, [customer, targetLevel, referenceLevel, records, periods, scope, month, target.size, mode, rate, valid, sizes]);
+  }, [customer, referenceCategory, targetLevel, referenceLevel, records, periods, scope, month, target.size, mode, rate, valid, sizes]);
 
   const save = async () => {
     if (busy || !valid || !customer || !changes.length) return;
@@ -170,123 +173,25 @@ export function CompanyPriceEditor({
                   : `تسعير المقاس ${target.size} · فئة ${customer}`)
               : (isCompany
                   ? `تسعير المستوى ${targetLevel} في فئة الشركات`
-                  : `تسعير فئة ${customer} مقارنة بالشركات`)}
+                  : `تسعير فئة ${customer} من سعر مرجعي`)}
           </DialogTitle>
           <DialogDescription className="text-sm text-muted-foreground">
-            {isCompany
-              ? `تعديل أسعار المستوى ${targetLevel} كنسبة تخفيض أو زيادة استناداً إلى مستوى آخر أو السعر الحالي لنفس المستوى.`
-              : 'الحساب من سعر الشركات لنفس المقاس والمستوى والمدة. نسبة 0% تعني نفس سعر الشركات، والتصفير يجعل السعر 0 د.ل.'}
+            اختر الفئة والمستوى المطلوب تسعيرهما، ثم الفئة والمستوى المرجعيين. راجع الأسعار الناتجة قبل الحفظ؛ الأسعار التي لا يتوفر لها مرجع تُترك دون تغيير.
           </DialogDescription>
         </DialogHeader>
 
         <div className="overflow-y-auto min-h-0 space-y-4 py-2">
           {/* Controls row */}
-          {isCompany ? (
-            <div className="grid sm:grid-cols-3 gap-3 rounded-xl border border-border p-3 bg-muted/20">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold flex items-center gap-1.5">
-                  <Layers className="h-3.5 w-3.5 text-primary" />
-                  المستوى المطلوب تسعيره
-                </Label>
-                <Select
-                  value={targetLevel}
-                  onValueChange={handleTargetLevelChange}
-                  disabled={busy || (!!target.size && !!target.level)}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="اختر المستوى" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {levels.map(l => (
-                      <SelectItem key={l.code} value={l.code}>
-                        المستوى {l.code} {l.name && l.name !== l.code ? `(${l.name})` : ''}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold flex items-center gap-1.5">
-                  <ArrowUpDown className="h-3.5 w-3.5 text-primary" />
-                  المستوى المرجعي للحساب
-                </Label>
-                <Select
-                  value={referenceLevel}
-                  onValueChange={setReferenceLevel}
-                  disabled={busy}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="اختر المرجع" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {levels
-                      .filter(l => l.code !== targetLevel)
-                      .map(l => (
-                        <SelectItem key={l.code} value={l.code}>
-                          المستوى {l.code} {l.name && l.name !== l.code ? `(${l.name})` : ''}
-                        </SelectItem>
-                      ))}
-                    <SelectItem value="__SAME__">
-                      نفس المستوى {targetLevel} (الأسعار الحالية)
-                    </SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold">نطاق التطبيق</Label>
-                <Select value={scope} onValueChange={setScope} disabled={busy}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {target.size ? (
-                      <>
-                        <SelectItem value="single_current">المقاس {target.size} · {currentPeriodLabel}</SelectItem>
-                        <SelectItem value="single_all">المقاس {target.size} · جميع المدد</SelectItem>
-                        <SelectItem value="level_all">المستوى {targetLevel} كامل · جميع المقاسات والمدد</SelectItem>
-                      </>
-                    ) : (
-                      <>
-                        <SelectItem value="current">المستوى {targetLevel} · {currentPeriodLabel}</SelectItem>
-                        <SelectItem value="all">المستوى {targetLevel} · جميع المدد</SelectItem>
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          ) : (
-            <div className="grid sm:grid-cols-2 gap-4 rounded-xl border border-border p-3 bg-muted/20">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold">الفئة المطلوب تعديلها</Label>
-                <Select value={customer} onValueChange={setCustomer} disabled={busy || !!target.size}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue placeholder="اختر الفئة" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {categories.filter(c => c !== 'شركات').map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold">نطاق التعديل</Label>
-                <Select value={scope} onValueChange={setScope} disabled={busy || !!target.size}>
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="current">المستوى {level} · {currentPeriodLabel}</SelectItem>
-                    <SelectItem value="level">المستوى {level} · جميع المدد</SelectItem>
-                    <SelectItem value="all">الفئة كاملة · جميع المستويات والمدد</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          )}
+          <div className="grid gap-3 sm:grid-cols-2 rounded-xl border border-border p-3 bg-muted/20">
+            <div className="space-y-1.5"><Label>الفئة المطلوب تعديلها</Label><Select value={customer} onValueChange={setCustomer} disabled={busy}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categories.map(category => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>المستوى المطلوب تعديله</Label><Select value={targetLevel} onValueChange={setTargetLevel} disabled={busy}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{levels.map(option => <SelectItem key={option.code} value={option.code}>{option.code} · {option.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>الفئة المرجعية</Label><Select value={referenceCategory} onValueChange={setReferenceCategory} disabled={busy}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{categories.map(category => <SelectItem key={category} value={category}>{category}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5"><Label>المستوى المرجعي</Label><Select value={referenceLevel} onValueChange={setReferenceLevel} disabled={busy}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="__SAME__">نفس المستوى المطلوب</SelectItem>{levels.map(option => <SelectItem key={option.code} value={option.code}>{option.code} · {option.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-1.5 sm:col-span-2"><Label>نطاق التطبيق</Label><Select value={scope} onValueChange={setScope} disabled={busy}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>
+              {target.size && <><SelectItem value="single_current">المقاس {target.size} · {currentPeriodLabel}</SelectItem><SelectItem value="single_all">المقاس {target.size} · جميع المدد</SelectItem></>}
+              <SelectItem value="current">المستوى {targetLevel} كامل · {currentPeriodLabel}</SelectItem><SelectItem value="level_all">المستوى {targetLevel} كامل · جميع المقاسات والمدد</SelectItem>
+            </SelectContent></Select></div>
+          </div>
 
           {/* Mode selector */}
           <div className="space-y-2">
@@ -334,9 +239,7 @@ export function CompanyPriceEditor({
             <div className="space-y-2 rounded-xl border border-border p-3 bg-muted/10">
               <Label htmlFor="pricing-percentage" className="text-sm font-bold">
                 نسبة {mode === 'discount' ? 'التخفيض' : 'الزيادة'}{' '}
-                {isCompany
-                  ? (referenceLevel === '__SAME__' ? 'عن السعر الحالي' : `مقارنة بالمستوى ${referenceLevel}`)
-                  : 'من سعر الشركات'}{' '}
+                من فئة {referenceCategory} · المستوى {referenceLevel === '__SAME__' ? targetLevel : referenceLevel}{' '}
                 (%)
               </Label>
               <Input
@@ -446,9 +349,7 @@ export function CompanyPriceEditor({
             </div>
 
             <p className="text-xs text-muted-foreground">
-              {isCompany
-                ? 'الأسعار المحفوظة ستسري على فئة الشركات للمستوى المحدد. المرجع يُستخدم في حساب القيم فقط.'
-                : 'القيم المعروضة بالدينار الليبي. ستُستبدل أسعار الفئة بالقيم الجديدة الظاهرة.'}
+              ستُحفظ القيم الظاهرة لفئة {customer} والمستوى {targetLevel}. تبقى أسعار الفئة والمستوى المرجعيين كما هي.
             </p>
           </div>
         </div>

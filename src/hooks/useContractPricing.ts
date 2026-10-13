@@ -1,3 +1,4 @@
+import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
 import { usePricingDurations } from '@/hooks/usePricingDurations';
 import { durationPrice } from '@/utils/pricingDuration';
 // Hook مشترك لحساب الأسعار من قاعدة البيانات (موحد لإنشاء/تعديل العقد)
@@ -7,6 +8,7 @@ import { getPriceFor, getDailyPriceFor, CustomerType } from '@/data/pricing';
 import { toast } from '@/components/ui/sonner';
 
 export function useContractPricing() {
+  const { category: defaultPricingCategory } = useDefaultPricingCategory();
   const { data: durations } = usePricingDurations();
   const [pricingData, setPricingData] = useState<any[]>([]);
   const [sizeNames, setSizeNames] = useState(() => new Map<number, string>());
@@ -187,9 +189,9 @@ export function useContractPricing() {
       }
     }
 
-    if (normCustomer !== 'عادي') {
-      console.log(`⚠️ No price found for category "${normCustomer}". Falling back to default category "عادي"...`);
-      return getPriceFromDatabase(sizeRef, level, 'عادي', months);
+    if (normCustomer !== defaultPricingCategory) {
+      console.log(`⚠️ No price found for category "${normCustomer}". Falling back to default category "${defaultPricingCategory}"...`);
+      return getPriceFromDatabase(sizeRef, level, defaultPricingCategory, months);
     }
 
     console.error('❌ No matching row found!');
@@ -271,9 +273,9 @@ export function useContractPricing() {
       }
     }
 
-    if (normCustomer !== 'عادي') {
-      console.warn(`⚠️ No daily price found for category "${normCustomer}". Falling back to default category "عادي"...`);
-      return getDailyPriceFromDatabase(sizeRef, level, 'عادي');
+    if (normCustomer !== defaultPricingCategory) {
+      console.warn(`⚠️ No daily price found for category "${normCustomer}". Falling back to default category "${defaultPricingCategory}"...`);
+      return getDailyPriceFromDatabase(sizeRef, level, defaultPricingCategory);
     }
 
     console.warn(`❌ No daily price found for size_ref=${String(sizeRef)}`);
