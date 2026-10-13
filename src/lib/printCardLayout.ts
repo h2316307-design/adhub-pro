@@ -52,7 +52,7 @@ export function resolvePrintCardLayout(settings: Record<string, any>, options: {
 
   // التصاميم: فوق إطار العنوان، والطولية تأخذ مساحة رأسية كافية
   const requestedDesignsTop = printLengthMm(s.designs_top, 178, 297);
-  const designsTop = clamp(Math.min(requestedDesignsTop, portraitDesign ? contentBottom - 62 : contentBottom - 20),
+  const designsTop = clamp(Math.min(requestedDesignsTop, portraitDesign ? contentBottom - 71 : contentBottom - 20),
     zones ? Z.image.top + 20 : 40, contentBottom - 20);
   const designHeight = clamp(Math.max(printLengthMm(s.design_image_height, 42, 297), portraitDesign ? 60 : 0),
     10, Math.max(10, contentBottom - designsTop - 9));
@@ -63,7 +63,7 @@ export function resolvePrintCardLayout(settings: Record<string, any>, options: {
 
   // الصورة: من أعلى منطقة الصور حتى التصاميم (أو حتى إطار العنوان)
   const requestedTop = printLengthMm(options.pairedImages ? s.installed_images_top : s.main_image_top, 88, 297);
-  const imageFloor = options.hasDesigns ? designsTop - 3 : contentBottom;
+  const imageFloor = (options.hasDesigns ? designsTop : (zones ? contentBottom : locationTop)) - 5;
   const imageTop = clamp(requestedTop, zones ? Z.image.top : 20, imageFloor - 20);
   const requestedHeight = options.hasDesigns
     ? printLengthMm(options.pairedImages ? s.installed_image_height : s.main_image_height, 85, 297)
@@ -75,10 +75,11 @@ export function resolvePrintCardLayout(settings: Record<string, any>, options: {
     2 * Math.min(imageCenter - (zones ? Z.image.left : 3), (zones ? Z.image.right : 207) - imageCenter)));
 
   // اسم اللوحة: داخل الجزء الفارغ من إطار «رقم المساحة»
-  const nameWidth = zones ? Z.name.right - Z.name.left - 1 : 65;
   const nameCenter = zones
     ? (Z.name.left + Z.name.right) / 2
-    : clamp(printLengthMm(s.billboard_name_left, 33) + printLengthMm(s.billboard_name_offset_x, 0), 10, 200);
+    : clamp(printLengthMm(s.billboard_name_left, 33) + printLengthMm(s.billboard_name_offset_x, 0), 25, 185);
+  const nameRight = nameCenter < 48 ? 48 : 200;
+  const nameWidth = zones ? Z.name.right - Z.name.left - 1 : Math.min(65, 2 * Math.min(nameCenter - 10, nameRight - nameCenter));
   const nameTop = zones
     ? clamp(printLengthMm(s.billboard_name_top, 56, 297), Z.name.top, Z.name.bottom - 6)
     : printLengthMm(s.billboard_name_top, 56, 297);

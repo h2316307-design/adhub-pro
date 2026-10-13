@@ -1,3 +1,4 @@
+import { loadInstallationPhotos } from '@/services/installationPhotosService';
 /**
  * UnifiedPrintAllDialog - مكون طباعة موحد لجميع الصفحات
  * يستخدم في: العقود، العروض، مهام التركيب، مهام الإزالة
@@ -376,7 +377,7 @@ export function UnifiedPrintAllDialog({
       } catch (e) { /* ignore */ }
     })();
   }, []);
-  const [installedImagesData, setInstalledImagesData] = useState<Record<number, { face_a?: string; face_b?: string }>>({});
+  const [installedImagesData, setInstalledImagesData] = useState<Record<string, { face_a?: string; face_b?: string }>>({});
   const [showInstalledImages, setShowInstalledImages] = useState(false);
   const [customBackgroundUrl, setCustomBackgroundUrl] = useState('/ipg.svg');
   const [customizationDialogOpen, setCustomizationDialogOpen] = useState(false);
@@ -610,34 +611,51 @@ export function UnifiedPrintAllDialog({
   // جلب الصور المركبة والبيانات عند فتح النافذة
   useEffect(() => {
     if (!open) return;
+    let current = true;
+    setInstalledImagesData({});
     (async () => {
       const bbIds = [...new Set(items.map(i => i.billboard_id))];
       if (!bbIds.length) return;
 
       try {
-        const { data: itemsWithImages } = await supabase
-          .from('installation_task_items')
-          .select('billboard_id, installed_image_face_a_url, installed_image_face_b_url, installed_image_url, design_face_a, design_face_b')
-          .in('billboard_id', bbIds)
-          .not('installed_image_face_a_url', 'is', null);
-
+        let sourceQuery = supabase.from('installation_task_items')
+          .select('id, task_id, billboard_id, installed_image_face_a_url, installed_image_face_b_url, installed_image_url')
+          .in('billboard_id', bbIds).order('created_at', { ascending: false });
+        let operationTaskIds = [...new Set([...(taskIds || []), ...(taskId ? [String(taskId)] : [])])];
+        if (!operationTaskIds.length && contextType === 'contract' && contextNumber) {
+          const { data: contractTasks, error } = await supabase.from('installation_tasks').select('id').eq('contract_id', Number(contextNumber));
+          if (error) throw error;
+          operationTaskIds = (contractTasks || []).map(task => task.id);
+        }
+        if (operationTaskIds.length) sourceQuery = sourceQuery.in('task_id', operationTaskIds);
+        else if (contextType === 'installation' && items.some(item => item.id)) sourceQuery = sourceQuery.in('id', items.map(item => item.id).filter(Boolean));
+        else { setInstalledImagesData({}); return; }
+        const { data: sourceRows, error } = await sourceQuery;
+        if (error) throw error;
+        const itemsWithImages = await loadInstallationPhotos(sourceRows || []);
+        if (!current) return;
+        setInstalledImagesData({});
         if (itemsWithImages && itemsWithImages.length > 0) {
-          const imgMap: Record<number, { face_a?: string; face_b?: string }> = {};
+          const imgMap: Record<string, { face_a?: string; face_b?: string }> = {};
           itemsWithImages.forEach((row: any) => {
-            if (!imgMap[row.billboard_id]) {
-              imgMap[row.billboard_id] = {
-                face_a: row.installed_image_face_a_url || row.installed_image_url || undefined,
-                face_b: row.installed_image_face_b_url || undefined,
-              };
-            }
+            imgMap['item:' + row.id] = { face_a: row.installed_image_face_a_url || row.installed_image_url || undefined, face_b: row.installed_image_face_b_url || undefined };
+            const existing = imgMap[row.billboard_id] || {};
+            imgMap[row.billboard_id] = {
+              face_a: existing.face_a || row.installed_image_face_a_url || row.installed_image_url || undefined,
+              face_b: existing.face_b || row.installed_image_face_b_url || undefined,
+            };
           });
           setInstalledImagesData(imgMap);
         }
       } catch (e) {
+        if (!current) return;
+        setInstalledImagesData({});
+        toast.error('تعذر تحميل صور تركيب هذه العملية');
         console.error('Error fetching installed images:', e);
       }
     })();
-  }, [open, items]);
+    return () => { current = false; };
+  }, [open, items, taskId, taskIds, contextType, contextNumber]);
 
   // ترتيب اللوحات هرمياً: المقاس أولاً، ثم المدينة / البلدية، ثم المستوى
   const sortBillboardsBySize = async (itemsToSort: BillboardPrintItem[]) => {
@@ -1056,7 +1074,7 @@ export function UnifiedPrintAllDialog({
 
       // صور التركيب: يتم جلبها أو استخدامها فقط إذا لم يتم تفعيل خيار إخفاء صور التركيب
       const allowInstalledImages = contextType !== 'removal' && !hideInstalledImages;
-      const fetchedInstalled = (allowInstalledImages && showInstalledImages) ? installedImagesData[item.billboard_id] : null;
+      const fetchedInstalled = (allowInstalledImages && showInstalledImages) ? (installedImagesData['item:' + item.id] || installedImagesData[item.billboard_id]) : null;
       const installedImageFaceA = allowInstalledImages
         ? (item.installed_image_face_a_url || fetchedInstalled?.face_a || null)
         : null;
@@ -1695,7 +1713,7 @@ export function UnifiedPrintAllDialog({
             break;
           }
           case 'installed_images': {
-            const installed = showInstalledImages ? installedImagesData[item.billboard_id] : null;
+            const installed = showInstalledImages ? (installedImagesData['item:' + item.id] || installedImagesData[item.billboard_id]) : null;
             if (!hideInstalledImages && (item.installed_image_face_a_url || installed?.face_a ||
               (supportsBackFace && (item.installed_image_face_b_url || installed?.face_b)))) columnHasData[col.id] = true;
             break;
@@ -1776,7 +1794,7 @@ export function UnifiedPrintAllDialog({
             case 'row_number':
               return `<td class="number-cell"><div class="billboard-number">${globalIndex}</div></td>`;
             case 'billboard_image':
-              const fetchedInstImg = (!hideInstalledImages && showInstalledImages) ? installedImagesData[item.billboard_id] : null;
+              const fetchedInstImg = (!hideInstalledImages && showInstalledImages) ? (installedImagesData['item:' + item.id] || installedImagesData[item.billboard_id]) : null;
               const instImgA = !hideInstalledImages ? (item.installed_image_face_a_url || fetchedInstImg?.face_a || null) : null;
               const instImgB = !hideInstalledImages && supportsBackFace ? (item.installed_image_face_b_url || fetchedInstImg?.face_b || null) : null;
               const tblImage = contextType === 'removal' ? removalImages.main : instImgA || instImgB || billboard.Image_URL || '';
@@ -1810,7 +1828,7 @@ export function UnifiedPrintAllDialog({
               </div></td>`;
             case 'installed_images':
               if (hideInstalledImages) return `<td class="image-cell">-</td>`;
-              const fetchedInst = showInstalledImages ? installedImagesData[item.billboard_id] : null;
+              const fetchedInst = showInstalledImages ? (installedImagesData['item:' + item.id] || installedImagesData[item.billboard_id]) : null;
               const instA = item.installed_image_face_a_url || fetchedInst?.face_a || null;
               const instB = supportsBackFace
                 ? item.installed_image_face_b_url || fetchedInst?.face_b || null

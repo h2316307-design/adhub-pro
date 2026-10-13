@@ -42,6 +42,26 @@ describe('design distribution review and persistence', () => {
     await click('تطبيق على 4 لوحة');
     expect(db.updates.map(p => p.id)).toEqual(items.slice(0, 4).map(i => i.id));
   });
+  it('distributes several designs evenly while keeping the selected size scope', async () => {
+    render(); await click('حسب المقاس'); await click('3×6 (4)');
+    await click('تصميم aالوجه الأماميالوجه الخلفي');
+    await click('تصميم bالوجه الأماميالوجه الخلفي');
+    await click('معاينة التوزيع');
+    expect(document.body.textContent).toContain('تصميم a · 2 لوحة');
+    expect(document.body.textContent).toContain('تصميم b · 2 لوحة');
+    await click('تطبيق على 4 لوحة');
+    expect(db.updates.map(row => row.id).sort()).toEqual(items.slice(0, 4).map(item => item.id).sort());
+    expect(['a', 'b'].map(id => db.updates.filter(row => row.selected_design_id === id).length)).toEqual([2, 2]);
+  });
+  it('filters the default distribution by size without requiring a mode change', async () => {
+    render(); await click('4×8 (6)');
+    await click('تصميم aالوجه الأماميالوجه الخلفي');
+    await click('تصميم bالوجه الأماميالوجه الخلفي');
+    await click('تصميم cالوجه الأماميالوجه الخلفي');
+    await click('تطبيق على 6 لوحة');
+    expect(db.updates.map(row => row.id).sort()).toEqual(items.slice(4).map(item => item.id).sort());
+    expect(['a', 'b', 'c'].map(id => db.updates.filter(row => row.selected_design_id === id).length)).toEqual([2, 2, 2]);
+  });
   it('only assigns unassigned boards and preserves completed boards when requested', async () => {
     render({ taskItems: items.map((item,i)=>({...item,selected_design_id:i<3?'b':null,design_face_a:i===3?'/legacy.jpg':null,status:i===4?'completed':'pending'})) });
     await click('بدون تصميم');

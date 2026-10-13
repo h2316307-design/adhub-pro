@@ -53,7 +53,7 @@ export const TaskCardRow = ({ task, idx, operationInstallationTaskIds, onDelete,
   const hasInvoice = Boolean(task.combined_invoice_id || task.invoice_generated);
   const hasCutout = Number(task.customer_cutout_cost) > 0 || Number(task.company_cutout_cost) > 0;
   const contracts = task.contractIds || (task.contract_id ? [Number(task.contract_id)] : []);
-  const typeLabel = task.task_type === 'reinstallation' ? `إعادة تركيب ${task.reinstallationNumber || ''}` : 'تركيب جديد';
+  const typeLabel = task.task_type === 'reinstallation' ? 'إعادة تركيب' : 'تركيب أول ضمن العقد';
   const status = task.status === 'completed' ? 'مكتملة' : task.status === 'cancelled' ? 'ملغاة' : task.status === 'in_progress' ? 'قيد التنفيذ' : 'بانتظار التنفيذ';
   const buttonClass = 'min-h-10 cursor-pointer gap-2 rounded-lg text-xs transition-all duration-200';
 

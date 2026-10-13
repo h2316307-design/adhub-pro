@@ -91,7 +91,9 @@ export const DesignPanel = ({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const url = urls[currentIdx % urls.length] || '';
   // ⚡ نسخة أصغر من Google Drive للعرض في البطاقة (الأصل يُعرض عند التكبير) — يقلل الحجم ورفض الطلبات (429)
-  const displayUrl = /^https:\/\/lh3\.googleusercontent\.com\/d\/[^=?#]+$/.test(url) ? `${url}=w800` : url;
+  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
+  const thumbnailUrl = /^https:\/\/lh3\.googleusercontent\.com\/d\/[^=?#]+$/.test(url) ? `${url}=w800` : url;
+  const displayUrl = originalImageUrl === url ? url : thumbnailUrl;
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   const imageFailed = failedUrl === displayUrl;
 
@@ -146,7 +148,10 @@ export const DesignPanel = ({
                 decoding="async"
                 className="relative w-full h-full object-contain z-10 p-2 transition-transform duration-300 group-hover/design:scale-105"
                 style={{ minHeight: '100%' }}
-                onError={() => setFailedUrl(displayUrl)}
+                onError={() => {
+                  if (displayUrl !== url) setOriginalImageUrl(url);
+                  else setFailedUrl(displayUrl);
+                }}
               />
             )}
 

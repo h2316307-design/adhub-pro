@@ -1,3 +1,4 @@
+import { loadInstallationPhotos } from '@/services/installationPhotosService';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { usePersistedFilters } from '@/hooks/usePersistedFilters';
@@ -165,7 +166,7 @@ export const fetchInstallationWorkflowData = async (
     }
   });
 
-  const items = itemsResult.data || [];
+  const items = await loadInstallationPhotos(itemsResult.data || []);
   const billboardIds = [...new Set(items.map((item: any) => Number(item.billboard_id)).filter(Boolean))];
   const billboardResult = billboardIds.length > 0
     ? await supabase.from('billboards').select('*').in('ID', billboardIds)

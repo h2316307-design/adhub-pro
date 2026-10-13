@@ -11,8 +11,8 @@ describe('saving the operation presentation order', () => {
   let root: Root;
   let host: HTMLDivElement;
   const group = { key: 'contract-1293', contractId: 1293, operations: [
-    { key: 'old', label: 'التركيب الأول', createdAt: '2026-09-01', tasks: [{ id: 'old-task', teamName: 'الفرقة الأولى', customer_total: 100 }] },
     { key: 'new', label: 'إعادة تركيب 1', createdAt: '2026-10-01', tasks: [{ id: 'new-task', teamName: 'الفرقة الجديدة', customer_total: 200 }] },
+    { key: 'old', label: 'التركيب الأول', createdAt: '2026-09-01', tasks: [{ id: 'old-task', teamName: 'الفرقة الأولى', customer_total: 100 }] },
   ] };
   beforeEach(() => {
     (globalThis as any).IS_REACT_ACT_ENVIRONMENT = true;
@@ -37,8 +37,8 @@ describe('saving the operation presentation order', () => {
     expect(from).toHaveBeenCalledTimes(1);
     expect(from).toHaveBeenCalledWith('system_settings');
     expect(upsert).toHaveBeenCalledWith({ setting_key: 'composite_operation_order:contract-1293', setting_value: '["new","old"]' }, { onConflict: 'setting_key' });
-    expect(group.operations[0].tasks[0].customer_total).toBe(100);
-    expect(group.operations[1].tasks[0].customer_total).toBe(200);
+    expect(group.operations[0].tasks[0].customer_total).toBe(200);
+    expect(group.operations[1].tasks[0].customer_total).toBe(100);
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   });
   it('keeps the dialog open and reports a rejected save', async () => {

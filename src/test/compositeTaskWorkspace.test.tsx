@@ -58,7 +58,7 @@ describe('Composite task workspace navigation', () => {
     expect(props.setEditingOperationTasks).toHaveBeenCalledWith([task]);
     expect(props.setEditingTask).toHaveBeenCalledWith(task);
     expect(props.setEditDialogOpen).toHaveBeenCalledWith(true);
-    const tab = Array.from(host.querySelectorAll('[role="tab"]')).find(b => b.textContent === 'الحسابات')!;
+    const tab = Array.from(host.querySelectorAll('[role="tab"]')).find(b => b.textContent === 'التكاليف والدفعات')!;
     act(() => tab.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 })));
     expect(tab.getAttribute('aria-selected')).toBe('true');
     expect(host.textContent).toContain('تعديل التكاليف');

@@ -1,3 +1,4 @@
+import { loadInstallationPhotos } from '@/services/installationPhotosService';
 import { installationCompletionStatus } from '@/lib/installationCompletion';
 import { applyOperationDisplayOrder, OPERATION_ORDER_PREFIX } from '@/lib/compositeOperationDisplayOrder';
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
@@ -573,7 +574,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
   // 2. Fetch design images, ad types, and operations data with strict normalization
   const { data: taskExtras = {} } = useQuery({
-    queryKey: ['composite-task-extras', compositeTasks.map(t => t.id)],
+    queryKey: ['composite-task-extras', 'photos-v2', compositeTasks.map(t => t.id)],
     enabled: compositeTasks.length > 0,
     queryFn: async () => {
       const extras: Record<string, { 
@@ -697,6 +698,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
                   )
                 ]);
                 installDesigns = itemsData || [];
+                installDesigns = await loadInstallationPhotos(installDesigns);
                 taskDesignsData = designsData || [];
               }
             } catch (err) {
@@ -1355,6 +1357,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           return {
             key: operationKey,
             isReinstall,
+            sequence: orderedOperationTasks[0]?.reinstallationNumber ?? null,
             contractIds: opContractIds,
             isMultiContract: opContractIds.length > 1,
             createdAt: orderedOperationTasks[0]?.created_at || null,
