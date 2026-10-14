@@ -1099,7 +1099,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
       if (effectiveItems.length > 0) {
         for (const item of effectiveItems) {
           const finalCustCost = item.customer_installation_cost ?? item.customer_reinstall_cost ?? 0;
-          await supabase.from('installation_task_items').update({
+          const { error: itemSaveError } = await supabase.from('installation_task_items').update({
             customer_installation_cost: finalCustCost,
             customer_original_install_cost: item.customer_original_install_cost || 0,
             customer_reinstall_cost: finalCustCost,
@@ -1122,17 +1122,19 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
             pricing_type: item.pricing_type || batchPricingMode || 'piece',
             price_per_meter: item.pricing_type === 'meter' ? (item.price_per_meter || batchPriceValue || 0) : 0,
           }).eq('id', item.id);
+          if (itemSaveError) throw itemSaveError;
         }
       }
 
       // 1.1 Update installation_tasks table default_pricing_type
       const allInstallIds = allTasks.map(t => t.installation_task_id).filter(Boolean) as string[];
       if (allInstallIds.length > 0) {
-        await supabase.from('installation_tasks').update({
+        const { error: pricingSaveError } = await supabase.from('installation_tasks').update({
           default_pricing_type: batchPricingMode,
           default_price_per_meter: batchPricingMode === 'meter' ? (batchPriceValue || 0) : 0,
           updated_at: new Date().toISOString()
         } as any).in('id', allInstallIds);
+        if (pricingSaveError) throw pricingSaveError;
       }
 
       // 2. Handle Print Task Creation / Updating
@@ -1161,7 +1163,8 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
           if (newPt) {
             effectivePrintTaskId = newPt.id;
             // Link to composite task & installation task
-            await supabase.from('composite_tasks').update({ print_task_id: newPt.id }).eq('id', primaryTask.id);
+            const { error: printLinkError } = await supabase.from('composite_tasks').update({ print_task_id: newPt.id }).eq('id', primaryTask.id);
+            if (printLinkError) throw printLinkError;
             if (primaryTask.installation_task_id) {
               await supabase.from('installation_tasks').update({ print_task_id: newPt.id }).eq('id', primaryTask.installation_task_id);
             }
@@ -1251,7 +1254,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
           const tNet = tCustTot - tCompTot;
           const tProfPct = tCustTot > 0 ? (tNet / tCustTot) * 100 : 0;
 
-          await supabase.from('composite_tasks').update({
+          const { error: taskSaveError } = await supabase.from('composite_tasks').update({
             customer_installation_cost: tCustInstall,
             company_installation_cost: tCompInstall,
             customer_print_cost: tCustPrint,
@@ -1266,6 +1269,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
             profit_percentage: tProfPct,
             updated_at: new Date().toISOString()
           }).eq('id', t.id);
+          if (taskSaveError) throw taskSaveError;
 
           if (t.combined_invoice_id) {
             await supabase.from('printed_invoices').update({

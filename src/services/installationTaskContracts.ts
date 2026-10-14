@@ -152,7 +152,8 @@ export async function syncInstallationTaskContracts(taskId: string): Promise<{
     })
     .sort((a, b) => a.contractId - b.contractId);
 
-  const newIds = info.map(c => c.contractId);
+  // A team's board subset must not shrink the shared multi-contract identity.
+  const newIds = [...new Set([...stored, ...info.map(c => c.contractId)])].sort((a, b) => a - b);
   const sameSet = newIds.length === stored.length && newIds.every(id => stored.includes(id));
   let changed = false;
   if (newIds.length > 1 && !sameSet) {
@@ -167,10 +168,10 @@ export async function syncInstallationTaskContracts(taskId: string): Promise<{
       });
     }
     const { error } = await supabase.from('installation_tasks').update(patch as any).eq('id', taskId);
-    if (!error) {
-      changed = true;
-      await supabase.from('composite_tasks').update({ contract_ids: newIds } as any).eq('installation_task_id', taskId);
-    }
+    if (error) throw error;
+    const { error: compositeError } = await supabase.from('composite_tasks').update({ contract_ids: newIds } as any).eq('installation_task_id', taskId);
+    if (compositeError) throw compositeError;
+    changed = true;
   }
   return { contracts: info, unmatched, changed };
 }

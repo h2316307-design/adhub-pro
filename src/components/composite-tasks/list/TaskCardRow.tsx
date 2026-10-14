@@ -31,7 +31,7 @@ export const TaskCardRow = ({ task, idx, operationInstallationTaskIds, onDelete,
   const ownUrls = task.designUrls || [];
   useEffect(() => {
     setFallbackUrls([]);
-    if (ownUrls.length) return;
+    if (ownUrls.length || (task.contractIds || task.contract_ids || []).length > 1) return;
     const id = normalizeContractId(task.contract_id);
     if (!id) return;
     let cancelled = false;

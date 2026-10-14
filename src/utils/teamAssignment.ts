@@ -150,13 +150,25 @@ export function findOptimalTeamForRemoval(
 /**
  * Finds the optimal team for an installation task.
  */
+export function installationTeamCoversBillboard(team: any, size: string | null | undefined, city: string | null | undefined, companyId: string | null | undefined): boolean {
+  if (!matchesTeamSize(team.sizes, size) || !matchesTeamCity(team.cities, city)) return false;
+  if (!isFriendCompanyTeam(team) || matchesFriendCompany(team, companyId)) return true;
+  // A company link grants ownership precedence, not exclusivity. For other
+  // owners, require explicit city coverage rather than an unrestricted list.
+  return Array.isArray(team.cities) && team.cities.length > 0 && !!city?.trim();
+}
+
 export function findOptimalTeamForInstallation(
   teams: any[],
   billboardSize: string | null | undefined,
   billboardCity: string | null | undefined,
   billboardCompanyId: string | null | undefined
 ): any {
-  return findOptimalTeamForRemoval(teams, billboardSize, billboardCity, billboardCompanyId);
+  const eligible = sortTeamsByPriority(teams || []).filter(team =>
+    installationTeamCoversBillboard(team, billboardSize, billboardCity, billboardCompanyId));
+  return eligible.find(team => matchesFriendCompany(team, billboardCompanyId))
+    || eligible[0]
+    || null;
 }
 
 /**

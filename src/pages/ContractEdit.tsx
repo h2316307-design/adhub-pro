@@ -458,6 +458,8 @@ export default function ContractEdit() {
   const handlePricingCategoryChange = (newVal: string) => {
     if (newVal === pricingCategory) return;
     setPricingCategory(newVal);
+    setBillboardPriceOverrides({});
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تغيّر أساس التسعير — تُحسب الأسعار الآن من جدول الأسعار الحالي');
@@ -467,6 +469,8 @@ export default function ContractEdit() {
   const handlePricingModeChange = (newVal: 'months' | 'days') => {
     if (newVal === pricingMode) return;
     setPricingMode(newVal);
+    setBillboardPriceOverrides({});
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تغيّر أساس التسعير — تُحسب الأسعار الآن من جدول الأسعار الحالي');
@@ -476,6 +480,8 @@ export default function ContractEdit() {
   const handleDurationMonthsChange = (newVal: number) => {
     if (newVal === durationMonths) return;
     setDurationMonths(newVal);
+    setBillboardPriceOverrides({});
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تغيّر أساس التسعير — تُحسب الأسعار الآن من جدول الأسعار الحالي');
@@ -485,6 +491,8 @@ export default function ContractEdit() {
   const handleDurationDaysChange = (newVal: number) => {
     if (newVal === durationDays) return;
     setDurationDays(newVal);
+    setBillboardPriceOverrides({});
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تغيّر أساس التسعير — تُحسب الأسعار الآن من جدول الأسعار الحالي');
@@ -494,6 +502,8 @@ export default function ContractEdit() {
   const handleUse30DayMonthChange = (newVal: boolean) => {
     if (newVal === use30DayMonth) return;
     setUse30DayMonth(newVal);
+    setBillboardPriceOverrides({});
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تغيّر أساس التسعير — تُحسب الأسعار الآن من جدول الأسعار الحالي');
@@ -1313,13 +1323,16 @@ export default function ContractEdit() {
 
   // Calculate installation_cost when selected billboards change
   useEffect(() => {
+    let active = true;
     if (selected.length > 0) {
       (async () => {
         try {
           const result = await calculateInstallationCostFromIds(selected);
+          if (!active) return;
           setInstallationCost(result.totalInstallationCost);
           setInstallationDetails(result.installationDetails);
         } catch (e) {
+          if (!active) return;
           console.warn('Failed to calculate installation_cost:', e);
           setInstallationCost(0);
           setInstallationDetails([]);
@@ -1329,6 +1342,7 @@ export default function ContractEdit() {
       setInstallationCost(0);
       setInstallationDetails([]);
     }
+    return () => { active = false; };
   }, [selected]);
 
   // Auto-calculate end date
@@ -1576,6 +1590,7 @@ export default function ContractEdit() {
       
       // Switch to using fresh prices
       setUseStoredPrices(false);
+      setBillboardPriceOverrides({});
       
       // Force recalculation by updating a dependency
       setUserEditedRentCost(false);
@@ -1787,7 +1802,7 @@ export default function ContractEdit() {
 
   useEffect(() => {
     // ✅ لا تدوس على rentCost المحمّل من DB إذا كان useStoredPrices = true أو إذا لم يطلب المستخدم تحديث الأسعار
-    if (!userEditedRentCost && estimatedTotal > 0 && !useStoredPrices) {
+    if (!userEditedRentCost && !useStoredPrices) {
       setRentCost(estimatedTotal);
     }
   }, [estimatedTotal, userEditedRentCost, useStoredPrices]);
@@ -2409,6 +2424,16 @@ export default function ContractEdit() {
   }, [billboards, searchQuery, cityFilter, sizeFilter, sizeFilters, statusFilter, municipalityFilter, selected, dbSizesData, dbMunisData]);
 
   // Event handlers
+  // User changes to board selection invalidate the saved/manual pricing basis.
+  const updateSelectedAndRecalculate = (update: (previous: string[]) => string[]) => {
+    setUseStoredPrices(false);
+    setUserEditedRentCost(false);
+    setInstallmentsLoaded(false);
+    setBillboardPriceOverrides({});
+    setRedistributeDiscount(true);
+    setSelected(update);
+  };
+
   const toggleSelect = async (b: Billboard) => {
     const id = String((b as any).ID);
     const isSelected = selected.includes(id);
@@ -2456,13 +2481,13 @@ export default function ContractEdit() {
       }
     }
 
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    updateSelectedAndRecalculate((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const handleConfirmMaintenanceSelect = () => {
     if (pendingMaintenanceBillboard) {
       const id = String((pendingMaintenanceBillboard as any).ID);
-      setSelected((prev) => [...prev, id]);
+      updateSelectedAndRecalculate((prev) => [...prev, id]);
       setPendingMaintenanceBillboard(null);
     }
     setMaintenanceConfirmOpen(false);
@@ -2470,12 +2495,12 @@ export default function ContractEdit() {
 
   // الإزالة تعديل في المسودة فقط: تُحرَّر اللوحات وتُعالج مهامها عند حفظ العقد (مع سؤال المهام المرتبطة)
   const removeSelected = (id: string) => {
-    setSelected((prev) => prev.filter((x) => x !== id));
+    updateSelectedAndRecalculate((prev) => prev.filter((x) => x !== id));
   };
 
   const removeMultipleSelected = (ids: string[]) => {
     if (ids.length === 0) return;
-    setSelected((prev) => prev.filter((x) => !ids.includes(x)));
+    updateSelectedAndRecalculate((prev) => prev.filter((x) => !ids.includes(x)));
   };
 
   const handleAddCustomer = async (name: string) => {
@@ -3857,7 +3882,7 @@ export default function ContractEdit() {
                       }
                     }}
                     onSelectMultiple={(billboardIds) => {
-                      setSelected((prev) => {
+                      updateSelectedAndRecalculate((prev) => {
                         const newSet = new Set(prev);
                         billboardIds.forEach((id) => newSet.add(id));
                         return Array.from(newSet);
@@ -4134,7 +4159,7 @@ export default function ContractEdit() {
             endDate={endDate}
             mode={swapDialogMode}
             onSwapComplete={() => {
-              setSelected(prev => prev.filter(x => x !== swapBillboard.id));
+              updateSelectedAndRecalculate(prev => prev.filter(x => x !== swapBillboard.id));
               setSwapBillboard(null);
             }}
           />
@@ -4148,7 +4173,7 @@ export default function ContractEdit() {
           targetStartDate={startDate}
           targetEndDate={endDate}
           onDone={(bbId) => {
-            setSelected(prev => prev.includes(bbId) ? prev : [...prev, bbId]);
+            updateSelectedAndRecalculate(prev => prev.includes(bbId) ? prev : [...prev, bbId]);
             // refresh billboards
             getContractEditBillboards(true).then(setBillboards).catch(() => {});
           }}
@@ -4298,7 +4323,7 @@ export default function ContractEdit() {
           onConfirm={() => {
             if (pendingConflictBillboard) {
               const id = String((pendingConflictBillboard as any).ID);
-              setSelected((prev) => [...prev, id]);
+              updateSelectedAndRecalculate((prev) => [...prev, id]);
             }
             setConflictDialogOpen(false);
             setPendingConflictBillboard(null);

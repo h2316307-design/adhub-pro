@@ -1,3 +1,4 @@
+import { findOptimalTeamForInstallation } from '@/utils/teamAssignment';
 /**
  * Smart Billboard Service
  * يتعامل مع إضافة/حذف اللوحات من العقود بذكاء
@@ -368,45 +369,9 @@ export async function addBillboardToExistingTasks(
   if (installTasks?.length) {
     const { data: teams } = await supabase
       .from('installation_teams')
-      .select('id, sizes, cities, friend_company_ids');
+      .select('id, team_name, priority, sizes, cities, friend_company_id, friend_company_ids');
 
-    // ✅ تحديد الفريق الصحيح للوحة (أولوية للفرق المرتبطة بالشركة المالكة)
-    const sortedTeams = [...(teams || [])].sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0));
-    
-    const matchesSizeAndCity = (t: any) => {
-      const sizeMatch = Array.isArray(t.sizes) && t.sizes.includes(billboardSize);
-      if (!sizeMatch) return false;
-      if (Array.isArray(t.cities) && t.cities.length > 0 && billboardCity) {
-        if (!t.cities.includes(billboardCity)) return false;
-      }
-      return true;
-    };
-
-    let correctTeam: any = null;
-    // أولاً: البحث في الفرق المرتبطة بالشركة المالكة
-    if (billboardCompanyId) {
-      correctTeam = sortedTeams.find((t: any) => 
-        matchesSizeAndCity(t) && Array.isArray(t.friend_company_ids) && t.friend_company_ids.includes(billboardCompanyId)
-      );
-    }
-    // ثانياً: fallback للفرق العامة (بدون ربط شركة) تطابق مدينة + مقاس
-    if (!correctTeam) {
-      correctTeam = sortedTeams.find((t: any) => 
-        matchesSizeAndCity(t) && (!Array.isArray(t.friend_company_ids) || t.friend_company_ids.length === 0)
-      );
-    }
-    // ثالثاً: أي فريق يطابق مدينة + مقاس (حتى لو مرتبط بشركة)
-    if (!correctTeam) {
-      correctTeam = sortedTeams.find((t: any) => matchesSizeAndCity(t));
-    }
-    // رابعاً: أي فريق يطابق المقاس فقط
-    if (!correctTeam) {
-      correctTeam = sortedTeams.find((t: any) => Array.isArray(t.sizes) && t.sizes.includes(billboardSize));
-    }
-    // خامساً: أي فريق كحل أخير
-    if (!correctTeam && sortedTeams.length > 0) {
-      correctTeam = sortedTeams[0];
-    }
+    const correctTeam = findOptimalTeamForInstallation(teams || [], billboardSize, billboardCity, billboardCompanyId);
 
     // ✅ البحث عن المهمة الأساسية للفريق الصحيح (الأقدم)
     let targetTaskId: string | null = null;
@@ -452,8 +417,8 @@ export async function addBillboardToExistingTasks(
         if (newTask) targetTaskId = newTask.id;
       }
     } else {
-      // لا يوجد فريق مطابق - استخدام أول مهمة موجودة
-      targetTaskId = installTasks[0].id;
+      // لا يوجد فريق مطابق: لا تُسند اللوحة إلى مهمة خارج نطاقها
+      throw new Error('لا توجد فرقة تغطي مقاس ومدينة اللوحة؛ راجع نطاق الفرق قبل إضافتها إلى مهمة تركيب.');
     }
 
     if (targetTaskId) {
@@ -641,3 +606,4 @@ export async function addBillboardToExistingTasks(
 
   return { added };
 }
+

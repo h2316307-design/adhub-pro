@@ -1,3 +1,5 @@
+import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
+import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -59,7 +61,7 @@ import { CreatePrintTaskFromInstallation } from '@/components/tasks/CreatePrintT
 import { TaskTotalCostSummary } from '@/components/tasks/TaskTotalCostSummary';
 import { MergeTeamTasksDialog } from '@/components/tasks/MergeTeamTasksDialog';
 import { EditTaskTypeDialog } from '@/components/tasks/EditTaskTypeDialog';
-import { findOptimalTeamForInstallation, sortTeamsByPriority } from '@/utils/teamAssignment';
+import { findOptimalTeamForInstallation, sortTeamsByPriority, installationTeamCoversBillboard } from '@/utils/teamAssignment';
 import { TransferBillboardsDialog } from '@/components/tasks/TransferBillboardsDialog';
 import { UnifiedPrintAllDialog, BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import BillboardPrintSettingsDialog from '@/components/billboards/BillboardPrintSettingsDialog';
@@ -875,6 +877,8 @@ export default function InstallationTasks() {
       teamId: string | null;
       taskType: 'installation' | 'reinstallation';
       task_name?: string;
+      acceptedInactiveContractIds?: number[];
+      operationNumber?: number;
     }) => {
       const { contractId, teamId, taskType, task_name } = vars;
       const contractIds = [...new Set((vars.contractIds?.length ? vars.contractIds : [contractId]).map(Number).filter(Boolean))];
@@ -883,6 +887,26 @@ export default function InstallationTasks() {
 
       if (!contractId) throw new Error('يرجى اختيار عقد');
       if (!billboardIds || billboardIds.length === 0) throw new Error('يرجى اختيار لوحة واحدة على الأقل');
+
+      const referenceDate = format(new Date(), 'yyyy-MM-dd');
+      const { data: chosenContracts, error: chosenError } = await supabase.from('Contract')
+        .select('Contract_Number, customer_id, "Customer Name", "Contract Date", "End Date", billboard_ids, billboards_released, "Renewal Status"').in('Contract_Number', contractIds);
+      if (chosenError) throw chosenError;
+      if (chosenContracts?.length !== contractIds.length) throw new Error('تغيرت العقود المختارة؛ أعد فتح النافذة.');
+      const customerKeys = new Set(chosenContracts.map(contract => contract.customer_id || contract['Customer Name']));
+      if (customerKeys.size !== 1) throw new Error('يجب أن تكون عقود المهمة المجمعة للزبون نفسه.');
+      const inactive = chosenContracts.filter(contract => !installationContractIsActive(contract, referenceDate));
+      if (inactive.some(contract => taskType !== 'reinstallation' || !vars.acceptedInactiveContractIds?.includes(Number(contract.Contract_Number)))) throw new Error('يجب مراجعة العقود غير النشطة من نافذة إعادة التركيب.');
+      const ownedBoards = new Set(chosenContracts.flatMap(contract => parseContractBillboardIds(contract.billboard_ids)));
+      if (billboardIds.some(id => !ownedBoards.has(Number(id)))) throw new Error('إحدى اللوحات لا تنتمي للعقود المختارة.');
+      const activeContracts: any[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('Contract').select('Contract_Number, "Contract Date", "End Date", billboard_ids, billboards_released, "Renewal Status"').gte('End Date', referenceDate).order('Contract_Number').range(offset, offset + 499);
+        if (error) throw error; activeContracts.push(...(data || [])); if (!data || data.length < 500) break;
+      }
+      const conflicts = blockedInstallationBillboards(activeContracts, contractIds, referenceDate);
+      const conflictId = billboardIds.find(id => conflicts.has(Number(id)));
+      if (conflictId != null) throw new Error(`اللوحة ${conflictId} مرتبطة بعقد نشط آخر #${conflicts.get(Number(conflictId))}`);
 
       // 🚫 Safety net: never add paused billboards to a new task
       try {
@@ -897,12 +921,19 @@ export default function InstallationTasks() {
         if (billboardIds.length === 0) throw new Error('جميع اللوحات المختارة موقوفة في هذا العقد');
       } catch (e: any) {
         if (e?.message?.startsWith?.('جميع اللوحات')) throw e;
-        console.warn('Failed to filter paused billboards:', e);
+        throw new Error('تعذر التحقق من اللوحات الموقوفة. أعد المحاولة قبل إنشاء المهمة.');
       }
 
 
       // If team is selected, create manual task for specific team
       if (teamId) {
+        const { data: selectedTeam, error: selectedTeamError } = await supabase.from('installation_teams').select('*').eq('id', teamId).single();
+        if (selectedTeamError) throw selectedTeamError;
+        const { data: assignmentBoards, error: assignmentError } = await supabase.from('billboards').select('ID, Billboard_Name, Size, City, friend_company_id').in('ID', billboardIds);
+        if (assignmentError) throw assignmentError;
+        if (assignmentBoards?.length !== new Set(billboardIds).size) throw new Error('تعذر التحقق من جميع اللوحات المختارة.');
+        const invalid = assignmentBoards.filter(board => !installationTeamCoversBillboard(selectedTeam, board.Size, board.City, board.friend_company_id));
+        if (invalid.length) throw new Error(`لوحات خارج نطاق ${selectedTeam.team_name}: ${invalid.map(board => `${board.Billboard_Name || board.ID} (${board.City || 'مدينة غير محددة'})`).join('، ')}`);
         let taskId: string | undefined;
 
         // For reinstallation: always create a new task (allow multiple per contract)
@@ -916,7 +947,7 @@ export default function InstallationTasks() {
             .order('reinstallation_number', { ascending: false })
             .limit(1);
           
-          const nextNumber = ((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1;
+          const nextNumber = vars.operationNumber ?? (((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1);
 
           const { data: newTask, error: taskError } = await supabase
             .from('installation_tasks')
@@ -1007,35 +1038,23 @@ export default function InstallationTasks() {
 
       const { data: billboardsData, error: bbError } = await supabase
         .from('billboards')
-        .select('ID, Size, City, Faces_Count')
+        .select('ID, Size, City, Faces_Count, friend_company_id')
         .in('ID', billboardIds);
       if (bbError) throw bbError;
       const autoFacesMap: Record<number, number> = {};
       (billboardsData || []).forEach((b: any) => { autoFacesMap[b.ID] = b.Faces_Count || 2; });
 
+      if (billboardsData?.length !== new Set(billboardIds).size) throw new Error('تعذر تحميل جميع اللوحات؛ لم يتم إنشاء المهمة');
       // Group billboards by team based on size AND city
       const billboardsByTeam: Record<string, number[]> = {};
       for (const bb of billboardsData || []) {
         const size = (bb as any).Size as string | null;
         const city = (bb as any).City as string | null;
         const id = (bb as any).ID as number;
-        if (!size) continue;
+        if (!size) throw new Error(`مقاس اللوحة ${id} غير محدد؛ راجع بياناتها قبل إنشاء المهمة`);
 
-        // Find team that matches BOTH size AND city (if team has cities defined)
-        // Use priority to pick the best team
-        const sortedTeams = [...teamsData].sort((a: any, b: any) => (b.priority || 0) - (a.priority || 0));
-        const team = sortedTeams.find((t: any) => {
-          const sizeMatch = Array.isArray(t.sizes) && t.sizes.includes(size);
-          if (!sizeMatch) return false;
-          
-          // If team has cities defined, check if billboard's city is in team's cities
-          if (Array.isArray(t.cities) && t.cities.length > 0 && city) {
-            return t.cities.includes(city);
-          }
-          // If team has no cities defined, it accepts all cities
-          return true;
-        });
-        if (!team) continue; // لوحة بلا تطابق لا تُسند
+        const team = findOptimalTeamForInstallation(teamsData, size, city, (bb as any).friend_company_id);
+        if (!team) throw new Error(`لا توجد فرقة مناسبة للوحة ${id} (${city || 'مدينة غير محددة'}، ${size})؛ راجع نطاق المدن والمقاسات. لم يتم إنشاء المهمة`);
 
         if (!billboardsByTeam[team.id]) billboardsByTeam[team.id] = [];
         billboardsByTeam[team.id].push(id);
@@ -1052,7 +1071,7 @@ export default function InstallationTasks() {
           .eq('task_type', 'reinstallation')
           .order('reinstallation_number', { ascending: false })
           .limit(1);
-        nextReinstallNumber = ((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1;
+        nextReinstallNumber = vars.operationNumber ?? (((existingReinstalls?.[0]?.reinstallation_number as number) || 0) + 1);
       }
 
       for (const [autoTeamId, autoBillboardIds] of Object.entries(billboardsByTeam)) {
@@ -2836,30 +2855,19 @@ export default function InstallationTasks() {
         onTaskTypeChange={setTaskType}
         teams={teams as any}
         isSubmitting={createTaskMutation.isPending}
-        onSubmit={({ contractIds, customerId, billboardIds, teamAssignments, task_name }) => {
-          // إذا كان هناك تعيينات للفرق، ننشئ مهمة لكل فرقة
-          if (teamAssignments.length > 0) {
-            teamAssignments.forEach(assignment => {
-              createTaskMutation.mutate({
-                contractId: contractIds[0],
-                contractIds,
-                billboardIds: assignment.billboardIds,
-                teamId: assignment.teamId,
-                taskType,
-                task_name,
-              });
-            });
-          } else {
-            // بدون تعيينات - توزيع تلقائي
-            createTaskMutation.mutate({
-              contractId: contractIds[0],
-              contractIds,
-              billboardIds,
-              teamId: null,
-              taskType,
-              task_name,
-            });
-          }
+        onSubmit={async ({ contractIds, customerId, billboardIds, teamAssignments, task_name, acceptedInactiveContractIds }) => {
+          try {
+            let operationNumber: number | undefined;
+            if (taskType === 'reinstallation') {
+              const { data, error } = await supabase.from('installation_tasks').select('reinstallation_number').in('contract_id', contractIds).eq('task_type', 'reinstallation').order('reinstallation_number', { ascending: false }).limit(1);
+              if (error) throw error;
+              operationNumber = (Number(data?.[0]?.reinstallation_number) || 0) + 1;
+            }
+            const batches = teamAssignments.length ? teamAssignments.map(assignment => ({ teamId: assignment.teamId, billboardIds: assignment.billboardIds })) : [{ teamId: null, billboardIds }];
+            for (const batch of batches) {
+              await createTaskMutation.mutateAsync({ contractId: contractIds[0], contractIds, billboardIds: batch.billboardIds, teamId: batch.teamId, taskType, task_name, acceptedInactiveContractIds, operationNumber });
+            }
+          } catch (error: any) { toast.error(error.message || 'تعذر إنشاء المهمة'); }
         }}
       />
 

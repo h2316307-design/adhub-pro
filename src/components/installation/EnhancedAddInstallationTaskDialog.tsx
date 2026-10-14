@@ -1,3 +1,6 @@
+import { sortTeamsByPriority, findOptimalTeamForInstallation, installationTeamCoversBillboard } from '@/utils/teamAssignment';
+import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -16,7 +19,7 @@ import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { assignBillboardsToContracts, buildTaskName } from '@/services/installationTaskContracts';
 
-interface InstallationTeam { id: string; team_name: string; sizes: string[]; cities: string[] }
+interface InstallationTeam { id: string; team_name: string; sizes: string[]; cities: string[]; priority?: number; friend_company_ids?: string[] | null; friend_company_id?: string | null }
 interface TeamAssignment { teamId: string; teamName: string; billboardIds: number[] }
 interface Customer { id: string; name: string; company: string | null }
 interface ContractRow {
@@ -27,6 +30,7 @@ interface ContractRow {
   'Contract Date': string;
   'End Date': string;
   billboard_ids: string;
+  billboards_released?: boolean;
 }
 
 interface EnhancedAddInstallationTaskDialogProps {
@@ -40,6 +44,7 @@ interface EnhancedAddInstallationTaskDialogProps {
     billboardIds: number[];
     teamAssignments: TeamAssignment[];
     task_name?: string;
+    acceptedInactiveContractIds?: number[];
   }) => void;
   isSubmitting: boolean;
   teams: InstallationTeam[];
@@ -69,6 +74,8 @@ export function EnhancedAddInstallationTaskDialog({
   const [customerSearch, setCustomerSearch] = useState('');
   const [customerId, setCustomerId] = useState<string | null>(null);
   const [showExpired, setShowExpired] = useState(false);
+  const [acceptInactive, setAcceptInactive] = useState(false);
+  const [selectAllActive, setSelectAllActive] = useState(false);
   const [contractIds, setContractIds] = useState<number[]>([]);
   const [selectedIds, setSelectedIds] = useState<number[]>([]);
   const [boardSearch, setBoardSearch] = useState('');
@@ -76,10 +83,11 @@ export function EnhancedAddInstallationTaskDialog({
   const [sizeFilter, setSizeFilter] = useState('all');
   const [assignments, setAssignments] = useState<TeamAssignment[]>([]);
   const [taskName, setTaskName] = useState('');
+  const [starting, setStarting] = useState(false);
 
   useEffect(() => {
     if (!open) {
-      setCustomerSearch(''); setCustomerId(null); setShowExpired(false); setContractIds([]); setSelectedIds([]);
+      setCustomerSearch(''); setCustomerId(null); setShowExpired(false); setAcceptInactive(false); setSelectAllActive(false); setContractIds([]); setSelectedIds([]);
       setBoardSearch(''); setCityFilter('all'); setSizeFilter('all'); setAssignments([]); setTaskName('');
     }
   }, [open]);
@@ -119,14 +127,14 @@ export function EnhancedAddInstallationTaskDialog({
     queryKey: ['task-dialog-contracts', customerId],
     enabled: open && !!customerId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('Contract')
-        .select('Contract_Number, "Customer Name", customer_id, "Ad Type", "End Date", "Contract Date", billboard_ids')
-        .eq('customer_id', customerId!)
-        .order('Contract_Number', { ascending: false })
-        .limit(500);
-      if (error) throw error;
-      return (data || []) as ContractRow[];
+      const rows: ContractRow[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('Contract')
+          .select('Contract_Number, "Customer Name", customer_id, "Ad Type", "End Date", "Contract Date", billboard_ids, billboards_released, "Renewal Status"')
+          .eq('customer_id', customerId!).order('Contract_Number', { ascending: false }).range(offset, offset + 499);
+        if (error) throw error; rows.push(...((data || []) as ContractRow[]));
+        if (!data || data.length < 500) return rows;
+      }
     },
   });
   const { data: taskCounts = {} } = useQuery({
@@ -139,17 +147,25 @@ export function EnhancedAddInstallationTaskDialog({
       return m;
     },
   });
-  const isExpired = (c: ContractRow) => !!c['End Date'] && String(c['End Date']).slice(0, 10) < today();
-  const contracts = useMemo(() => allContracts.filter(c => showExpired || !isExpired(c) || contractIds.includes(c.Contract_Number)), [allContracts, showExpired, contractIds]);
+  const isExpired = (c: ContractRow) => !installationContractIsActive(c, today());
+  const contracts = useMemo(() => allContracts.filter(c => (taskType === 'reinstallation' && showExpired) || !isExpired(c) || contractIds.includes(c.Contract_Number)).sort((a, b) => Number(isExpired(a)) - Number(isExpired(b))), [allContracts, showExpired, contractIds, taskType]);
   const expiredCount = allContracts.filter(isExpired).length;
+  useEffect(() => {
+    if (taskType === 'reinstallation') return;
+    setShowExpired(false);
+    setContractIds(ids => ids.filter(id => allContracts.some(contract => contract.Contract_Number === id && !isExpired(contract))));
+    setAcceptInactive(false);
+  }, [taskType]);
+
 
   // ── لوحات العقود المحددة ──
   const selectedContracts = useMemo(() => allContracts.filter(c => contractIds.includes(c.Contract_Number)), [allContracts, contractIds]);
-  const { data: pausedRows = [] } = useQuery({
+  const { data: pausedRows = [], isLoading: loadingPaused, isSuccess: pausedLoaded } = useQuery({
     queryKey: ['task-dialog-paused', contractIds.join(',')],
     enabled: open && contractIds.length > 0,
     queryFn: async () => {
-      const { data } = await supabase.from('paused_billboards' as any).select('billboard_id, contract_number').in('contract_number', contractIds);
+      const { data, error } = await supabase.from('paused_billboards' as any).select('billboard_id, contract_number').in('contract_number', contractIds);
+      if (error) throw error;
       return (data || []) as any[];
     },
   });
@@ -168,7 +184,7 @@ export function EnhancedAddInstallationTaskDialog({
       for (let i = 0; i < allBoardIds.length; i += 100) {
         const { data, error } = await supabase
           .from('billboards')
-          .select('ID, Billboard_Name, Size, City, Municipality, District, Nearest_Landmark, Image_URL, Faces_Count, Level')
+          .select('ID, Billboard_Name, Size, City, Municipality, District, Nearest_Landmark, Image_URL, Faces_Count, Level, friend_company_id')
           .in('ID', allBoardIds.slice(i, i + 100));
         if (error) throw error;
         out.push(...(data || []));
@@ -184,20 +200,35 @@ export function EnhancedAddInstallationTaskDialog({
     return m;
   }, [boards, selectedContracts, pausedRows]);
 
-  const { statusesByBillboard, resolveByType } = useBillboardStatuses(allBoardIds);
+  const { statusesByBillboard } = useBillboardStatuses(allBoardIds);
   const tornIds = useMemo(() => allBoardIds.filter(id => (statusesByBillboard[id] || []).some((s: any) => s.status_type === 'torn_ad')), [allBoardIds, statusesByBillboard]);
+
+  const { data: currentContracts = [], isLoading: loadingCurrent, isSuccess: currentLoaded } = useQuery({
+    queryKey: ['task-dialog-current-contracts'], enabled: open,
+    queryFn: async () => {
+      const rows: any[] = [];
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('Contract').select('Contract_Number, "Contract Date", "End Date", billboard_ids, billboards_released, "Renewal Status"').gte('End Date', today()).order('Contract_Number').range(offset, offset + 499);
+        if (error) throw error; rows.push(...(data || [])); if (!data || data.length < 500) return rows;
+      }
+    },
+  });
+  const conflicts = useMemo(() => blockedInstallationBillboards(currentContracts, contractIds, today()), [currentContracts, contractIds]);
+  const eligible = (id: number) => currentLoaded && pausedLoaded && !loadingPaused && !pausedSet.has(id) && !conflicts.has(id);
+  useEffect(() => { setAcceptInactive(false); }, [contractIds.join(',')]);
+  useEffect(() => { if (currentLoaded) setSelectedIds(ids => ids.filter(id => !conflicts.has(id) && !pausedSet.has(id))); }, [conflicts, pausedSet, currentLoaded]);
 
   // تحديد افتراضي عند تحميل لوحات عقد جديد فقط (لا يمسح اختيارات المستخدم)
   const seenBoards = useRef<Set<number>>(new Set());
   useEffect(() => {
-    if (!boards.length) return;
+    if (!boards.length || !currentLoaded || !pausedLoaded || loadingPaused) return;
     const fresh = boards.map(b => Number(b.ID)).filter(id => !seenBoards.current.has(id));
     if (!fresh.length) return;
     fresh.forEach(id => seenBoards.current.add(id));
     const preferTorn = taskType === 'reinstallation' && tornIds.length > 0;
-    const pick = fresh.filter(id => preferTorn ? tornIds.includes(id) : !pausedSet.has(id));
+    const pick = fresh.filter(id => eligible(id) && installationContractIsActive(selectedContracts.find(contract => contract.Contract_Number === contractOf.get(id)) || {}, today()) && (selectAllActive || !preferTorn || tornIds.includes(id)));
     setSelectedIds(prev => [...new Set([...prev, ...pick])]);
-  }, [boards, taskType, tornIds, pausedSet]);
+  }, [boards, taskType, tornIds, pausedSet, conflicts, currentLoaded, pausedLoaded, loadingPaused, selectAllActive, contractOf]);
   useEffect(() => { if (!open) seenBoards.current = new Set(); }, [open]);
 
   const cities = useMemo(() => [...new Set(boards.map(b => b.City).filter(Boolean))].sort(), [boards]);
@@ -223,8 +254,9 @@ export function EnhancedAddInstallationTaskDialog({
     }
     setAssignments([]);
   };
-  const toggleBoard = (id: number) => setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
-  const toggleMany = (ids: number[]) => {
+  const toggleBoard = (id: number) => { if (!eligible(id)) { toast.error(conflicts.has(id) ? `اللوحة مرتبطة بعقد نشط آخر #${conflicts.get(id)}` : 'اللوحة موقوفة أو التحقق لم يكتمل'); return; } setSelectedIds(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]); };
+  const toggleMany = (requestedIds: number[]) => {
+    const ids = requestedIds.filter(eligible);
     const all = ids.every(id => selectedIds.includes(id));
     setSelectedIds(p => all ? p.filter(id => !ids.includes(id)) : [...new Set([...p, ...ids])]);
   };
@@ -232,10 +264,9 @@ export function EnhancedAddInstallationTaskDialog({
   // ── الفرق ──
   const selectedBoards = useMemo(() => boards.filter(b => selectedIds.includes(Number(b.ID))), [boards, selectedIds]);
   const teamFits = (team: InstallationTeam, b: any) =>
-    (!team.sizes?.length || team.sizes.includes(b.Size)) && (!team.cities?.length || team.cities.includes(b.City));
-  const rankedTeams = useMemo(() => teams
-    .map(t => ({ team: t, fit: selectedBoards.filter(b => teamFits(t, b)).length }))
-    .sort((a, b) => b.fit - a.fit), [teams, selectedBoards]);
+    installationTeamCoversBillboard(team, b.Size, b.City, b.friend_company_id);
+  const rankedTeams = useMemo(() => sortTeamsByPriority(teams)
+    .map(t => ({ team: t, fit: selectedBoards.filter(b => teamFits(t, b)).length })), [teams, selectedBoards]);
   const assignedIds = new Set(assignments.flatMap(a => a.billboardIds));
   const unassigned = selectedBoards.filter(b => !assignedIds.has(Number(b.ID)));
   const addTeam = (team: InstallationTeam) => {
@@ -246,10 +277,14 @@ export function EnhancedAddInstallationTaskDialog({
   const autoAssign = () => {
     const next: TeamAssignment[] = [];
     const taken = new Set<number>();
-    for (const { team } of rankedTeams) {
-      const ids = selectedBoards.filter(b => !taken.has(Number(b.ID)) && teamFits(team, b)).map(b => Number(b.ID));
-      if (ids.length) { ids.forEach(id => taken.add(id)); next.push({ teamId: team.id, teamName: team.team_name, billboardIds: ids }); }
-      if (taken.size === selectedBoards.length) break;
+    for (const board of selectedBoards) {
+      const team = findOptimalTeamForInstallation(teams, board.Size, board.City, board.friend_company_id);
+      if (!team) continue;
+      const id = Number(board.ID);
+      const existing = next.find(a => a.teamId === team.id);
+      if (existing) existing.billboardIds.push(id);
+      else next.push({ teamId: team.id, teamName: team.team_name, billboardIds: [id] });
+      taken.add(id);
     }
     setAssignments(next);
     if (taken.size < selectedBoards.length) toast.warning(`${selectedBoards.length - taken.size} لوحة لا تناسب أي فرقة`);
@@ -273,19 +308,24 @@ export function EnhancedAddInstallationTaskDialog({
   });
 
   const submit = async () => {
+    if (starting || isSubmitting) return;
+    if (!currentLoaded || loadingCurrent || loadingPaused || selectedIds.some(id => !eligible(id))) { toast.error('انتظر التحقق من اللوحات، أو أزل اللوحات المرتبطة بعقود أخرى'); return; }
+    const inactiveIds = selectedContracts.filter(contract => usedContractIds.includes(contract.Contract_Number) && isExpired(contract)).map(contract => contract.Contract_Number);
+    if (inactiveIds.length && (taskType !== 'reinstallation' || !acceptInactive)) { toast.error('راجع اختيار العقود غير النشطة وأكّد مراجعتها'); return; }
     if (!selectedIds.length) { toast.error('اختر لوحة واحدة على الأقل'); return; }
     if (assignments.length && unassigned.length) { toast.error(`${unassigned.length} لوحة بدون فرقة — عيّنها أو احذف تعيينات الفرق للتوزيع التلقائي`); return; }
-    if (taskType === 'reinstallation') {
-      const torn = selectedIds.filter(id => tornIds.includes(id));
-      if (torn.length) { try { await resolveByType(torn, 'torn_ad'); } catch { /* ليست شرطاً للإنشاء */ } }
+    if (!assignments.length) {
+      const missing = selectedBoards.filter(board => !findOptimalTeamForInstallation(teams, board.Size, board.City, board.friend_company_id));
+      if (missing.length) { toast.error(`لوحات بلا فرقة مناسبة: ${missing.map(board => `${board.Billboard_Name || board.ID} (${board.City || 'مدينة غير محددة'}، ${board.Size || 'مقاس غير محدد'})`).join('، ')}`); return; }
     }
-    onSubmit({ contractIds: usedContractIds, customerId, billboardIds: selectedIds, teamAssignments: assignments, task_name: taskName.trim() || autoName });
+    setStarting(true);
+    try { await onSubmit({ contractIds: usedContractIds, customerId, billboardIds: selectedIds, teamAssignments: assignments, task_name: taskName.trim() || autoName, acceptedInactiveContractIds: inactiveIds }); } finally { setStarting(false); }
   };
 
   const loadingBoardsView = contractIds.length > 0 && (loadingBoards || (allBoardIds.length > 0 && boards.length === 0));
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={value => { if (!starting && !isSubmitting) onOpenChange(value); }}>
       <DialogContent className="flex h-[92vh] max-w-6xl flex-col gap-0 overflow-hidden p-0" dir="rtl">
         <DialogHeader className="flex-row flex-wrap items-center gap-3 space-y-0 border-b border-border px-5 py-3 text-right">
           <div className="min-w-0 flex-1">
@@ -337,9 +377,9 @@ export function EnhancedAddInstallationTaskDialog({
 
             {customer && (
               <Step n={2} title="العقود" done={contractIds.length > 0}
-                aside={expiredCount > 0 && (
+                aside={taskType === 'reinstallation' && expiredCount > 0 && (
                   <label className="flex cursor-pointer items-center gap-1.5 text-xs text-muted-foreground">
-                    <Switch checked={showExpired} onCheckedChange={setShowExpired} className="scale-75" />المنتهية ({expiredCount})
+                    <Switch checked={showExpired} onCheckedChange={setShowExpired} className="scale-75" />عقود غير نشطة ({expiredCount})
                   </label>
                 )}>
                 {loadingContracts ? (
@@ -347,6 +387,8 @@ export function EnhancedAddInstallationTaskDialog({
                 ) : contracts.length === 0 ? (
                   <p className="rounded-lg bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">لا توجد عقود سارية — فعّل «المنتهية» لعرضها</p>
                 ) : (
+                  <>
+                  <Button variant="outline" className="mb-3 w-full cursor-pointer text-xs" onClick={() => { setSelectAllActive(true); setContractIds(allContracts.filter(contract => !isExpired(contract)).map(contract => contract.Contract_Number)); setAssignments([]); setSelectedIds([]); seenBoards.current = new Set(); }}>اختيار جميع لوحات عقود الزبون النشطة</Button>
                   <ul className="space-y-1.5">
                     {contracts.map(c => {
                       const on = contractIds.includes(c.Contract_Number);
@@ -360,7 +402,7 @@ export function EnhancedAddInstallationTaskDialog({
                             <span className="min-w-0 flex-1">
                               <span className="flex items-center gap-1.5 text-sm">
                                 <b className="tabular-nums">#{c.Contract_Number}</b>
-                                {isExpired(c) && <span className="rounded bg-muted px-1 text-xs text-muted-foreground">منتهي</span>}
+                                {isExpired(c) && <span className="rounded bg-muted px-1 text-xs text-muted-foreground">غير نشط · اختيار يدوي</span>}
                                 {taskCounts[c.Contract_Number] ? <span className="rounded bg-sky-500/15 px-1 text-xs text-sky-500">{taskCounts[c.Contract_Number]} مهام</span> : null}
                               </span>
                               <span className="block truncate text-xs">{c['Ad Type'] || '—'}</span>
@@ -371,6 +413,7 @@ export function EnhancedAddInstallationTaskDialog({
                       );
                     })}
                   </ul>
+                  </>
                 )}
               </Step>
             )}
@@ -406,7 +449,7 @@ export function EnhancedAddInstallationTaskDialog({
                     </Select>
                   )}
                   {tornIds.length > 0 && (
-                    <Button variant="outline" size="sm" className="h-9 gap-1 border-amber-500/40 text-xs text-amber-500" onClick={() => setSelectedIds(p => [...new Set([...p, ...tornIds])])}>
+                    <Button variant="outline" size="sm" className="h-9 gap-1 border-amber-500/40 text-xs text-amber-500" onClick={() => setSelectedIds(p => [...new Set([...p, ...tornIds.filter(eligible)])])}>
                       <AlertTriangle className="h-3.5 w-3.5" />الممزقة ({tornIds.length})
                     </Button>
                   )}
@@ -435,7 +478,7 @@ export function EnhancedAddInstallationTaskDialog({
                             const on = selectedIds.includes(id);
                             return (
                               <li key={id}>
-                                <div role="checkbox" aria-checked={on} tabIndex={0} onClick={() => toggleBoard(id)}
+                                <div role="checkbox" aria-checked={on} aria-disabled={!eligible(id)} tabIndex={eligible(id) ? 0 : -1} onClick={() => toggleBoard(id)}
                                   onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleBoard(id); } }}
                                   className={cn('flex cursor-pointer items-center gap-3 rounded-lg border p-2 transition-colors', on ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40')}>
                                   <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded border', on ? 'border-primary bg-primary text-primary-foreground' : 'border-input')}>{on && <Check className="h-3.5 w-3.5" />}</span>
@@ -447,6 +490,7 @@ export function EnhancedAddInstallationTaskDialog({
                                       <span className="truncate">{b.Billboard_Name || `#${id}`}</span>
                                       <span className="rounded bg-muted px-1.5 text-xs font-bold" dir="ltr">{b.Size}</span>
                                       {tornIds.includes(id) && <span className="rounded bg-amber-500/15 px-1.5 text-xs text-amber-500">ممزق</span>}
+                                      {conflicts.has(id) && <span className="rounded bg-destructive/10 px-1 text-xs text-destructive">محجوبة · عقد نشط #{conflicts.get(id)}</span>}
                                       {pausedSet.has(id) && <span className="rounded bg-muted px-1.5 text-xs text-muted-foreground">موقوفة</span>}
                                     </span>
                                     <span className="flex items-center gap-1 truncate text-xs text-muted-foreground"><MapPin className="h-3 w-3 shrink-0" />{[b.Nearest_Landmark, b.Municipality].filter(Boolean).join(' · ') || '—'}</span>
@@ -468,7 +512,7 @@ export function EnhancedAddInstallationTaskDialog({
                       <span className={cn('flex h-6 w-6 items-center justify-center rounded-full text-xs', assignments.length ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>4</span>
                       <Users className="h-4 w-4" />الفرق
                     </span>
-                    <span className="text-xs text-muted-foreground">{assignments.length ? `${unassigned.length ? `${unassigned.length} لوحة بلا فرقة` : 'كل اللوحات معيّنة'}` : 'اختياري — بدون تعيين تُوزَّع تلقائياً حسب تخصص الفرق'}</span>
+                    <span className="text-xs text-muted-foreground">{assignments.length ? `${unassigned.length ? `${unassigned.length} لوحة بلا فرقة` : 'كل اللوحات معيّنة'}` : 'الأولوية لفرقة الشركة مالكة اللوحة، ثم الفرق التي تغطي المدينة والمقاس حسب الترتيب'}</span>
                     {selectedBoards.length > 0 && <Button variant="outline" size="sm" className="mr-auto h-8 text-xs" onClick={autoAssign}>توزيع تلقائي الآن</Button>}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -491,6 +535,8 @@ export function EnhancedAddInstallationTaskDialog({
           </div>
         </div>
 
+        {selectedContracts.some(contract => usedContractIds.includes(contract.Contract_Number) && isExpired(contract)) && <label className="mx-5 my-2 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs"><Checkbox checked={acceptInactive} onCheckedChange={value => setAcceptInactive(value === true)} />راجعت لوحات العقود غير النشطة؛ هذه إعادة تركيب للزبون المحدد، واللوحات المرتبطة بعقد نشط آخر محجوبة.</label>}
+        {usedContractIds.length > 1 && <p className="mx-5 mb-2 rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs font-bold text-primary">مهمة مجمّعة مستقلة من {usedContractIds.length} عقود: #{usedContractIds.join('، #')}</p>}
         <footer className="flex flex-wrap items-center gap-3 border-t border-border px-5 py-3">
           <Input value={taskName} onChange={e => setTaskName(e.target.value)} placeholder={autoName || 'اسم المهمة (اختياري)'} className="h-10 min-w-[240px] flex-1 text-sm" aria-label="اسم المهمة" />
           <span className="text-xs text-muted-foreground">

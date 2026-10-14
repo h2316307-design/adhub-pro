@@ -1,3 +1,4 @@
+import { MergeTaskGroupsDialog } from './MergeTaskGroupsDialog';
 import { loadInstallationPhotos } from '@/services/installationPhotosService';
 import { installationCompletionStatus } from '@/lib/installationCompletion';
 import { applyOperationDisplayOrder, OPERATION_ORDER_PREFIX } from '@/lib/compositeOperationDisplayOrder';
@@ -98,6 +99,21 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 }) => {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { data: manualGroups = {} } = useQuery({
+    queryKey: ['composite-manual-groups'],
+    queryFn: async () => {
+      const map: Record<string, string> = {};
+      for (let offset = 0; ; offset += 500) {
+        const { data, error } = await supabase.from('system_settings').select('setting_key, setting_value, updated_at').like('setting_key', 'composite_manual_group:%').order('updated_at').order('setting_key').range(offset, offset + 499);
+        if (error) throw error;
+        for (const row of data || []) {
+          try { const ids = JSON.parse(row.setting_value || '[]'); if (Array.isArray(ids)) for (const id of ids) if (typeof id === 'string') map[id] = row.setting_key; } catch {}
+        }
+        if (!data || data.length < 500) break;
+      }
+      return map;
+    },
+  });
   const { data: operationOrders = {} } = useQuery({
     queryKey: ['composite-operation-display-order'],
     queryFn: async () => {
@@ -537,11 +553,11 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           const directContract = normalizeContractId(t.contract_id) || reinstallInfo?.contractId;
           const normalizedTaskType = normalizeCompositeTaskType(reinstallInfo?.taskType || t.task_type);
           
-          const rawIds = (t.contract_ids && Array.isArray(t.contract_ids) && t.contract_ids.length > 0)
-            ? t.contract_ids
-            : (reinstallInfo?.contractIds && reinstallInfo.contractIds.length > 0)
-              ? reinstallInfo.contractIds
-              : (directContract ? [directContract] : []);
+          const rawIds = [
+            ...(Array.isArray(t.contract_ids) ? t.contract_ids : []),
+            ...(reinstallInfo?.contractIds || []),
+            ...(directContract ? [directContract] : []),
+          ];
 
           t._contractIds = [...new Set(rawIds.map(normalizeContractId).filter((id): id is number => id !== null))];
           t.contractIds = t._contractIds;
@@ -1279,7 +1295,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
     const groupMap = new Map<string, typeof sorted>();
     
     sorted.forEach(task => {
-      const groupKey = getTaskContractGroupKey(task);
+      const groupKey = manualGroups[task.id] || getTaskContractGroupKey(task);
       if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
       groupMap.get(groupKey)!.push(task);
     });
@@ -1430,7 +1446,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
     });
 
     return groups.sort((a, b) => new Date(b.latestActivity || 0).getTime() - new Date(a.latestActivity || 0).getTime());
-  }, [sorted, operationOrders]);
+  }, [sorted, operationOrders, manualGroups]);
 
   const typeCounts = useMemo(() => ({
     all: grouped.length,
@@ -1753,6 +1769,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           </details>
         </div>
 
+        <MergeTaskGroupsDialog groups={grouped} />
         {/* أدوات البحث والتصفية */}
         <div className="flex flex-col gap-2 rounded-xl border border-border/60 bg-card p-2.5">
           <div className="flex flex-wrap items-center gap-2">
@@ -1879,7 +1896,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       {/* Edit Costs Dialog */}
       <EnhancedEditCompositeTaskCostsDialog
         task={editingTask}
-        tasks={editingOperationTasks || (editingTask ? [editingTask] : undefined)}
+        tasks={editingOperationTasks || undefined}
         open={editDialogOpen}
         onOpenChange={(open) => {
           setEditDialogOpen(open);

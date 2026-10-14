@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { sameInstallationOperation } from '@/lib/installationTransferIdentity';
+import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -38,6 +39,8 @@ export function TransferBillboardsDialog({
   const [targetTeamId, setTargetTeamId] = useState<string>('');
   const [transferring, setTransferring] = useState(false);
 
+  useEffect(() => { setSelectedItems([]); setTargetTeamId(''); }, [open, sourceTaskId]);
+
   // فقط اللوحات غير المكتملة يمكن نقلها
   const pendingItems = useMemo(() => 
     taskItems.filter(item => item.status !== 'completed'),
@@ -68,144 +71,36 @@ export function TransferBillboardsDialog({
       return;
     }
 
+    if (transferring) return;
     setTransferring(true);
     try {
-      // ✅ البحث عن جميع مهام التركيب للفريق المستهدف لنفس العقد
-      const { data: existingTasks, error: fetchError } = await supabase
-        .from('installation_tasks')
-        .select('id')
-        .eq('team_id', targetTeamId)
-        .eq('contract_id', contractId)
-        .eq('task_type', 'installation')
-        .order('created_at', { ascending: true });
-
+      const { data: source, error: sourceError } = await supabase.from('installation_tasks').select('*').eq('id', sourceTaskId).single();
+      if (sourceError) throw sourceError;
+      if (source.status === 'cancelled') throw new Error('المهمة المصدر ملغاة');
+      const { data: items, error: itemsError } = await supabase.from('installation_task_items').select('*').eq('task_id', sourceTaskId).in('id', selectedItems);
+      if (itemsError) throw itemsError;
+      if (items?.length !== selectedItems.length || items.some(item => item.status === 'completed')) throw new Error('تغيرت اللوحات المختارة؛ حدّث المهمة ثم أعد الاختيار');
+      const { data: candidates, error: fetchError } = await supabase.from('installation_tasks').select('*').eq('team_id', targetTeamId).eq('task_type', source.task_type || 'installation').in('status', ['pending', 'in_progress']).order('created_at');
       if (fetchError) throw fetchError;
-
-      let targetTaskId: string;
-
-      if (existingTasks && existingTasks.length > 0) {
-        // ✅ استخدام المهمة الأساسية (الأقدم)
-        targetTaskId = existingTasks[0].id;
-        
-        // ✅ دمج المهام المكررة إن وجدت
-        if (existingTasks.length > 1) {
-          for (let i = 1; i < existingTasks.length; i++) {
-            const dupTaskId = existingTasks[i].id;
-            // نقل العناصر من المكررة إلى الأساسية
-            const { data: dupItems } = await supabase
-              .from('installation_task_items')
-              .select('id, billboard_id')
-              .eq('task_id', dupTaskId);
-            
-            if (dupItems?.length) {
-              const { data: primaryItems } = await supabase
-                .from('installation_task_items')
-                .select('billboard_id')
-                .eq('task_id', targetTaskId);
-              const primaryBbIds = new Set((primaryItems || []).map(p => p.billboard_id));
-              
-              for (const item of dupItems) {
-                if (primaryBbIds.has(item.billboard_id)) {
-                  await supabase.from('installation_task_items').delete().eq('id', item.id);
-                } else {
-                  await supabase.from('installation_task_items').update({ task_id: targetTaskId }).eq('id', item.id);
-                }
-              }
-            }
-            // حذف المهمة المكررة
-            await supabase.from('installation_tasks').delete().eq('id', dupTaskId);
-          }
-        }
-      } else {
-        // إنشاء مهمة جديدة للفريق المستهدف
-        const { data: newTask, error: createError } = await supabase
-          .from('installation_tasks')
-          .insert({
-            contract_id: contractId,
-            team_id: targetTeamId,
-            status: 'pending',
-            task_type: 'installation'
-          })
-          .select('id')
-          .single();
-
-        if (createError) throw createError;
-        targetTaskId = newTask.id;
+      const target = candidates?.find(task => task.id !== source.id && sameInstallationOperation(source, task));
+      let targetTaskId = target?.id;
+      if (!targetTaskId) {
+        const { data: created, error } = await supabase.from('installation_tasks').insert({
+          contract_id: source.contract_id, contract_ids: source.contract_ids,
+          team_id: targetTeamId, task_type: source.task_type || 'installation',
+          reinstallation_number: source.reinstallation_number, task_name: source.task_name, status: 'pending',
+        }).select('id').single();
+        if (error) throw error;
+        targetTaskId = created.id;
       }
-
-      // Get all current items in targetTaskId to prevent duplicate constraint violation
-      const { data: targetItems, error: fetchTargetError } = await supabase
-        .from('installation_task_items')
-        .select('*')
-        .eq('task_id', targetTaskId);
-
-      if (fetchTargetError) throw fetchTargetError;
-      const targetBillboardIds = new Set((targetItems || []).map(item => item.billboard_id));
-
-      const toDeleteIds: string[] = [];
-      const toUpdateIds: string[] = [];
-
-      for (const itemId of selectedItems) {
-        const sourceItem = pendingItems.find(item => item.id === itemId);
-        if (sourceItem) {
-          const billboardId = sourceItem.billboard_id;
-          if (targetBillboardIds.has(billboardId)) {
-            // The target task already has this billboard.
-            // Let's copy over designs/notes/costs from the source item if they are defined in source and not in target.
-            const targetItem = targetItems?.find(item => item.billboard_id === billboardId);
-            if (targetItem) {
-              const patch: Record<string, any> = {};
-              if (sourceItem.notes && !targetItem.notes) patch.notes = sourceItem.notes;
-              if (sourceItem.design_face_a && !targetItem.design_face_a) patch.design_face_a = sourceItem.design_face_a;
-              if (sourceItem.design_face_b && !targetItem.design_face_b) patch.design_face_b = sourceItem.design_face_b;
-              if (sourceItem.selected_design_id && !targetItem.selected_design_id) patch.selected_design_id = sourceItem.selected_design_id;
-              if (sourceItem.customer_installation_cost && !targetItem.customer_installation_cost) patch.customer_installation_cost = sourceItem.customer_installation_cost;
-              if (sourceItem.company_installation_cost && !targetItem.company_installation_cost) patch.company_installation_cost = sourceItem.company_installation_cost;
-              
-              if (Object.keys(patch).length > 0) {
-                await (supabase as any)
-                  .from('installation_task_items')
-                  .update(patch)
-                  .eq('id', targetItem.id);
-              }
-            }
-            toDeleteIds.push(itemId);
-          } else {
-            toUpdateIds.push(itemId);
-          }
-        }
-      }
-
-      if (toDeleteIds.length > 0) {
-        const { error: deleteError } = await supabase
-          .from('installation_task_items')
-          .delete()
-          .in('id', toDeleteIds);
-        if (deleteError) throw deleteError;
-      }
-
-      if (toUpdateIds.length > 0) {
-        const { error: updateError } = await supabase
-          .from('installation_task_items')
-          .update({ task_id: targetTaskId })
-          .in('id', toUpdateIds);
-        if (updateError) throw updateError;
-      }
-
-      // التحقق إذا كانت المهمة الأصلية فارغة فعلاً، نحذفها
-      const { data: srcRemaining } = await supabase
-        .from('installation_task_items')
-        .select('id')
-        .eq('task_id', sourceTaskId)
-        .limit(1);
-      
-      if (!srcRemaining || srcRemaining.length === 0) {
-        await supabase
-          .from('installation_tasks')
-          .delete()
-          .eq('id', sourceTaskId);
-      }
-
+      const { data: duplicates, error: duplicateError } = await supabase.from('installation_task_items').select('billboard_id').eq('task_id', targetTaskId).in('billboard_id', items.map(item => item.billboard_id));
+      if (duplicateError) throw duplicateError;
+      if (duplicates?.length) throw new Error('بعض اللوحات موجودة بالفعل في العملية المستهدفة؛ لم يتم حذف أو دمج أي لوحة');
+      // Move the same records to preserve photos, designs and item history.
+      const { data: moved, error: moveError } = await supabase.from('installation_task_items').update({ task_id: targetTaskId }).eq('task_id', sourceTaskId).neq('status', 'completed').in('id', selectedItems).select('id');
+      if (moveError) throw moveError;
+      if (moved?.length !== selectedItems.length) throw new Error(`تم نقل ${moved?.length || 0} من ${selectedItems.length} لوحة؛ حدّث المهمة وراجع الباقي`);
+      // Keep the source task and its financial/history links, even if now empty.
       const targetTeamName = teams.find(t => t.id === targetTeamId)?.team_name || 'الفريق الجديد';
       toast.success(`تم نقل ${selectedItems.length} لوحة إلى ${targetTeamName}`);
       

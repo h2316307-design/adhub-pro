@@ -1,3 +1,5 @@
+import { installationContractIsActive } from '@/lib/installationContractSelection';
+import { loadInstallationOperationBillboards } from '@/services/installationOperationBillboards';
 import { useState, useMemo, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -40,10 +42,10 @@ export function AddBillboardsToTaskDialog({
 
   // عقود الزبون كلها (بالمعرّف، ثم بالاسم كاحتياط)
   const { data: contracts = [], isLoading: loadingContracts } = useQuery({
-    queryKey: ['add-to-task-customer-contracts', contractId, customerName],
+    queryKey: ['add-to-task-customer-contracts', 'active-only', contractId, customerName],
     enabled: open && !!(contractId || customerName),
     queryFn: async () => {
-      const cols = 'Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", billboard_ids, customer_id';
+      const cols = 'Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", billboard_ids, customer_id, billboards_released, "Renewal Status"';
       const { data: main } = contractId
         ? await supabase.from('Contract').select(cols).eq('Contract_Number', contractId).maybeSingle()
         : { data: null as any };
@@ -52,29 +54,39 @@ export function AddBillboardsToTaskDialog({
       const q = supabase.from('Contract').select(cols);
       const { data, error } = custId ? await q.eq('customer_id', custId) : await q.eq('Customer Name', name);
       if (error) throw error;
-      return (data || []) as any[];
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
+      return (data || []).filter(contract => installationContractIsActive(contract, today)) as any[];
     },
   });
 
   const contractNumbers = useMemo(() => contracts.map(c => Number(c.Contract_Number)), [contracts]);
 
-  const { data: pausedRows = [] } = useQuery({
+  const { data: operationBillboardIds = [], isFetching: checkingOperation, isSuccess: operationLoaded, error: operationError } = useQuery({
+    queryKey: ['installation-operation-billboards', taskId, contractNumbers.join(',')],
+    enabled: open && !!taskId && contractNumbers.length > 0,
+    staleTime: 0,
+    queryFn: () => loadInstallationOperationBillboards(taskId, contractNumbers),
+  });
+
+  const { data: pausedRows = [], isFetching: checkingPaused, isSuccess: pausedLoaded, error: pausedError } = useQuery({
     queryKey: ['add-to-task-paused', contractNumbers.join(',')],
     enabled: open && contractNumbers.length > 0,
     queryFn: async () => {
-      const { data } = await supabase.from('paused_billboards' as any).select('billboard_id, contract_number').in('contract_number', contractNumbers);
+      const { data, error } = await supabase.from('paused_billboards' as any).select('billboard_id, contract_number').in('contract_number', contractNumbers);
+      if (error) throw error;
       return (data || []) as any[];
     },
   });
 
   // اللوحات المرشحة: لوحات العقود + الموقوفة، ناقص الموجودة في المهمة
   const candidateIds = useMemo(() => {
+    if (!operationLoaded || checkingOperation || operationError || !pausedLoaded || checkingPaused || pausedError) return [];
     const ids = new Set<number>();
     contracts.forEach(c => parseContractBillboardIds(c.billboard_ids).forEach(id => ids.add(id)));
-    pausedRows.forEach(r => r.billboard_id && ids.add(Number(r.billboard_id)));
-    existingBillboardIds.forEach(id => ids.delete(Number(id)));
+    pausedRows.forEach(r => ids.delete(Number(r.billboard_id)));
+    [...existingBillboardIds, ...operationBillboardIds].forEach(id => ids.delete(Number(id)));
     return [...ids];
-  }, [contracts, pausedRows, existingBillboardIds]);
+  }, [contracts, pausedRows, existingBillboardIds, operationBillboardIds, operationLoaded, checkingOperation, operationError, pausedLoaded, checkingPaused, pausedError]);
   const pausedSet = useMemo(() => new Set(pausedRows.map(r => Number(r.billboard_id))), [pausedRows]);
 
   const { data: billboards = [], isLoading: loadingBoards } = useQuery({
@@ -118,12 +130,12 @@ export function AddBillboardsToTaskDialog({
           adType: c['Ad Type'] || '',
           contractDate: String(c['Contract Date'] || '').slice(0, 10),
           isTaskContract: taskContracts.includes(cid),
-          boards: sortBillboardsStandardSync(billboards.filter(b => contractOf.get(Number(b.ID)) === cid)),
+          boards: sortBillboardsStandardSync(billboards.filter(b => candidateIds.includes(Number(b.ID)) && contractOf.get(Number(b.ID)) === cid)),
         };
       })
       .filter(g => g.boards.length > 0)
       .sort((a, b) => Number(b.isTaskContract) - Number(a.isTaskContract) || b.contractId - a.contractId);
-  }, [contracts, billboards, contractOf, taskContracts]);
+  }, [contracts, billboards, contractOf, taskContracts, candidateIds]);
 
   const q = search.trim().toLowerCase();
   const matches = (b: any) => !q || [b.Billboard_Name, b.ID, b.Nearest_Landmark, b.Municipality, b.District, b.Size].some(v => String(v ?? '').toLowerCase().includes(q));
@@ -142,6 +154,19 @@ export function AddBillboardsToTaskDialog({
 
   const addMutation = useMutation({
     mutationFn: async (ids: number[]) => {
+      const present = new Set(await loadInstallationOperationBillboards(taskId, contractNumbers));
+      if (ids.some(id => present.has(id))) {
+        await queryClient.invalidateQueries({ queryKey: ['installation-operation-billboards', taskId] });
+        throw new Error('إحدى اللوحات أُضيفت بالفعل للعملية الحالية؛ تم تحديث القائمة، أعد الاختيار');
+      }
+      if (!ids.length || ids.some(id => !candidateIds.includes(id))) throw new Error('تغيرت اللوحات المتاحة؛ أعد الاختيار');
+      const { data: pausedNow, error: pausedCheckError } = await supabase.from('paused_billboards').select('billboard_id').in('contract_number', contractNumbers).in('billboard_id', ids);
+      if (pausedCheckError) throw pausedCheckError;
+      if (pausedNow?.length) throw new Error('بعض اللوحات موقوفة؛ أعد فتح النافذة لتحديث القائمة');
+      const { data: latest, error: contractError } = await supabase.from('Contract').select('Contract_Number, "Contract Date", "End Date", billboards_released, "Renewal Status", billboard_ids').in('Contract_Number', contractNumbers);
+      if (contractError) throw contractError;
+      const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
+      if (ids.some(id => !latest?.some(contract => Number(contract.Contract_Number) === contractOf.get(id) && installationContractIsActive(contract, today) && parseContractBillboardIds(contract.billboard_ids).includes(id)))) throw new Error('تغيرت حالة العقد؛ الإضافة من العقود النشطة فقط. أعد فتح النافذة');
       const faces = new Map(billboards.map(b => [Number(b.ID), Number(b.Faces_Count) || 2]));
       const { error } = await supabase.from('installation_task_items').insert(ids.map(id => ({
         task_id: taskId, billboard_id: id, status: 'pending', customer_installation_cost: 0, faces_to_install: faces.get(id) || 2,
@@ -157,10 +182,14 @@ export function AddBillboardsToTaskDialog({
       onSuccess();
       onOpenChange(false);
     },
-    onError: () => toast.error('فشل إضافة اللوحات'),
+    onError: (error: Error) => toast.error(error.message || 'فشل إضافة اللوحات'),
   });
 
-  const loading = loadingContracts || loadingBoards;
+  useEffect(() => {
+    setSelectedIds(previous => previous.filter(id => candidateIds.includes(id)));
+  }, [candidateIds]);
+  const loading = loadingContracts || loadingBoards || checkingOperation || checkingPaused;
+
 
   return (
     <>
@@ -169,7 +198,7 @@ export function AddBillboardsToTaskDialog({
           <DialogHeader className="border-b border-border px-5 py-4 text-right">
             <DialogTitle className="text-base">إضافة لوحات للمهمة</DialogTitle>
             <DialogDescription className="text-xs">
-              {customerName || contracts[0]?.['Customer Name'] || ''} · اختر من أي عقد للزبون. اللوحات من عقد جديد تجعل المهمة مجمعة لعدة عقود.
+              {customerName || contracts[0]?.['Customer Name'] || ''} · اختر من العقود النشطة للزبون فقط. اللوحات من عقد جديد تجعل المهمة مجمعة لعدة عقود.
             </DialogDescription>
           </DialogHeader>
 
@@ -178,7 +207,7 @@ export function AddBillboardsToTaskDialog({
             <nav aria-label="عقود الزبون" className="no-scrollbar flex gap-1.5 overflow-x-auto border-b border-border p-3 md:flex-col md:overflow-y-auto md:border-b-0 md:border-l">
               <button type="button" onClick={() => setActiveContract('all')}
                 className={cn('shrink-0 rounded-lg px-3 py-2 text-right text-sm', activeContract === 'all' ? 'bg-primary/10 font-semibold text-primary' : 'hover:bg-muted')}>
-                كل العقود <span className="text-xs text-muted-foreground">({groups.reduce((s, g) => s + g.boards.length, 0)})</span>
+                العقود النشطة <span className="text-xs text-muted-foreground">({groups.reduce((s, g) => s + g.boards.length, 0)})</span>
               </button>
               {groups.map(g => {
                 const sel = selectedByContract(g.contractId);
@@ -208,6 +237,8 @@ export function AddBillboardsToTaskDialog({
               <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-3">
                 {loading ? (
                   <div className="flex items-center justify-center gap-2 py-16 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />جارٍ التحميل...</div>
+                ) : operationError || pausedError ? (
+                  <p role="alert" className="py-16 text-center text-sm text-destructive">تعذر التحقق من لوحات العملية الحالية. أغلق النافذة وأعد المحاولة.</p>
                 ) : visibleGroups.length === 0 ? (
                   <p className="py-16 text-center text-sm text-muted-foreground">{q ? 'لا توجد نتائج مطابقة' : 'كل لوحات عقود الزبون موجودة في المهمة'}</p>
                 ) : visibleGroups.map(g => {

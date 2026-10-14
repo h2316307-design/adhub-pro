@@ -1,3 +1,4 @@
+import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { usePricingDurations } from '@/hooks/usePricingDurations';
 import { PricingSnapshotCard } from '@/components/contracts/edit/PricingSnapshotCard';
 import { buildPricingSnapshot, parsePricingSnapshot, shouldRefreshSnapshot } from '@/utils/pricingSnapshot';
@@ -16,7 +17,7 @@ import { calculateInstallationCostFromIds } from '@/services/installationService
 import { getPriceFor, getDailyPriceFor, CustomerType } from '@/data/pricing';
 import { useContractPricing } from '@/hooks/useContractPricing';
 import { calculateAllBillboardPrices } from '@/utils/contractBillboardPricing';
-import { money } from '@/utils/contractEditMoney';
+import { allocateMoney, money } from '@/utils/contractEditMoney';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -186,25 +187,22 @@ export default function OfferEdit() {
   useEffect(() => {
     (async () => {
       try {
-        const today = new Date().toISOString().split('T')[0];
-        const [data, contractsResult] = await Promise.all([
-          loadBillboards(),
-          supabase.from('Contract').select('Contract_Number, billboard_ids, "End Date"').gte('End Date', today),
-        ]);
-        setBillboards(data);
-
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Tripoli' }).format(new Date());
+        const data = await loadBillboards();
         const occupied = new Map<number, string>();
-        if (contractsResult.data) {
-          for (const c of contractsResult.data as any[]) {
-            const ids = c.billboard_ids;
-            if (ids && typeof ids === 'string') {
-              ids.split(',').forEach((id: string) => {
-                const n = parseInt(String(id).trim(), 10);
-                if (!isNaN(n)) occupied.set(n, c['End Date'] as string);
-              });
+        for (let offset = 0; ; offset += 500) {
+          const { data: rows, error } = await supabase.from('Contract').select('Contract_Number, billboard_ids, "End Date", "Contract Date", billboards_released, "Renewal Status"').gte('End Date', today).order('Contract_Number').range(offset, offset + 499);
+          if (error) throw error;
+          for (const contract of rows || []) {
+            if (contract.billboards_released || ['cancelled', 'canceled', 'ملغي', 'ملغى'].includes(String(contract['Renewal Status'] || '').trim().toLowerCase())) continue;
+            for (const id of parseContractBillboardIds(contract.billboard_ids)) {
+              const end = String(contract['End Date'] || '');
+              if (end > (occupied.get(id) || '')) occupied.set(id, end);
             }
           }
+          if (!rows || rows.length < 500) break;
         }
+        setBillboards(data);
         setOccupiedBillboardIds(occupied);
       } catch (e: any) {
         console.error(e);
@@ -440,13 +438,16 @@ export default function OfferEdit() {
 
   // Calculate installation cost
   useEffect(() => {
+    let active = true;
     if (selected.length > 0) {
       (async () => {
         try {
           const result = await calculateInstallationCostFromIds(selected);
+          if (!active) return;
           setInstallationCost(result.totalInstallationCost);
           setInstallationDetails(result.installationDetails);
         } catch (e) {
+          if (!active) return;
           setInstallationCost(0);
           setInstallationDetails([]);
         }
@@ -455,6 +456,7 @@ export default function OfferEdit() {
       setInstallationCost(0);
       setInstallationDetails([]);
     }
+    return () => { active = false; };
   }, [selected]);
 
   // Auto-calculate end date
@@ -528,6 +530,7 @@ export default function OfferEdit() {
     if (newVal === pricingCategory) return;
     setPricingCategory(newVal);
     setInstallmentsLoaded(false);
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تم تحديث فئة التسعير وإعادة احتساب الأسعار');
@@ -538,6 +541,7 @@ export default function OfferEdit() {
     if (newVal === pricingMode) return;
     setPricingMode(newVal);
     setInstallmentsLoaded(false);
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تم تحديث نوع المدة وإعادة احتساب الأسعار');
@@ -548,6 +552,7 @@ export default function OfferEdit() {
     if (newVal === durationMonths) return;
     setDurationMonths(newVal);
     setInstallmentsLoaded(false);
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تم تحديث المدة وإعادة احتساب الأسعار');
@@ -558,6 +563,7 @@ export default function OfferEdit() {
     if (newVal === durationDays) return;
     setDurationDays(newVal);
     setInstallmentsLoaded(false);
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تم تحديث عدد الأيام وإعادة احتساب الأسعار');
@@ -568,6 +574,7 @@ export default function OfferEdit() {
     if (newVal === use30DayMonth) return;
     setUse30DayMonth(newVal);
     setInstallmentsLoaded(false);
+    setUserEditedRentCost(false);
     if (useStoredPrices) {
       setUseStoredPrices(false);
       toast.info('تم تحديث إعدادات الشهر وإعادة احتساب الأسعار');
@@ -626,7 +633,7 @@ export default function OfferEdit() {
   }, [billboards, selected, pricingMode, durationMonths, durationDays, pricingCategory, pricing.pricingData]);
 
   const baseTotal = useMemo(() => {
-    if (userEditedRentCost && rentCost > 0) return rentCost;
+    if (userEditedRentCost) return Math.max(0, rentCost);
     return estimatedTotal;
   }, [rentCost, estimatedTotal, userEditedRentCost]);
 
@@ -711,7 +718,7 @@ export default function OfferEdit() {
   }, [billboards, selected, printCostEnabled, printPricePerMeter, customPrintCosts, sizeDimensionsMap]);
 
   // ✅ مدخلات التسعير الموحد (نفس منطق تعديل العقد) — مصدر واحد للعرض والحفظ والطباعة
-  const offerPricingInputs = useMemo(() => selected
+  const baseOfferPricingInputs = useMemo(() => selected
     .map((id) => {
       const bb = billboards.find((b) => String((b as any).ID) === id);
       if (!bb) return null;
@@ -733,6 +740,12 @@ export default function OfferEdit() {
     })
     .filter(Boolean) as any[], [selected, billboards, installationDetails, perBillboardPrintCosts, calculateBillboardPrice,
     singleFaceBillboards, individualDiscounts, levelDiscounts]);
+
+  const offerPricingInputs = useMemo(() => {
+    if (!userEditedRentCost) return baseOfferPricingInputs;
+    const amounts = allocateMoney(Math.max(0, rentCost), baseOfferPricingInputs.map(row => row.baseRentalPrice));
+    return baseOfferPricingInputs.map((row, index) => ({ ...row, baseRentalPrice: amounts[index] }));
+  }, [baseOfferPricingInputs, userEditedRentCost, rentCost]);
 
   const offerPricingOptions = { printCostEnabled, includePrintInPrice, installationEnabled, includeInstallationInPrice };
 
@@ -896,7 +909,7 @@ export default function OfferEdit() {
   // Helper: check if billboard is near expiry (uses occupied map's End Date as fallback)
   const isNearExpiring = (b: any): boolean => {
     const id = Number(b.ID ?? b.id);
-    const endDate = b.Rent_End_Date || b.rent_end_date || b.rentEndDate || occupiedBillboardIds.get(id) || '';
+    const endDate = occupiedBillboardIds.get(id) || b.Rent_End_Date || b.rent_end_date || b.rentEndDate || '';
     if (!endDate) return false;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -923,7 +936,7 @@ export default function OfferEdit() {
 
   const mapBillboardWithEffectiveStatus = (b: any): Billboard => {
     const id = Number(b.ID ?? b.id ?? 0);
-    const effectiveEndDate = (b as any).Rent_End_Date ?? (b as any).rent_end_date ?? occupiedBillboardIds.get(id) ?? null;
+    const effectiveEndDate = occupiedBillboardIds.get(id) ?? (b as any).Rent_End_Date ?? (b as any).rent_end_date ?? null;
     const effectiveStatus = isBillboardRented(b) ? 'مؤجر' : 'متاح';
     const effectiveStatusEn = isBillboardRented(b) ? 'rented' : 'available';
 
@@ -1047,6 +1060,14 @@ export default function OfferEdit() {
 
   // ========== HANDLERS ==========
 
+  // User changes to board selection invalidate the saved/manual pricing basis.
+  const updateSelectedAndRecalculate = (update: (previous: string[]) => string[]) => {
+    setUseStoredPrices(false);
+    setUserEditedRentCost(false);
+    setInstallmentsLoaded(false);
+    setSelected(update);
+  };
+
   const toggleSelect = (b: Billboard) => {
     const id = String((b as any).ID);
     const isSelected = selected.includes(id);
@@ -1077,7 +1098,7 @@ export default function OfferEdit() {
 
     setUserEditedRentCost(false);
     setInstallmentsLoaded(false);
-    setSelected(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+    updateSelectedAndRecalculate(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const handleConfirmMaintenanceSelect = () => {
@@ -1085,7 +1106,7 @@ export default function OfferEdit() {
       const id = String((pendingMaintenanceBillboard as any).ID);
       setUserEditedRentCost(false);
       setInstallmentsLoaded(false);
-        setSelected(prev => [...prev, id]);
+        updateSelectedAndRecalculate(prev => [...prev, id]);
       setPendingMaintenanceBillboard(null);
     }
     setMaintenanceConfirmOpen(false);
@@ -1094,7 +1115,7 @@ export default function OfferEdit() {
   const removeSelected = (id: string) => {
     setUserEditedRentCost(false);
     setInstallmentsLoaded(false);
-    setSelected(prev => prev.filter(x => x !== id));
+    updateSelectedAndRecalculate(prev => prev.filter(x => x !== id));
     setFriendBillboardCosts(prev => prev.filter(f => f.billboardId !== id));
     setSingleFaceBillboards(prev => { const next = new Set(prev); next.delete(id); return next; });
     setIndividualDiscounts(prev => { const next = { ...prev }; delete next[id]; return next; });
@@ -1103,7 +1124,7 @@ export default function OfferEdit() {
   const removeMultipleSelected = (ids: string[]) => {
     setUserEditedRentCost(false);
     setInstallmentsLoaded(false);
-    setSelected(prev => prev.filter(x => !ids.includes(x)));
+    updateSelectedAndRecalculate(prev => prev.filter(x => !ids.includes(x)));
     setFriendBillboardCosts(prev => prev.filter(f => !ids.includes(f.billboardId)));
     setSingleFaceBillboards(prev => {
       const next = new Set(prev);
@@ -1817,7 +1838,7 @@ export default function OfferEdit() {
                       setUserEditedRentCost(false);
                       setInstallmentsLoaded(false);
                       if (useStoredPrices) setUseStoredPrices(false);
-                      setSelected(prev => prev.filter(id => !emptyIds.includes(id)));
+                      updateSelectedAndRecalculate(prev => prev.filter(id => !emptyIds.includes(id)));
                       setSingleFaceBillboards(prev => {
                         const next = new Set(prev);
                         emptyIds.forEach(id => next.delete(id));
@@ -1860,7 +1881,7 @@ export default function OfferEdit() {
                       setUserEditedRentCost(false);
                       setInstallmentsLoaded(false);
                       if (useStoredPrices) setUseStoredPrices(false);
-                      setSelected(prev => prev.filter(id => !rentedIds.includes(id)));
+                      updateSelectedAndRecalculate(prev => prev.filter(id => !rentedIds.includes(id)));
                       setSingleFaceBillboards(prev => {
                         const next = new Set(prev);
                         rentedIds.forEach(id => next.delete(id));
@@ -2054,7 +2075,7 @@ export default function OfferEdit() {
                       }
                     }}
                     onSelectMultiple={(billboardIds) => {
-                      setSelected((prev) => {
+                      updateSelectedAndRecalculate((prev) => {
                         const newSet = new Set(prev);
                         billboardIds.forEach((id) => newSet.add(id));
                         return Array.from(newSet);
