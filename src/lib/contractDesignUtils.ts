@@ -99,7 +99,7 @@ async function fetchContractDesignUrlsUncached(
       return allImages;
     }
 
-    // 2. مهام التركيب المباشرة لهذا العقد (الأولوية القصوى - الأحدث أولاً)
+    // 2. أوامر التركيب المباشرة لهذا العقد (الأولوية القصوى - الأحدث أولاً)
     const { data: directTasks } = await supabase
       .from('installation_tasks')
       .select('id, reinstallation_number, task_type')
@@ -178,7 +178,7 @@ async function fetchContractDesignUrlsUncached(
       }
     }
 
-    // 4. المهام المجمعة (composite_tasks)
+    // 4. أوامر العمل (composite_tasks)
     if (allImages.length === 0) {
       const { data: compositeTasks } = await supabase
         .from('composite_tasks')

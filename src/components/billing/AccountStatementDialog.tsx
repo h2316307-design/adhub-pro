@@ -225,7 +225,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
         pb.lifecycle_state !== 'cancelled' && contractNumbers.includes(Number(pb.contract_number))
       );
 
-      // إثراء المهام المجمعة بأرقام إعادة التركيب والفرق المنفذة
+      // إثراء أوامر العمل بأرقام إعادة التركيب والفرق المنفذة
       const rawCompTasks = (compositeRes.data || []) as any[];
       const compInstallIds = rawCompTasks.map((t: any) => t.installation_task_id).filter(Boolean);
       const installMap: Record<string, any> = {};

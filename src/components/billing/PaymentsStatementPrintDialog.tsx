@@ -247,9 +247,9 @@ export function PaymentsStatementPrintDialog({
       details.push(`الصافي: ${fmtAmt(payment.net_amount)} د.ل`);
     }
     
-    // مستحقات موظف (مهمة مجمعة)
+    // مستحقات موظف (أمر عمل)
     if (payment.composite_task_id) {
-      details.push(`مستحقات موظف / مهمة تركيب`);
+      details.push(`مستحقات موظف / أمر تركيب`);
     }
     
     // ملاحظات العمولات

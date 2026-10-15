@@ -173,7 +173,7 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
             </Button>
           )}
 
-          {/* زر طباعة الكل (نظام مهام التركيب الموحد) */}
+          {/* زر طباعة الكل (نظام أوامر التركيب الموحد) */}
           <Button
             onClick={() => setPrintAllDialogOpen(true)}
             className="bg-white text-primary hover:bg-white/90 gap-2 font-bold shadow-lg cursor-pointer"
@@ -250,7 +250,7 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
         </div>
       </div>
 
-      {/* نافذة طباعة الكل الموحدة كما في مهام التركيب */}
+      {/* نافذة طباعة الكل الموحدة كما في أوامر التركيب */}
       <UnifiedPrintAllDialog
         open={printAllDialogOpen}
         onOpenChange={setPrintAllDialogOpen}

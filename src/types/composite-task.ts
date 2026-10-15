@@ -1,4 +1,4 @@
-// أنواع المهام المجمعة (تركيب + طباعة + قص)
+// أنواع أوامر العمل (تركيب + طباعة + قص)
 export interface CompositeTask {
   id: string;
   task_number: number;
@@ -63,6 +63,7 @@ export interface CompositeTask {
 }
 
 export interface CompositeTaskWithDetails extends CompositeTask {
+  operation_id?: string | null;
   installation_task?: any;
   print_task?: any;
   cutout_task?: any;

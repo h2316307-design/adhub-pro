@@ -1,7 +1,7 @@
 import { loadInstallationPhotos } from '@/services/installationPhotosService';
 /**
  * UnifiedPrintAllDialog - مكون طباعة موحد لجميع الصفحات
- * يستخدم في: العقود، العروض، مهام التركيب، مهام الإزالة
+ * يستخدم في: العقود، العروض، أوامر التركيب، مهام الإزالة
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -256,7 +256,7 @@ export const resolveBillboardDesigns = async (
   });
 
   try {
-    // 2. التصاميم المطبّقة في مهام التركيب.
+    // 2. التصاميم المطبّقة في أوامر التركيب.
     // في طباعة العقد: مهام هذا العقد فقط، والأحدث لكل لوحة له الأولوية على تصاميم العقد.
     // في غيرها: تُكمل الناقص فقط، والأحدث أولاً — ولا تُستخدم تصاميم عقود أخرى قديمة.
     const contractNumber = opts.contractNumber != null && String(opts.contractNumber).trim() !== '' ? Number(opts.contractNumber) : null;
@@ -355,6 +355,14 @@ export function UnifiedPrintAllDialog({
     contextType === 'installation' || contextType === 'removal' ? 'installation' : 'client'
   );
   const [printMode, setPrintMode] = useState<'cards' | 'table'>('cards');
+  // شكل ورقة البطاقات: تصميم نظيف مستقل، أو قالب الخلفية المخصص (القديم)
+  const [cardStyle, setCardStyle] = useState<'clean' | 'template'>(() => {
+    try { return localStorage.getItem('unified-print-card-style') === 'template' ? 'template' : 'clean'; } catch { return 'clean'; }
+  });
+  const changeCardStyle = (v: 'clean' | 'template') => {
+    setCardStyle(v);
+    try { localStorage.setItem('unified-print-card-style', v); } catch { /* تجاهل */ }
+  };
   const [loading, setLoading] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [respectCityLimits, setRespectCityLimits] = useState(false);
@@ -1023,7 +1031,7 @@ export function UnifiedPrintAllDialog({
       resolveBillboardPreviousAds(sortedItems, contextNumber, billboards),
       contextType === 'removal' ? Promise.resolve({} as Record<string, { design_face_a?: string; design_face_b?: string; design_name?: string }>) : resolveBillboardDesigns(sortedItems, billboards, { contractNumber: contextType === 'contract' ? contextNumber : null })
     ]);
-    // في طباعة العقد: التصميم المطبّق في مهام التركيب (المهام المجمعة) له الأولوية على تصميم العقد
+    // في طباعة العقد: التصميم المطبّق في أوامر التركيب (أوامر العمل) له الأولوية على تصميم العقد
     if (contextType === 'contract') {
       sortedItems.forEach((it: any, k: number) => {
         const d = freshDesigns[String(it.billboard_id)];
@@ -1251,6 +1259,80 @@ export function UnifiedPrintAllDialog({
           </div>`;
       }
 
+      // ───── التصميم النظيف: ورقة مستقلة عن قالب الخلفية ─────
+      if (cardStyle === 'clean') {
+        const esc = (v: unknown) => String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const teamBadge = printType === 'installation' && showTeamInContent && displayTeamNames
+          ? `<div class="cp-team">${contextType === 'removal' ? 'فريق الإزالة' : 'فريق التركيب'}: ${esc(displayTeamNames)}</div>` : '';
+        const plainImg = (src: string, alt: string) => `<img src="${src}" alt="${alt}" class="cp-img" />`;
+        let cleanImage = '';
+        if (installedImageFaceA && installedImageFaceB) {
+          cleanImage = `<div class="cp-pair">
+              <div class="cp-pair-col"><div class="cp-cap">الوجه الأمامي</div><div class="cp-pair-box">${plainImg(installedImageFaceA, 'الوجه الأمامي')}</div></div>
+              <div class="cp-pair-col"><div class="cp-cap">الوجه الخلفي</div><div class="cp-pair-box">${plainImg(installedImageFaceB, 'الوجه الخلفي')}</div></div>
+            </div>`;
+        } else if (hasMainImage && isImageActive && isOverlayActive && activeCutout) {
+          const x = ov?.x_pct ?? 50; const y = ov?.y_pct ?? 50; const sc = (ov?.scale_pct ?? 100) / 100; const rot = ov?.rotation_deg ?? 0;
+          const isV2 = ov?.anchor_version === 'v2'; const cropBottom = ov?.crop_bottom_pct || 0;
+          cleanImage = `<div class="overlay-container cp-overlay">
+              <img src="${mainImage}" alt="صورة اللوحة" class="billboard-image cp-img" />
+              <img src="${activeCutout}" class="overlay-cutout" data-x="${x}" data-y="${y}" data-scale="${sc}" data-rot="${rot}" data-anchor="${isV2 ? 'v2' : 'v1'}"
+                style="position:absolute;left:${x}%;top:${y}%;width:27.15%;height:auto;display:block;transform:translate(-50%, ${isV2 ? '-100%' : '-50%'}) scale(${sc}) rotate(${rot}deg);transform-origin:${isV2 ? 'bottom center' : 'center center'};clip-path:inset(0 0 ${cropBottom}% 0);-webkit-clip-path:inset(0 0 ${cropBottom}% 0);z-index:10;" />
+            </div>`;
+        } else if (hasMainImage) {
+          cleanImage = plainImg(mainImage, 'صورة اللوحة');
+        } else {
+          cleanImage = `<div class="cp-empty">لا توجد صورة للوحة${coords ? `<span dir="ltr">${esc(coords)}</span>` : ''}</div>`;
+        }
+        const designBox = (src: string | null, fallback: string) => src
+          ? `<div class="cp-design"><div class="cp-cap">${esc(showDesignName && cleanAdType ? cleanAdType : fallback)}</div><div class="cp-design-box"><img src="${src}" alt="${fallback}" class="cp-img" /></div></div>` : '';
+        const locationMain = [municipality, district].filter(Boolean).join(' - ');
+        const footerParts = [
+          showPreviousAd && itemPreviousAd ? `الإعلان السابق: ${esc(itemPreviousAd)}` : '',
+          contextType === 'installation' && customerCompanyText ? `الزبون: ${esc(customerCompanyText)}` : '',
+          installationDate ? `${contextType === 'removal' ? 'تاريخ الإزالة' : 'تاريخ التركيب'}: ${installationDate}` : '',
+        ].filter(Boolean);
+
+        pages.push(`
+        <div class="page cp-page" data-print-page>
+          <div class="cp-inner">
+            <header class="cp-head">
+              <div class="cp-head-r">${teamBadge}${contractInfoText ? `<div class="cp-info">${esc(contractInfoText)}</div>` : ''}</div>
+              <div class="cp-seq"><b>${sequentialNumber}</b><span>من ${sortedItems.length}</span></div>
+            </header>
+
+            <section class="cp-title">
+              <div class="cp-title-text">
+                <div class="cp-name">${esc(name)}</div>
+                ${showBillboardStatus ? `<div class="cp-status" style="color:${billboardStatusColor}">${esc(billboardStatusLabel)}</div>` : ''}
+              </div>
+              <div class="cp-size">
+                <div class="cp-size-val">${generatePrintedSizeHtml(size, false, showSizeDimensionLabels)}</div>
+                <div class="cp-faces">${isCutoutEnabled ? 'مجسم · ' : ''}${formatFacesCountArabic(facesCount)}</div>
+              </div>
+            </section>
+
+            <section class="cp-photo">${cleanImage}</section>
+
+            <section class="cp-loc">
+              <div class="cp-loc-text">
+                <div class="cp-loc-label">الموقع</div>
+                <div class="cp-loc-main">${esc(locationMain || '—')}</div>
+                ${landmark ? `<div class="cp-loc-land">${esc(landmark)}</div>` : ''}
+                ${coords ? `<div class="cp-loc-gps" dir="ltr">${esc(coords)}</div>` : ''}
+              </div>
+              ${qrCodeDataUrl ? `<a class="cp-qr" href="${mapLink}" target="_blank"><img src="${qrCodeDataUrl}" alt="QR" /><span>امسح لفتح الخريطة</span></a>` : ''}
+            </section>
+
+            ${isDesignsIncluded ? `<section class="cp-designs">${designBox(designFaceA, 'تصميم الوجه الأمامي')}${designBox(designFaceB, 'تصميم الوجه الخلفي')}</section>` : ''}
+
+            ${footerParts.length ? `<footer class="cp-foot">${footerParts.map(p => `<span>${p}</span>`).join('')}</footer>` : ''}
+          </div>
+        </div>
+        `);
+        continue;
+      }
+
       pages.push(`
         <div class="page" data-print-page data-template-zones="${layout.zones ? '1' : '0'}">
           <div class="background"><img src="${customBackgroundUrl}" alt="" /></div>
@@ -1298,7 +1380,7 @@ export function UnifiedPrintAllDialog({
           </div>
 
           ${printType === 'installation' && showTeamInContent && displayTeamNames ? `
-            <div class="absolute-field print-type" style="top: ${s.team_name_top}; right: ${s.team_name_right}; font-size: ${s.team_name_font_size}; color: ${s.team_name_color || '#000'}; font-weight: ${s.team_name_font_weight}; text-align: ${s.team_name_alignment}; ${s.team_name_offset_x && s.team_name_offset_x !== '0mm' ? `margin-right: ${s.team_name_offset_x};` : ''}">
+            <div class="absolute-field print-type" style="top: 5mm; left: 50%; right: auto; transform: translateX(-50%); width: max-content; max-width: calc(100% - 16mm); font-size: 11px; color: ${s.team_name_color || '#000'}; font-weight: 700; text-align: center; padding: 1mm 3mm; border: 1px solid #999; border-radius: 2mm; background: #fff;">
                ${contextType === 'removal' ? 'فريق الإزالة' : 'فريق التركيب'}: ${displayTeamNames}
             </div>
           ` : ''}
@@ -1544,6 +1626,45 @@ export function UnifiedPrintAllDialog({
           }
           .designs-section { overflow: hidden; }
 
+          /* ───── التصميم النظيف ───── */
+          .cp-page { background: #fff; }
+          .cp-inner { position: absolute; inset: 0; padding: 10mm 11mm 9mm; display: flex; flex-direction: column; gap: 4mm; }
+          .cp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 4mm; min-height: 9mm; }
+          .cp-head-r { display: flex; flex-direction: column; align-items: flex-start; gap: 1.5mm; min-width: 0; }
+          .cp-team { display: inline-block; background: #111; color: #fff; font-weight: 700; font-size: 13px; padding: 1.6mm 4mm; border-radius: 10mm; }
+          .cp-info { font-size: 13px; color: #444; }
+          .cp-seq { font-family: 'Manrope', Arial, sans-serif; display: flex; align-items: baseline; gap: 1mm; color: #111; white-space: nowrap; }
+          .cp-seq b { font-size: 22px; font-weight: 700; }
+          .cp-seq span { font-size: 12px; color: #777; }
+          .cp-title { display: flex; align-items: stretch; justify-content: space-between; gap: 5mm; border-bottom: 0.6mm solid #111; padding-bottom: 3mm; }
+          .cp-title-text { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+          .cp-name { font-size: 26px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
+          .cp-status { font-size: 13px; font-weight: 600; margin-top: 1mm; }
+          .cp-size { flex-shrink: 0; text-align: center; border: 0.5mm solid #111; border-radius: 3mm; padding: 1.5mm 5mm; display: flex; flex-direction: column; justify-content: center; }
+          .cp-size-val { font-family: 'Manrope', Arial, sans-serif; font-size: 34px; font-weight: 700; line-height: 1.1; display: flex; justify-content: center; }
+          .cp-faces { font-size: 12px; font-weight: 600; color: #444; margin-top: 0.5mm; }
+          .cp-photo { flex: 1 1 auto; min-height: 60mm; display: flex; align-items: center; justify-content: center; background: #f4f4f5; border-radius: 3mm; padding: 2mm; overflow: hidden; }
+          .cp-img { width: 100%; height: 100%; object-fit: contain; display: block; border: none !important; border-radius: 2mm !important; }
+          .cp-overlay { position: relative; width: 100%; height: 100%; }
+          .cp-pair { display: flex; gap: 3mm; width: 100%; height: 100%; }
+          .cp-pair-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+          .cp-pair-box { flex: 1 1 auto; min-height: 0; }
+          .cp-cap { font-size: 12px; font-weight: 600; color: #333; text-align: center; margin-bottom: 1.5mm; overflow-wrap: anywhere; }
+          .cp-empty { display: flex; flex-direction: column; align-items: center; gap: 2mm; color: #999; font-size: 14px; }
+          .cp-empty span { font-size: 11px; color: #666; }
+          .cp-loc { display: flex; align-items: center; gap: 5mm; border: 0.3mm solid #d4d4d8; border-radius: 3mm; padding: 3mm 4mm; }
+          .cp-loc-text { flex: 1; min-width: 0; }
+          .cp-loc-label { font-size: 11px; color: #777; }
+          .cp-loc-main { font-size: 17px; font-weight: 700; line-height: 1.3; }
+          .cp-loc-land { font-size: 14px; color: #222; line-height: 1.35; margin-top: 0.5mm; overflow-wrap: anywhere; }
+          .cp-loc-gps { font-family: 'Manrope', Arial, sans-serif; font-size: 10px; color: #888; margin-top: 1mm; text-align: right; }
+          .cp-qr { flex-shrink: 0; width: 24mm; display: flex; flex-direction: column; align-items: center; gap: 1mm; text-decoration: none; color: #555; font-size: 9px; }
+          .cp-qr img { width: 24mm; height: 24mm; display: block; }
+          .cp-designs { flex: 0 0 62mm; display: flex; gap: 4mm; min-height: 0; }
+          .cp-design { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+          .cp-design-box { flex: 1 1 auto; min-height: 0; background: #f4f4f5; border-radius: 3mm; padding: 1.5mm; }
+          .cp-foot { display: flex; flex-wrap: wrap; gap: 2mm 6mm; font-size: 12px; color: #444; border-top: 0.3mm solid #e4e4e7; padding-top: 2mm; }
+
           @page { size: A4 portrait; margin: 0; }
 
           @media print {
@@ -1654,7 +1775,7 @@ export function UnifiedPrintAllDialog({
       resolveBillboardPreviousAds(sortedItems, contextNumber, billboards),
       contextType === 'removal' ? Promise.resolve({} as Record<string, { design_face_a?: string; design_face_b?: string; design_name?: string }>) : resolveBillboardDesigns(sortedItems, billboards, { contractNumber: contextType === 'contract' ? contextNumber : null })
     ]);
-    // في طباعة العقد: التصميم المطبّق في مهام التركيب (المهام المجمعة) له الأولوية على تصميم العقد
+    // في طباعة العقد: التصميم المطبّق في أوامر التركيب (أوامر العمل) له الأولوية على تصميم العقد
     if (contextType === 'contract') {
       sortedItems.forEach((it: any, k: number) => {
         const d = freshDesigns[String(it.billboard_id)];
@@ -2415,7 +2536,7 @@ export function UnifiedPrintAllDialog({
   const taskShortId = primaryTaskId ? (primaryTaskId.length > 8 ? primaryTaskId.slice(0, 8) : primaryTaskId) : '';
 
   const dialogTitle = isInstallation
-    ? (title && !title.startsWith('طباعة مهمة') && !title.startsWith('طباعة إعادة') ? title : getInstallationTitle())
+    ? (title && !title.startsWith('طباعة مهمة') && !title.startsWith('طباعة أمر') && !title.startsWith('طباعة إعادة') ? title : getInstallationTitle())
     : (title || `${getContextLabel()} لوحات`);
 
   return (
@@ -2435,7 +2556,7 @@ export function UnifiedPrintAllDialog({
             </div>
             <p className="text-sm font-normal leading-relaxed text-muted-foreground break-words sm:mr-12">{dialogTitle}</p>
             <div className="flex flex-wrap items-center gap-2 text-sm font-normal sm:mr-12">
-              {/* رقم مهمة التركيب */}
+              {/* رقم أمر التركيب */}
               {isInstallation && taskShortId && (
                 <Badge variant="outline" className="font-mono text-xs font-bold bg-muted/60 border-primary/30 text-foreground flex items-center gap-1">
                   <Hash className="h-3 w-3 text-primary" />
@@ -2610,6 +2731,17 @@ export function UnifiedPrintAllDialog({
 
                 </button>
               </div>
+              {printMode === 'cards' && (
+                <div className="flex items-center gap-1 rounded-lg border border-border/60 bg-muted/20 p-1">
+                  <span className="px-1.5 text-[11px] font-semibold text-muted-foreground">شكل الورقة</span>
+                  {([['clean', 'تصميم نظيف'], ['template', 'قالب الخلفية']] as const).map(([key, label]) => (
+                    <button key={key} type="button" aria-pressed={cardStyle === key} onClick={() => changeCardStyle(key)}
+                      className={`flex-1 rounded-md px-2 py-1 text-xs font-bold transition-colors ${cardStyle === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

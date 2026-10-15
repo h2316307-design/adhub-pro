@@ -181,7 +181,7 @@ export function ItemsTabsSection({ items, setItems, onSelect, onAmountChange, re
 
         <TabsContent value="composite" className="flex-1 overflow-y-auto mt-2">
           {filteredCompositeTasks.length === 0
-            ? renderEmptyState(<Wrench className="h-10 w-10 mx-auto" />, 'لا توجد مهام مجمعة مستحقة')
+            ? renderEmptyState(<Wrench className="h-10 w-10 mx-auto" />, 'لا توجد أوامر عمل مستحقة')
             : renderItems(filteredCompositeTasks)
           }
         </TabsContent>

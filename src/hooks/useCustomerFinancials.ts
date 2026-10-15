@@ -11,7 +11,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { calculateTotalRemainingDebt, filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
 
 export interface CustomerFinancialData {
-  // إجمالي الديون (العقود + الفواتير + المهام المجمعة + الديون السابقة)
+  // إجمالي الديون (العقود + الفواتير + أوامر العمل + الديون السابقة)
   totalDebt: number;
   // إجمالي المدفوعات
   totalPaid: number;

@@ -16,7 +16,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Loader2, FileText, PrinterIcon, ShoppingCart, DollarSign, Sparkles, AlertCircle, Wallet, Plus, X, UserCheck, Wrench, CheckCircle, Search } from 'lucide-react';
+import { Loader2, FileText, PrinterIcon, ShoppingCart, DollarSign, Sparkles, AlertCircle, Wallet, Plus, X, UserCheck, Wrench, CheckCircle, Search, ArrowRightLeft } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 // Sub-components
@@ -68,7 +68,8 @@ interface EnhancedDistributePaymentDialogProps {
 }
 
 
-export function EnhancedDistributePaymentDialog({
+/** النافذة السابقة الكاملة (موظفين/عهد/مصاريف) — تُفتح من النافذة الجديدة عند الحاجة */
+export function LegacyDistributePaymentDialog({
   open,
   onOpenChange,
   customerId,
@@ -786,7 +787,7 @@ export function EnhancedDistributePaymentDialog({
         console.error('Error fetching printed invoices:', printedError);
       }
 
-      // ✅ جلب المهام المجمعة لاستبعاد فواتير الطباعة المرتبطة بها
+      // ✅ جلب أوامر العمل لاستبعاد فواتير الطباعة المرتبطة بها
       const compositeLinkedInvoiceIds = new Set<string>();
       const { data: compositeTasksForFilter } = await supabase
         .from('composite_tasks')
@@ -799,7 +800,7 @@ export function EnhancedDistributePaymentDialog({
           if (ct.combined_invoice_id) compositeLinkedInvoiceIds.add(ct.combined_invoice_id);
         });
 
-        // استبعاد فواتير الطباعة المرتبطة بمهام طباعة ضمن مهام مجمعة
+        // استبعاد فواتير الطباعة المرتبطة بمهام طباعة ضمن أوامر عمل
         const printTaskIds = compositeTasksForFilter.map(ct => ct.print_task_id).filter(Boolean) as string[];
         if (printTaskIds.length > 0) {
           const { data: printTasks } = await supabase
@@ -831,7 +832,7 @@ export function EnhancedDistributePaymentDialog({
         }
 
         printedInvoices.forEach(invoice => {
-          // ✅ استبعاد الفواتير المرتبطة بمهام مجمعة
+          // ✅ استبعاد الفواتير المرتبطة بأوامر عمل
           if (compositeLinkedInvoiceIds.has(invoice.id)) return;
           
           const total = Number(invoice.total_amount) || 0;
@@ -844,7 +845,7 @@ export function EnhancedDistributePaymentDialog({
           if (isPartOfEditingPayment && editingPayments) {
             editingAmount = savedAllocationAmount(editingPayments, 'printed_invoice', invoice.id);
           }
-          
+          const remaining = Math.max(0, total - paid + editingAmount);
           const isFullyPaid = (remaining - editingAmount) <= 0.01;
           const invoiceTitle = invoice.notes?.trim() || 'فاتورة طباعة';
           if (remaining > 0.01 || isPartOfEditingPayment) {
@@ -925,7 +926,7 @@ export function EnhancedDistributePaymentDialog({
         });
       }
 
-      // جلب المهام المجمعة (تركيب + طباعة + قص)
+      // جلب أوامر العمل (تركيب + طباعة + قص)
       const { data: compositeTasks, error: compositeError } = await supabase
         .from('composite_tasks')
         .select('id, task_number, contract_id, customer_total, paid_amount, customer_name, task_type, customer_installation_cost, customer_print_cost, customer_cutout_cost, installation_task_id, print_task_id, cutout_task_id')
@@ -936,7 +937,7 @@ export function EnhancedDistributePaymentDialog({
       }
 
       if (compositeTasks) {
-        // حساب المبلغ المدفوع من جدول customer_payments لكل مهمة مجمعة
+        // حساب المبلغ المدفوع من جدول customer_payments لكل أمر عمل
         const { data: compositePayments } = await supabase
           .from('customer_payments')
           .select('composite_task_id, amount, entry_type')
@@ -953,7 +954,7 @@ export function EnhancedDistributePaymentDialog({
           });
         }
 
-        // جلب تفاصيل مهام التركيب المرتبطة (رقم إعادة التركيب، الفرقة، نوع المهمة)
+        // جلب تفاصيل أوامر التركيب المرتبطة (رقم إعادة التركيب، الفرقة، نوع المهمة)
         const installTaskIds = compositeTasks
           .map(t => t.installation_task_id)
           .filter(Boolean) as string[];
@@ -1038,7 +1039,7 @@ export function EnhancedDistributePaymentDialog({
           if (task.customer_installation_cost > 0 || task.installation_task_id) components.push('تركيب');
           if (task.customer_print_cost > 0 || task.print_task_id) components.push('طباعة');
           if (task.customer_cutout_cost > 0 || task.cutout_task_id) components.push('قص');
-          const serviceComponents = components.length > 0 ? components.join(' + ') : 'مهمة مجمعة';
+          const serviceComponents = components.length > 0 ? components.join(' + ') : 'أمر عمل';
 
           const isPartOfEditingPayment = editingCompositeTaskIds.has(task.id);
           
@@ -1074,7 +1075,7 @@ export function EnhancedDistributePaymentDialog({
           } else if (task.cutout_task_id && !task.installation_task_id) {
             taskTitle = `قص مجسمات${contractNum ? ` — عقد #${contractNum}` : ''}`;
           } else {
-            taskTitle = `مهمة مجمعة${contractNum ? ` — عقد #${contractNum}` : ''}`;
+            taskTitle = `أمر عمل${contractNum ? ` — عقد #${contractNum}` : ''}`;
           }
 
           const existing = compositeGroups.get(groupKey);
@@ -1085,7 +1086,7 @@ export function EnhancedDistributePaymentDialog({
             if (teamName) existing._teamsSet.add(teamName);
             components.forEach(c => existing._servicesSet.add(c));
             existing.teamName = Array.from(existing._teamsSet).filter(Boolean).join(' + ');
-            existing.serviceType = Array.from(existing._servicesSet).filter(Boolean).join(' + ') || 'مهمة مجمعة';
+            existing.serviceType = Array.from(existing._servicesSet).filter(Boolean).join(' + ') || 'أمر عمل';
             existing.subTasks?.push({
               id: task.id,
               total,
@@ -1820,3 +1821,6 @@ export function EnhancedDistributePaymentDialog({
     </Dialog>
   );
 }
+
+// كل الاستخدامات تفتح نافذة التوزيع الجديدة
+export { SmartDistributeDialog as EnhancedDistributePaymentDialog } from './SmartDistributeDialog';

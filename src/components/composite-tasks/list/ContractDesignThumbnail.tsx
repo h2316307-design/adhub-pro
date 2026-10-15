@@ -14,6 +14,6 @@ export function ContractDesignThumbnail({ contractId, url, className }: { contra
   }, [contractId, url]);
   const image = url || fallback;
   return <span className={cn('flex h-24 w-28 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background', className)}>
-    {image ? <img src={image} alt={contractId > 0 ? `تصميم عقد ${contractId}` : 'تصميم المهمة المجمعة'} className="h-full w-full object-contain" loading="lazy" onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/placeholder.svg'; }} /> : <ImageIcon className="h-6 w-6 text-muted-foreground" />}
+    {image ? <img src={image} alt={contractId > 0 ? `تصميم عقد ${contractId}` : 'تصميم أمر العمل'} className="h-full w-full object-contain" loading="lazy" onError={e => { e.currentTarget.onerror = null; e.currentTarget.src = '/placeholder.svg'; }} /> : <ImageIcon className="h-6 w-6 text-muted-foreground" />}
   </span>;
 }

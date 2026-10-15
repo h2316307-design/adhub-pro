@@ -14,7 +14,7 @@ export interface BillboardWithContract extends Billboard {
   };
 }
 
-// جلب اللوحات مع صور التصميم من مهام التركيب
+// جلب اللوحات مع صور التصميم من أوامر التركيب
 export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContract[]> => {
   console.log('🔍 fetchBillboardsWithContracts: Starting...');
   try {
@@ -77,12 +77,12 @@ export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContr
       console.warn('⚠️ Could not fetch contracts for latest mapping:', err);
     }
 
-    // جلب صور التصميم من مهام التركيب لكل اللوحات
+    // جلب صور التصميم من أوامر التركيب لكل اللوحات
     const billboardIds = billboards.map(b => b.ID);
     let designImagesMap: Record<number, { design_face_a?: string; design_face_b?: string; installed_image_face_a_url?: string; installed_image_face_b_url?: string }> = {};
     
     try {
-      // جلب مهام التركيب المرتبطة باللوحات
+      // جلب أوامر التركيب المرتبطة باللوحات
       const { data: installationItems } = await supabase
         .from('installation_task_items')
         .select('billboard_id, design_face_a, design_face_b, installed_image_face_a_url, installed_image_face_b_url')
@@ -167,7 +167,7 @@ export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContr
         Rent_End_Date: effectiveEndDate || '',
         Days_Count: typeof remainingDays === 'number' ? String(remainingDays) : undefined,
         Ad_Type: effectiveAdType || '',
-        // إضافة صور التصميم من مهام التركيب
+        // إضافة صور التصميم من أوامر التركيب
         design_face_a: designData.design_face_a || billboard.design_face_a || '',
         design_face_b: designData.design_face_b || billboard.design_face_b || '',
         installed_image_face_a_url: designData.installed_image_face_a_url || '',

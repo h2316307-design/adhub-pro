@@ -270,7 +270,7 @@ export function resolveCustomerAndContract(
       conflict: {
         type: 'ERROR',
         code: 'CUSTOMER_CONFLICT',
-        message: `تعارض بيانات العميل: العقد #${itemContractId} مرتبط بالعميل (${contractCustomerId} - ${contractCustomerName}) بينما المهمة المجمعة مرتبطة بالعميل (${compCustomerId} - ${compCustomerName})`,
+        message: `تعارض بيانات العميل: العقد #${itemContractId} مرتبط بالعميل (${contractCustomerId} - ${contractCustomerName}) بينما أمر العمل مرتبط بالعميل (${compCustomerId} - ${compCustomerName})`,
         billboardId,
         contractId: itemContractId
       }

@@ -546,7 +546,7 @@ export async function executeCreatePrintTask(
         await supabase.from('customer_payments')
           .update({
             amount: -newCustomerTotal,
-            notes: `مهمة مجمعة - عقد #${selectedContractId} (معاد حسابها بعد تحديث مهام الطباعة/القص)`
+            notes: `أمر عمل - عقد #${selectedContractId} (معاد حسابها بعد تحديث مهام الطباعة/القص)`
           })
           .eq('printed_invoice_id', existingComposite.combined_invoice_id)
           .eq('entry_type', 'invoice');
@@ -609,7 +609,7 @@ export async function executeCreatePrintTask(
       }
 
       const r7 = await supabase.from('installation_tasks').update({ print_task_id: null }).eq('id', installationTaskId);
-      if (r7?.error) rollbackErrors.push(r7.error.message || 'فشل إرجاع ربط مهمة التركيب');
+      if (r7?.error) rollbackErrors.push(r7.error.message || 'فشل إرجاع ربط أمر التركيب');
     } catch (rollbackErr: any) {
       console.error('CRITICAL: Error during compensating rollback:', rollbackErr);
       rollbackErrors.push(rollbackErr.message || 'فشل التراجع عن بعض السجلات');

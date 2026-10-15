@@ -50,7 +50,7 @@ export function createPrintGeneratorFixture(overrides: Record<string, any> = {})
     showPreviousAd: false, showSizeDimensionLabels: false, printCityInsteadOfMunicipality: false,
     showTeamInContent: false, showTeamInHeader: false, showBillboardStatusOpt: false,
     showTeamFilter: true, selectedTeamIds: new Set(['team']), teams: { team: { team_name: 'الفريق التجريبي' } },
-    printType: 'installation', printMode: 'cards', customBackgroundUrl: '/ipg.svg',
+    printType: 'installation', printMode: 'cards', cardStyle: 'template', customBackgroundUrl: '/ipg.svg',
     dynamicDesignsMap: {}, previousAdsData: {}, installedImagesData: {}, sizeCutoutMap: {},
     maintenanceStatusesMap: { ready: { label: 'جاهزة', color: '#166534' } },
     sortBillboardsBySize: async (items: any[]) => items,

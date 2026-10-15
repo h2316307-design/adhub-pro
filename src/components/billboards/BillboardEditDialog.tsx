@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import { Upload, ClipboardPaste, Loader2, Image as ImageIcon, RefreshCw, Plus, Ruler, ChevronDown, MapPin, SlidersHorizontal, Building2, Handshake, Save, X } from 'lucide-react';
 import { BillboardImage } from '@/components/BillboardImage';
 import { supabase } from '@/integrations/supabase/client';
@@ -92,6 +93,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
 }) => {
   // Sub-dialog states for quick add
   const [sizeQuickAddOpen, setSizeQuickAddOpen] = useState(false);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [munQuickAddOpen, setMunQuickAddOpen] = useState(false);
   const [cityQuickAddOpen, setCityQuickAddOpen] = useState(false);
   const [typeQuickAddOpen, setTypeQuickAddOpen] = useState(false);
@@ -991,7 +993,9 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                     <img 
                       src={imagePreview || editForm.Image_URL}
                       alt="معاينة الصورة"
-                      className="w-full h-full object-contain"
+                      className="w-full h-full object-contain cursor-zoom-in"
+                      title="تكبير"
+                      onClick={(e) => { e.stopPropagation(); setImageViewerOpen(true); }}
                     />
                   </div>
                 ) : (
@@ -1284,6 +1288,9 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
           onSuccess={(val) => setEditForm((prev: any) => ({ ...prev, Faces_Count: val }))}
           onRefresh={loadFaces || (() => Promise.resolve())}
         />
+        {imageViewerOpen && (imagePreview || editForm.Image_URL) && (
+          <ImageViewer images={[{ src: imagePreview || editForm.Image_URL, label: editForm.Billboard_Name || 'صورة اللوحة' }]} onClose={() => setImageViewerOpen(false)} />
+        )}
       </DialogContent>
     </Dialog>
   );

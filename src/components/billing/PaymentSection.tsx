@@ -99,12 +99,12 @@ export const getPaymentTargetInfo = (
   // 1. Composite Task
   if (compositeId) {
     const tInfo = compositeTasksInfo[compositeId];
-    const taskNum = tInfo?.task_number || (notes.match(/مهمة\s*(?:مجمعة)?\s*#?(\d+)/)?.[1]);
+    const taskNum = tInfo?.task_number || (notes.match(/(?:مهمة|أمر عمل)\s*(?:مجمعة)?\s*#?(\d+)/)?.[1]);
     const cId = tInfo?.contract_id || (notes.match(/عقد\s*#?(\d+)/)?.[1] ? Number(notes.match(/عقد\s*#?(\d+)/)?.[1]) : undefined);
     const adType = tInfo?.ad_type || (cId ? contractAdTypes[cId] : '') || (payment as any).ad_type || '';
-    const numDisplay = taskNum ? `مهمة #${taskNum}` : cId ? `مهمة (عقد #${cId})` : 'مهمة مجمعة';
+    const numDisplay = taskNum ? `أمر عمل #${taskNum}` : cId ? `أمر عمل (عقد #${cId})` : 'أمر عمل';
     return {
-      type: 'مهمة مجمعة',
+      type: 'أمر عمل',
       targetNumber: numDisplay,
       statement: (payment as any).statement_description || `دفعة على ${numDisplay}${adType ? ` (${adType})` : ''}`,
       badgeLabel: `${numDisplay}${adType ? ` - ${adType}` : ''}`,
@@ -301,7 +301,7 @@ export function PaymentSection({
             if (contractNums.length > 0) {
               const { data: contractsData } = await supabase
                 .from('Contract')
-                .select('Contract_Number, ad_type, "Ad Type"')
+                .select('Contract_Number, "Ad Type"')
                 .in('Contract_Number', contractNums);
               if (contractsData) {
                 const map: Record<number, string> = {};
@@ -470,7 +470,7 @@ export function PaymentSection({
     loadCustodyInfo();
     loadWithdrawalInfo();
 
-    // تحميل كامل مراجع الدفعات (عقود، مهام مجمعة، فواتير مبيعات، فواتير طباعة ومشتريات)
+    // تحميل كامل مراجع الدفعات (عقود، أوامر عمل، فواتير مبيعات، فواتير طباعة ومشتريات)
     const loadAllPaymentReferences = async () => {
       if (!payments || payments.length === 0) return;
       try {

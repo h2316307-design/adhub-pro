@@ -17,9 +17,10 @@ import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Printer, X, Download, Maximize2, Minimize2, Stamp, FileText, Loader2, CloudUpload, MessageCircle, Send, Ruler } from 'lucide-react';
-import { iframeToPdfBlobOptimized } from '@/utils/pdfHelpers';
-import { downloadPdfBlob, uploadPdfBlobToDrive, uploadPdfBlobAndSendWhatsApp } from '@/utils/pdfDriveWhatsApp';
+import { Printer, X, Download, Maximize2, Minimize2, Stamp, FileText, Loader2, CloudUpload, MessageCircle, Send, Ruler, ListTree } from 'lucide-react';
+// مكتبات PDF ثقيلة: تُحمَّل عند أول استخدام فقط
+const loadPdfHelpers = () => import('@/utils/pdfHelpers');
+const loadPdfDrive = () => import('@/utils/pdfDriveWhatsApp');
 import { preparePrintWindow, writePrintWindow, formatCleanDisplayTitle, formatWindowsSafeFileName } from '@/utils/printWindowHelper';
 import { toast } from 'sonner';
 
@@ -48,6 +49,8 @@ export function PrintPreviewDialog() {
   const [showTotalMeters, setShowTotalMeters] = useState(false);
   const [hideInvoiceDate, setHideInvoiceDate] = useState(false);
   const [hideRentalNotes, setHideRentalNotes] = useState(false);
+  // وصل الاستلام: تفاصيل السداد (أين وُزّعت الدفعة) مخفية افتراضياً
+  const [showReceiptDetails, setShowReceiptDetails] = useState(false);
   const [isPdfLoading, setIsPdfLoading] = useState(false);
   const [isDriveUploading, setIsDriveUploading] = useState(false);
   const [isWhatsAppSending, setIsWhatsAppSending] = useState(false);
@@ -58,6 +61,7 @@ export function PrintPreviewDialog() {
   const hasTotalMetersRow = job?.html?.includes('total-meters-row') ?? false;
   const hasRentalNotes = job?.html?.includes('invoice-rental-notes') ?? false;
   const hasInvoiceDate = job?.html?.includes('invoice-meta') ?? false;
+  const isPaymentReceipt = job?.html?.includes('data-payment-receipt') ?? false;
 
   const handleEvent = useCallback((e: Event) => {
     const detail = (e as CustomEvent).detail as PrintJob;
@@ -78,16 +82,27 @@ export function PrintPreviewDialog() {
   }, [job]);
 
   // Strip auto-print scripts & toggle signature/meters visibility in HTML
-  const getProcessedHtml = useCallback((html: string, showSig: boolean, showMeters: boolean, hidDate: boolean, hidNotes: boolean) => {
+  const getProcessedHtml = useCallback((html: string, showSig: boolean, showMeters: boolean, hidDate: boolean, hidNotes: boolean, showDetails = true) => {
+    const isReceipt = html.includes('data-payment-receipt');
     let processed = replaceImageUrlsInHtml(html);
     processed = processed
       .replace(/<script[^>]*>[\s\S]*?window\.print\(\)[\s\S]*?<\/script>/gi, '')
       .replace(/onload\s*=\s*["'][^"']*window\.print\(\)[^"']*["']/gi, '');
     processed = processed.replace('</head>', getDSFallbackScript() + '<style>html, body { overflow-y: visible !important; height: auto !important; }</style></head>');
+    if (isReceipt) {
+      // الوصل: الاسم/التوقيع/الختم ورسالة الشكر تتبع مفتاح «إدراج الختم والتوقيع»
+      processed = processed.replace('</head>', showSig
+        ? '<style>[data-payment-receipt] .receipt-signatures { display: grid !important; }</style></head>'
+        : '<style>[data-payment-receipt] .receipt-signatures, [data-payment-receipt] .u-closing-message { display: none !important; }</style></head>');
+      if (!showDetails) {
+        // بدون التفصيل: المبلغ المستلم والمتبقي فقط
+        processed = processed.replace('</head>', '<style>[data-payment-receipt] .measurements-stats-cards, [data-payment-receipt] .payment-details-section, [data-payment-receipt] .receipt-transfer, [data-payment-receipt] .measurements-notes, [data-payment-receipt] .measurements-table thead, [data-payment-receipt] .measurements-table tr.even-row, [data-payment-receipt] .measurements-table tr.odd-row, [data-payment-receipt] .measurements-table tr.subtotal-row { display: none !important; }</style></head>');
+      }
+    }
     if (!showSig) {
       processed = processed.replace('</head>', '<style>.signature-stamp-section { display: none !important; }</style></head>');
     } else {
-      if (!processed.includes('class="signature-stamp-section"')) {
+      if (!isReceipt && !processed.includes('class="signature-stamp-section"')) {
         const signature = '<section class="signature-stamp-section" style="display:flex;justify-content:space-between;gap:24px;padding:16px 8px;break-inside:avoid;color:#262626"><div style="width:40%;text-align:center">الختم<div style="height:40px;border-bottom:1px solid #999"></div></div><div style="width:40%;text-align:center">التوقيع<div style="height:40px;border-bottom:1px solid #999"></div></div></section>';
         const footer = /<div\b[^>]*class="[^"]*(?:u-footer|measurements-footer)[^"]*"/i;
         processed = footer.test(processed) ? processed.replace(footer, match => signature + match) : processed.replace('</body>', signature + '</body>');
@@ -148,7 +163,7 @@ export function PrintPreviewDialog() {
     }
   }, []);
 
-  const iframeSrcDoc = open && job ? getProcessedHtml(job.html, showSignature, showTotalMeters, hideInvoiceDate, hideRentalNotes) : undefined;
+  const iframeSrcDoc = open && job ? getProcessedHtml(job.html, showSignature, showTotalMeters, hideInvoiceDate, hideRentalNotes, showReceiptDetails) : undefined;
 
   const cleanTitle = formatCleanDisplayTitle(job?.title);
 
@@ -180,7 +195,7 @@ export function PrintPreviewDialog() {
     }
 
     if (!job?.html) return;
-    const processedHtml = getProcessedHtml(job.html, showSignature, showTotalMeters, hideInvoiceDate, hideRentalNotes);
+    const processedHtml = getProcessedHtml(job.html, showSignature, showTotalMeters, hideInvoiceDate, hideRentalNotes, showReceiptDetails);
     const title = safeName;
     const isLandscape = Boolean(
       processedHtml.includes('size: landscape') ||
@@ -210,6 +225,7 @@ export function PrintPreviewDialog() {
       job?.html?.includes('class="landscape"') ||
       job?.html?.includes('data-orientation="landscape"')
     );
+    const { iframeToPdfBlobOptimized } = await loadPdfHelpers();
     const pdfBlob = await iframeToPdfBlobOptimized(iframeRef.current, fileName, {
       marginMm: [0, 0, 0, 0],
       landscape: isLandscape,
@@ -221,7 +237,7 @@ export function PrintPreviewDialog() {
     setIsPdfLoading(true);
     try {
       const { pdfBlob, fileName } = await getUnifiedPdfBlob();
-      downloadPdfBlob(pdfBlob, fileName);
+      (await loadPdfDrive()).downloadPdfBlob(pdfBlob, fileName);
     } catch (error) { toast.error('تعذر إنشاء ملف PDF'); console.error(error); }
     finally { setIsPdfLoading(false); }
   };
@@ -234,7 +250,7 @@ export function PrintPreviewDialog() {
     setIsDriveUploading(true);
     try {
       const { pdfBlob, fileName } = await getUnifiedPdfBlob();
-      await uploadPdfBlobToDrive({ pdfBlob, fileName, driveFolder: folder });
+      await (await loadPdfDrive()).uploadPdfBlobToDrive({ pdfBlob, fileName, driveFolder: folder });
       toast.success('تم رفع الملف إلى المجلد بنجاح');
     } catch (err) {
       console.error('Drive upload failed:', err);
@@ -253,7 +269,7 @@ export function PrintPreviewDialog() {
     setIsWhatsAppSending(true);
     try {
       const { pdfBlob, fileName } = await getUnifiedPdfBlob();
-      await uploadPdfBlobAndSendWhatsApp({
+      await (await loadPdfDrive()).uploadPdfBlobAndSendWhatsApp({
         pdfBlob,
         fileName,
         driveFolder: folder,
@@ -278,6 +294,7 @@ export function PrintPreviewDialog() {
     setShowTotalMeters(false);
     setHideInvoiceDate(false);
     setHideRentalNotes(false);
+    setShowReceiptDetails(false);
     setWhatsAppPhone('');
     setWhatsAppOpen(false);
   };
@@ -398,6 +415,16 @@ export function PrintPreviewDialog() {
                 <span>إدراج الختم والتوقيع</span>
               </Label>
             </div>
+
+            {isPaymentReceipt && (
+              <div className="flex items-center gap-2">
+                <Switch id="print-receipt-details" checked={showReceiptDetails} onCheckedChange={setShowReceiptDetails} />
+                <Label htmlFor="print-receipt-details" className="text-xs cursor-pointer whitespace-nowrap flex items-center gap-1 select-none font-medium">
+                  <ListTree className="h-3.5 w-3.5 text-sky-500" />
+                  <span>تفاصيل السداد</span>
+                </Label>
+              </div>
+            )}
 
             {hasTotalMetersRow && (
               <div className="flex items-center gap-2">

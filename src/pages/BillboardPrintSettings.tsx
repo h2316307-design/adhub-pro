@@ -2616,12 +2616,12 @@ export default function BillboardPrintSettings() {
             <DialogTrigger asChild>
               <Button variant="outline">
                 <FileText className="h-4 w-4 ml-2" />
-                جلب مهمة تركيب
+                جلب أمر تركيب
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-3xl max-h-[90vh]">
               <DialogHeader>
-                <DialogTitle>اختيار مهمة تركيب للمعاينة</DialogTitle>
+                <DialogTitle>اختيار أمر تركيب للمعاينة</DialogTitle>
                 <DialogDescription>اختر عقد وفريق لجلب اللوحات</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">

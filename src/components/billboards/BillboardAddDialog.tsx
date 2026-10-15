@@ -29,6 +29,7 @@ import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { uploadToImgbb } from '@/services/imgbbService';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import { 
   QuickAddSizeDialog, 
   QuickAddMunicipalityDialog, 
@@ -119,6 +120,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
 }) => {
   // Sub-dialog states for quick add
   const [sizeQuickAddOpen, setSizeQuickAddOpen] = useState(false);
+  const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [munQuickAddOpen, setMunQuickAddOpen] = useState(false);
   const [cityQuickAddOpen, setCityQuickAddOpen] = useState(false);
   const [typeQuickAddOpen, setTypeQuickAddOpen] = useState(false);
@@ -1157,7 +1159,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
               <div className="flex items-center justify-center">
                 {(imagePreview || addForm.Image_URL) ? (
                   <div className="w-full h-32 bg-muted rounded-lg overflow-hidden border border-border">
-                    <img src={imagePreview || addForm.Image_URL} alt="معاينة" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} />
+                    <img src={imagePreview || addForm.Image_URL} alt="معاينة" title="تكبير" className="w-full h-full object-cover cursor-zoom-in" onClick={() => setImageViewerOpen(true)} onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }} />
                   </div>
                 ) : (
                   <div className="w-full h-32 bg-muted/30 rounded-lg border-2 border-dashed border-border flex items-center justify-center">
@@ -1291,6 +1293,9 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
           onSuccess={(val) => setAddForm((prev: any) => ({ ...prev, Faces_Count: val }))}
           onRefresh={loadFaces || (() => Promise.resolve())}
         />
+        {imageViewerOpen && (imagePreview || addForm.Image_URL) && (
+          <ImageViewer images={[{ src: imagePreview || addForm.Image_URL, label: addForm.Billboard_Name || 'صورة اللوحة' }]} onClose={() => setImageViewerOpen(false)} />
+        )}
       </DialogContent>
     </Dialog>
   );

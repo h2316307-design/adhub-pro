@@ -31,7 +31,7 @@ const PREVIEW_DOC_TYPES = [
   { value: DOCUMENT_TYPES.CUSTOMER_INVOICE, label: 'فاتورة عميل' },
   { value: DOCUMENT_TYPES.PAYMENT_RECEIPT, label: 'إيصال دفع' },
   { value: DOCUMENT_TYPES.ACCOUNT_STATEMENT, label: 'كشف حساب' },
-  { value: DOCUMENT_TYPES.COMBINED_TASK, label: 'مهمة مجمعة' },
+  { value: DOCUMENT_TYPES.COMBINED_TASK, label: 'أمر عمل' },
 ];
 
 export default function FontSettings() {

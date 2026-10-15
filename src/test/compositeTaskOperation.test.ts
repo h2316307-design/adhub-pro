@@ -8,6 +8,7 @@ import {
   isMultiContractOperation,
   normalizeCompositeTaskType,
   selectLatestOperationTasks,
+  summarizeInstallationOperation,
 } from '@/lib/compositeTaskOperation';
 
 describe('composite task type normalization', () => {
@@ -26,6 +27,24 @@ describe('composite task type normalization', () => {
 });
 
 describe('composite task multi-contract isolation and identity', () => {
+  it('summarizes completion and money across the entire operation', () => {
+    expect(summarizeInstallationOperation([
+      { status: 'completed', customer_total: 36440, _totalPaid: 1000 },
+      { status: 'pending', customer_total: 2160, _totalPaid: 0 },
+      { status: 'pending', customer_total: 12240, _totalPaid: 0 },
+    ])).toEqual({ status: 'in_progress', total: 50840, paid: 1000 });
+    expect(summarizeInstallationOperation([{ status: 'completed' }, { status: 'completed' }]).status).toBe('completed');
+    expect(summarizeInstallationOperation([{ status: 'pending' }, { status: 'pending' }]).status).toBe('pending');
+  });
+  it('groups one explicit operation regardless of contract subsets, primary contract or team status', () => {
+    const first = { id: 'a', operation_id: 'operation-a', contract_id: 1114, contract_ids: [1114, 1200], task_type: 'reinstallation', status: 'completed' };
+    const second = { ...first, id: 'b', contract_id: 1201, contract_ids: [1201, 1202], status: 'pending' };
+    expect(getTaskContractGroupKey(first)).toBe(getTaskContractGroupKey(second));
+    expect(getCompositeTaskOperationKey(first)).toBe(getCompositeTaskOperationKey(second));
+    expect(getCompositeTaskOperationKey({ ...first, operation_id: 'operation-b' })).not.toBe(getCompositeTaskOperationKey(first));
+    expect(selectLatestOperationTasks([{ ...first, created_at: '2026-10-01' }, { ...second, created_at: '2026-10-02' }])).toHaveLength(2);
+  });
+
   it('identifies tasks spanning multiple contracts', () => {
     expect(isMultiContractOperation({ contract_id: 1114, contract_ids: [1114, 1231, 1260] })).toBe(true);
     expect(isMultiContractOperation({ contract_id: 1114, contract_ids: [1114] })).toBe(false);
@@ -55,7 +74,7 @@ describe('composite task multi-contract isolation and identity', () => {
     expect(getOperationLabel({ id: 'm1', contract_ids: [1114, 1231], task_type: 'reinstallation', reinstallationNumber: 71 }))
       .toBe('إعادة تركيب مجمعة (71)');
     expect(getOperationLabel({ id: 'm2', contract_ids: [1114, 1231], task_type: 'new_installation' }))
-      .toBe('مهمة تركيب مجمعة لعدة عقود');
+      .toBe('أمر تركيب مجمّع لعدة عقود');
     expect(getOperationLabel({ id: 's1', contract_id: 1114, task_type: 'reinstallation', reinstallationNumber: 1 }))
       .toBe('إعادة تركيب 1');
   });

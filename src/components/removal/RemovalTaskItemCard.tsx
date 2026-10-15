@@ -17,6 +17,7 @@ import {
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
 import { motion, AnimatePresence } from 'framer-motion';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import {
   Dialog,
   DialogContent,
@@ -318,31 +319,7 @@ export function RemovalTaskItemCard({
       {/* Full Screen Image Preview Lightbox */}
       <AnimatePresence>
         {previewImage && (
-          <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-            <DialogContent className="max-w-4xl p-0 overflow-hidden bg-black/95 border-0 rounded-2xl">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="relative flex flex-col items-center justify-center p-2"
-              >
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  onClick={() => setPreviewImage(null)}
-                  className="absolute left-4 top-4 z-20 h-10 w-10 cursor-pointer rounded-xl bg-white/10 text-white transition-all duration-200 hover:bg-white/20 active:scale-95"
-                  aria-label="إغلاق المعاينة"
-                >
-                  <X className="h-5 w-5" />
-                </Button>
-                <img
-                  src={previewImage}
-                  alt="معاينة عالية الدقة"
-                  className="w-full h-auto max-h-[85vh] object-contain rounded-xl"
-                />
-              </motion.div>
-            </DialogContent>
-          </Dialog>
+          <ImageViewer images={[{ src: previewImage }]} onClose={() => setPreviewImage(null)} />
         )}
       </AnimatePresence>
     </>

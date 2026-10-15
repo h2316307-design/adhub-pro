@@ -16,6 +16,7 @@ import { CutoutCostSummary } from './CutoutCostSummary';
 import { UnifiedTaskInvoice, InvoiceType } from '@/components/composite-tasks/UnifiedTaskInvoice';
 import { CompositeTaskWithDetails } from '@/types/composite-task';
 import { DesignImageWithBlur } from '@/components/DesignImageWithBlur';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface CutoutTask {
   id: string;
@@ -76,7 +77,7 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
   const [currentInvoiceType, setCurrentInvoiceType] = useState<InvoiceType>('customer');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
-  // جلب المهمة المجمعة المرتبطة
+  // جلب أمر العمل المرتبط
   const { data: linkedCompositeTask } = useQuery({
     queryKey: ['linked-composite-task-cutout', task?.id],
     enabled: !!task?.id,
@@ -427,7 +428,7 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
             </Button>
           </>
         ) : (
-          <span className="text-xs text-muted-foreground">لا توجد مهمة مجمعة مرتبطة للفواتير</span>
+          <span className="text-xs text-muted-foreground">لا توجد أمر عمل مرتبط للفواتير</span>
         )}
       </div>
 
@@ -785,13 +786,7 @@ export function CutoutTaskDetails({ task }: CutoutTaskDetailsProps) {
       )}
 
       {/* Lightbox Dialog */}
-      <Dialog open={!!lightboxImage} onOpenChange={() => setLightboxImage(null)}>
-        <DialogContent className="max-w-4xl p-2 bg-black/95 border-none">
-          {lightboxImage && (
-            <img src={lightboxImage} alt="تكبير التصميم" className="w-full h-auto max-h-[85vh] object-contain rounded" />
-          )}
-        </DialogContent>
-      </Dialog>
+      {lightboxImage && <ImageViewer images={[{ src: lightboxImage }]} onClose={() => setLightboxImage(null)} />}
     </div>
   );
 }

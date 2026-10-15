@@ -78,7 +78,7 @@ import {
 } from '@/components/ui/alert-dialog';
 
 
-// أدوات وثوابت مشتركة لصفحة المهام المجمعة
+// أدوات وثوابت مشتركة لصفحة أوامر العمل
 export const isEnabledContractFlag = (value: unknown): boolean =>
   value === true || value === 1 || value === '1' || String(value).toLowerCase() === 'true';
 
@@ -112,7 +112,7 @@ export const fetchInstallationWorkflowData = async (
 ): Promise<InstallationWorkflowData> => {
   let taskIds = [...new Set([primaryTaskId, ...relatedTaskIds].filter(Boolean))];
 
-  // إذا تم تمرير رقم العقد، نجمع جميع مهام التركيب التابعة لنفس العقد والعملية لتجميع كل الفرق
+  // إذا تم تمرير رقم العقد، نجمع جميع أوامر التركيب التابعة لنفس العقد والعملية لتجميع كل الفرق
   if (contractId) {
     try {
       const { data: contractTasks } = await supabase

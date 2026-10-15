@@ -141,10 +141,10 @@ export const calculateTotalRemainingDebt = (
     0
   );
 
-  // إجمالي فواتير الطباعة (استثناء الفواتير المرتبطة بمهام مجمعة والمضمنة في العقود)
+  // إجمالي فواتير الطباعة (استثناء الفواتير المرتبطة بأوامر عمل والمضمنة في العقود)
   const compositeTaskInvoiceIds = new Set(compositeTasks.map((t) => t.combined_invoice_id).filter(Boolean));
   const totalPrintedInvoices = printedInvoices.reduce((sum, inv) => {
-    // استثناء فواتير المهام المجمعة
+    // استثناء فواتير أوامر العمل
     if (compositeTaskInvoiceIds.has(inv.id)) return sum;
     // ✅ استثناء الفواتير المضمنة في العقود
     if (inv.included_in_contract === true) return sum;
@@ -152,7 +152,7 @@ export const calculateTotalRemainingDebt = (
     return sum + val;
   }, 0);
 
-  // ✅ إجمالي المهام المجمعة (غير المنشأ لها فواتير)
+  // ✅ إجمالي أوامر العمل (غير المنشأ لها فواتير)
   const totalCompositeTasks = compositeTasks.reduce((sum, task) => {
     // إذا تم إنشاء فاتورة، يتم احتسابها من printed_invoices
     if (task.combined_invoice_id) return sum;
@@ -283,7 +283,7 @@ export const calculateTotalRemainingDebtExcludingFriendRentals = (
     0
   );
 
-  // إجمالي فواتير الطباعة (استثناء الفواتير المرتبطة بمهام مجمعة والمضمنة في العقود)
+  // إجمالي فواتير الطباعة (استثناء الفواتير المرتبطة بأوامر عمل والمضمنة في العقود)
   const compositeTaskInvoiceIds = new Set(compositeTasks.map((t) => t.combined_invoice_id).filter(Boolean));
   const totalPrintedInvoices = printedInvoices.reduce((sum, inv: any) => {
     if (compositeTaskInvoiceIds.has(inv.id)) return sum;
@@ -293,7 +293,7 @@ export const calculateTotalRemainingDebtExcludingFriendRentals = (
     return sum + val;
   }, 0);
 
-  // إجمالي المهام المجمعة (غير المنشأ لها فواتير)
+  // إجمالي أوامر العمل (غير المنشأ لها فواتير)
   const totalCompositeTasks = compositeTasks.reduce((sum, task) => {
     if (task.combined_invoice_id) return sum;
     return sum + (Number(task.customer_total) || 0);
@@ -498,7 +498,7 @@ export const translateInvoiceType = (type: string | null | undefined): string =>
     case 'cutout':
       return 'قص مجسمات';
     case 'composite_task':
-      return 'مهمة مجمعة';
+      return 'أمر عمل';
     default:
       return type;
   }

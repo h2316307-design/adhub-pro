@@ -105,13 +105,13 @@ export function SendInstallationReportDialog({
     const periodLabels = { week: 'أسبوع', two_weeks: 'أسبوعين', month: 'شهر' };
     const today = format(new Date(), 'yyyy/MM/dd');
 
-    let msg = `*تقرير مهام التركيب المكتملة خلال ${periodLabels[period]}*\n`;
+    let msg = `*تقرير أوامر التركيب المكتملة خلال ${periodLabels[period]}*\n`;
     msg += `تاريخ التقرير: ${today}\n`;
     msg += `إجمالي اللوحات المركبة: ${totalCompleted}\n`;
     msg += `---------------\n\n`;
 
     if (totalCompleted === 0) {
-      msg += `لا توجد مهام تركيب مكتملة خلال هذه الفترة`;
+      msg += `لا توجد أوامر تركيب مكتملة خلال هذه الفترة`;
     } else {
       const teamEntries = Object.values(groupedByTeam);
       teamEntries.forEach((group, gi) => {
@@ -192,7 +192,7 @@ export function SendInstallationReportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <FileText className="h-5 w-5 text-primary" />
-            إرسال تقرير مهام التركيب
+            إرسال تقرير أوامر التركيب
           </DialogTitle>
         </DialogHeader>
 

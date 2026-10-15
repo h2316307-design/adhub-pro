@@ -46,6 +46,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { toast } from 'sonner';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import { 
   getCalendarRetrySeconds,
   loadCalendarRecords,
@@ -55,6 +56,8 @@ import {
   buildContractDesignsMap,
   formatAlertTimeArabic,
   syncEventsToGoogleCalendar, 
+  filterChangedCalendarEvents,
+  resetCalendarSyncMemory,
   cleanOldGoogleCalendarEvents,
   sendTestGoogleCalendarAlert, 
   generateGoogleCalendarWebUrl, 
@@ -288,7 +291,7 @@ export default function GoogleCalendarSyncPage() {
     }
 
     // Determine upcoming events: if current filter is upcoming_only, use filteredEvents; otherwise filter directly to upcoming & month
-    const eventsToSync = typeof customStartIndex === 'number' && resumeState ? resumeState.events : scopeFilter === 'upcoming_only'
+    let eventsToSync = typeof customStartIndex === 'number' && resumeState ? resumeState.events : scopeFilter === 'upcoming_only'
       ? filteredEvents
       : events.filter(e => {
           const matchScope = e.isContractActive && !e.isOverdue;
@@ -302,6 +305,13 @@ export default function GoogleCalendarSyncPage() {
     }
 
     const startIndex = typeof customStartIndex === 'number' ? customStartIndex : 0;
+    // مزامنة تزايدية: أرسل الجديد والمتغير فقط (الاستئناف يكمل نفس القائمة)
+    if (startIndex === 0 && !(typeof customStartIndex === 'number' && resumeState)) {
+      const changed = filterChangedCalendarEvents(config, eventsToSync);
+      if (!changed.length) { toast.success('كل المواعيد محدّثة في تقويم Google — لا تغييرات منذ آخر مزامنة'); return; }
+      if (changed.length < eventsToSync.length) toast.info(`سيتم إرسال ${changed.length} موعداً جديداً أو متغيراً فقط من أصل ${eventsToSync.length}`);
+      eventsToSync = changed;
+    }
 
     try {
       setSyncingAll(true);
@@ -378,6 +388,7 @@ export default function GoogleCalendarSyncPage() {
     try {
       setCleaningOld(true);
       const res = await cleanOldGoogleCalendarEvents(config);
+      resetCalendarSyncMemory(config); // بعد التنظيف تُعاد مزامنة كل المواعيد في المرة القادمة
       toast.success(res.message);
     } catch (err: any) {
       toast.error('فشل تنظيف التقويم: ' + (err.message || 'خطأ غير متوقع'));
@@ -1678,46 +1689,7 @@ export default function GoogleCalendarSyncPage() {
       </Tabs>
 
       {/* Design Preview Dialog */}
-      <Dialog open={!!previewDesign} onOpenChange={open => !open && setPreviewDesign(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ImageIcon className="h-5 w-5 text-primary" />
-              {previewDesign?.title || 'معاينة التصميم الإعلاني'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center p-3 bg-muted/20 rounded-lg max-h-[70vh] overflow-hidden">
-            {previewDesign?.url && (
-              <img
-                src={previewDesign.url}
-                alt={previewDesign.title || 'تصميم'}
-                className="max-h-[65vh] w-auto object-contain rounded border shadow-sm"
-              />
-            )}
-          </div>
-          <DialogFooter className="flex sm:justify-between items-center gap-2">
-            {previewDesign?.url && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.open(previewDesign.url, '_blank')}
-                className="cursor-pointer gap-1.5 text-xs"
-              >
-                <ExternalLink className="h-3.5 w-3.5" />
-                فتح في نافذة جديدة
-              </Button>
-            )}
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => setPreviewDesign(null)}
-              className="cursor-pointer text-xs"
-            >
-              إغلاق
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {previewDesign && <ImageViewer images={[{ src: previewDesign.url }]} onClose={() => setPreviewDesign(null)} title="" />}
     </div>
   );
 }

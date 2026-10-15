@@ -10,6 +10,7 @@ export type OperationTaskLike = {
   reinstallationNumber?: number | null;
   _reinstallationNumber?: number | null;
   created_at?: string | null;
+  operation_id?: string | null;
 };
 
 export type InstallationCostItemLike = {
@@ -19,6 +20,21 @@ export type InstallationCostItemLike = {
 };
 
 export type CompositeTaskType = 'new_installation' | 'reinstallation';
+
+export const summarizeInstallationOperation = (tasks: Array<{
+  status?: string; customer_total?: number; _totalPaid?: number;
+}>) => {
+  const active = tasks.filter(task => task.status !== 'cancelled');
+  const status = active.length === 0 ? 'cancelled'
+    : active.every(task => task.status === 'completed') ? 'completed'
+      : active.some(task => task.status === 'in_progress' || task.status === 'completed') ? 'in_progress'
+        : 'pending';
+  return {
+    status,
+    total: tasks.reduce((sum, task) => sum + (Number(task.customer_total) || 0), 0),
+    paid: tasks.reduce((sum, task) => sum + (Number(task._totalPaid) || 0), 0),
+  };
+};
 
 export type SharedOperationCosts = {
   customerPrint: number;
@@ -77,9 +93,10 @@ export const getTaskReinstallationNumber = (task: OperationTaskLike): number | n
 
 /**
  * مفتاح تجميع المهام في البطاقات:
- * المهام المجمعة لعدة عقود تكون بطاقة مستقلة بذاتها ولاتنضوي تحت بطاقة عقد واحد محدد.
+ * أوامر العمل لعدة عقود تكون بطاقة مستقلة بذاتها ولاتنضوي تحت بطاقة عقد واحد محدد.
  */
 export const getTaskContractGroupKey = (task: OperationTaskLike): string => {
+  if (task.operation_id) return `operation-${task.operation_id}`;
   if (isMultiContractOperation(task)) {
     const contractIdentity = getOperationContractIds(task).join('-');
     const sequence = getTaskReinstallationNumber(task);
@@ -95,6 +112,7 @@ export const getTaskContractGroupKey = (task: OperationTaskLike): string => {
  * invoices must not combine unrelated operations that happened in the same week.
  */
 export const getCompositeTaskOperationKey = (task: OperationTaskLike): string => {
+  if (task.operation_id) return `operation:${task.operation_id}`;
   if (isMultiContractOperation(task)) {
     const contractIdentity = getOperationContractIds(task).join('-');
     const stableTaskId = task.installation_task_id || task.id || 'isolated';
@@ -117,7 +135,7 @@ export const getCompositeTaskOperationKey = (task: OperationTaskLike): string =>
 export const getOperationLabel = (task: OperationTaskLike): string => {
   const isMulti = isMultiContractOperation(task);
   if (!isReinstallationOperation(task)) {
-    return isMulti ? 'مهمة تركيب مجمعة لعدة عقود' : 'التركيب الأول';
+    return isMulti ? 'أمر تركيب مجمّع لعدة عقود' : 'التركيب الأول';
   }
   const sequence = getTaskReinstallationNumber(task);
   if (isMulti) {

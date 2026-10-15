@@ -139,7 +139,7 @@ export function TopOverduePayments() {
                 <div
                   key={`${payment.customerId}-${payment.contractNumber}`}
                   className="bg-card/50 border border-red-500/30 rounded-lg p-3 hover:bg-card/70 transition-colors cursor-pointer"
-                  onClick={() => navigate(`/admin/customer-billing?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`)}
+                  onClick={() => navigate(`/admin/customer-account?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`)}
                 >
                   <div className="flex items-start justify-between mb-2">
                     <Badge variant="destructive" className="text-xs">
@@ -174,7 +174,7 @@ export function TopOverduePayments() {
                     className="w-full mt-2 text-xs h-7"
                     onClick={(e) => {
                       e.stopPropagation();
-                      navigate(`/admin/customer-billing?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`);
+                      navigate(`/admin/customer-account?id=${payment.customerId}&name=${encodeURIComponent(payment.customerName)}`);
                     }}
                   >
                     عرض الفواتير

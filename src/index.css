@@ -4,6 +4,18 @@
 
 /* نظام التصميم - ذهبي احترافي */
 
+/* قيمة افتراضية لمتغير الخط حتى لا يصبح font-sans غير صالح قبل تحميل إعدادات المظهر (كان يسبب تبدّل الخطوط) */
+:root { --app-font-family: 'Doran', 'Cairo', 'Tajawal', sans-serif; }
+
+/* ✅ خط النظام Doran — تعريف عام ثابت (كان يُحمَّل فقط عند فتح صفحات طباعة معينة فيتغير خط الواجهة) */
+@font-face { font-family: 'Doran'; src: url('/Doran-Thin.otf') format('opentype'); font-weight: 100; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Doran'; src: url('/Doran-Light.otf') format('opentype'); font-weight: 300; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Doran'; src: url('/Doran-Regular.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Doran'; src: url('/Doran-Medium.otf') format('opentype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Doran'; src: url('/Doran-Bold.otf') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Doran'; src: url('/Doran-ExtraBold.otf') format('opentype'); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Doran'; src: url('/Doran-ExtraBold.otf') format('opentype'); font-weight: 900; font-style: normal; font-display: swap; }
+
 @layer base {
   :root {
     color-scheme: light;
@@ -167,7 +179,7 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Doran', 'Cairo', 'Tajawal', sans-serif;
+    font-family: var(--app-font-family, 'Doran', 'Cairo', 'Tajawal', sans-serif);
     font-size: 80%;
     height: 100%;
     /* ❗️ لا تضع overflow:hidden هنا — يتعارض مع Radix UI Dialog ويسبب التجميد */

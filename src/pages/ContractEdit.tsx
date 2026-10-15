@@ -900,7 +900,7 @@ export default function ContractEdit() {
             setBillboardDesigns([]);
           }
         }
-        // ✅ التصاميم المطبّقة في مهام تركيب هذا العقد (المهام المجمعة) تظهر في صفحة العقد — الأحدث لكل لوحة
+        // ✅ التصاميم المطبّقة في أوامر تركيب هذا العقد (أوامر العمل) تظهر في صفحة العقد — الأحدث لكل لوحة
         (async () => {
           try {
             const { data: tasks } = await supabase.from('installation_tasks').select('id').eq('contract_id', Number(contractNumber));
@@ -3292,13 +3292,19 @@ export default function ContractEdit() {
   useEffect(() => {
     if (!billboardBaseline || finalTotal <= 0) return;
     const prevTotal = syncedTotalRef.current ?? billboardBaseline.total;
-    if (pendingBillboardChanges) setBillboardBaseline({ ids: [...selected], total: finalTotal });
     syncedTotalRef.current = finalTotal;
     if (Math.abs(prevTotal - finalTotal) < 0.01) return;
     setInstallments((cur: any[]) => {
       if (!cur.length) return cur;
       const sum = cur.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-      if (Math.abs(sum - prevTotal) > 1) return cur;
+      // تمت مزامنتها مسبقاً (مثلاً وضع الدفعة الواحدة يعيد توليدها) — لا تُطبَّق الفروقات مرة ثانية
+      if (Math.abs(sum - finalTotal) <= 1) return cur;
+      // الدفعات المطابقة للإجمالي السابق تتبع الإجمالي الجديد بالتناسب
+      if (Math.abs(sum - prevTotal) <= 1) return rescaleInstallmentsToTotal(cur, finalTotal);
+      // دفعات معدّلة يدوياً: يُضاف فرق الإجمالي على آخر دفعة (أو تُعاد بالتناسب إن صارت سالبة) حتى يبقى المجموع صحيحاً
+      const delta = Math.round((finalTotal - prevTotal) * 100) / 100;
+      const last = Number(cur[cur.length - 1].amount || 0) + delta;
+      if (last >= 0) return cur.map((r: any, i: number) => i === cur.length - 1 ? { ...r, amount: Math.round(last * 100) / 100 } : r);
       return rescaleInstallmentsToTotal(cur, finalTotal);
     });
   }, [finalTotal, pendingBillboardChanges, billboardBaseline]);

@@ -36,7 +36,7 @@ export default function DelayedBillboards() {
   const fetchDelayedBillboards = async () => {
     setLoading(true);
     try {
-      // جلب عناصر مهام التركيب غير المكتملة مع بيانات اللوحات
+      // جلب عناصر أوامر التركيب غير المكتملة مع بيانات اللوحات
       const { data: taskItems, error } = await supabase
         .from('installation_task_items')
         .select(`

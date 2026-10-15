@@ -20,9 +20,9 @@ interface Notification {
 const categoryConfig: Record<string, { icon: typeof Bell; link: string; color: string; bg: string }> = {
   'دفعات متأخرة':      { icon: DollarSign,    link: '/admin/overdue-payments',      color: 'text-red-600 dark:text-red-400',        bg: 'bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-800/50' },
   'عقود تنتهي قريباً':  { icon: CalendarClock, link: '/admin/contracts',             color: 'text-amber-600 dark:text-amber-400',    bg: 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800/50' },
-  'مهام تركيب':        { icon: Wrench,         link: '/admin/installation-tasks',    color: 'text-blue-600 dark:text-blue-400',      bg: 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/50' },
+  'أوامر تركيب':        { icon: Wrench,         link: '/admin/installation-tasks',    color: 'text-blue-600 dark:text-blue-400',      bg: 'bg-blue-50 dark:bg-blue-950/40 border-blue-200 dark:border-blue-800/50' },
   'مهام إزالة':        { icon: Trash2,         link: '/admin/removal-tasks',         color: 'text-orange-600 dark:text-orange-400',  bg: 'bg-orange-50 dark:bg-orange-950/40 border-orange-200 dark:border-orange-800/50' },
-  'مهام مجمعة':        { icon: ClipboardList,  link: '/admin/composite-tasks',       color: 'text-indigo-600 dark:text-indigo-400',  bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/50' },
+  'أوامر عمل':        { icon: ClipboardList,  link: '/admin/composite-tasks',       color: 'text-indigo-600 dark:text-indigo-400',  bg: 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-200 dark:border-indigo-800/50' },
   'آخر الدفعات':       { icon: CreditCard,     link: '/admin/payments',              color: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/50' },
   'آخر الحركات':       { icon: Activity,       link: '/admin/activity-log',          color: 'text-cyan-600 dark:text-cyan-400',      bg: 'bg-cyan-50 dark:bg-cyan-950/40 border-cyan-200 dark:border-cyan-800/50' },
   'طلبات حجز':         { icon: BookOpen,       link: '/admin/booking-requests',      color: 'text-purple-600 dark:text-purple-400',  bg: 'bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-800/50' },
@@ -124,7 +124,7 @@ export function NotificationBar() {
       for (const t of compositeRes.data || []) {
         const adType = t.contract_id ? adTypeMap.get(t.contract_id) : '';
         const taskLabel = t.task_type === 'new_installation' ? 'تركيب جديد' : 'إعادة تركيب';
-        alerts.push({ id: `composite-${t.id}`, type: 'info', category: 'مهام مجمعة',
+        alerts.push({ id: `composite-${t.id}`, type: 'info', category: 'أوامر عمل',
           message: `عقد #${t.contract_id}${adType ? ` - ${adType}` : ''}`,
           details: [
             `مهمة: ${taskLabel}`,
@@ -135,7 +135,7 @@ export function NotificationBar() {
       }
       for (const t of installRes.data || []) {
         const adType = t.contract_id ? adTypeMap.get(t.contract_id) : '';
-        alerts.push({ id: `install-${t.id}`, type: 'info', category: 'مهام تركيب',
+        alerts.push({ id: `install-${t.id}`, type: 'info', category: 'أوامر تركيب',
           message: `عقد #${t.contract_id}`,
           details: [
             adType ? `نوع الإعلان: ${adType}` : '',

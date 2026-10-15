@@ -221,7 +221,7 @@ export function PrintedInvoiceEditDialog({
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Package className="h-5 w-5" />
-                  تفاصيل المهمة المجمعة
+                  تفاصيل أمر العمل
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">

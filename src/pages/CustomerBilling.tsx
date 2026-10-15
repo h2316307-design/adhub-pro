@@ -355,7 +355,7 @@ export default function CustomerBilling() {
         printedInvoicesData = [];
       }
 
-      // ✅ تحميل المهام المجمعة للزبون
+      // ✅ تحميل أوامر العمل للزبون
       let compositeTasksData: any[] = [];
       try {
         if (customerId) {
@@ -379,7 +379,7 @@ export default function CustomerBilling() {
       }
       setCompositeTasks(compositeTasksData || []);
 
-      // ✅ توحيد ومنع تكرار احتساب الطباعة عند وجود مهمة مجمعة
+      // ✅ توحيد ومنع تكرار احتساب الطباعة عند وجود أمر عمل
       try {
         if (!(customerType.supplierType === 'printer' && customerType.printerName)) {
           const printTasksRes = customerId 
@@ -725,7 +725,7 @@ export default function CustomerBilling() {
     payments.filter(p => p.entry_type === 'general_credit')
   , [payments]);
   
-  // ✅ FIXED: تضمين فواتير الطباعة والواردات العامة والمهام المجمعة في الحسابات المدينة
+  // ✅ FIXED: تضمين فواتير الطباعة والواردات العامة وأوامر العمل في الحسابات المدينة
   const totalDebits = useMemo(() => {
     let totalDebit = totalRent;
 
@@ -739,7 +739,7 @@ export default function CustomerBilling() {
       }
     });
 
-    // ✅ إضافة فواتير الطباعة (استثناء فواتير المهام المجمعة وفواتير print_tasks المرتبطة بمهام مجمعة)
+    // ✅ إضافة فواتير الطباعة (استثناء فواتير أوامر العمل وفواتير print_tasks المرتبطة بأوامر عمل)
     const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(printedInvoices, compositeTasks, printTasks, cutoutTasks);
     billablePrintedInvoices.forEach(invoice => {
       if ((invoice as any).included_in_contract === true) return;
@@ -753,7 +753,7 @@ export default function CustomerBilling() {
       totalDebit += totalAmount;
     });
 
-    // ✅ إضافة المهام المجمعة (غير المنشأ لها فواتير)
+    // ✅ إضافة أوامر العمل (غير المنشأ لها فواتير)
     compositeTasks.forEach(task => {
       if (task.combined_invoice_id) return; // إذا تم إنشاء فاتورة، يتم احتسابها من printed_invoices
       const totalAmount = Number(task.customer_total) || 0;
@@ -809,7 +809,7 @@ export default function CustomerBilling() {
     return sum;
   }, [salesInvoices]);
 
-  // ✅ حساب إجمالي فواتير الطباعة (مع استثناء فواتير المهام المجمعة والمضمنة في العقود)
+  // ✅ حساب إجمالي فواتير الطباعة (مع استثناء فواتير أوامر العمل والمضمنة في العقود)
   const totalPrintedInvoices = useMemo(() => {
     const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(printedInvoices, compositeTasks, printTasks, cutoutTasks);
     const sum = billablePrintedInvoices.reduce((sum, invoice) => {
@@ -819,7 +819,7 @@ export default function CustomerBilling() {
     return sum;
   }, [printedInvoices, compositeTasks, printTasks, cutoutTasks]);
 
-  // ✅ حساب إجمالي المهام المجمعة (غير المنشأ لها فواتير)
+  // ✅ حساب إجمالي أوامر العمل (غير المنشأ لها فواتير)
   const totalCompositeTasks = useMemo(() => {
     const sum = compositeTasks.reduce((sum, task) => {
       // إذا تم إنشاء فاتورة، يتم احتسابها من printed_invoices
@@ -1231,7 +1231,7 @@ export default function CustomerBilling() {
           }
         }
 
-        // 4. تحديث المهمة المجمعة المرتبطة
+        // 4. تحديث أمر العمل المرتبط
         if (payment.composite_task_id) {
           const { data: task } = await supabase
             .from('composite_tasks')
@@ -1473,7 +1473,7 @@ export default function CustomerBilling() {
           }
         }
 
-        // 8. تحديث المهام المجمعة المرتبطة (composite_tasks.paid_amount)
+        // 8. تحديث أوامر العمل المرتبطة (composite_tasks.paid_amount)
         const compositeTaskIds = new Set<string>();
         paymentsToDelete.forEach(p => {
           if (p.composite_task_id) compositeTaskIds.add(p.composite_task_id);
@@ -2259,7 +2259,7 @@ export default function CustomerBilling() {
                 <Layers className="h-6 w-6 text-amber-500" />
               </div>
               <div>
-                <CardTitle className="text-xl font-bold text-white">المهام المجمعة (تركيب + طباعة + قص)</CardTitle>
+                <CardTitle className="text-xl font-bold text-white">أوامر العمل (تركيب + طباعة + قص)</CardTitle>
                 <p className="text-white/70 text-sm mt-0.5">المهام الفنية والتشغيلية المجمعة للعميل</p>
               </div>
             </div>

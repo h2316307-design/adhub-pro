@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 import { MapPin, Calendar, Ruler, ImageIcon, Maximize2, Edit2, X, Check } from 'lucide-react';
 
@@ -269,21 +270,10 @@ export default function TeamBillboardCard({
         </CardContent>
       </Card>
 
-      {/* Image Preview Dialog */}
-      <Dialog open={imagePreviewOpen} onOpenChange={setImagePreviewOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle>{previewImageTitle}</DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center">
-            <img 
-              src={previewImageUrl} 
-              alt={previewImageTitle}
-              className="max-w-full max-h-[70vh] object-contain rounded-lg"
-            />
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Image Preview */}
+      {imagePreviewOpen && previewImageUrl && (
+        <ImageViewer images={[{ src: previewImageUrl, label: previewImageTitle }]} onClose={() => setImagePreviewOpen(false)} />
+      )}
     </>
   );
 }

@@ -1,7 +1,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { normalizeContractId, parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 
-/** عقد داخل مهمة تركيب مع لوحاته الفعلية في المهمة */
+/** عقد داخل أمر تركيب مع لوحاته الفعلية في المهمة */
 export interface TaskContractInfo {
   contractId: number;
   adType: string;
@@ -113,7 +113,7 @@ async function loadCustomerContracts(baseContractId: number | null, customerName
 }
 
 /**
- * يحدد عقود مهمة التركيب من لوحاتها الفعلية، ويحفظها في المهمة والمهمة المجمعة عند اختلافها،
+ * يحدد عقود أمر التركيب من لوحاتها الفعلية، ويحفظها في المهمة وأمر العمل عند اختلافها،
  * ويحدّث الاسم إن كان مولَّداً تلقائياً. لا يلمس المهام ذات العقد الواحد التي لم تتغير.
  */
 export async function syncInstallationTaskContracts(taskId: string): Promise<{

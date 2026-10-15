@@ -249,7 +249,7 @@ export function UnifiedTaskInvoice({
           await supabase.from('customer_payments')
             .update({
               amount: -customerTotal,
-              notes: `مهمة مجمعة - عقد #${t.contract_id} (معاد حسابها)`
+              notes: `أمر عمل - عقد #${t.contract_id} (معاد حسابها)`
             })
             .eq('printed_invoice_id', t.combined_invoice_id)
             .eq('entry_type', 'invoice');
@@ -277,7 +277,8 @@ export function UnifiedTaskInvoice({
   const [showCosts, setShowCosts] = useState(true);
   const [showPriceDetails, setShowPriceDetails] = useState(true);
   const [data, setData] = useState<typeof invoiceData>(invoiceData);
-  const [displayMode, setDisplayMode] = useState<'detailed' | 'summary'>('detailed');
+  // عرض واحد للفاتورة: الجدول الكامل، ومفتاح «تفصيل الطباعة والتركيب» يحدد إظهار أعمدة الخدمات أو الإجمالي فقط
+  const displayMode = 'detailed' as 'detailed' | 'summary';
   const [separateFaces, setSeparateFaces] = useState(true);
   const [contractIds, setContractIds] = useState<number[]>(() => {
     const rawIds = (task as any)._contractIds || (task as any).contractIds || (task as any).contract_ids || (task.contract_id ? [task.contract_id] : []);
@@ -329,7 +330,7 @@ export function UnifiedTaskInvoice({
           })
         )].map(Number).filter(Boolean) as number[];
 
-        // جلب contract_ids من جدول مهام التركيب مباشرة
+        // جلب contract_ids من جدول أوامر التركيب مباشرة
         if (allInstallTaskIdsForContracts.length > 0) {
           const { data: installTasksData } = await supabase
             .from('installation_tasks')
@@ -1229,7 +1230,7 @@ export function UnifiedTaskInvoice({
 
             pricePerMeter = totalAreaForPriceRate > 0 ? aggCustomerPrint / totalAreaForPriceRate : 0;
 
-            // ✅ بناء فهرس المهام المجمعة حسب installation_task_id لربط كل عنصر بمهمته الأصلية
+            // ✅ بناء فهرس أوامر العمل حسب installation_task_id لربط كل عنصر بمهمته الأصلية
             const taskByInstallId = new Map<string, any>();
             allTasks.forEach((t: any) => {
               if (t.installation_task_id) taskByInstallId.set(t.installation_task_id, t);
@@ -1357,6 +1358,10 @@ export function UnifiedTaskInvoice({
 
 
 
+            // سعر متر طباعة واحد للعملية كلها: الطباعة تكلفة مشتركة محفوظة على مهمة واحدة،
+            // فتوزيعها لكل فرقة على حدة كان يضاعف طباعة لوحات الفرق الأخرى
+            const operationPrintedArea = Array.from(perTaskAggMap.values()).reduce((s, a) => s + (a.printedArea || 0), 0);
+            const operationPrintRate = aggCustomerPrint > 0 && operationPrintedArea > 0 ? aggCustomerPrint / operationPrintedArea : 0;
             // إضافة كل عنصر كصف في الفاتورة
             installItems.forEach((item: any) => {
               const billboardSize = item.billboard?.Size;
@@ -1408,7 +1413,7 @@ export function UnifiedTaskInvoice({
                 item.include_in_print !== false &&
                 (allPrintIds.length === 0 || printedBillboardIds.has(Number(billboardId)))
               );
-              const printCostPerFace = isBillboardPrinted ? (areaPerFace * (taskPricePerMeter || pricePerMeter)) : 0;
+              const printCostPerFace = isBillboardPrinted ? (areaPerFace * operationPrintRate) : 0;
 
               const hasStoredCustomerCost = item.customer_installation_cost !== null && item.customer_installation_cost !== undefined;
               let actualItemInstallCost = 0;
@@ -1467,7 +1472,7 @@ export function UnifiedTaskInvoice({
                 // احتساب تكلفة الوجه الواحد لكل دورة تركيب
                 const installCostPerFacePerIteration = actualItemInstallCost > 0
                   ? (actualItemInstallCost / (operationFacesCount * iterationsCount))
-                  : (areaPerFace * (taskPricePerMeter || 10));
+                  : 0;
                 const cutoutCostPerFace = hasCutout ? (taskCutoutCostPerBillboard / (operationFacesCount * iterationsCount)) : 0;
 
                 for (let r = 1; r <= iterationsCount; r++) {
@@ -2087,6 +2092,21 @@ export function UnifiedTaskInvoice({
       --invoice-muted: ${customerText};
       --invoice-line: ${tableBorder};
     }
+    [data-invoice-print] .u-invoice-details > div {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      align-items: baseline;
+      gap: 8px;
+      line-height: 1.6;
+    }
+    [data-invoice-print] .u-invoice-details > div > span {
+      white-space: nowrap;
+      margin: 0;
+    }
+    [data-invoice-print] .u-invoice-details strong {
+      overflow-wrap: anywhere;
+      min-width: 0;
+    }
     [data-invoice-print] .invoice-recipient-card {
       display: grid !important;
       grid-template-columns: minmax(0, 1fr) auto !important;
@@ -2166,27 +2186,45 @@ export function UnifiedTaskInvoice({
       font-size: 8.5px !important;
       font-weight: 700 !important;
     }
+    [data-invoice-print] .invoice-item-note {
+      display: inline;
+      background: transparent;
+      border: none;
+      border-radius: 0;
+      padding: 0;
+      color: #525252;
+      font-size: 9px;
+      font-weight: 400;
+      line-height: 1.6;
+    }
     [data-invoice-print] .invoice-items-table {
       table-layout: fixed;
       width: 100%;
       border: 1px solid var(--invoice-line) !important;
-      border-top: 3px solid var(--invoice-gold) !important;
-      margin-bottom: 8px !important;
+      border-top: 2px solid var(--invoice-gold) !important;
+      margin-bottom: 16px !important;
     }
     [data-invoice-print] .invoice-detail-table th,
     [data-invoice-print] .invoice-detail-table td { width: auto !important; }
+    [data-invoice-print] .invoice-detail-table th,
+    [data-invoice-print] .invoice-detail-table td {
+      border-left: 0 !important;
+      border-right: 0 !important;
+    }
     [data-invoice-print] .invoice-items-table thead th {
-      padding: 6px 3px !important;
+      padding: 9px 4px !important;
       border-color: ${tableBorder} !important;
       font-size: 9px !important;
-      line-height: 1.35 !important;
+      line-height: 1.5 !important;
       font-weight: 700 !important;
     }
     [data-invoice-print] .invoice-items-table tbody td {
       min-width: 0;
       overflow-wrap: anywhere;
       border-color: var(--invoice-line) !important;
-      line-height: 1.35 !important;
+      line-height: 1.6 !important;
+      padding: 6px 4px !important;
+      vertical-align: middle;
     }
     [data-invoice-print] .invoice-items-table tbody tr:nth-child(even) td {
       background-color: ${tableRowEven} !important;
@@ -2194,6 +2232,27 @@ export function UnifiedTaskInvoice({
     [data-invoice-print] .invoice-items-table tbody tr:nth-child(odd) td {
       background-color: ${tableRowOdd} !important;
     }
+    [data-invoice-print] .invoice-detail-table > tbody:nth-of-type(odd) > tr > td {
+      background-color: ${tableRowOdd} !important;
+    }
+    [data-invoice-print] .invoice-detail-table > tbody:nth-of-type(even) > tr > td {
+      background-color: ${tableRowEven} !important;
+    }
+    [data-invoice-print] .invoice-detail-table > tbody > tr:first-child > td {
+      border-top: 1.5px solid ${tableBorder} !important;
+    }
+    [data-invoice-print] .invoice-section-heading {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      margin: 14px 0 8px;
+      break-after: avoid;
+      page-break-after: avoid;
+      color: ${customerText};
+    }
+    [data-invoice-print] .invoice-section-heading strong { font-size: 13px; }
+    [data-invoice-print] .invoice-section-heading span { font-size: 10px; }
     [data-invoice-print] .invoice-items-table td img {
       border-radius: 5px !important;
     }
@@ -2206,8 +2265,8 @@ export function UnifiedTaskInvoice({
       color: #262626 !important;
       font-size: 12px !important;
     }
-    [data-invoice-print] table tfoot tr,
-    [data-invoice-print] table tfoot td {
+    [data-invoice-print] .invoice-items-table > tfoot tr,
+    [data-invoice-print] .invoice-items-table > tfoot td {
       background: #ffffff !important;
       color: #262626 !important;
       border-top: 1px solid ${tableBorder} !important;
@@ -2217,7 +2276,61 @@ export function UnifiedTaskInvoice({
       border-top: 3px solid var(--invoice-gold) !important;
       border-radius: 6px !important;
       box-shadow: none !important;
+      padding: 14px 18px !important;
+      margin: 16px 0 !important;
     }
+    [data-task-invoice-footer] {
+      border-top: 1px solid ${tableBorder} !important;
+      padding: 10px 14px 8px !important;
+      margin: 12px 0 0 !important;
+      font-size: 11.5px !important;
+      line-height: 1.8 !important;
+      color: ${footerTextColor};
+      background: #fff !important;
+      font-family: '${shared.fontFamily || 'Doran'}', Arial, sans-serif;
+      box-sizing: border-box;
+      direction: rtl;
+    }
+    [data-task-invoice-footer] .u-footer-contacts {
+      width: 100%;
+      display: grid !important;
+      grid-template-columns: auto minmax(0, 1fr);
+      justify-content: space-between !important;
+      align-items: center;
+      column-gap: 28px !important;
+      row-gap: 6px !important;
+    }
+    [data-task-invoice-footer] .u-footer-contacts > span[aria-hidden] { display: none; }
+    [data-task-invoice-footer] .u-footer-contact {
+      display: inline-flex !important;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      overflow-wrap: anywhere;
+    }
+    [data-task-invoice-footer] .u-footer-contact:nth-of-type(4n + 3) {
+      justify-self: end;
+      text-align: left;
+    }
+    [data-task-invoice-footer] .u-footer-contact:first-child bdi { font-weight: 700; }
+    [data-task-invoice-footer] .u-footer-contact svg { flex-shrink: 0; align-self: center; }
+    [data-invoice-print] .u-closing-message {
+      font-size: 10px !important;
+      padding: 8px 0 !important;
+    }
+    /* Financial totals belong at the end, not in the repeating page footer. */
+    [data-invoice-print] table:not(.print-pagination-shell) > tfoot {
+      display: table-row-group !important;
+    }
+    [data-invoice-print] .print-shell-footer-cell {
+      border: 0 !important;
+    }
+    [data-invoice-print] table.print-pagination-shell > tbody > tr,
+    [data-invoice-print] table.print-pagination-shell > tbody > tr > td {
+      break-inside: auto !important;
+      page-break-inside: auto !important;
+    }
+    .print-fixed-footer { display: none; }
     @media print {
       [data-invoice-print] .invoice-recipient-card,
       [data-invoice-print] .invoice-size-summary,
@@ -2226,6 +2339,10 @@ export function UnifiedTaskInvoice({
       }
     }
   `;
+
+  const buildTaskFooterHtml = () => unifiedFooterHtml({
+    ...unifiedStyles, footerText: '', showPageNumber: false,
+  }).replace('class="u-footer"', 'class="u-footer" data-task-invoice-footer');
 
   const buildPrintableHtml = () => {
     if (!printRef.current) return '';
@@ -2350,6 +2467,7 @@ export function UnifiedTaskInvoice({
     table.print-pagination-shell > thead { display: table-row-group !important; }
 
     /* الفوتر ثابت أسفل كل صفحة: نسخة ثابتة مرئية + مساحة محجوزة غير مرئية في tfoot حتى لا يغطي المحتوى */
+    /* فوتر واحد يتكرر أسفل كل صفحة (بيانات التواصل)؛ ترقيم الصفحات يضيفه محرك الطباعة/PDF */
     table.print-pagination-shell > tfoot .u-footer { visibility: hidden !important; margin-bottom: 0 !important; }
     .print-fixed-footer {
       display: block !important;
@@ -2369,7 +2487,6 @@ export function UnifiedTaskInvoice({
 <div class="paper print-container" data-page-title="${getInvoiceTitle() || 'فاتورة المهمة'}" data-invoice-print>
   ${printContent}
 </div>
-<div class="print-fixed-footer" aria-hidden="true">${unifiedFooterHtml({ ...unifiedStyles, footerText: '' } as any)}</div>
 </body>
 </html>`;
   };
@@ -2592,22 +2709,24 @@ export function UnifiedTaskInvoice({
   };
   const taskSymbols = allTasks.map(buildTaskSymbol);
   const taskSymbolDisplay = taskSymbols.join(' , ');
+  // Keep lengthy campaign lists out of the header and contract badges.
+  const showAdType = adType.trim().length > 0 && adType.trim().length <= 60;
 
   const taskTypeDetailedLabel = hasReinstallation && hasNewInstallation
     ? `تركيب جديد + إعادة تركيب ${reinstallIcon}`
     : hasReinstallation
-      ? (contractIds.length > 1 ? `إعادة تركيب (مهمة مجمعة) ${reinstallIcon}` : `إعادة تركيب ${reinstallIcon}`)
-      : (contractIds.length > 1 ? `تركيب جديد (مهمة مجمعة) ${newInstallIcon}` : `تركيب جديد ${newInstallIcon}`);
+      ? (contractIds.length > 1 ? `إعادة تركيب (عدة عقود) ${reinstallIcon}` : `إعادة تركيب ${reinstallIcon}`)
+      : (contractIds.length > 1 ? `تركيب جديد (عدة عقود) ${newInstallIcon}` : `تركيب جديد ${newInstallIcon}`);
 
   const metaLinesHtml = `
     <div><span>التاريخ</span><strong>${formatDateForPrint(task.created_at, mergedStyles?.showHijriDate ?? false)}</strong></div>
-    <div><span>${contractIds.length > 1 ? 'أرقام العقود (مهمة مجمعة)' : 'رقم العقد'}</span><strong>${contractIds.length > 1
+    <div><span>${contractIds.length > 1 ? 'أرقام العقود' : 'رقم العقد'}</span><strong>${contractIds.length > 1
       ? contractIds.map(id => `#${id}`).join('، ')
       : `#${contractIds[0] ?? task.contract_id ?? ''}`
     }</strong></div>
     <div><span>رمز المهمة</span><strong>${taskSymbolDisplay}</strong></div>
-    ${adType ? `<div><span>نوع الإعلان</span><strong>${adType}</strong></div>` : ''}
-    <div><span>نوع المهمة</span><strong>${taskTypeDetailedLabel}</strong></div>
+    ${showAdType ? `<div><span>نوع الإعلان</span><strong>${adType}</strong></div>` : ''}
+    <div><span>نوع العمل</span><strong>${taskTypeDetailedLabel}</strong></div>
   `;
 
   if (isLoading) {
@@ -2691,26 +2810,6 @@ export function UnifiedTaskInvoice({
               {/* زر التبديل بين العرض التفصيلي والمجمّع - لفاتورة الزبون فقط */}
               {invoiceType === 'customer' && (
                 <>
-                  <div className="flex h-10 shrink-0 items-center gap-1 rounded-xl border border-border/35 bg-muted/50 p-1">
-                    <Button
-                      variant={displayMode === 'detailed' ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={() => setDisplayMode('detailed')}
-                      className="h-8 cursor-pointer gap-1 text-xs transition-all duration-200"
-                    >
-                      <Eye className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden sm:inline">تفصيلي</span>
-                    </Button>
-                    <Button
-                      variant={displayMode === 'summary' ? 'default' : 'ghost'}
-                      size="sm"
-                      onClick={() => setDisplayMode('summary')}
-                      className="h-8 cursor-pointer gap-1 text-xs transition-all duration-200"
-                    >
-                      <EyeOff className="h-3 w-3 sm:h-4 sm:w-4" />
-                      <span className="hidden sm:inline">مجمّع</span>
-                    </Button>
-                  </div>
                   <div className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/35 bg-background/60 px-2.5">
                     <Switch
                       id={`${controlId}-showServiceBreakdown`}
@@ -2800,7 +2899,7 @@ export function UnifiedTaskInvoice({
                   </Label>
                 </div>
               )}
-              {/* زر إظهار/إخفاء تفصيل المهام المجمعة */}
+              {/* زر إظهار/إخفاء تفصيل أوامر العمل */}
               {isGroupInvoice && invoiceType === 'customer' && (
                 <div className="flex h-10 shrink-0 items-center gap-1.5 rounded-xl border border-border/35 bg-background/60 px-2.5">
                   <Switch
@@ -3073,7 +3172,7 @@ export function UnifiedTaskInvoice({
                           fontWeight: 'bold',
                           color: '#334155'
                         }}>
-                          عقد #{cid}{contractAdTypesMap[cid] ? `: ${contractAdTypesMap[cid]}` : ''}
+                          عقد #{cid}{showAdType && contractAdTypesMap[cid] ? `: ${contractAdTypesMap[cid]}` : ''}
                         </span>
                       ))}
                     </div>
@@ -3171,15 +3270,7 @@ export function UnifiedTaskInvoice({
                         </span>
                       ))}
                       {totalCutouts > 0 && (
-                        <span style={{
-                          background: '#fff3cd',
-                          padding: '4px 8px',
-                          borderRadius: '6px',
-                          fontSize: '11px',
-                          color: '#856404',
-                          border: '1px solid #ffc107',
-                          fontWeight: 'bold',
-                        }}>
+                        <span className="invoice-item-note">
                           {totalCutouts} مجسم
                         </span>
                       )}
@@ -3188,6 +3279,10 @@ export function UnifiedTaskInvoice({
                 );
               })()}
 
+              <div className="invoice-section-heading">
+                <strong>{displayMode === 'summary' && invoiceType === 'customer' ? 'ملخص الأعمال' : 'تفاصيل الأعمال'}</strong>
+                <span>{data?.items?.length || 0} وجه{showCosts ? ' · القيم بالدينار الليبي' : ''}</span>
+              </div>
               {/* Items Table - يظهر فقط في العرض التفصيلي أو لغير فواتير الزبون */}
               {(displayMode === 'detailed' || invoiceType !== 'customer') && (() => {
                 const isCustomerLike = invoiceType === 'customer' || invoiceType === 'installation_team';
@@ -3209,14 +3304,20 @@ export function UnifiedTaskInvoice({
                   const total = installItems.reduce((s, it) => s + (it.installationCost || 0), 0);
                   return total / installItems.length;
                 })();
+                // سعر متر التركيب الفعلي = إجمالي تركيب البنود ÷ مساحتها (التسعير الافتراضي بالمتر)
+                const installPerMeter = (() => {
+                  const installItems = (data?.items || []).filter(it => (it.installationCost || 0) > 0 && (it.area || 0) > 0);
+                  const area = installItems.reduce((s, it) => s + (it.area || 0), 0);
+                  return area > 0 ? installItems.reduce((s, it) => s + (it.installationCost || 0), 0) / area : 0;
+                })();
 
                 const costColumnCount = !showCosts ? 0 :
                   isCustomerLike && (invoiceType !== 'customer' || showServiceBreakdown)
                     ? 1 + Number(hasPrintCost) + Number(hasInstallCost) + Number(hasCutoutCost)
                     : 1;
-                const columnWeights = [3.5, ...(isCustomerLike ? [14] : []), 11,
-                  ...(isCustomerLike ? [20] : []), 10,
-                  8, 11, 8.5, ...Array(costColumnCount).fill(12)];
+                const columnWeights = [3.5, ...(isCustomerLike ? [16] : []), 14,
+                  ...(isCustomerLike ? [21] : []), 10,
+                  7, 16, 10, ...Array(costColumnCount).fill(12)];
                 const columnWeightTotal = columnWeights.reduce((sum, weight) => sum + weight, 0);
 
                 return (
@@ -3251,7 +3352,9 @@ export function UnifiedTaskInvoice({
                             {hasInstallCost && (
                               <th style={{ padding: '7px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', backgroundColor: tableHeaderBg, fontSize: '10px', fontWeight: 'bold' }}>
                                 التركيب
-                                {showPriceDetails && installUnitPrice > 0 && <div style={{ fontSize: '7.5px', opacity: 0.85 }}>({installUnitPrice.toFixed(2)} د.ل/وجه)</div>}
+                                {showPriceDetails && (installPerMeter > 0
+                                  ? <div style={{ fontSize: '7.5px', opacity: 0.85 }}>({installPerMeter.toFixed(2)} د.ل/م²)</div>
+                                  : installUnitPrice > 0 && <div style={{ fontSize: '7.5px', opacity: 0.85 }}>({installUnitPrice.toFixed(2)} د.ل/وجه)</div>)}
                               </th>
                             )}
                             {hasCutoutCost && (
@@ -3261,7 +3364,10 @@ export function UnifiedTaskInvoice({
                           </>
                         )}
                         {invoiceType === 'customer' && showCosts && !showServiceBreakdown && (
-                          <th style={{ padding: '7px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', backgroundColor: tableHeaderBg, fontSize: '10px', fontWeight: 'bold' }}>الإجمالي</th>
+                          <th style={{ padding: '7px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', backgroundColor: tableHeaderBg, fontSize: '10px', fontWeight: 'bold' }}>
+                            الإجمالي
+                            {totalArea > 0 && dynamicTotal > 0 && <div style={{ fontSize: '7.5px', opacity: 0.85 }}>({(dynamicTotal / totalArea).toFixed(2)} د.ل/م²)</div>}
+                          </th>
                         )}
                         {!isCustomerLike && showCosts && (
                           <th style={{ padding: '7px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', fontSize: '10px', fontWeight: 'bold' }}>
@@ -3373,20 +3479,17 @@ export function UnifiedTaskInvoice({
                                   {/* اسم اللوحة - يُدمج للوحات ذات الوجهين */}
                                   {isFirst && (
                                     <td rowSpan={faceCount} data-no-break style={{ padding: '4px 3px', border: `1px solid ${tableBorder}`, textAlign: 'center', fontWeight: 'bold', fontSize: '10px', verticalAlign: 'middle', overflow: 'visible', whiteSpace: 'normal', wordBreak: 'break-word' }}>
+                                      {/* المقاس ونوع اللوحة فوق الاسم */}
+                                      {(item.sizeName || item.billboardType) && (
+                                        <div style={{ fontSize: '8.5px', fontWeight: 600, color: '#475569', marginBottom: '2px', lineHeight: 1.25 }}>
+                                          {[cleanReprintLabel(item.sizeName || '').replace(' (مجسم)', ''), item.billboardType].filter(Boolean).join(' · ')}
+                                        </div>
+                                      )}
                                       <div>{cleanReprintLabel(item.billboardName || '-')}</div>
-                                      {/* رقم العقد للوحة في المهام المجمعة */}
+                                      {/* رقم العقد للوحة في أوامر العمل */}
                                       {contractIds.length > 1 && item.contractNumber && (
                                         <div style={{ marginTop: '2px' }}>
-                                          <span style={{
-                                            background: '#f1f5f9',
-                                            color: '#334155',
-                                            padding: '1px 5px',
-                                            borderRadius: '3px',
-                                            fontSize: '7.5px',
-                                            fontWeight: 'bold',
-                                            border: '1px solid #cbd5e1',
-                                            display: 'inline-block',
-                                          }}>
+                                          <span className="invoice-item-note">
                                             عقد #{item.contractNumber}
                                           </span>
                                         </div>
@@ -3394,16 +3497,7 @@ export function UnifiedTaskInvoice({
                                       {/* علامة التركيب الأصلي */}
                                       {item.isOriginalInstallation && (
                                         <div style={{ marginTop: '3px' }}>
-                                          <span style={{
-                                            background: '#f0fdf4',
-                                            color: '#15803d',
-                                            padding: '2px 5px',
-                                            borderRadius: '3px',
-                                            fontSize: '8px',
-                                            fontWeight: 'bold',
-                                            border: '1px solid #bbf7d0',
-                                            display: 'inline-block',
-                                          }}>
+                                          <span className="invoice-item-note">
                                             تركيب أصلي
                                           </span>
                                         </div>
@@ -3411,36 +3505,14 @@ export function UnifiedTaskInvoice({
                                       {/* شارة إعادة التركيب تحت اسم اللوحة */}
                                       {item.isReinstallation && (
                                         <div style={{ marginTop: '3px' }}>
-                                          <span style={{
-                                            background: '#fff7ed',
-                                            color: '#c2410c',
-                                            padding: '2px 5px',
-                                            borderRadius: '3px',
-                                            fontSize: '8px',
-                                            fontWeight: 'bold',
-                                            border: '1px solid #fed7aa',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '2px',
-                                          }}>
+                                          <span className="invoice-item-note">
                                             إعادة تركيب {item.reinstallSeq ? `(${item.reinstallSeq})` : ''}
                                           </span>
                                         </div>
                                       )}
                                       {item.isReplacement && (
                                         <div style={{ marginTop: '3px' }}>
-                                          <span style={{
-                                            background: '#e8f5e9',
-                                            color: '#2e7d32',
-                                            padding: '2px 5px',
-                                            borderRadius: '3px',
-                                            fontSize: '8px',
-                                            fontWeight: 'bold',
-                                            border: '1px solid #a5d6a7',
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: '2px',
-                                          }}>
+                                          <span className="invoice-item-note">
                                             لوحة بديلة
                                           </span>
                                         </div>
@@ -3468,16 +3540,7 @@ export function UnifiedTaskInvoice({
                                       {/* شارة مجسم تحت المقاس عند وجود قص */}
                                       {item.sizeName.includes('(مجسم)') && (
                                         <div style={{ marginBottom: '3px' }}>
-                                          <span style={{
-                                            background: '#fff3cd',
-                                            color: '#856404',
-                                            padding: '2px 5px',
-                                            borderRadius: '3px',
-                                            fontSize: '8px',
-                                            fontWeight: 'bold',
-                                            border: '1px solid #ffc107',
-                                            display: 'inline-block',
-                                          }}>مجسم</span>
+                                          <span className="invoice-item-note">مجسم</span>
                                         </div>
                                       )}
                                       {/* إظهار نوع اللوحة تحت المقاس */}
@@ -3739,7 +3802,7 @@ export function UnifiedTaskInvoice({
                         <th style={{ padding: '6px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', fontSize: '9px', width: '14%' }}>التصميم</th>
                         <th style={{ padding: '6px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', fontSize: '9px' }}>المقاس</th>
                         <th style={{ padding: '6px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', fontSize: '9px' }}>المساحة</th>
-                        <th style={{ padding: '6px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', fontSize: '9px', width: '12%' }}>الإجمالي</th>
+                        <th style={{ padding: '6px 4px', color: tableHeaderText, border: `1px solid ${tableBorder}`, textAlign: 'center', fontSize: '9px', width: '12%' }}>الإجمالي{(() => { const area = (data?.items || []).reduce((s, it) => s + (it.area || 0), 0); return area > 0 && dynamicTotal > 0 ? <div style={{ fontSize: '7.5px', opacity: 0.85 }}>({(dynamicTotal / area).toFixed(2)} د.ل/م²)</div> : null; })()}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3803,14 +3866,14 @@ export function UnifiedTaskInvoice({
                                   <div>{cleanReprintLabel(item.billboardName || '-')}</div>
                                   {item.isReinstallation && (
                                     <div style={{ marginTop: '2px' }}>
-                                      <span style={{ background: '#fff3e0', color: '#e65100', padding: '1px 4px', borderRadius: '3px', fontSize: '7px', fontWeight: 'bold', border: '1px solid #ffcc80' }}>
+                                      <span className="invoice-item-note">
                                         إعادة تركيب ({item.reinstallCount})
                                       </span>
                                     </div>
                                   )}
                                   {item.isReplacement && (
                                     <div style={{ marginTop: '2px' }}>
-                                      <span style={{ background: '#e8f5e9', color: '#2e7d32', padding: '1px 4px', borderRadius: '3px', fontSize: '7px', fontWeight: 'bold', border: '1px solid #a5d6a7' }}>
+                                      <span className="invoice-item-note">
                                         لوحة بديلة
                                       </span>
                                     </div>
@@ -3923,7 +3986,7 @@ export function UnifiedTaskInvoice({
                   overflow: 'hidden',
                 }}>
                   <div style={{ background: tableHeaderBg, padding: '8px 12px', textAlign: 'center', color: tableHeaderText, fontSize: '12px', fontWeight: 'bold' }}>
-                    تفصيل المهام المجمعة ({allTasks.length} مهام)
+                    تفصيل أوامر العمل ({allTasks.length} مهام)
                   </div>
                   <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
                     <thead>
@@ -3964,7 +4027,7 @@ export function UnifiedTaskInvoice({
                 </div>
               )}
 
-              {/* Total Section - يظهر فقط عند وجود تفاصيل خصم أو توزيع تكاليف أو مهام مجمعة لمنع التكرار */}
+              {/* Total Section - يظهر فقط عند وجود تفاصيل خصم أو توزيع تكاليف أو أوامر عمل لمنع التكرار */}
               {showCosts && displayMode === 'detailed' && (
                 (invoiceType === 'customer' && (task.discount_amount || 0) > 0) ||
                 (invoiceType === 'customer' && (task as any).cost_allocation) ||
@@ -4207,11 +4270,12 @@ export function UnifiedTaskInvoice({
                   <tr>
                     <td className="print-shell-footer-cell" style={{ border: 'none', padding: 0, background: 'transparent' }}>
                       {/* Footer - Unified Engine */}
-                      <div dangerouslySetInnerHTML={{ __html: unifiedFooterHtml({ ...unifiedStyles, footerText: '' } as any) }} />
+                      <div dangerouslySetInnerHTML={{ __html: buildTaskFooterHtml() }} />
                     </td>
                   </tr>
                 </tfoot>
               </table>
+              <div className="print-fixed-footer" aria-hidden="true" dangerouslySetInnerHTML={{ __html: buildTaskFooterHtml() }} />
             </div>
           </div>
         </ScrollArea>

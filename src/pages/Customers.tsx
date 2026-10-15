@@ -66,7 +66,7 @@ interface CustomerSummary {
   company: string | null;
   pricingCategory?: string | null;
   contractsCount: number;
-  totalRent: number;       // إجمالي الديون (العقود + الفواتير + المهام المجمعة)
+  totalRent: number;       // إجمالي الديون (العقود + الفواتير + أوامر العمل)
   totalPaid: number;       // إجمالي المدفوعات الصحيحة
   accountBalance: number;
  remainingDebt: number; // المتبقي من الدين باستخدام المنطق الصحيح
@@ -1006,13 +1006,13 @@ export default function Customers() {
         }
       }
       
-      // حساب رصيد الحساب (استثناء الدفعات الموزعة على مهام مجمعة)
+      // حساب رصيد الحساب (استثناء الدفعات الموزعة على أوامر عمل)
       customerData.accountBalance = customerPayments
         .filter(p => {
           if (p.entry_type === 'account_payment') return true;
           if (!p.contract_number && (p.entry_type === 'receipt' || p.entry_type === 'payment')) {
-            // ✅ استثناء الدفعات المرتبطة بمهام مجمعة (تحتوي "مهمة مجمعة" في الملاحظات)
-            if (p.notes && (p.notes.includes('مهمة مجمعة') || p.notes.includes('composite'))) return false;
+            // ✅ استثناء الدفعات المرتبطة بأوامر عمل (تحتوي "أمر عمل" في الملاحظات)
+            if (p.notes && (p.notes.includes('مهمة مجمعة') || p.notes.includes('أمر عمل') || p.notes.includes('composite'))) return false;
             // ✅ استثناء الدفعات المرتبطة بـ distributed_payment
             if (p.distributed_payment_id) return false;
             return true;
@@ -1677,7 +1677,7 @@ export default function Customers() {
 
   const openCustomerBilling = (customer: CustomerSummary) => {
     const id = typeof customer.id === 'string' ? customer.id : String(customer.id);
-    navigate(`/admin/customer-billing?id=${encodeURIComponent(id)}&name=${encodeURIComponent(customer.name)}`);
+    navigate(`/admin/customer-account?id=${encodeURIComponent(id)}&name=${encodeURIComponent(customer.name)}`);
   };
 
   const openCustomerEditor = async (customer: CustomerSummary) => {

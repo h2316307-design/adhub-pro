@@ -1,3 +1,4 @@
+import { loadInstallationOperationIds, prepareInstallationOperationTask } from '@/services/installationOperation';
 import { MergeTaskGroupsDialog } from './MergeTaskGroupsDialog';
 import { loadInstallationPhotos } from '@/services/installationPhotosService';
 import { installationCompletionStatus } from '@/lib/installationCompletion';
@@ -35,6 +36,7 @@ import {
   getCurrentOperationInstallationCost,
   getOperationLabel,
   getTaskContractGroupKey,
+  summarizeInstallationOperation,
   isReinstallationOperation,
   normalizeCompositeTaskType,
   sortTasksNewestFirst,
@@ -214,6 +216,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         );
         const nextNumber = existingReinstallOps.length + 1;
 
+        const operationId = crypto.randomUUID();
         for (const installTask of installTasks) {
           const origInstallTaskId = installTask.installation_task_id;
 
@@ -226,6 +229,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           const { data: newTask, error: taskError } = await supabase
             .from('installation_tasks')
             .insert({
+              ...(await prepareInstallationOperationTask(operationId)),
               contract_id: contractId,
               contract_ids: group.contractIds && group.contractIds.length > 0 ? group.contractIds : origTask?.contract_ids,
               team_id: origTask?.team_id || null,
@@ -285,7 +289,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
             await supabase.from('installation_task_items').insert(itemsToInsert);
           }
 
-          // ✅ الـ trigger التلقائي auto_create_composite_task ينشئ المهمة المجمعة تلقائياً في قاعدة البيانات
+          // ✅ الـ trigger التلقائي auto_create_composite_task ينشئ أمر العمل تلقائياً في قاعدة البيانات
           // نقوم فقط بتحديث التكاليف واسم الزبون عليها لمنع أي تضارب فريد (unique constraint)
           await supabase
             .from('composite_tasks')
@@ -346,7 +350,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
   ) => {
     const primaryTaskId = task.installation_task_id as string | undefined;
     if (!primaryTaskId) {
-      toast.error('لا توجد مهمة تركيب مرتبطة');
+      toast.error('لا توجد أمر تركيب مرتبط');
       return;
     }
 
@@ -377,13 +381,13 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         }
       } else {
         if (data.items.length === 0) {
-          toast.info('لا توجد لوحات داخل مهمة التركيب');
+          toast.info('لا توجد لوحات داخل أمر التركيب');
           return;
         }
         setInstallationPrintOpen(true);
       }
     } catch (error: any) {
-      toast.error(error?.message || 'تعذر تحميل بيانات مهمة التركيب');
+      toast.error(error?.message || 'تعذر تحميل بيانات أمر التركيب');
     } finally {
       setWorkflowLoadingTaskId(null);
     }
@@ -423,7 +427,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         toast.dismiss(tId);
       } else {
         toast.dismiss(tId);
-        toast.error('فشل في تحميل بنود مهمة التركيب');
+        toast.error('فشل في تحميل بنود أمر التركيب');
       }
     } catch (err) {
       console.error('Error fetching installation task items:', err);
@@ -508,8 +512,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         .order('created_at', { ascending: false });
 
       if (customerId) query = query.eq('customer_id', customerId);
-      if (filter === 'pending') query = query.in('status', ['pending', 'in_progress']);
-      else if (filter === 'completed') query = query.eq('status', 'completed');
+      // Filter complete operations after loading their team rows.
 
       const { data, error } = await query;
       if (error) throw error;
@@ -532,13 +535,15 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
               .in('id', chunk)
         );
 
-        const reinstallInfoMap = new Map<string, { number: number | null; taskType: string; contractId: number | null; contractIds: number[]; status: string }>();
+        const operationIds = await loadInstallationOperationIds();
+        const reinstallInfoMap = new Map<string, { operationId: string | null; number: number | null; taskType: string; contractId: number | null; contractIds: number[]; status: string }>();
         (installTasksData || []).forEach((it: any) => {
           const cIds = (it.contract_ids || []).map(normalizeContractId).filter((id): id is number => id !== null);
           const directC = normalizeContractId(it.contract_id);
           if (directC && !cIds.includes(directC)) cIds.push(directC);
 
           reinstallInfoMap.set(it.id, { 
+            operationId: operationIds[it.id] || null,
             number: it.reinstallation_number,
             status: it.status,
             taskType: normalizeCompositeTaskType(it.task_type),
@@ -549,6 +554,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
         tasks.forEach((t: any) => {
           const reinstallInfo = t.installation_task_id ? reinstallInfoMap.get(t.installation_task_id) : undefined;
+          t.operation_id = reinstallInfo?.operationId || null;
           t._installationStatus = reinstallInfo?.status;
           const directContract = normalizeContractId(t.contract_id) || reinstallInfo?.contractId;
           const normalizedTaskType = normalizeCompositeTaskType(reinstallInfo?.taskType || t.task_type);
@@ -563,7 +569,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           t.contractIds = t._contractIds;
           t.contract_ids = t._contractIds;
           t._reinstallationNumber = normalizedTaskType === 'reinstallation'
-            ? ((reinstallInfo?.number as number) || 1)
+            ? (reinstallInfo?.number ?? null)
             : null;
           t.reinstallationNumber = t._reinstallationNumber;
           t._taskType = normalizedTaskType;
@@ -830,7 +836,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       installTasks.forEach((t: any) => { 
         teamNameMap.set(t.id, (t.team_id && teamNameById.get(t.team_id)) || t.team?.team_name || ''); 
         taskTypeByInstallTaskId.set(t.id, normalizeCompositeTaskType(t.task_type));
-        reinstallMap.set(t.id, t.task_type === 'reinstallation' ? (t.reinstallation_number || 1) : null);
+        reinstallMap.set(t.id, t.task_type === 'reinstallation' ? (t.reinstallation_number ?? null) : null);
         const c = normalizeContractId(t.contract_id);
         if (c) contractByInstallTaskId.set(t.id, c);
       });
@@ -886,7 +892,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
             if (c && !taskOwnedContractIds.includes(c)) taskOwnedContractIds.push(c);
           });
         }
-        // مطابقة اللوحات الفعلية للمهمة مع عقود العميل لكشف المهام المجمعة لعدة عقود
+        // مطابقة اللوحات الفعلية للمهمة مع عقود العميل لكشف أوامر العمل لعدة عقود
         if (
           task.installation_task_id
           && taskOwnedContractIds.length <= 1
@@ -1173,7 +1179,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       printerName: extra.printerName || '',
       companyName: resolvedCompanyName,
       reinstallationNumber: normalizedTaskType === 'reinstallation'
-        ? (task._reinstallationNumber ?? task.reinstallationNumber ?? extra.reinstallationNumber ?? 1)
+        ? (task._reinstallationNumber ?? task.reinstallationNumber ?? extra.reinstallationNumber ?? null)
         : null,
       taskDesignCount: extra.taskDesignCount || 0,
       assignedDesignCount: extra.assignedDesignCount || 0,
@@ -1237,32 +1243,26 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
 
   // Filter by Status, Payment & Search
   const filtered = useMemo(() => {
-    let r = enriched;
-    if (filterStatus !== 'all') r = r.filter(t => t.status === filterStatus);
-    
-    if (paymentFilter === 'unpaid') {
-      r = r.filter(t => (t.customer_total || 0) > 0 && (t._totalPaid || 0) === 0);
-    } else if (paymentFilter === 'partial') {
-      r = r.filter(t => (t.customer_total || 0) > 0 && (t._totalPaid || 0) > 0 && (t._totalPaid || 0) < (t.customer_total || 0));
-    } else if (paymentFilter === 'paid') {
-      r = r.filter(t => (t.customer_total || 0) > 0 && (t._totalPaid || 0) >= (t.customer_total || 0));
-    } else if (paymentFilter === 'free') {
-      r = r.filter(t => (t.customer_total || 0) === 0);
-    }
-
-    if (search && search.trim()) {
-      const normalizedQuery = normalizeForSearch(search);
-      const rawTokens = normalizedQuery.split(' ').filter(Boolean);
-      // إذا كتب المستخدم كلمات متعددة تتضمن كلمة "عقد" (مثل "عقد 1178")، نستثني كلمة "عقد" لأن الأرقام والأسماء هي المحددة
-      const tokens = rawTokens.length > 1 ? rawTokens.filter(tok => tok !== 'عقد') : rawTokens;
-
-      r = r.filter(t => {
-        const text = (t as any)._searchableText || '';
-        return tokens.every(tok => text.includes(tok));
-      });
-    }
-    return r;
-  }, [enriched, filterStatus, paymentFilter, search]);
+    const buckets = new Map<string, typeof enriched>();
+    enriched.forEach(task => {
+      const key = task.operation_id || task.id;
+      buckets.set(key, [...(buckets.get(key) || []), task]);
+    });
+    const rawTokens = normalizeForSearch(search || '').split(' ').filter(Boolean);
+    const tokens = rawTokens.length > 1 ? rawTokens.filter(token => token !== 'عقد') : rawTokens;
+    return [...buckets.values()].filter(tasks => {
+      const { status, total, paid } = summarizeInstallationOperation(tasks);
+      if (filter === 'completed' && status !== 'completed') return false;
+      if (filter === 'pending' && !['pending', 'in_progress'].includes(status)) return false;
+      if (filterStatus !== 'all' && status !== filterStatus) return false;
+      if (paymentFilter === 'unpaid' && !(total > 0 && paid === 0)) return false;
+      if (paymentFilter === 'partial' && !(total > 0 && paid > 0 && paid < total)) return false;
+      if (paymentFilter === 'paid' && !(total > 0 && paid >= total)) return false;
+      if (paymentFilter === 'free' && total !== 0) return false;
+      const text = tasks.map(task => task._searchableText || '').join(' ');
+      return tokens.every(token => text.includes(token));
+    }).flat();
+  }, [enriched, filter, filterStatus, paymentFilter, search]);
 
   // The comprehensive hub always follows the operational timeline: newest work first.
   const sorted = useMemo(() => sortTasksNewestFirst(filtered), [filtered]);
@@ -1295,7 +1295,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
     const groupMap = new Map<string, typeof sorted>();
     
     sorted.forEach(task => {
-      const groupKey = manualGroups[task.id] || getTaskContractGroupKey(task);
+      const groupKey = (task.operation_id ? getTaskContractGroupKey(task) : manualGroups[task.id] || getTaskContractGroupKey(task));
       if (!groupMap.has(groupKey)) groupMap.set(groupKey, []);
       groupMap.get(groupKey)!.push(task);
     });
@@ -1312,7 +1312,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       const isMultiContract = allGroupContractIds.length > 1;
 
       const label = isMultiContract
-        ? `مهمة مجمعة لعدة عقود (عقود #${allGroupContractIds.join('، #')})`
+        ? `أمر عمل لعدة عقود (عقود #${allGroupContractIds.join('، #')})`
         : `عقد #${first.contract_id}`;
       const customerName = first.customer_name || 'غير محدد';
       const companyName = orderedTasks
@@ -1392,7 +1392,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
         if (!op.isReinstall) {
           return {
             ...op,
-            label: isMultiContract ? 'مهمة تركيب مجمعة لعدة عقود' : 'التركيب الأول',
+            label: isMultiContract ? 'أمر تركيب مجمّع لعدة عقود' : 'التركيب الأول',
           };
         }
         reinstallCounter++;
@@ -1478,6 +1478,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
       const groupProgressPercentage = groupTotalBillboards > 0 ? Math.round((groupCompletedBillboards / groupTotalBillboards) * 100) : 0;
       return {
         ...g,
+        operationStatus: summarizeInstallationOperation(g.tasks).status,
         groupTotal,
         groupProfit,
         groupCost,
@@ -1621,7 +1622,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           await supabase.from('customer_payments')
             .update({
               amount: -customerTotal,
-              notes: `مهمة مجمعة - عقد #${compositeTask.contract_id}`
+              notes: `أمر عمل - عقد #${compositeTask.contract_id}`
             })
             .eq('printed_invoice_id', taskData.combined_invoice_id)
             .eq('entry_type', 'invoice');
@@ -1935,10 +1936,10 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5" />
-              تأكيد حذف المهمة المجمعة
+              تأكيد حذف أمر العمل
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
-              سيتم حذف هذه المهمة المجمعة وجميع الفواتير المرتبطة بها نهائياً. هذا الإجراء لا يمكن التراجع عنه.
+              سيتم حذف هذا أمر العمل وجميع الفواتير المرتبطة بها نهائياً. هذا الإجراء لا يمكن التراجع عنه.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter className="flex-row gap-2 justify-end">
@@ -1988,7 +1989,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
             <DialogHeader className="text-right">
               <DialogTitle className="flex items-center gap-2 text-right">
                 <ImagePlus className="h-5 w-5 text-warning" />
-                إدارة تصاميم مهمة التركيب
+                إدارة تصاميم أمر التركيب
               </DialogTitle>
             </DialogHeader>
             <TaskDesignManager
@@ -2097,7 +2098,7 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
             billboards={installationWorkflowData.billboards}
             teams={teams}
             showTeamFilter={true}
-            title={`طباعة مهمة التركيب (شامل لجميع الفرق) - عقد #${installationWorkflowTask.contract_id} (${printItems.length} لوحة)`}
+            title={`طباعة أمر التركيب (شامل لجميع الفرق) - عقد #${installationWorkflowTask.contract_id} (${printItems.length} لوحة)`}
             taskId={installationWorkflowTask.installation_task_id || installationWorkflowData.primaryTaskId || undefined}
             taskType={installationWorkflowTask.task_type || 'installation'}
             reinstallationNumber={installationWorkflowTask.reinstallation_number ?? null}

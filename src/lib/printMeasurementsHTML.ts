@@ -1,5 +1,6 @@
 import { unifiedHeaderHtml, unifiedFooterHtml, unifiedHeaderFooterCss } from './unifiedInvoiceBase';
 import { PRINT_INK_SAVER_CSS } from './printInkSaver';
+import { receiptAmountHtml, receiptSignatureHtml, receiptPresentationCss, type ReceiptPresentation } from './receiptPresentation';
 /**
  * Generate Measurements-Style HTML for Print
  * توليد HTML بنمط المقاسات للطباعة
@@ -22,6 +23,7 @@ export interface MeasurementsHTMLOptions {
   paymentDetailsTable?: { label: string; value: string }[];
   customHeaderHtml?: string; // Custom HTML to show at the top before table
   additionalContent?: string; // Custom HTML to append after table
+  receiptPresentation?: ReceiptPresentation;
  headerSwap?: boolean; // تبديل نصفي الهيدر (يمين يسار)
 }
 
@@ -707,7 +709,7 @@ export const generateMeasurementsHTML = (options: MeasurementsHTMLOptions): stri
   }) : '') : generateHeader(config, documentData, headerSwap);
   const partyHTML = generatePartySection(config, partyData, statisticsCards);
   const paymentDetailsHTML = generatePaymentDetailsTable(config, paymentDetailsTable);
-  const tableHTML = generateTable(config, columns, rows, totals, totalsTitle);
+  const tableHTML = generateTable(config, columns, rows, options.receiptPresentation ? totals?.slice(1) : totals, totalsTitle);
   const notesHTML = generateNotes(config, notes);
   const footerHTML = styles ? unifiedFooterHtml({
     ...styles,
@@ -721,15 +723,17 @@ export const generateMeasurementsHTML = (options: MeasurementsHTMLOptions): stri
     <head>
       <meta charset="UTF-8">
       <title>${documentData.title || 'طباعة'}</title>
-      <style>${css}${PRINT_INK_SAVER_CSS}</style>
+      <style>${css}${PRINT_INK_SAVER_CSS}${options.receiptPresentation ? receiptPresentationCss : ''}</style>
     </head>
-    <body>
+    <body${options.receiptPresentation ? ' data-payment-receipt' : ''}>
       <div class="measurements-container paper">
         ${headerHTML}
         ${partyHTML}
+        ${options.receiptPresentation ? receiptAmountHtml(options.receiptPresentation) : ''}
         ${customHeaderHtml || ''}
         ${paymentDetailsHTML}
         ${tableHTML}
+        ${options.receiptPresentation ? receiptSignatureHtml(options.receiptPresentation) : ''}
         ${additionalContent || ''}
         ${notesHTML}
         ${footerHTML}

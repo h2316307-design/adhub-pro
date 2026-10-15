@@ -30,6 +30,7 @@ import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
 import { completeRemovalItems } from '@/services/completeRemovalItems';
 import { matchesRemovalDesignBillboard, isRemovalDesignEnabled } from '@/services/removalPrintImages';
 import { toast } from 'sonner';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface QuickRemovalDialogProps {
   open: boolean;
@@ -617,25 +618,7 @@ export function QuickRemovalDialog({
 
       {/* نافذة معاينة الصورة مكبرة */}
       {previewImage && (
-        <Dialog open={!!previewImage} onOpenChange={(openVal) => { if (!openVal) setPreviewImage(null); }}>
-          <DialogContent
-            dir="rtl"
-            className="max-w-4xl p-3 bg-zinc-950/95 border-zinc-800 text-white flex flex-col items-center"
-          >
-            <DialogHeader className="w-full px-2 pt-1 pb-2 text-right">
-              <DialogTitle className="text-sm font-bold text-white flex items-center justify-between">
-                <span>{previewImage.title}</span>
-              </DialogTitle>
-            </DialogHeader>
-            <div className="relative max-h-[75vh] w-full flex items-center justify-center p-1 overflow-hidden">
-              <img
-                src={previewImage.url}
-                alt=""
-                className="max-h-[70vh] w-auto max-w-full rounded-xl object-contain shadow-2xl border border-white/10"
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+        <ImageViewer images={[{ src: previewImage.url }]} onClose={() => setPreviewImage(null)} title="" />
       )}
     </>
   );

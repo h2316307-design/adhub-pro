@@ -1,9 +1,7 @@
+import './lib/polyfills';
 import React from "react";
 import { createRoot } from "react-dom/client";
-import L from "leaflet";
-if (typeof window !== "undefined") {
-  (window as any).L = L;
-}
+// leaflet يُحمَّل مع صفحات الخرائط فقط (utils/leafletInit) بدل تحميله مع بداية التطبيق
 import App from "./App.tsx";
 import "./index.css";
 import { prefetchInvoiceSettings } from "@/hooks/useInvoiceSettingsSync";

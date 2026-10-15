@@ -52,7 +52,7 @@ const ENTITY_CONFIG: Record<string, { icon: typeof FileText; label: string; colo
   payment: { icon: CreditCard, label: 'دفعة', color: 'text-emerald-600 dark:text-emerald-400' },
   sales_invoice: { icon: FileText, label: 'فاتورة مبيعات', color: 'text-blue-600 dark:text-blue-400' },
   printed_invoice: { icon: Printer, label: 'فاتورة طباعة', color: 'text-violet-600 dark:text-violet-400' },
-  composite_task: { icon: Layers, label: 'مهمة مجمعة', color: 'text-orange-600 dark:text-orange-400' },
+  composite_task: { icon: Layers, label: 'أمر عمل', color: 'text-orange-600 dark:text-orange-400' },
   installation_item: { icon: Layers, label: 'تركيب لوحة', color: 'text-cyan-600 dark:text-cyan-400' },
 };
 

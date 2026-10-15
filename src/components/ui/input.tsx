@@ -120,7 +120,7 @@ const NumberInputInner = React.forwardRef<HTMLInputElement, React.ComponentProps
           onMouseLeave={stopHold}
           onTouchStart={() => startHold(-stepVal)}
           onTouchEnd={stopHold}
-          className="flex items-center justify-center h-8.5 sm:h-10 w-7 sm:w-8 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground transition-colors select-none"
+          className="flex items-center justify-center h-10 w-8 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground transition-colors select-none"
           tabIndex={-1}
         >
           <Minus className="h-3.5 w-3.5" />
@@ -129,7 +129,7 @@ const NumberInputInner = React.forwardRef<HTMLInputElement, React.ComponentProps
           type="text"
           inputMode="decimal"
           className={cn(
-            "flex h-8.5 sm:h-10 w-full rounded-md border border-input bg-background px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+            "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
             className,
           )}
           ref={internalRef}
@@ -144,7 +144,7 @@ const NumberInputInner = React.forwardRef<HTMLInputElement, React.ComponentProps
           onMouseLeave={stopHold}
           onTouchStart={() => startHold(stepVal)}
           onTouchEnd={stopHold}
-          className="flex items-center justify-center h-8.5 sm:h-10 w-7 sm:w-8 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground transition-colors select-none"
+          className="flex items-center justify-center h-10 w-8 shrink-0 rounded-md border border-input bg-background hover:bg-accent text-muted-foreground transition-colors select-none"
           tabIndex={-1}
         >
           <Plus className="h-3.5 w-3.5" />
@@ -165,7 +165,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
       <input
         type={type}
         className={cn(
-          "flex h-8.5 sm:h-10 w-full rounded-md border border-input bg-background px-2.5 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
+          "flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50",
           type === "color" && "p-1 cursor-pointer",
           className,
         )}

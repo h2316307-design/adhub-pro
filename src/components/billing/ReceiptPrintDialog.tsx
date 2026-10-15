@@ -165,7 +165,7 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
         .eq('customer_id', customerId)
         .lte('purchase_date', paymentDate.toISOString().split('T')[0]);
 
-      // ✅ المهام المجمعة
+      // ✅ أوامر العمل
       const { data: compositeTasks } = await supabase
         .from('composite_tasks')
         .select('*')
@@ -256,7 +256,7 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
       const isSalesInvoicePayment = !!(payment as any).sales_invoice_id;
       const isPrintedInvoicePayment = !!(payment as any).printed_invoice_id;
       
-      // جلب بيانات المهمة المجمعة
+      // جلب بيانات أمر العمل
       let compositeTaskInfo: any = null;
       if (isCompositeTaskPayment) {
         try {
@@ -350,7 +350,7 @@ export default function ReceiptPrintDialog({ open, onOpenChange, payment, custom
           if (compositeTaskInfo.print_task_id) components.push('طباعة');
           if (compositeTaskInfo.cutout_task_id) components.push('قص');
           if (compositeTaskInfo.installation_task_id) components.push('تركيب');
-          const taskComponents = components.length > 0 ? components.join(' + ') : 'مهمة مجمعة';
+          const taskComponents = components.length > 0 ? components.join(' + ') : 'أمر عمل';
 
           const label = compositeTaskLabel({
             id: (payment as any).composite_task_id,

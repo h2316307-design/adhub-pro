@@ -109,7 +109,7 @@ const generateTeamPdfBlob = async (
     </head>
     <body>
       <div style="text-align: center; margin-bottom: 20px; border-bottom: 2px solid #3b82f6; padding-bottom: 12px;">
-        <h1 style="font-size: 20px; font-weight: 700; color: #1e3a5f;">مهام التركيب</h1>
+        <h1 style="font-size: 20px; font-weight: 700; color: #1e3a5f;">أوامر التركيب</h1>
         <h2 style="font-size: 16px; font-weight: 600; color: #3b82f6; margin-top: 4px;">فريق ${teamName}</h2>
         <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">
           إجمالي اللوحات: ${totalCount} | التاريخ: ${new Date().toLocaleDateString('ar-LY')}
@@ -287,7 +287,7 @@ export function SendTeamInstallationReportDialog({
     const data = teamTasksData[teamId];
     if (!data) return '';
 
-    let msg = `*مهام التركيب - فريق ${data.teamName}*\n\n`;
+    let msg = `*أوامر التركيب - فريق ${data.teamName}*\n\n`;
     let totalCount = 0;
 
     const contractEntries = Object.entries(data.contracts)
@@ -384,7 +384,7 @@ export function SendTeamInstallationReportDialog({
       contractEntries.forEach(([, cg]) => { totalCount += cg.total; });
 
       const contractNumbers = contractEntries.map(([, cg]) => `#${cg.contractId}`).join(', ');
-      const message = `*مهام التركيب - فريق ${data.teamName}*\n\n` +
+      const message = `*أوامر التركيب - فريق ${data.teamName}*\n\n` +
         `العقود: ${contractNumbers}\n` +
         `إجمالي اللوحات: ${totalCount}\n\n` +
  ` ملف التفاصيل:\n${pdfUrl}\n\n` +
@@ -408,13 +408,13 @@ export function SendTeamInstallationReportDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-lg">
             <Users className="h-5 w-5 text-primary" />
-            إرسال مهام التركيب للفرق
+            إرسال أوامر التركيب للفرق
           </DialogTitle>
         </DialogHeader>
 
         {teamEntries.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
-            لا توجد مهام تركيب معلقة لأي فرقة
+            لا توجد أوامر تركيب معلقة لأي فرقة
           </div>
         ) : (
           <ScrollArea className="max-h-[65vh]">

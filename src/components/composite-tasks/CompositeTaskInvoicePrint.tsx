@@ -1003,7 +1003,7 @@ export function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any
       virtualItems.push({
         type: 'virtual',
         category: 'print',
-        description: 'الطباعة (مهمة مجمّعة)',
+        description: 'الطباعة (أمر عمل)',
         description_en: 'Printing (Composite Task)',
         quantity: 1,
         unit_price: task.customer_print_cost,
@@ -1014,7 +1014,7 @@ export function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any
       virtualItems.push({
         type: 'virtual',
         category: 'installation',
-        description: 'التركيب (مهمة مجمّعة)',
+        description: 'التركيب (أمر عمل)',
         description_en: 'Installation (Composite Task)',
         quantity: 1,
         unit_price: task.customer_installation_cost,
@@ -1026,7 +1026,7 @@ export function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any
       virtualItems.push({
         type: 'virtual',
         category: 'cutout',
-        description: 'القص (مهمة مجمّعة)',
+        description: 'القص (أمر عمل)',
         description_en: 'Cutout (Composite Task)',
         quantity: details.totalCutouts || 1,
         unit_price: (details.totalCutouts || 0) > 0 ? cutoutTotalForVirtual / details.totalCutouts : cutoutTotalForVirtual,
@@ -1587,7 +1587,7 @@ export function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any
         metaLinesHtml: `
           <div><strong>التاريخ:</strong> ${invoiceDate}</div>
           <div><strong>${details.contractsInfo?.length > 1 ? 'أرقام العقود:' : 'رقم العقد:'}</strong> ${details.contractsInfo?.length > 1 ? details.contractsInfo.map((c: any) => '#' + c.contractId).join(', ') : '#' + task.contract_id}</div>
-          <div><strong>نوع المهمة:</strong> ${task.task_type === 'new_installation' ? 'تركيب جديد' : 'إعادة تركيب'}</div>
+          <div><strong>نوع العمل:</strong> ${task.task_type === 'new_installation' ? 'تركيب جديد' : 'إعادة تركيب'}</div>
         `,
         titleAr: invoiceTitle.ar,
         titleEn: invoiceTitle.en,

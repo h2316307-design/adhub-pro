@@ -124,7 +124,7 @@ export function groupReceiptTasks(items: DistributedContract[]): DistributedCont
       // ✅ لا يتم ذكر الفرق في الفاتورة الرسمية للزبون
       const cleanBase = (existing.rawAdType 
         ? (existing.rawAdType.includes('طباعة') || existing.rawAdType.includes('تركيب') ? existing.rawAdType : `${existing.rawAdType} (${existing.taskComponents || 'طباعة + تركيب'})`)
-        : (existing.taskComponents || existing.adType)) || 'مهمة مجمعة';
+        : (existing.taskComponents || existing.adType)) || 'أمر عمل';
       existing.adType = cleanBase.replace(/\s*—\s*(?:فرقة|دانة|فريق).*$/g, '').trim();
 
       const isFullyPaid = existing.remaining !== null && Number(existing.remaining) <= 0.01 && existing.total !== null && Number(existing.total) > 0;
@@ -139,7 +139,7 @@ export function groupReceiptTasks(items: DistributedContract[]): DistributedCont
       if (row.entityType === 'composite_task') {
         const cleanBase = (row.rawAdType 
           ? (row.rawAdType.includes('طباعة') || row.rawAdType.includes('تركيب') ? row.rawAdType : `${row.rawAdType} (${row.taskComponents || 'طباعة + تركيب'})`)
-          : (row.taskComponents || row.adType)) || 'مهمة مجمعة';
+          : (row.taskComponents || row.adType)) || 'أمر عمل';
         row.adType = cleanBase.replace(/\s*—\s*(?:فرقة|دانة|فريق).*$/g, '').trim();
       }
       if (item.teamName) {
@@ -151,7 +151,7 @@ export function groupReceiptTasks(items: DistributedContract[]): DistributedCont
     if (item.compositeTaskId) countedTasks.add(item.compositeTaskId);
   }
 
-  // ✅ ترتيب منطقي للبنود: عقود أولاً ثم مهام مجمعة مرتبة ثم فواتير مبيعات ثم فواتير طباعة ثم الفائض
+  // ✅ ترتيب منطقي للبنود: عقود أولاً ثم أوامر عمل مرتبة ثم فواتير مبيعات ثم فواتير طباعة ثم الفائض
   distributedContracts.sort((a, b) => {
     const typeOrder = (c: DistributedContract) => {
       if (c.entityType === 'contract' && !c.contractNumber.includes('فائض') && c.contractNumber !== '—') return 1;
@@ -212,7 +212,7 @@ export function buildUnifiedReceiptPrintOptions(
 
   // Document header
   const documentData: PrintDocumentData = {
-    title: `إيصال استلام: ${customerData.name}`,
+    title: 'وصل استلام مبلغ',
     documentNumberLabel: 'رقم الإيصال',
     documentNumber: receiptNumber,
     date: '',
@@ -221,7 +221,7 @@ export function buildUnifiedReceiptPrintOptions(
 
   // Customer data
   const partyData: PrintPartyData = {
-    title: 'بيانات العميل',
+    title: 'استلمنا من',
     name: customerData.name,
     company: customerData.company,
     phone: customerData.phone,
@@ -281,11 +281,11 @@ export function buildUnifiedReceiptPrintOptions(
       let description = contract.adType || 'لوحة إعلانية';
       
       if (contract.entityType === 'composite_task') {
-        reference = contract.contractNumber || 'مهمة مجمعة';
+        reference = contract.contractNumber || 'أمر عمل';
         // البيان: نوع الإعلان مع مكونات المهمة (بدون أسماء الفرق للزبون)
         const cleanBase = (contract.rawAdType 
           ? (contract.rawAdType.includes('طباعة') || contract.rawAdType.includes('تركيب') ? contract.rawAdType : `${contract.rawAdType} (${contract.taskComponents || 'طباعة + تركيب'})`)
-          : (contract.taskComponents || contract.adType || contract.compositeTaskType)) || 'مهمة مجمعة';
+          : (contract.taskComponents || contract.adType || contract.compositeTaskType)) || 'أمر عمل';
         description = cleanBase.replace(/\s*—\s*(?:فرقة|دانة|فريق).*$/g, '').trim();
       } else if (contract.entityType === 'sales_invoice') {
         reference = contract.contractNumber && contract.contractNumber !== '—'
@@ -385,7 +385,7 @@ export function buildUnifiedReceiptPrintOptions(
   const statisticsCards: { label: string; value: number; unit: string }[] = [];
   if (isDistributed) {
     if (contractCount > 0) statisticsCards.push({ label: 'عقد', value: contractCount, unit: '' });
-    if (compositeTaskCount > 0) statisticsCards.push({ label: 'مهمة', value: compositeTaskCount, unit: '' });
+    if (compositeTaskCount > 0) statisticsCards.push({ label: 'أمر عمل', value: compositeTaskCount, unit: '' });
     if (salesInvoiceCount > 0) statisticsCards.push({ label: 'فاتورة مبيعات', value: salesInvoiceCount, unit: '' });
     if (printedInvoiceCount > 0) statisticsCards.push({ label: 'فاتورة طباعة', value: printedInvoiceCount, unit: '' });
     if (surplusCreditItem && Number(surplusCreditItem.amount) > 0) {
@@ -433,7 +433,7 @@ export function buildUnifiedReceiptPrintOptions(
         `).join('');
 
         additionalContent = `
-          <div style="margin: 10px 0; page-break-inside: avoid;">
+          <div class="receipt-transfer" style="margin: 10px 0; page-break-inside: avoid;">
             <div style="background: #f0f7ff; border: 2px solid #3b82f6; border-radius: 10px; padding: 10px; text-align: center;">
               <div style="font-size: 13px; font-weight: 700; color: #1e40af; margin-bottom: 8px;">
  مرفق: صورة إيصال الدفع${imageUrls.length > 1 ? ` (${imageUrls.length})` : ''}
@@ -447,6 +447,10 @@ export function buildUnifiedReceiptPrintOptions(
   }
 
   const printOptions: MeasurementsHTMLOptions = {
+    receiptPresentation: {
+      amount: `${formatArabicNumber(payment.amount)} ${currency.symbol}`,
+      receiver: payment.receiver_name,
+    },
     config,
     documentData,
     partyData,

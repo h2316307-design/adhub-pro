@@ -1,4 +1,5 @@
-import { sortTeamsByPriority, findOptimalTeamForInstallation, installationTeamCoversBillboard } from '@/utils/teamAssignment';
+import { sortTeamsByPriority, installationTeamCoversBillboard } from '@/utils/teamAssignment';
+import { pickInstallationTeam, loadPreviousTeams } from '@/utils/smartTeamAssignment';
 import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useState, useMemo, useEffect, useRef } from 'react';
@@ -67,7 +68,7 @@ function Step({ n, title, done, children, aside }: { n: number; title: string; d
   );
 }
 
-/** إنشاء مهمة تركيب أو إعادة تركيب: زبون ← عقود ← لوحات ← فرق، في شاشة واحدة */
+/** إنشاء أمر تركيب أو إعادة تركيب: زبون ← عقود ← لوحات ← فرق، في شاشة واحدة */
 export function EnhancedAddInstallationTaskDialog({
   open, onOpenChange, taskType, onTaskTypeChange, onSubmit, isSubmitting, teams,
 }: EnhancedAddInstallationTaskDialogProps) {
@@ -200,6 +201,12 @@ export function EnhancedAddInstallationTaskDialog({
     return m;
   }, [boards, selectedContracts, pausedRows]);
 
+  const { data: previousTeams = new Map<number, string>() } = useQuery({
+    queryKey: ['task-dialog-previous-teams', allBoardIds.join(',')],
+    enabled: open && allBoardIds.length > 0,
+    queryFn: () => loadPreviousTeams(allBoardIds),
+    staleTime: 60_000,
+  });
   const { statusesByBillboard } = useBillboardStatuses(allBoardIds);
   const tornIds = useMemo(() => allBoardIds.filter(id => (statusesByBillboard[id] || []).some((s: any) => s.status_type === 'torn_ad')), [allBoardIds, statusesByBillboard]);
 
@@ -278,7 +285,7 @@ export function EnhancedAddInstallationTaskDialog({
     const next: TeamAssignment[] = [];
     const taken = new Set<number>();
     for (const board of selectedBoards) {
-      const team = findOptimalTeamForInstallation(teams, board.Size, board.City, board.friend_company_id);
+      const team = pickInstallationTeam(teams, board, previousTeams.get(Number(board.ID)));
       if (!team) continue;
       const id = Number(board.ID);
       const existing = next.find(a => a.teamId === team.id);
@@ -315,7 +322,7 @@ export function EnhancedAddInstallationTaskDialog({
     if (!selectedIds.length) { toast.error('اختر لوحة واحدة على الأقل'); return; }
     if (assignments.length && unassigned.length) { toast.error(`${unassigned.length} لوحة بدون فرقة — عيّنها أو احذف تعيينات الفرق للتوزيع التلقائي`); return; }
     if (!assignments.length) {
-      const missing = selectedBoards.filter(board => !findOptimalTeamForInstallation(teams, board.Size, board.City, board.friend_company_id));
+      const missing = selectedBoards.filter(board => !pickInstallationTeam(teams, board));
       if (missing.length) { toast.error(`لوحات بلا فرقة مناسبة: ${missing.map(board => `${board.Billboard_Name || board.ID} (${board.City || 'مدينة غير محددة'}، ${board.Size || 'مقاس غير محدد'})`).join('، ')}`); return; }
     }
     setStarting(true);
@@ -536,11 +543,11 @@ export function EnhancedAddInstallationTaskDialog({
         </div>
 
         {selectedContracts.some(contract => usedContractIds.includes(contract.Contract_Number) && isExpired(contract)) && <label className="mx-5 my-2 flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs"><Checkbox checked={acceptInactive} onCheckedChange={value => setAcceptInactive(value === true)} />راجعت لوحات العقود غير النشطة؛ هذه إعادة تركيب للزبون المحدد، واللوحات المرتبطة بعقد نشط آخر محجوبة.</label>}
-        {usedContractIds.length > 1 && <p className="mx-5 mb-2 rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs font-bold text-primary">مهمة مجمّعة مستقلة من {usedContractIds.length} عقود: #{usedContractIds.join('، #')}</p>}
+        {usedContractIds.length > 1 && <p className="mx-5 mb-2 rounded-lg border border-primary/30 bg-primary/10 p-2 text-xs font-bold text-primary">أمر عمل مستقل من {usedContractIds.length} عقود: #{usedContractIds.join('، #')}</p>}
         <footer className="flex flex-wrap items-center gap-3 border-t border-border px-5 py-3">
           <Input value={taskName} onChange={e => setTaskName(e.target.value)} placeholder={autoName || 'اسم المهمة (اختياري)'} className="h-10 min-w-[240px] flex-1 text-sm" aria-label="اسم المهمة" />
           <span className="text-xs text-muted-foreground">
-            <b className="text-foreground">{selectedIds.length}</b> لوحة{usedContractIds.length > 1 && <> من <b className="text-orange-500">{usedContractIds.length} عقود</b> (مهمة مجمعة)</>}
+            <b className="text-foreground">{selectedIds.length}</b> لوحة{usedContractIds.length > 1 && <> من <b className="text-orange-500">{usedContractIds.length} عقود</b> (أمر عمل)</>}
           </span>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>إلغاء</Button>
           <Button onClick={submit} disabled={!selectedIds.length || isSubmitting} className="gap-1.5">

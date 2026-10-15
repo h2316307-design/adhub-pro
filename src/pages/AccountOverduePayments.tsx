@@ -103,13 +103,13 @@ export default function AccountOverduePayments() {
       }
       if (initialCompositeRes.error) {
         console.error('Error loading composite tasks:', initialCompositeRes.error);
-        toast.error('خطأ في تحميل المهام المجمعة');
+        toast.error('خطأ في تحميل أوامر العمل');
         return;
       }
 
       const invoices = initialPrintedRes.data || [];
 
-      // ✅ جلب خصومات المهام المجمعة المرتبطة بهذه الفواتير
+      // ✅ جلب خصومات أوامر العمل المرتبطة بهذه الفواتير
       const invoiceIds = invoices.map((i: any) => i.id);
       const ctDiscountByInvoice = new Map<string, number>();
       const ctByInvoice = new Map<string, { customerTotal: number; paid: number; discount: number }>();
@@ -179,7 +179,7 @@ export default function AccountOverduePayments() {
         const installItems = installItemsRes.data || [];
         const installTasksData = installTasksRes.data || [];
 
-        // حساب تكاليف التركيب الحقيقية لكل مهمة مجمعة
+        // حساب تكاليف التركيب الحقيقية لكل أمر عمل
         installItems.forEach((row: any) => {
           const isReinstalled = (row.reinstall_count || 0) > 0;
           const origCost = Number(row.customer_original_install_cost) || Number(row.customer_installation_cost) || 0;
@@ -220,7 +220,7 @@ export default function AccountOverduePayments() {
         });
       }
 
-      // جلب أنواع الإعلانات من جدول العقود بشكل منفصل (تشمل عقود فواتير الطباعة وعقود المهام المجمعة)
+      // جلب أنواع الإعلانات من جدول العقود بشكل منفصل (تشمل عقود فواتير الطباعة وعقود أوامر العمل)
       const contractNumbers = Array.from(
         new Set([
           ...invoices.flatMap((i: any) => {
@@ -388,7 +388,7 @@ export default function AccountOverduePayments() {
         }
       }
 
-      // 3. إضافة المهام المجمعة غير المسددة بالكامل
+      // 3. إضافة أوامر العمل غير المسددة بالكامل
       for (const ct of initialCompositeRes.data || []) {
         const createdAt = ct.created_at as string;
         const diffDays = Math.ceil((today.getTime() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
@@ -471,7 +471,7 @@ export default function AccountOverduePayments() {
           daysOverdue: diffDays,
           adType: getAdTypeDisplay(cNumStr, ct.customer_id, ct.customer_name),
           type: 'composite',
-          invoiceNumber: ct.task_number ? `مهمة #${ct.task_number}` : undefined,
+          invoiceNumber: ct.task_number ? `أمر عمل #${ct.task_number}` : undefined,
           invoiceTitle,
           serviceLabel,
         };

@@ -37,6 +37,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 // Framer Motion
 import { motion, AnimatePresence } from 'framer-motion';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 // Recharts components
 import { 
@@ -309,7 +310,7 @@ export default function Dashboard() {
         .limit(20);
 
       if (installError) {
-        console.error('خطأ في تحميل مهام التركيب:', installError);
+        console.error('خطأ في تحميل أوامر التركيب:', installError);
       }
 
       const enrichedInstallTasks = await Promise.all(
@@ -1322,7 +1323,7 @@ return removalTasks.filter(t => {
                   <QuickActionButton icon={<Monitor className="h-4 w-4" />} label="اللوحات" onClick={() => navigate('/admin/billboards')} variant="outline" />
                   <QuickActionButton icon={<Wallet className="h-4 w-4" />} label="المدفوعات" onClick={() => navigate('/admin/payments-receipts-page')} variant="outline" />
                   <QuickActionButton icon={<BarChart3 className="h-4 w-4" />} label="التقارير" onClick={() => navigate('/admin/reports')} variant="outline" />
-                  <QuickActionButton icon={<ClipboardList className="h-4 w-4" />} label="المهام المجمعة" onClick={() => navigate('/admin/composite-tasks')} variant="outline" />
+                  <QuickActionButton icon={<ClipboardList className="h-4 w-4" />} label="أوامر العمل" onClick={() => navigate('/admin/composite-tasks')} variant="outline" />
                   <QuickActionButton icon={<BookOpen className="h-4 w-4" />} label="طلبات الحجز" onClick={() => navigate('/admin/booking-requests')} variant="outline" />
                 </div>
               </CardContent>
@@ -1824,7 +1825,7 @@ return removalTasks.filter(t => {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-border/20 pb-4">
               <div>
                 <h2 className="text-base font-bold text-foreground">لوحة الرقابة والعمليات الميدانية</h2>
-                <p className="text-xs text-muted-foreground">متابعة سير مهام التركيب والإزالة المخططة وتفويض الفرق الميدانية ونسب إنجاز العمليات</p>
+                <p className="text-xs text-muted-foreground">متابعة سير أوامر التركيب والإزالة المخططة وتفويض الفرق الميدانية ونسب إنجاز العمليات</p>
               </div>
             </div>
 
@@ -1983,7 +1984,7 @@ return removalTasks.filter(t => {
                 </CardHeader>
                 <CardContent className="p-5">
                   {filteredInstallTasks.length === 0 ? (
-                    <EmptyState icon={<Wrench className="h-8 w-8 text-muted-foreground/50" />} message="لا توجد مهام تركيب متطابقة" />
+                    <EmptyState icon={<Wrench className="h-8 w-8 text-muted-foreground/50" />} message="لا توجد أوامر تركيب متطابقة" />
                   ) : (
                     <div className="space-y-3 max-h-[380px] overflow-y-auto custom-scrollbar pr-1">
                       {filteredInstallTasks.map((task) => (
@@ -2530,22 +2531,7 @@ return removalTasks.filter(t => {
       </Tabs>
 
       {/* Selected Image Modal */}
-      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden bg-card border border-border/60 rounded-2xl shadow-2xl">
-          <CardHeader className="py-3.5 px-5 border-b border-border/20">
-            <DialogTitle className="text-sm font-bold">{selectedImage?.name}</DialogTitle>
-          </CardHeader>
-          <div className="p-3 bg-muted/20">
-            {selectedImage && (
-              <img 
-                src={selectedImage.url} 
-                alt={selectedImage.name}
-                className="w-full h-auto max-h-[78vh] rounded-xl object-contain mx-auto shadow-md"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {selectedImage && <ImageViewer images={[{ src: selectedImage.url }]} onClose={() => setSelectedImage(null)} />}
 
       {/* WhatsApp dialog rendering */}
       <Dialog open={whatsappDialog.open} onOpenChange={(open) => setWhatsappDialog(prev => ({ ...prev, open }))}>

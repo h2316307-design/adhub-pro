@@ -396,7 +396,7 @@ export function SendOverdueRemindersDialog({
     try {
       const designMap = new Map<number, string>();
 
-      // 1) البحث في مهام التركيب أولاً
+      // 1) البحث في أوامر التركيب أولاً
       for (const cn of allContractNumbers) {
         if (designMap.has(cn)) continue;
         const { data: tasks } = await supabase

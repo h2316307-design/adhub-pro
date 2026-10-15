@@ -69,7 +69,24 @@ export function PrintInvoicePaymentDialog({
         return;
       }
 
-      // إضافة الدفعة
+      // 1) الدفعة في الجدول الرئيسي مرتبطة بالفاتورة (تُحتسب في رصيد الزبون)
+      const { data: cust } = await supabase.from('customers').select('name').eq('id', customerId).maybeSingle();
+      const { error: mainError } = await supabase
+        .from('customer_payments')
+        .insert({
+          customer_id: customerId,
+          customer_name: (cust as any)?.name || null,
+          printed_invoice_id: invoice.id,
+          amount: paymentAmount,
+          method: paymentMethod,
+          reference: paymentReference || null,
+          paid_at: paymentDate,
+          notes: `سداد فاتورة طباعة ${invoice.invoice_number}` + (notes ? ` - ${notes}` : ''),
+          entry_type: 'payment'
+        })
+      if (mainError) throw mainError;
+
+      // 2) سجل دفعات فاتورة الطباعة
       const { error: paymentError } = await supabase
         .from('print_invoice_payments')
         .insert({
@@ -80,7 +97,7 @@ export function PrintInvoicePaymentDialog({
           payment_reference: paymentReference || null,
           payment_date: paymentDate,
           notes: notes || null
-        });
+        } as any);
 
       if (paymentError) throw paymentError;
 
@@ -98,18 +115,6 @@ export function PrintInvoicePaymentDialog({
 
       if (updateError) throw updateError;
 
-      // إضافة الدفعة في جدول الدفعات الرئيسي
-      await supabase
-        .from('customer_payments')
-        .insert({
-          customer_id: customerId,
-          amount: paymentAmount,
-          method: paymentMethod,
-          reference: paymentReference || null,
-          paid_at: paymentDate,
-          notes: `سداد فاتورة طباعة ${invoice.invoice_number}` + (notes ? ` - ${notes}` : ''),
-          entry_type: 'print_payment'
-        });
 
       toast.success('تم إضافة الدفعة بنجاح');
       onOpenChange(false);

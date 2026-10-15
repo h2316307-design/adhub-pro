@@ -347,6 +347,66 @@ const uploadViaProxy = async (base64: string, provider: ImageUploadProvider, nam
   return data.url;
 };
 
+
+/* ───────────── تحسينات خوارزمية الرفع ─────────────
+ * 1) ضغط الصور الكبيرة (JPEG/WEBP فقط للحفاظ على شفافية PNG) قبل الرفع: أسرع وأقل استهلاكاً.
+ * 2) مهلة لكل محاولة + إعادة المحاولة مرتين مع انتظار متزايد لأخطاء الشبكة.
+ * 3) ذاكرة صحة المزودين: المزوّد الذي فشل قريباً يُؤخَّر لآخر القائمة 10 دقائق.
+ * 4) منع الرفع المكرر لنفس الملف في الجلسة نفسها.
+ */
+const MAX_DIMENSION = 2560;
+const COMPRESS_OVER_BYTES = 1.5 * 1024 * 1024;
+const ATTEMPT_TIMEOUT_MS = 60_000;
+const providerFailures = new Map<string, number>();
+const sessionUploads = new Map<string, Promise<string>>();
+
+const fileKey = (file: File, name?: string) => `${file.name}|${file.size}|${file.lastModified}|${name || ''}`;
+
+export async function prepareImageForUpload(file: File): Promise<File> {
+  try {
+    if (!/^image\/(jpeg|jpg|webp)$/i.test(file.type) || file.size < COMPRESS_OVER_BYTES || typeof createImageBitmap !== 'function') return file;
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
+    const w = Math.round(bitmap.width * scale), h = Math.round(bitmap.height * scale);
+    const canvas = document.createElement('canvas');
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return file;
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    bitmap.close?.();
+    const blob: Blob | null = await new Promise(res => canvas.toBlob(res, 'image/jpeg', 0.86));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg', lastModified: file.lastModified });
+  } catch {
+    return file;
+  }
+}
+
+const isTransient = (err: any) => {
+  const msg = String(err?.message || err || '').toLowerCase();
+  return msg.includes('network') || msg.includes('fetch') || msg.includes('timeout') || msg.includes('مهلة') || msg.includes('502') || msg.includes('503') || msg.includes('504');
+};
+
+async function attempt<T>(label: string, fn: () => Promise<T>, retries = 2): Promise<T> {
+  let lastErr: any;
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await Promise.race([
+        fn(),
+        new Promise<T>((_, rej) => setTimeout(() => rej(new Error(`انتهت مهلة الرفع إلى ${label}`)), ATTEMPT_TIMEOUT_MS)),
+      ]);
+    } catch (err) {
+      lastErr = err;
+      if (!isTransient(err) || i === retries) break;
+      await new Promise(r => setTimeout(r, 800 * 2 ** i));
+    }
+  }
+  providerFailures.set(label, Date.now());
+  throw lastErr;
+}
+
+const recentlyFailed = (id: string) => Date.now() - (providerFailures.get(id) || 0) < 10 * 60_000;
+
 /**
  * Upload an image file using the configured provider
  * @param folder - Optional folder path for Cloudinary organization
@@ -395,24 +455,31 @@ export const uploadBase64Image = async (base64Data: string, name?: string, folde
  * Upload with automatic fallback to Supabase Storage if the primary provider fails
  */
 export const uploadImageWithFallback = async (file: File, name?: string, folder?: string): Promise<string> => {
-  const provider = await getImageUploadProvider();
-  
-  // If already using Supabase Storage, just upload directly
-  if (provider === 'supabase_storage') {
-    return uploadToSupabaseStorage(file, name);
-  }
-
-  try {
-    return await uploadImage(file, name, folder);
-  } catch (err) {
-    console.warn(`${getProviderName(provider)} failed, falling back to Supabase Storage:`, err);
-    try {
-      return await uploadToSupabaseStorage(file, name);
-    } catch (fallbackErr) {
-      console.error('Supabase Storage fallback also failed:', fallbackErr);
-      throw err; // throw original error
+  const key = fileKey(file, name);
+  const cached = sessionUploads.get(key);
+  if (cached) return cached;
+  const run = (async () => {
+    const prepared = await prepareImageForUpload(file);
+    const provider = await getImageUploadProvider();
+    if (provider === 'supabase_storage') return attempt('supabase_storage', () => uploadToSupabaseStorage(prepared, name));
+    // المزوّد المعتمد أولاً (إلا إن فشل قريباً)، ثم Supabase Storage كاحتياط أخير
+    const order = recentlyFailed(provider) ? ['supabase_storage', provider] : [provider, 'supabase_storage'];
+    let firstErr: any;
+    for (const id of order) {
+      try {
+        return id === 'supabase_storage'
+          ? await attempt('supabase_storage', () => uploadToSupabaseStorage(prepared, name))
+          : await attempt(id, () => uploadImage(prepared, name, folder));
+      } catch (err) {
+        firstErr = firstErr || err;
+        console.warn(`[upload] ${id} failed:`, (err as any)?.message);
+      }
     }
-  }
+    throw firstErr;
+  })();
+  sessionUploads.set(key, run);
+  run.catch(() => sessionUploads.delete(key));
+  return run;
 };
 
 /**
@@ -421,7 +488,7 @@ export const uploadImageWithFallback = async (file: File, name?: string, folder?
  * Never uses Supabase Storage to avoid bandwidth costs.
  */
 export const uploadWithAutoFallback = async (file: File, name?: string, folder?: string): Promise<string> => {
-  const base64 = await fileToBase64(file);
+  const base64 = await fileToBase64(await prepareImageForUpload(file));
   const providers: { id: ImageUploadProvider; fn: (b64: string, n?: string) => Promise<string> }[] = [
     { id: 'imgbb', fn: (b64, n) => uploadToImgbbDirect(b64, n) },
     { id: 'postimg', fn: (b64, n) => uploadToPostImagesDirect(b64, n) },
@@ -439,11 +506,14 @@ export const uploadWithAutoFallback = async (file: File, name?: string, folder?:
     }
   }
 
+  // المزودون الذين فشلوا خلال آخر 10 دقائق يُجرَّبون أخيراً
+  providers.sort((a, b) => Number(recentlyFailed(a.id)) - Number(recentlyFailed(b.id)));
   let lastError: Error | null = null;
   for (const { id, fn } of providers) {
     try {
       console.log(`[AutoFallback] Trying ${id}...`);
-      const url = await fn(base64, name);
+      const url = await attempt(id, () => fn(base64, name), 1);
+      providerFailures.delete(id);
       console.log(`[AutoFallback] Success with ${id}`);
       return url;
     } catch (err: any) {

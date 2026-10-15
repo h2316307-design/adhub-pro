@@ -182,7 +182,7 @@ const PrintTaskCardRow = ({ task, idx, onOpenTask, priorityColors, priorityLabel
                     ? 'bg-blue-500/10 text-blue-400 border-blue-500/20'
                     : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
               }`}>
-                {(task as any)._source === 'installation' ? 'عبر مهمة تركيب' : (task as any)._source === 'contract' ? 'من عقد مباشرة' : 'إضافة يدوية'}
+                {(task as any)._source === 'installation' ? 'عبر أمر تركيب' : (task as any)._source === 'contract' ? 'من عقد مباشرة' : 'إضافة يدوية'}
               </Badge>
             </div>
           </div>

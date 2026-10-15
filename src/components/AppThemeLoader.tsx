@@ -22,6 +22,8 @@ function applyFontToDocument(fontFamily: string) {
     '--app-font-family',
     `'${font}', 'Cairo', 'Tajawal', sans-serif`
   );
+  // يُحفظ ليُطبَّق فوراً في الزيارة التالية قبل جلب الإعدادات (منع تبدّل الخط)
+  try { localStorage.setItem('app-font-family', font); } catch { /* ignore */ }
 }
 
 function applyColorsToDocument(data: Record<string, string>) {

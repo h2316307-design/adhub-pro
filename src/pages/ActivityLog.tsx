@@ -44,7 +44,7 @@ const ENTITY_CONFIG: Record<string, { icon: typeof FileText; label: string; colo
   payment: { icon: CreditCard, label: 'دفعة', color: 'text-emerald-600 dark:text-emerald-400' },
   sales_invoice: { icon: FileText, label: 'فاتورة مبيعات', color: 'text-blue-600 dark:text-blue-400' },
   printed_invoice: { icon: Printer, label: 'فاتورة طباعة', color: 'text-violet-600 dark:text-violet-400' },
-  composite_task: { icon: Layers, label: 'مهمة مجمعة', color: 'text-orange-600 dark:text-orange-400' },
+  composite_task: { icon: Layers, label: 'أمر عمل', color: 'text-orange-600 dark:text-orange-400' },
   installation_item: { icon: Wrench, label: 'تركيب لوحة', color: 'text-cyan-600 dark:text-cyan-400' },
 };
 
@@ -286,7 +286,7 @@ export default function ActivityLog() {
                   <SelectItem value="payment">دفعات</SelectItem>
                   <SelectItem value="sales_invoice">فواتير مبيعات</SelectItem>
                   <SelectItem value="printed_invoice">فواتير طباعة</SelectItem>
-                  <SelectItem value="composite_task">مهام مجمعة</SelectItem>
+                  <SelectItem value="composite_task">أوامر عمل</SelectItem>
                   <SelectItem value="installation_item">تركيب لوحات</SelectItem>
                 </SelectContent>
               </Select>

@@ -154,9 +154,9 @@ export const DOCUMENT_TYPE_INFO: Record<DocumentType, DocumentTypeInfo> = {
   },
   [DOCUMENT_TYPES.COMBINED_TASK]: {
     id: DOCUMENT_TYPES.COMBINED_TASK,
-    nameAr: 'المهام المجمعة',
+    nameAr: 'أوامر العمل',
     nameEn: 'Combined Task Invoice',
-    description: 'فاتورة المهام المجمعة (طباعة + تركيب + قص)',
+    description: 'فاتورة أوامر العمل (طباعة + تركيب + قص)',
     category: 'operations',
     icon: 'Layers',
   },

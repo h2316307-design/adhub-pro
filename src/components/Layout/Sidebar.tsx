@@ -59,7 +59,7 @@ const sidebarInventory: SidebarSection[] = [
       { id: 'tasks', label: 'المهمات اليومية', icon: Calendar, path: '/admin/tasks' },
       {
         id: 'comprehensive_installation_tasks',
-        label: 'مهام التركيب الشاملة',
+        label: 'أوامر العمل (التركيب)',
         icon: FolderKanban,
         path: '/admin/composite-tasks',
         permissions: ['installation_tasks', 'print_tasks', 'cutout_tasks', 'composite_tasks'],
@@ -76,7 +76,8 @@ const sidebarInventory: SidebarSection[] = [
     icon: DollarSign,
     items: [
       { id: 'google_calendar', label: 'تقويم جوجل والتنبيهات', icon: Calendar, path: '/admin/google-calendar' },
-      { id: 'overdue_payments', label: 'دفعات العقود المتأخرة', icon: AlertCircle, path: '/admin/overdue-payments' },
+      { id: 'alerts_center', label: 'تنبيهات الزبائن', icon: AlertCircle, path: '/admin/alerts-center', permission: 'overdue_payments' },
+      { id: 'overdue_payments', label: 'الدفعات المتأخرة', icon: AlertTriangle, path: '/admin/overdue-payments' },
       { id: 'account_overdue_payments', label: 'متأخرات الحسابات والفواتير', icon: Receipt, path: '/admin/account-overdue-payments' },
       { id: 'payments', label: 'الدفعات والإيصالات', icon: CreditCard, path: '/admin/payments-receipts-page' },
       { id: 'contract_closure_simulator', label: 'محاكي تسوية العقود', icon: Calculator, path: '/admin/contract-closure-simulator', permission: 'contracts' },
@@ -146,6 +147,7 @@ const sidebarInventory: SidebarSection[] = [
     items: [
       { id: 'activity_log', label: 'سجل الحركات', icon: Activity, path: '/admin/activity-log' },
       { id: 'reports', label: 'التقارير والإحصائيات', icon: BarChart3, path: '/admin/reports' },
+      { id: 'periodic_reports', label: 'التقارير الدورية (مكتوبة)', icon: FileText, path: '/admin/periodic-reports', permission: 'reports' },
       { id: 'kpi_dashboard', label: 'مؤشرات الأداء', icon: TrendingUp, path: '/admin/kpi-dashboard' },
       { id: 'profitability_reports', label: 'تقارير الربحية', icon: DollarSign, path: '/admin/profitability-reports' },
     ],
@@ -170,6 +172,7 @@ const sidebarInventory: SidebarSection[] = [
       { id: 'settings', label: 'الإعدادات العامة', icon: Settings, path: '/admin/settings' },
       { id: 'system_settings', label: 'إعدادات النظام', icon: Link, path: '/admin/system-settings' },
       { id: 'messaging_settings', label: 'المراسلات', icon: MessageSquare, path: '/admin/messaging-settings' },
+      { id: 'correspondence', label: 'المراسلات الرسمية', icon: FileText, path: '/admin/correspondence', permission: 'messaging_settings' },
       { id: 'bulk_whatsapp', label: 'إرسال جماعي واتساب', icon: Send, path: '/admin/bulk-whatsapp' },
       { id: 'currency_settings', label: 'العملة', icon: DollarSign, path: '/admin/currency-settings' },
       { id: 'print_design', label: 'تصميم الطباعة', icon: Palette, path: '/admin/print-design' },
@@ -189,18 +192,29 @@ const allSidebarItems = new Map(sidebarInventory.flatMap(section => section.item
 const group = (id: string, title: string, icon: LucideIcon, ids: string[]): SidebarSection => ({
   id, title, icon, items: ids.map(key => allSidebarItems.get(key)!).filter(Boolean),
 });
+// الوصول السريع: الأكثر استخداماً — العقود وما يتبعها مباشرة (المهام الشاملة، الدفعات، المتأخرات، التنبيهات)
+const coreMap = new Map(coreItems.map(item => [item.id, item]));
+const quickItems: SidebarItem[] = [
+  'dashboard', 'contracts', 'comprehensive_installation_tasks', 'payments', 'overdue_payments', 'alerts_center',
+  'customers', 'offers', 'billboards', 'events_contracts', 'events_pricing', 'booking_requests',
+].map(id => coreMap.get(id) || allSidebarItems.get(id)!).filter(Boolean);
+
 const sidebarSections: SidebarSection[] = [
-  group('sales', 'العملاء والأسعار', Users, ['customers', 'pricing', 'pricing_factors', 'export_pricing', 'customer_merge']),
+  group('sales', 'الأسعار والعملاء', Calculator, ['pricing', 'pricing_factors', 'export_pricing', 'customer_merge']),
   group('billboards', 'إدارة اللوحات والمواقع', MapPin, ['billboard_photos', 'extended_billboards', 'delayed_billboards', 'billboard_maintenance', 'smart_distribution', 'billboard_cleanup']),
-  group('operations', 'التنفيذ والتصميم', FolderKanban, ['tasks', 'comprehensive_installation_tasks', 'removal_tasks', 'design_studio', 'image_gallery', 'field_photos', 'rephotography', 'drive_uploader']),
-  group('finance', 'المالية والحسابات', DollarSign, ['google_calendar', 'payments', 'overdue_payments', 'account_overdue_payments', 'revenue', 'expenses', 'printed_invoices_page', 'printer_accounts', 'installation_team_accounts', 'custody', 'salaries', 'contract_closure_simulator']),
+  group('operations', 'التنفيذ والتصميم', FolderKanban, ['tasks', 'removal_tasks', 'design_studio', 'image_gallery', 'field_photos', 'rephotography', 'drive_uploader']),
+  group('finance', 'المالية والحسابات', DollarSign, ['account_overdue_payments', 'revenue', 'expenses', 'custody', 'salaries', 'printed_invoices_page', 'printer_accounts', 'installation_team_accounts', 'contract_closure_simulator', 'google_calendar']),
   group('partnerships', 'الشركات والشراكات', Building2, ['company_management', 'shared_companies', 'shared_billboards', 'friend_billboards', 'friend_accounts', 'logo_management']),
   group('municipalities', 'البلديات', MapPin, ['municipality_organizer', 'municipality_stickers', 'municipality_rent_prices', 'municipality_stats']),
-  group('reports', 'التقارير والأداء', BarChart3, ['reports', 'kpi_dashboard', 'profitability_reports', 'activity_log']),
+  group('reports', 'التقارير والأداء', BarChart3, ['reports', 'periodic_reports', 'kpi_dashboard', 'profitability_reports', 'activity_log']),
   group('team', 'الفريق والصلاحيات', Users, ['installation_teams', 'printers', 'users', 'roles']),
-  group('communication', 'التواصل والمساعد', MessageSquare, ['bulk_whatsapp', 'messaging_settings', 'ai_assistant']),
+  group('communication', 'التواصل والمساعد', MessageSquare, ['correspondence', 'bulk_whatsapp', 'messaging_settings', 'ai_assistant']),
   group('settings', 'الإعدادات والطباعة', Settings, ['settings', 'currency_settings', 'contract_terms', 'print_design', 'billboard_print_settings', 'export_content_settings', 'site_appearance', 'font_settings', 'system_settings', 'database_backup', 'database_setup']),
 ];
+
+/** فهرس كل صفحات القائمة للبحث العام (نفس الوجهات والصلاحيات) */
+export const NAV_SEARCH_INDEX: (SidebarItem & { section: string })[] = [{ title: 'الوصول السريع', items: quickItems }, ...sidebarSections]
+  .flatMap(section => section.items.map(item => ({ ...item, section: section.title })));
 
 interface SidebarProps {
   className?: string;
@@ -221,7 +235,7 @@ export function Sidebar({ className, onNavigate }: SidebarProps) {
   ), [hasPermission]);
 
   const filteredCoreItems = useMemo(
-    () => coreItems.filter(item => canViewItem(item) && matchesSearch(item.label)),
+    () => quickItems.filter(item => canViewItem(item) && matchesSearch(item.label)),
     [canViewItem, search]
   );
 

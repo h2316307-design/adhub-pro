@@ -180,7 +180,7 @@ export const ContractGroupCard = ({
                 {group.label}
               </span>
               {group.isMultiContract && (
-                <span className="text-amber-400/90">مهمة مجمعة مستقلة</span>
+                <span className="text-amber-400/90">أمر عمل مستقل</span>
               )}
               <span className="text-muted-foreground">
                 {group.operations.length} {group.operations.length === 1 ? 'عملية' : 'عمليات'}
@@ -533,7 +533,7 @@ export const ContractGroupCard = ({
                           </>
                         )}
 
-                        {/* 3. طباعة مهمة التركيب لجميع الفرق مع فلترة الفرق */}
+                        {/* 3. طباعة أمر التركيب لجميع الفرق مع فلترة الفرق */}
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -543,7 +543,7 @@ export const ContractGroupCard = ({
                                   .map((t: any) => t.installation_task_id)
                                   .filter(Boolean);
                                 if (allInstallTaskIds.length === 0) {
-                                  toast.error('لا توجد مهام تركيب مرتبطة بهذه العملية');
+                                  toast.error('لا توجد أوامر تركيب مرتبطة بهذه العملية');
                                   return;
                                 }
                                 loadInstallationWorkflow(
@@ -553,13 +553,13 @@ export const ContractGroupCard = ({
                                 );
                               }}
                               className="inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border border-border/60 bg-card px-3 text-xs font-semibold text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-                              aria-label={`طباعة مهمة التركيب لجميع فرق ${operation.label}`}
+                              aria-label={`طباعة أمر التركيب لجميع فرق ${operation.label}`}
                             >
                               <Printer className="h-3.5 w-3.5" />
-                              <span>طباعة مهمة التركيب</span>
+                              <span>طباعة أمر التركيب</span>
                             </button>
                           </TooltipTrigger>
-                          <TooltipContent side="top" className="text-xs">طباعة شاملة لمهمة التركيب لجميع الفرق مع إمكانية اختيار الفرق كلها أو إلغاء</TooltipContent>
+                          <TooltipContent side="top" className="text-xs">طباعة شاملة لأمر التركيب لجميع الفرق مع إمكانية اختيار الفرق كلها أو إلغاء</TooltipContent>
                         </Tooltip>
                       </div>
                     </div>

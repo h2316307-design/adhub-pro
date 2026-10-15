@@ -1,3 +1,4 @@
+import { loadInstallationOperationIds, prepareInstallationOperationTask } from '@/services/installationOperation';
 import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
 import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { useState, useMemo, useEffect } from 'react';
@@ -154,8 +155,11 @@ export default function InstallationTasks() {
   useEffect(() => {
     if (searchParams.get('create') !== '1') return;
     setAddTaskDialogOpen(true);
+    const requestedType = searchParams.get('type');
+    if (requestedType === 'reinstallation' || requestedType === 'installation') setTaskType(requestedType);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.delete('create');
+    nextParams.delete('type');
     setSearchParams(nextParams, { replace: true });
   }, [searchParams, setSearchParams]);
   const { filters: pageFilters, setFilter: setPageFilter } = usePersistedFilters('installation-page', {
@@ -274,7 +278,7 @@ export default function InstallationTasks() {
       .eq('installation_task_id', taskId)
       .maybeSingle();
     if (!data) {
-      toast.error('لا توجد مهمة مجمعة مرتبطة بمهمة التركيب هذه');
+      toast.error('لا توجد أمر عمل مرتبط بأمر التركيب هذه');
       return;
     }
 
@@ -300,10 +304,10 @@ export default function InstallationTasks() {
     setInvoiceDialogOpen(true);
   };
 
-  // ✅ Helper: عند إكمال جميع عناصر مهمة التركيب، يتم تلقائياً تحديث حالة مهام الطباعة والقص المرتبطة
+  // ✅ Helper: عند إكمال جميع عناصر أمر التركيب، يتم تلقائياً تحديث حالة مهام الطباعة والقص المرتبطة
   const autoCompleteLinkedTasks = async (taskId: string) => {
     try {
-      // تحقق من أن جميع العناصر في مهمة التركيب مكتملة
+      // تحقق من أن جميع العناصر في أمر التركيب مكتمل
       const [totalResult, pendingResult] = await Promise.all([
         supabase.from('installation_task_items').select('id', { count: 'exact', head: true }).eq('task_id', taskId),
         supabase.from('installation_task_items').select('id', { count: 'exact', head: true }).eq('task_id', taskId).neq('status', 'completed'),
@@ -314,7 +318,7 @@ export default function InstallationTasks() {
       const { error: parentError } = await supabase.from('installation_tasks').update({ status: 'completed' }).eq('id', taskId);
       if (parentError) throw parentError;
 
-      // البحث عن المهمة المجمعة المرتبطة
+      // البحث عن أمر العمل المرتبط
       const { data: composites, error: compositesError } = await supabase
         .from('composite_tasks')
         .select('id, print_task_id, cutout_task_id')
@@ -347,7 +351,7 @@ export default function InstallationTasks() {
         if (ct.cutout_task_id) {
           await supabase.from('cutout_tasks').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', ct.cutout_task_id);
         }
-        // تحديث حالة المهمة المجمعة أيضاً
+        // تحديث حالة أمر العمل أيضاً
         const { error: compositeError } = await supabase.from('composite_tasks').update({ status: 'completed', updated_at: new Date().toISOString() }).eq('id', ct.id);
         if (compositeError) throw compositeError;
       }
@@ -439,8 +443,10 @@ export default function InstallationTasks() {
       if (error) throw error;
       
       // Map arrays returned by PostgREST one-to-many relationship back to single objects
+      const operationIds = await loadInstallationOperationIds();
       const mapped = (allTasks || []).map((t: any) => ({
         ...t,
+        operation_id: operationIds[t.id] || null,
         print_tasks: t.print_tasks && t.print_tasks.length > 0 ? t.print_tasks[0] : null,
         cutout_tasks: t.cutout_tasks && t.cutout_tasks.length > 0 ? t.cutout_tasks[0] : null,
       }));
@@ -879,6 +885,7 @@ export default function InstallationTasks() {
       task_name?: string;
       acceptedInactiveContractIds?: number[];
       operationNumber?: number;
+      operationId: string;
     }) => {
       const { contractId, teamId, taskType, task_name } = vars;
       const contractIds = [...new Set((vars.contractIds?.length ? vars.contractIds : [contractId]).map(Number).filter(Boolean))];
@@ -894,7 +901,7 @@ export default function InstallationTasks() {
       if (chosenError) throw chosenError;
       if (chosenContracts?.length !== contractIds.length) throw new Error('تغيرت العقود المختارة؛ أعد فتح النافذة.');
       const customerKeys = new Set(chosenContracts.map(contract => contract.customer_id || contract['Customer Name']));
-      if (customerKeys.size !== 1) throw new Error('يجب أن تكون عقود المهمة المجمعة للزبون نفسه.');
+      if (customerKeys.size !== 1) throw new Error('يجب أن تكون عقود أمر العمل للزبون نفسه.');
       const inactive = chosenContracts.filter(contract => !installationContractIsActive(contract, referenceDate));
       if (inactive.some(contract => taskType !== 'reinstallation' || !vars.acceptedInactiveContractIds?.includes(Number(contract.Contract_Number)))) throw new Error('يجب مراجعة العقود غير النشطة من نافذة إعادة التركيب.');
       const ownedBoards = new Set(chosenContracts.flatMap(contract => parseContractBillboardIds(contract.billboard_ids)));
@@ -954,6 +961,7 @@ export default function InstallationTasks() {
             .insert({
               contract_id: contractId,
               contract_ids: contractIds,
+              ...(await prepareInstallationOperationTask(vars.operationId)),
               team_id: teamId,
               status: 'pending',
               task_type: 'reinstallation',
@@ -983,6 +991,7 @@ export default function InstallationTasks() {
               .insert({
                 contract_id: contractId,
                 contract_ids: contractIds,
+                ...(await prepareInstallationOperationTask(vars.operationId)),
                 team_id: teamId,
                 status: 'pending',
                 task_type: 'installation',
@@ -1084,6 +1093,7 @@ export default function InstallationTasks() {
             .insert({
               contract_id: contractId,
               contract_ids: contractIds,
+              ...(await prepareInstallationOperationTask(vars.operationId)),
               team_id: autoTeamId,
               status: 'pending',
               task_type: 'reinstallation',
@@ -1112,6 +1122,7 @@ export default function InstallationTasks() {
               .insert({
                 contract_id: contractId,
                 contract_ids: contractIds,
+                ...(await prepareInstallationOperationTask(vars.operationId)),
                 team_id: autoTeamId,
                 status: 'pending',
                 task_type: 'installation',
@@ -1247,7 +1258,7 @@ export default function InstallationTasks() {
         .maybeSingle();
 
       if (existingByTask) {
-        throw new Error('توجد مهمة مجمعة مرتبطة بهذه المهمة بالفعل');
+        throw new Error('توجد أمر عمل مرتبط بهذه المهمة بالفعل');
       }
 
       // Get contract data
@@ -1338,13 +1349,13 @@ export default function InstallationTasks() {
       return compositeTask;
     },
     onSuccess: () => {
-      toast.success('تم إنشاء المهمة المجمعة للتركيب بنجاح');
+      toast.success('تم إنشاء أمر العمل للتركيب بنجاح');
       setCreateCompositeDialogOpen(false);
       setSelectedTaskForComposite(null);
       queryClient.invalidateQueries({ queryKey: ['composite-tasks'] });
     },
     onError: (error: any) => {
-      toast.error(error.message || 'فشل في إنشاء المهمة المجمعة');
+      toast.error(error.message || 'فشل في إنشاء أمر العمل');
     },
   });
 
@@ -1410,6 +1421,7 @@ export default function InstallationTasks() {
           task_type: 'reinstallation',
           reinstallation_number: nextNumber,
           contract_ids: originalTask.contract_ids,
+          ...(await prepareInstallationOperationTask(crypto.randomUUID())),
         })
         .select()
         .single();
@@ -1526,6 +1538,7 @@ export default function InstallationTasks() {
   const duplicateAsReinstallationGroupMutation = useMutation({
     mutationFn: async (taskIds: string[]) => {
       const newTaskIdList: string[] = [];
+      const operationId = crypto.randomUUID();
 
       for (const originalTaskId of taskIds) {
         // 1. Fetch original task details
@@ -1558,6 +1571,7 @@ export default function InstallationTasks() {
             task_type: 'reinstallation',
             reinstallation_number: nextNumber,
             contract_ids: originalTask.contract_ids,
+            ...(await prepareInstallationOperationTask(operationId)),
           })
           .select()
           .single();
@@ -1677,7 +1691,7 @@ export default function InstallationTasks() {
   }, [tasks]);
 
   const duplicateRows = useMemo(() => {
-    // اعتبر فقط عناصر مهام التركيب (installation) غير المكتملة
+    // اعتبر فقط عناصر أوامر التركيب (installation) غير المكتملة
     const eligible = allTaskItems.filter(i =>
       i.status !== 'completed' && (taskTypeById[i.task_id] || 'installation') === 'installation'
     );
@@ -1789,7 +1803,7 @@ export default function InstallationTasks() {
       return itemsToDelete.length;
     },
     onSuccess: (count) => {
-      toast.success(`تم حذف ${count} لوحة مكررة من مهام التركيب`);
+      toast.success(`تم حذف ${count} لوحة مكررة من أوامر التركيب`);
       setDuplicatesReviewOpen(false);
       refetchTasks();
       refetchTaskItems();
@@ -1985,7 +1999,7 @@ export default function InstallationTasks() {
     },
   });
 
-  // ── مطابقة لوحات مهام التركيب مع العقد (إضافة الناقص + حذف الزائد غير المركّب) ──
+  // ── مطابقة لوحات أوامر التركيب مع العقد (إضافة الناقص + حذف الزائد غير المركّب) ──
   const syncMissingBillboardsMutation = useMutation({
     mutationFn: async ({ contractId, groupTaskIds, selectedBillboards: inputBillboards, removeItemIds = [] }: {
       contractId: number;
@@ -2232,7 +2246,7 @@ export default function InstallationTasks() {
   const selectedTaskObj = useMemo(() => selectedTaskId ? tasks.find(t => t.id === selectedTaskId) : null, [selectedTaskId, tasks]);
   const selectedTaskItemsList = useMemo(() => selectedTaskId ? allTaskItems.filter(i => i.task_id === selectedTaskId) : [], [selectedTaskId, allTaskItems]);
   // ضمّ تصاميم المهام الشقيقة التي تشترك في نفس (العقد + نوع المهمة + رقم إعادة التركيب)
-  // فقط — لمنع تسرّب تصاميم مهمة التركيب الأصلية إلى مهمة إعادة التركيب، مع السماح
+  // فقط — لمنع تسرّب تصاميم أمر التركيب الأصلي إلى مهمة إعادة التركيب، مع السماح
   // بمشاركة التصاميم بين فرق متعددة لنفس المجموعة (وهو السلوك الذي تعرضه شريط الفريق).
   const selectedTaskDesigns = useMemo(() => {
     if (!selectedTaskId || !selectedTaskObj) return [];
@@ -2243,7 +2257,7 @@ export default function InstallationTasks() {
         if (!isSameKey) return false;
 
         // التحقق من أن المهمة الشقيقة تم إنشاؤها في نفس الفترة الزمنية (خلال 24 ساعة)
-        // لتجنب جلب تصاميم من مهام تركيب قديمة جداً لنفس العقد
+        // لتجنب جلب تصاميم من أوامر تركيب قديمة جداً لنفس العقد
         if (t.created_at && selectedTaskObj.created_at) {
           const diffMs = Math.abs(new Date(t.created_at).getTime() - new Date(selectedTaskObj.created_at).getTime());
           const diffHours = diffMs / (1000 * 60 * 60);
@@ -2366,7 +2380,7 @@ export default function InstallationTasks() {
                 });
                 setPrintAllDialogOpen(true);
               }}
-              onDelete={async () => { if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف مهمة التركيب؟', variant: 'destructive', confirmText: 'حذف' })) { deleteTaskMutation.mutate(selectedTaskId); setSelectedTaskId(null); } }}
+              onDelete={async () => { if (await systemConfirm({ title: 'تأكيد الحذف', message: 'هل أنت متأكد من حذف أمر التركيب؟', variant: 'destructive', confirmText: 'حذف' })) { deleteTaskMutation.mutate(selectedTaskId); setSelectedTaskId(null); } }}
               onDuplicateAsReinstallation={async () => {
                 if (await systemConfirm({
                   title: 'تأكيد التكرار كإعادة تركيب',
@@ -2583,10 +2597,10 @@ export default function InstallationTasks() {
           <div className="mb-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-card/45 backdrop-blur-md border border-border/30 rounded-[22px] p-5 shadow-lg select-none">
             <div className="space-y-1 text-right">
               <h1 className="text-3xl font-black tracking-tight text-foreground bg-gradient-to-r from-foreground to-foreground/80 bg-clip-text">
-                مهام التركيب
+                أوامر التركيب
               </h1>
               <p className="text-xs font-medium text-muted-foreground/80">
-                إدارة ومتابعة مهام تركيب وتوزيع اللوحات الإعلانية للفرق الفنية
+                إدارة ومتابعة أوامر تركيب وتوزيع اللوحات الإعلانية للفرق الفنية
               </p>
             </div>
             
@@ -2769,7 +2783,7 @@ export default function InstallationTasks() {
                 const bb = billboardById[item.billboard_id];
                 return bb ? `• ${bb.Billboard_Name || `لوحة #${bb.ID}`} - ${bb.City || ''} ${bb.District || ''}` : `• لوحة #${item.billboard_id}`;
               }).join('\n');
-              const message = `مرحباً ${customerName}\n\nتفاصيل مهمة التركيب:\nنوع الإعلان: ${adType}\nعدد اللوحات: ${taskItemsList.length}\n\n${billboardNames}\n\nشكراً لتعاملكم معنا`;
+              const message = `مرحباً ${customerName}\n\nتفاصيل أمر التركيب:\nنوع الإعلان: ${adType}\nعدد اللوحات: ${taskItemsList.length}\n\n${billboardNames}\n\nشكراً لتعاملكم معنا`;
               if (phone) {
                 const cleanPhone = phone.replace(/[^0-9+]/g, '').replace(/^\+/, '');
                 window.open(`https://wa.me/${cleanPhone}?text=${encodeURIComponent(message)}`, '_blank');
@@ -2857,6 +2871,7 @@ export default function InstallationTasks() {
         isSubmitting={createTaskMutation.isPending}
         onSubmit={async ({ contractIds, customerId, billboardIds, teamAssignments, task_name, acceptedInactiveContractIds }) => {
           try {
+            const operationId = crypto.randomUUID();
             let operationNumber: number | undefined;
             if (taskType === 'reinstallation') {
               const { data, error } = await supabase.from('installation_tasks').select('reinstallation_number').in('contract_id', contractIds).eq('task_type', 'reinstallation').order('reinstallation_number', { ascending: false }).limit(1);
@@ -2865,7 +2880,7 @@ export default function InstallationTasks() {
             }
             const batches = teamAssignments.length ? teamAssignments.map(assignment => ({ teamId: assignment.teamId, billboardIds: assignment.billboardIds })) : [{ teamId: null, billboardIds }];
             for (const batch of batches) {
-              await createTaskMutation.mutateAsync({ contractId: contractIds[0], contractIds, billboardIds: batch.billboardIds, teamId: batch.teamId, taskType, task_name, acceptedInactiveContractIds, operationNumber });
+              await createTaskMutation.mutateAsync({ contractId: contractIds[0], contractIds, billboardIds: batch.billboardIds, teamId: batch.teamId, taskType, task_name, acceptedInactiveContractIds, operationNumber, operationId });
             }
           } catch (error: any) { toast.error(error.message || 'تعذر إنشاء المهمة'); }
         }}
@@ -2877,7 +2892,7 @@ export default function InstallationTasks() {
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>إدارة التصاميم</DialogTitle>
-              <DialogDescription className="sr-only">إدارة وتعيين التصاميم لمهمة التركيب</DialogDescription>
+              <DialogDescription className="sr-only">إدارة وتعيين التصاميم لأمر التركيب</DialogDescription>
             </DialogHeader>
             <TaskDesignManager
               taskId={selectedTaskForDesign}
@@ -3576,8 +3591,8 @@ export default function InstallationTasks() {
       <Dialog open={createCompositeDialogOpen} onOpenChange={setCreateCompositeDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>إنشاء مهمة مجمعة للتركيب</DialogTitle>
-            <DialogDescription className="sr-only">نموذج إنشاء مهمة مجمعة لعمليات التركيب</DialogDescription>
+            <DialogTitle>إنشاء أمر عمل للتركيب</DialogTitle>
+            <DialogDescription className="sr-only">نموذج إنشاء أمر عمل لعمليات التركيب</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {selectedTaskForComposite && (
@@ -3597,7 +3612,7 @@ export default function InstallationTasks() {
                   </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  سيتم إنشاء مهمة مجمعة تحتوي على تكلفة التركيب فقط. يمكنك لاحقاً إضافة مهام الطباعة والقص من صفحة المهام المجمعة.
+                  سيتم إنشاء أمر عمل تحتوي على تكلفة التركيب فقط. يمكنك لاحقاً إضافة مهام الطباعة والقص من صفحة أوامر العمل.
                 </p>
                 <div className="flex justify-end gap-2 pt-4">
                   <Button
@@ -3623,7 +3638,7 @@ export default function InstallationTasks() {
                     disabled={createCompositeTaskMutation.isPending}
                     className="bg-amber-600 hover:bg-amber-700"
                   >
-                    {createCompositeTaskMutation.isPending ? 'جاري الإنشاء...' : 'إنشاء المهمة المجمعة'}
+                    {createCompositeTaskMutation.isPending ? 'جاري الإنشاء...' : 'إنشاء أمر العمل'}
                   </Button>
                 </div>
               </>

@@ -657,7 +657,7 @@ export async function getContractWithBillboards(contractId: string): Promise<any
     const c = contractResult.data || {};
     const contractTasks = contractTasksResult.data || [];
 
-    // ✅ جلب عناصر مهام التركيب (صور التركيب والتصاميم)
+    // ✅ جلب عناصر أوامر التركيب (صور التركيب والتصاميم)
     let installationItemsMap = new Map<number, any>();
     if (contractTasks && contractTasks.length > 0) {
       const taskIds = contractTasks.map(t => t.id);
@@ -758,7 +758,7 @@ export async function getContractWithBillboards(contractId: string): Promise<any
           installed_image_url: installationItem.installed_image_url || b.installed_image_url,
           installed_image_face_a_url: installationItem.installed_image_face_a_url || b.installed_image_face_a_url,
           installed_image_face_b_url: installationItem.installed_image_face_b_url || b.installed_image_face_b_url,
-          // تصاميم من مهمة التركيب (لها أولوية إذا لم تكن موجودة من design_data)
+          // تصاميم من أمر التركيب (لها أولوية إذا لم تكن موجودة من design_data)
           design_face_a: b.design_face_a || installationItem.design_face_a,
           design_face_b: b.design_face_b || installationItem.design_face_b,
           installation_date: installationItem.installation_date,

@@ -766,8 +766,8 @@ export function CreatePrintTaskFromInstallation({
       }
 
       const successMessage = cutoutGroups.length > 0 
-        ? `تم إنشاء مهمة الطباعة والقص والمهمة المجمعة بنجاح`
-        : `تم إنشاء مهمة الطباعة والمهمة المجمعة بنجاح`;
+        ? `تم إنشاء مهمة الطباعة والقص وأمر العمل بنجاح`
+        : `تم إنشاء مهمة الطباعة وأمر العمل بنجاح`;
 
       toast.success(successMessage);
       queryClient.invalidateQueries({ queryKey: ['print-tasks'] });
@@ -798,7 +798,7 @@ export function CreatePrintTaskFromInstallation({
                 <Printer className="h-5.5 w-5.5 text-primary animate-pulse" />
                 <span>إنشاء مهمة طباعة وقص</span>
               </DialogTitle>
-              <p className="text-xs text-muted-foreground mt-1">قم بإعداد وتوزيع تكاليف فواتير الطباعة والقص لمهام التركيب</p>
+              <p className="text-xs text-muted-foreground mt-1">قم بإعداد وتوزيع تكاليف فواتير الطباعة والقص لأوامر التركيب</p>
             </div>
 
             {/* Step indicators */}
@@ -912,7 +912,7 @@ export function CreatePrintTaskFromInstallation({
                     <h3 className="font-extrabold text-sm text-foreground">تحديد اللوحات المطلوب طباعتها</h3>
                   </div>
                   <p className="text-xs text-muted-foreground leading-relaxed">
-                    يرجى تحديد اللوحات التي ترغب في طباعتها فعلياً ضمن هذه المهمة المجمعة. سيتم استبعاد اللوحات غير المحددة من مهمة الطباعة وفاتورة الطباعة لتجنب أي فروقات مالية.
+                    يرجى تحديد اللوحات التي ترغب في طباعتها فعلياً ضمن هذا أمر العمل. سيتم استبعاد اللوحات غير المحددة من مهمة الطباعة وفاتورة الطباعة لتجنب أي فروقات مالية.
                   </p>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5 pt-2">

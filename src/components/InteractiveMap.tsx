@@ -5,6 +5,7 @@ import { MapPin, Layers, ZoomIn, ZoomOut, Download, PenTool, X, CheckCircle2 } f
 import { Button } from "@/components/ui/button"
 import { loadScriptOnce } from "@/lib/loadExternalScript"
 import DOMPurify from 'dompurify'
+import { ImageViewer } from "@/components/shared/ImageViewer"
 
 // Helper function to escape HTML entities for safe rendering
 const escapeHtml = (text: string): string => {
@@ -1085,45 +1086,9 @@ export default function InteractiveMap({ billboards, onImageView, selectedBillbo
         </CardContent>
       </Card>
       
-      {/* Image Lightbox - Full screen overlay with highest z-index */}
+      {/* تكبير الصورة: العارض الموحد */}
       {zoomedImage && (
-        <div
-          className="fixed inset-0 bg-black/95 flex items-center justify-center p-4 cursor-pointer"
-          style={{ zIndex: 99999 }}
-          onClick={() => setZoomedImage(null)}
-        >
-          {/* Close button */}
-          <button
-            className="absolute top-6 right-6 z-10 h-14 w-14 rounded-full bg-red-600 hover:bg-red-700 active:bg-red-800 text-white flex items-center justify-center transition-all duration-200 shadow-2xl border-2 border-white/30 hover:scale-110 cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              setZoomedImage(null);
-            }}
-            aria-label="إغلاق"
-          >
-            <X className="h-7 w-7" strokeWidth={2.5} />
-          </button>
-          
-          {/* Hint text */}
-          <div className="absolute top-6 left-6 text-white/60 text-sm font-medium">
-            اضغط في أي مكان للإغلاق
-          </div>
-          
-          {/* Image container */}
-          <div 
-            className="relative max-w-[95vw] max-h-[90vh] flex items-center justify-center"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <img
-              src={zoomedImage}
-              alt="Billboard"
-              className="max-w-full max-h-[85vh] object-contain rounded-xl shadow-2xl"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = "/roadside-billboard.png";
-              }}
-            />
-          </div>
-        </div>
+        <ImageViewer images={[{ src: zoomedImage }]} onClose={() => setZoomedImage(null)} />
       )}
     </div>
   )

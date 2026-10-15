@@ -32,15 +32,15 @@ export function compositeTaskLabel(task: CompositeTaskIdentity, adType?: string)
 
   if (isReinstall) {
     const num = task.reinstallation_number || 1;
-    kindStr = `مهمة إعادة تركيب رقم ${num}`;
+    kindStr = `إعادة تركيب رقم ${num}`;
   } else if (task.task_type === 'installation' || task.task_type === 'new_installation' || task.installation_task_id) {
-    kindStr = 'مهمة تركيب جديد';
+    kindStr = 'أمر تركيب جديد';
   } else if (task.task_type === 'print') {
-    kindStr = task.task_number ? `مهمة طباعة #${task.task_number}` : 'مهمة طباعة';
+    kindStr = task.task_number ? `أمر طباعة #${task.task_number}` : 'أمر طباعة';
   } else if (task.task_type === 'cutout') {
-    kindStr = task.task_number ? `مهمة قص مجسمات #${task.task_number}` : 'مهمة قص مجسمات';
+    kindStr = task.task_number ? `أمر قص مجسمات #${task.task_number}` : 'أمر قص مجسمات';
   } else {
-    kindStr = task.task_number ? `مهمة مجمعة #${task.task_number}` : 'مهمة مجمعة';
+    kindStr = task.task_number ? `أمر عمل #${task.task_number}` : 'أمر عمل';
   }
 
   const isFullyPaid = task.is_fully_paid ?? (

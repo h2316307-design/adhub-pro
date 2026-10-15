@@ -178,7 +178,7 @@ export default function BillboardPrintSettingsNew() {
     },
   });
 
-  // جلب مهام التركيب
+  // جلب أوامر التركيب
   const { data: installationTasks = [] } = useQuery({
     queryKey: ['installation-tasks-for-print-new'],
     queryFn: async () => {
@@ -462,7 +462,7 @@ export default function BillboardPrintSettingsNew() {
                     </DialogHeader>
                     <div className="space-y-4">
                       <div className="flex gap-2 border-b pb-3">
-                        <Button variant={searchMode === 'tasks' ? 'default' : 'outline'} size="sm" onClick={() => setSearchMode('tasks')}>مهام التركيب</Button>
+                        <Button variant={searchMode === 'tasks' ? 'default' : 'outline'} size="sm" onClick={() => setSearchMode('tasks')}>أوامر التركيب</Button>
                         <Button variant={searchMode === 'contracts' ? 'default' : 'outline'} size="sm" onClick={() => setSearchMode('contracts')}>العقود</Button>
                       </div>
                       <div className="relative">
@@ -482,7 +482,7 @@ export default function BillboardPrintSettingsNew() {
                                 <p className="text-sm mt-1">{task.customer_name || 'بدون عميل'}</p>
                                 {task.team_name && <p className="text-xs text-muted-foreground">{task.team_name}</p>}
                               </button>
-                            )) : <p className="text-center text-muted-foreground py-8">لا توجد مهام تركيب</p>
+                            )) : <p className="text-center text-muted-foreground py-8">لا توجد أوامر تركيب</p>
                           ) : (
                             filteredContracts.length > 0 ? filteredContracts.map((contract) => (
                               <button key={contract.Contract_Number} onClick={() => {

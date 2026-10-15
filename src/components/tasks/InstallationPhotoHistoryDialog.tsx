@@ -4,6 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { Camera, Calendar, ImageIcon, X, Palette } from 'lucide-react';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface PhotoRecord {
   id: string;
@@ -200,25 +201,7 @@ export function InstallationPhotoHistoryDialog({
 
       {/* Full-size preview with clear close button */}
       {previewImage && (
-        <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-          <DialogContent className="max-w-4xl p-0 bg-black/95 border-0 overflow-hidden">
-            <div className="relative">
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute top-3 left-3 z-50 h-10 w-10 rounded-full bg-red-600 hover:bg-red-700 shadow-2xl ring-2 ring-white/30"
-                onClick={() => setPreviewImage(null)}
-              >
-                <X className="h-5 w-5 text-white" />
-              </Button>
-              <img 
-                src={previewImage} 
-                alt="معاينة" 
-                className="w-full max-h-[85vh] object-contain p-2" 
-              />
-            </div>
-          </DialogContent>
-        </Dialog>
+        <ImageViewer images={[{ src: previewImage }]} onClose={() => setPreviewImage(null)} />
       )}
     </>
   );

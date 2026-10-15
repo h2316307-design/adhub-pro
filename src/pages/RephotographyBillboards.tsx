@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { Camera, MapPin, RotateCcw, X, Navigation, Building, Ruler, Layers, Eye, ZoomIn, Copy } from "lucide-react";
 import { EditGuard } from "@/components/EditGuard";
 import { BillboardImageWithBlur } from "@/components/BillboardImageWithBlur";
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -363,13 +364,7 @@ const RephotographyBillboards = () => {
       )}
 
       {/* معاينة الصورة */}
-      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
-        <DialogContent className="max-w-4xl p-0 overflow-hidden">
-          {previewImage && (
-            <img src={previewImage} alt="معاينة" className="w-full h-auto" />
-          )}
-        </DialogContent>
-      </Dialog>
+      {previewImage && <ImageViewer images={[{ src: previewImage }]} onClose={() => setPreviewImage(null)} />}
     </div>
   );
 };

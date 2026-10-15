@@ -76,6 +76,7 @@ const Salaries = lazyRetry(() => import("./pages/Salaries"));
 const EmployeeDetail = lazyRetry(() => import("./pages/EmployeeDetail"));
 const Customers = lazyRetry(() => import("./pages/Customers"));
 const CustomerBilling = lazyRetry(() => import("./pages/CustomerBilling"));
+const CustomerAccount = lazyRetry(() => import("./pages/CustomerAccount"));
 const CustomerMerge = lazyRetry(() => import("./pages/CustomerMerge"));
 const BookingRequests = lazyRetry(() => import("./pages/BookingRequests"));
 const SharedBillboards = lazyRetry(() => import("./pages/SharedBillboards"));
@@ -102,6 +103,7 @@ const PDFTemplateSettings = lazyRetry(() => import("./pages/PDFTemplateSettings"
 const FriendBillboards = lazyRetry(() => import("./pages/FriendBillboards"));
 const FriendCompanyAccounts = lazyRetry(() => import("./pages/FriendCompanyAccounts"));
 const CompositeTasks = lazyRetry(() => import("./pages/CompositeTasks"));
+const CompositeOperations = lazyRetry(() => import("./pages/CompositeOperations"));
 const Revenue = lazyRetry(() => import("./pages/Revenue"));
 const SystemSettings = lazyRetry(() => import("./pages/SystemSettings"));
 const SiteAppearance = lazyRetry(() => import("./pages/SiteAppearance"));
@@ -142,6 +144,9 @@ const ExportPricingList = lazyRetry(() => import("./pages/ExportPricingList"));
 const ContractClosureSimulator = lazyRetry(() => import("./pages/ContractClosureSimulator"));
 const GoogleDriveUploaderPage = lazyRetry(() => import("./pages/GoogleDriveUploaderPage"));
 const GoogleCalendarSyncPage = lazyRetry(() => import("./pages/GoogleCalendarSyncPage"));
+const AlertsCenter = lazyRetry(() => import("./pages/AlertsCenter"));
+const Correspondence = lazyRetry(() => import("./pages/Correspondence"));
+const PeriodicReports = lazyRetry(() => import("./pages/PeriodicReports"));
 
 // ---- Loading fallback ----
 const PageLoader = () => (
@@ -171,6 +176,7 @@ const adminRoutes: { path: string; Component: React.LazyExoticComponent<any>; pe
   { path: "events-pricing", Component: EventPricingList, permission: "contracts" },
   { path: "customers", Component: Customers, permission: "customers" },
   { path: "customer-billing", Component: CustomerBilling, permission: "customer_billing" },
+  { path: "customer-account", Component: CustomerAccount, permission: "customer_billing" },
   { path: "customer-merge", Component: CustomerMerge, permission: "customer_merge" },
   { path: "overdue-payments", Component: OverduePayments, permission: "overdue_payments" },
   { path: "account-overdue-payments", Component: AccountOverduePayments, permission: "overdue_payments" },
@@ -188,7 +194,8 @@ const adminRoutes: { path: string; Component: React.LazyExoticComponent<any>; pe
   { path: "removal-tasks", Component: RemovalTasks, permission: "removal_tasks" },
   { path: "print-tasks", Component: PrintTasks, permission: "print_tasks" },
   { path: "cutout-tasks", Component: CutoutTasks, permission: "cutout_tasks" },
-  { path: "composite-tasks", Component: CompositeTasks, permission: "composite_tasks" },
+  { path: "composite-tasks", Component: CompositeOperations, permission: "composite_tasks" },
+  { path: "composite-tasks-classic", Component: CompositeTasks, permission: "composite_tasks" },
   { path: "installation-teams", Component: InstallationTeams, permission: "installation_teams" },
   { path: "installation-team-accounts", Component: InstallationTeamAccounts, permission: "installation_team_accounts" },
   { path: "expenses", Component: Expenses, permission: "expenses" },
@@ -241,6 +248,9 @@ const adminRoutes: { path: string; Component: React.LazyExoticComponent<any>; pe
   { path: "contract-closure-simulator", Component: ContractClosureSimulator, permission: "contracts" },
   { path: "drive-uploader", Component: GoogleDriveUploaderPage, permission: "settings" },
   { path: "google-calendar", Component: GoogleCalendarSyncPage },
+  { path: "alerts-center", Component: AlertsCenter, permission: "overdue_payments" },
+  { path: "correspondence", Component: Correspondence, permission: "messaging_settings" },
+  { path: "periodic-reports", Component: PeriodicReports, permission: "reports" },
 ];
 
 // ---- QueryClient with caching ----

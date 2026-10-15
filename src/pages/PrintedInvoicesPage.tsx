@@ -67,7 +67,7 @@ export default function PrintedInvoicesPage() {
 
       if (error) throw error;
 
-      // ✅ FIX: استبعاد فواتير المهام المجمعة وفواتير طباعة مهام مرتبطة بمهمة مجمعة (لتفادي التكرار)
+      // ✅ FIX: استبعاد فواتير أوامر العمل وفواتير طباعة مهام مرتبطة بأمر عمل (لتفادي التكرار)
       let filtered = (data || []) as any[];
       try {
         // 1) لا نعرض فواتير invoice_type=composite_task داخل فواتير الطباعة

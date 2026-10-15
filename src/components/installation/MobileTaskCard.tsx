@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { cn } from '@/lib/utils';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface MobileTaskCardProps {
   task: any;
@@ -170,69 +171,14 @@ export function MobileTaskCard({
 
   return (
     <>
-      {/* Modal لعرض الصورة بحجم كبير */}
-      <Dialog open={!!selectedImage} onOpenChange={() => setSelectedImage(null)}>
-        <DialogContent className="max-w-4xl w-[95vw] p-0 bg-black/95 border-0 overflow-hidden">
-          <div className="relative w-full h-[80vh] flex items-center justify-center">
-            {/* زر الإغلاق */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-4 right-4 z-50 h-10 w-10 rounded-full bg-white/10 hover:bg-white/20 text-white"
-              onClick={() => setSelectedImage(null)}
-            >
-              <X className="h-5 w-5" />
-            </Button>
-            
-            {/* الصورة */}
-            {selectedImage && (
-              <motion.img
-                key={selectedImage}
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                src={selectedImage}
-                alt="تصميم"
-                className="max-w-full max-h-full object-contain"
-              />
-            )}
-            
-            {/* أزرار التنقل */}
-            {uniqueDesignImages.length > 1 && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute left-4 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 text-white"
-                  onClick={handlePrevImage}
-                >
-                  <ArrowRight className="h-6 w-6" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-4 top-1/2 -translate-y-1/2 h-12 w-12 rounded-full bg-white/10 hover:bg-white/20 text-white"
-                  onClick={handleNextImage}
-                >
-                  <ArrowRight className="h-6 w-6 rotate-180" />
-                </Button>
-                
-                {/* مؤشر الصور */}
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-                  {uniqueDesignImages.map((_, idx) => (
-                    <div
-                      key={idx}
-                      className={cn(
-                        "h-2 w-2 rounded-full transition-all",
-                        idx === currentImageIndex ? "bg-white w-6" : "bg-white/40"
-                      )}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* عرض الصور بالعارض الموحد */}
+      {selectedImage && (
+        <ImageViewer
+          images={uniqueDesignImages.map((src, k) => ({ src, label: `تصميم ${k + 1}` }))}
+          index={currentImageIndex}
+          onClose={() => setSelectedImage(null)}
+        />
+      )}
 
       <Card className={cn(
         "relative overflow-hidden transition-all duration-300 rounded-2xl shadow-sm hover:shadow-md",
@@ -510,7 +456,7 @@ export function MobileTaskCard({
                   {task.task_type === 'reinstallation' && onCreateCompositeTask && (
                     <DropdownMenuItem onClick={onCreateCompositeTask} className="gap-2 text-amber-600">
                       <Plus className="h-4 w-4" />
-                      مهمة مجمعة
+                      أمر عمل
                     </DropdownMenuItem>
                   )}
                   {isMergedTask && onUnmerge && (

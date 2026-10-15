@@ -326,7 +326,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
                 <DropdownMenuItem onClick={onTransferBillboards}><ArrowLeftRight className="ml-2 h-4 w-4" />نقل لوحات لفرقة أخرى</DropdownMenuItem>
                 <DropdownMenuItem onClick={() => { setTempName(task.task_name || autoName); setEditingName(true); }}><Edit className="ml-2 h-4 w-4" />تعديل اسم المهمة</DropdownMenuItem>
                 <DropdownMenuItem onClick={onEditTaskType}><Wrench className="ml-2 h-4 w-4" />تغيير نوع المهمة</DropdownMenuItem>
-                {onCreateCompositeTask && <DropdownMenuItem onClick={onCreateCompositeTask}><Layers className="ml-2 h-4 w-4" />إنشاء مهمة مجمعة</DropdownMenuItem>}
+                {onCreateCompositeTask && <DropdownMenuItem onClick={onCreateCompositeTask}><Layers className="ml-2 h-4 w-4" />إنشاء أمر عمل</DropdownMenuItem>}
                 {onDuplicateAsReinstallation && <DropdownMenuItem onClick={onDuplicateAsReinstallation}><RefreshCw className="ml-2 h-4 w-4" />إعادة تركيب جديدة</DropdownMenuItem>}
                 {isMergedTask && onUnmerge && <DropdownMenuItem onClick={onUnmerge}>فصل المهمة حسب العقود</DropdownMenuItem>}
                 <DropdownMenuSeparator /><DropdownMenuItem onClick={onDelete} className="text-destructive">حذف المهمة</DropdownMenuItem>

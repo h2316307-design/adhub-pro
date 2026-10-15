@@ -317,7 +317,7 @@ export function SelectedBillboardsCard({
     if (nonDeletableBillboards.length > 0) {
       const ok = await confirm({
         title: 'إزالة اللوحات من العقد',
-        message: `بعض اللوحات المحددة (${nonDeletableBillboards.map(b => b.Billboard_Name || b.name || `لوحة ${b.ID}`).join(', ')}) لها مهام تركيب أو تجاوزت مدة الإزالة المباشرة. تُزال كلها من العقد دون تسوية مالية، وتُحرَّر عند حفظ العقد. متابعة؟`,
+        message: `بعض اللوحات المحددة (${nonDeletableBillboards.map(b => b.Billboard_Name || b.name || `لوحة ${b.ID}`).join(', ')}) لها أوامر تركيب أو تجاوزت مدة الإزالة المباشرة. تُزال كلها من العقد دون تسوية مالية، وتُحرَّر عند حفظ العقد. متابعة؟`,
         confirmText: 'إزالة الكل',
         cancelText: 'إلغاء',
         variant: 'destructive',
@@ -2001,7 +2001,7 @@ export function SelectedBillboardsCard({
               <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
               <div className="text-sm">
                 <p className="font-semibold text-foreground">
-                  اللوحة <span className="text-primary font-bold">{deletingBillboard?.Billboard_Name || deletingBillboard?.name}</span> مرتبطة بمهام تركيب أو تجاوزت مدة الحذف التلقائي.
+                  اللوحة <span className="text-primary font-bold">{deletingBillboard?.Billboard_Name || deletingBillboard?.name}</span> مرتبطة بأوامر تركيب أو تجاوزت مدة الحذف التلقائي.
                 </p>
                 <p className="text-xs text-muted-foreground mt-1">
                   الرجاء اختيار نوع الإزالة المناسب لمعالجة هذه اللوحة:

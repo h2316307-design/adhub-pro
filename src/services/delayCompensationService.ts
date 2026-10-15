@@ -90,7 +90,7 @@ export async function calculateContractDelay(contractNumber: number): Promise<Co
     const contractDurationDays = Math.max(1, Math.ceil((contractEndOriginal.getTime() - contractStartOriginal.getTime()) / (1000 * 60 * 60 * 24)));
     const totalContractValue = Number(contract['Total Rent'] || contract.Total || 0);
 
-    // 2. جلب مهام التركيب المرتبطة بالعقد (فقط التركيب الجديد)
+    // 2. جلب أوامر التركيب المرتبطة بالعقد (فقط التركيب الجديد)
     const { data: directTasks } = await supabase
       .from('installation_tasks')
       .select('id')

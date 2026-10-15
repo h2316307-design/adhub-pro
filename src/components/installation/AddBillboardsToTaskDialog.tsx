@@ -26,7 +26,7 @@ interface AddBillboardsToTaskDialogProps {
   onSuccess: () => void;
 }
 
-/** إضافة لوحات ناقصة لمهمة تركيب من أي عقد للزبون نفسه، مع تحديث عقود المهمة واسمها تلقائياً */
+/** إضافة لوحات ناقصة لأمر تركيب من أي عقد للزبون نفسه، مع تحديث عقود المهمة واسمها تلقائياً */
 export function AddBillboardsToTaskDialog({
   open, onOpenChange, taskId, contractId, contractIds = [], existingBillboardIds, customerName, onSuccess,
 }: AddBillboardsToTaskDialogProps) {
@@ -198,7 +198,7 @@ export function AddBillboardsToTaskDialog({
           <DialogHeader className="border-b border-border px-5 py-4 text-right">
             <DialogTitle className="text-base">إضافة لوحات للمهمة</DialogTitle>
             <DialogDescription className="text-xs">
-              {customerName || contracts[0]?.['Customer Name'] || ''} · اختر من العقود النشطة للزبون فقط. اللوحات من عقد جديد تجعل المهمة مجمعة لعدة عقود.
+              {customerName || contracts[0]?.['Customer Name'] || ''} · اختر من العقود النشطة للزبون فقط. اللوحات من عقد جديد تجعل الأمر عمل لعدة عقود.
             </DialogDescription>
           </DialogHeader>
 
@@ -256,7 +256,7 @@ export function AddBillboardsToTaskDialog({
                         {g.boards.map((b: any) => {
                           const id = Number(b.ID);
                           const on = selectedIds.includes(id);
-                          const img = b.design_face_a || b.Image_URL;
+                          const img = b.Image_URL || b.design_face_a; // الصورة الأصلية للوحة أولاً
                           return (
                             <li key={id}>
                               <div role="checkbox" aria-checked={on} tabIndex={0}
@@ -266,8 +266,8 @@ export function AddBillboardsToTaskDialog({
                                   {on && <Check className="h-3.5 w-3.5" />}
                                 </span>
                                 <button type="button" onClick={e => { e.stopPropagation(); img && setZoomed(img); }}
-                                  className="h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted" aria-label="تكبير الصورة">
-                                  {img ? <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageIcon className="m-auto mt-3 h-5 w-5 text-muted-foreground/50" />}
+                                  className="h-16 w-24 shrink-0 overflow-hidden rounded-md bg-muted" aria-label="تكبير الصورة">
+                                  {img ? <img src={img} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageIcon className="m-auto mt-5 h-5 w-5 text-muted-foreground/50" />}
                                 </button>
                                 <span className="min-w-0 flex-1">
                                   <span className="flex items-center gap-1.5 text-sm font-semibold">

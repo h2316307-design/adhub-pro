@@ -18,7 +18,7 @@ export async function loadReceiptGroup(payment: any): Promise<any[]> {
   return data && data.length ? data : [payment];
 }
 
-/** تحويل صفوف الدفعة إلى بنود جدول الإيصال (عقد / مهمة مجمعة / فاتورة مبيعات / فاتورة طباعة / رصيد فائض) */
+/** تحويل صفوف الدفعة إلى بنود جدول الإيصال (عقد / أمر عمل / فاتورة مبيعات / فاتورة طباعة / رصيد فائض) */
 export async function buildReceiptLineItems(rows: any[]): Promise<any[]> {
   const compositeIds = [...new Set(rows.map(p => p.composite_task_id).filter(Boolean))];
   const salesIds = [...new Set(rows.map(p => p.sales_invoice_id).filter(Boolean))];
@@ -92,7 +92,7 @@ export async function buildReceiptLineItems(rows: any[]): Promise<any[]> {
       if (task?.print_task_id) components.push('طباعة');
       if (task?.cutout_task_id) components.push('قص');
       if (task?.installation_task_id) components.push('تركيب');
-      const taskComponents = components.length ? components.join(' + ') : 'مهمة مجمعة';
+      const taskComponents = components.length ? components.join(' + ') : 'أمر عمل';
       const description = adTypeClean
         ? (adTypeClean.includes('طباعة') || adTypeClean.includes('تركيب') ? adTypeClean : `${adTypeClean} (${taskComponents})`)
         : taskComponents;

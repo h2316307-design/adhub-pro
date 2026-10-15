@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 
 export interface BillboardDesign {
@@ -478,29 +479,7 @@ export function DesignManager({ selectedBillboards, designs, onChange, contractI
         )}
 
         {showPreview && (
-          <div
-            className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
-            onClick={() => setShowPreview(null)}
-          >
-            <div className="bg-card rounded-lg max-w-4xl max-h-[90vh] overflow-auto">
-              <div className="p-4 border-b border-border flex items-center justify-between">
-                <h3 className="font-medium text-card-foreground">{showPreview.title}</h3>
-                <Button size="sm" variant="ghost" onClick={() => setShowPreview(null)}>
-                  إغلاق
-                </Button>
-              </div>
-              <div className="p-4">
-                <img
-                  src={showPreview.url}
-                  alt={showPreview.title}
-                  className="w-full h-auto"
-                  onError={(e) => {
-                    e.currentTarget.src = '/placeholder.svg';
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+          <ImageViewer images={[{ src: showPreview.url, label: showPreview.title }]} onClose={() => setShowPreview(null)} />
         )}
 
         {groupedDesigns.length > 0 && (

@@ -2,7 +2,7 @@ import { findOptimalTeamForInstallation } from '@/utils/teamAssignment';
 /**
  * Smart Billboard Service
  * يتعامل مع إضافة/حذف اللوحات من العقود بذكاء
- * يشمل: مهام التركيب، الطباعة، القص المجسمات، الإزالة
+ * يشمل: أوامر التركيب، الطباعة، القص المجسمات، الإزالة
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -51,7 +51,7 @@ export async function checkLinkedTasks(
   
   const historySet = new Set((historyItems || []).map(h => Number(h.billboard_id)));
 
-  // 1. مهام التركيب
+  // 1. أوامر التركيب
   const { data: installTasks } = await supabase
     .from('installation_tasks')
     .select('id, status')
@@ -130,17 +130,17 @@ export async function checkLinkedTasks(
       const itemStatus = bbInstallItems[0].status || 'pending';
       linkedTasks.push({
         type: 'installation',
-        label: 'مهمة تركيب',
+        label: 'أمر تركيب',
         taskId: bbInstallItems[0].task_id,
         itemCount: bbInstallItems.length,
         status: isAlreadyInstalled ? 'completed' : taskStatus,
         itemStatus: isAlreadyInstalled ? 'completed' : itemStatus,
       });
     } else if (isAlreadyInstalled) {
-      // ✅ إذا تم تركيبها سابقاً، نقوم بإضافة مهمة تركيب مكتملة مصطنعة لضمان إعلام الواجهة وتاريخها
+      // ✅ إذا تم تركيبها سابقاً، نقوم بإضافة أمر تركيب مكتمل مصطنعة لضمان إعلام الواجهة وتاريخها
       linkedTasks.push({
         type: 'installation',
-        label: 'مهمة تركيب',
+        label: 'أمر تركيب',
         taskId: 'history',
         itemCount: 1,
         status: 'completed',
@@ -205,7 +205,7 @@ export interface TaskTypeSelection {
 
 /**
  * حذف اللوحة من المهام المختارة فقط
- * إذا كانت اللوحة مركبة (completed) في مهمة التركيب، تبقى وتُعلّم كمستبدلة
+ * إذا كانت اللوحة مركبة (completed) في أمر التركيب، تبقى وتُعلّم كمستبدلة
  */
 export async function removeBillboardFromAllTasks(
   contractNumber: number,
@@ -343,7 +343,7 @@ export async function addBillboardToExistingTasks(
   const billboardCity = billboard.City;
   const billboardCompanyId = billboard.friend_company_id;
 
-  // 1. إضافة لمهام التركيب
+  // 1. إضافة لأوامر التركيب
   // تأخير قصير لانتظار التريقر (auto_create_installation_tasks) الذي ينشئ المهام تلقائياً
   await new Promise(r => setTimeout(r, 600));
 
@@ -418,7 +418,7 @@ export async function addBillboardToExistingTasks(
       }
     } else {
       // لا يوجد فريق مطابق: لا تُسند اللوحة إلى مهمة خارج نطاقها
-      throw new Error('لا توجد فرقة تغطي مقاس ومدينة اللوحة؛ راجع نطاق الفرق قبل إضافتها إلى مهمة تركيب.');
+      throw new Error('لا توجد فرقة تغطي مقاس ومدينة اللوحة؛ راجع نطاق الفرق قبل إضافتها إلى أمر تركيب.');
     }
 
     if (targetTaskId) {
@@ -446,7 +446,7 @@ export async function addBillboardToExistingTasks(
             .update({ replaced_by_item_id: existing[0].id } as any)
             .eq('id', replacesItemId);
 
-          added.push('مهمة التركيب (ربط استبدال)');
+          added.push('أمر التركيب (ربط استبدال)');
         }
       } else {
         const insertData: any = {
@@ -475,7 +475,7 @@ export async function addBillboardToExistingTasks(
             .eq('id', replacesItemId);
         }
 
-        added.push('مهمة التركيب');
+        added.push('أمر التركيب');
       }
     }
   }

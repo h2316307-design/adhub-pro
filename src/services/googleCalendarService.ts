@@ -30,6 +30,8 @@ export interface GoogleCalendarEvent {
   location?: string;
   contractNumber?: number;
   invoiceNumber?: string;
+  /** عنوان الفاتورة إن وُجد (invoice_name) */
+  invoiceName?: string;
   invoiceId?: string;
   customerName: string;
   customerId?: string | null;
@@ -105,7 +107,7 @@ export async function loadCalendarRecords() {
   let invoices: any[] = [];
   try {
     invoices = await readPages((from, to) => supabase.from('sales_invoices')
-      .select('id, invoice_number, invoice_date, customer_id, customer_name, total_amount, paid_amount, remaining_amount, paid, notes')
+      .select('id, invoice_number, invoice_name, invoice_date, customer_id, customer_name, total_amount, paid_amount, remaining_amount, paid, notes')
       .order('invoice_date', { ascending: false }).range(from, to));
   } catch (e) {
     console.warn('Could not read sales_invoices:', e);
@@ -921,6 +923,7 @@ export function extractCalendarEvents(
         allDay: false,
         alertTime,
         invoiceNumber: invNum,
+        invoiceName: inv.invoice_name || undefined,
         invoiceId: inv.id,
         customerName,
         customerId: inv.customer_id,
@@ -1019,6 +1022,33 @@ function pauseCalendarSync(url: string) {
   const attempts = (calendarBackoff.get(url)?.attempts || 0) + 1;
   calendarBackoff.set(url, { attempts, until: Date.now() + Math.min(900000, 60000 * 2 ** Math.min(attempts - 1, 4)) });
 }
+/* ── مزامنة تزايدية: لا يُرسل إلا الموعد الجديد أو المتغير منذ آخر مزامنة ناجحة ── */
+const SYNCED_KEY = (url: string) => `gcal-synced:${url}`;
+export function calendarEventFingerprint(e: GoogleCalendarEvent, config: GoogleCalendarConfig): string {
+  const raw = [e.tag, e.title, e.description, e.startDate, e.endDate || '', e.amount ?? '', e.alertTime || config.alertTime || '', e.designUrl || '', e.customerEmail || '', (config.reminders || []).join(','), (config.emails || []).join(',')].join('|');
+  let h = 0;
+  for (let i = 0; i < raw.length; i++) h = (Math.imul(31, h) + raw.charCodeAt(i)) | 0;
+  return String(h);
+}
+function readSynced(url: string): Record<string, string> {
+  try { return JSON.parse(localStorage.getItem(SYNCED_KEY(url)) || '{}') || {}; } catch { return {}; }
+}
+function markEventsSynced(config: GoogleCalendarConfig, events: GoogleCalendarEvent[]) {
+  try {
+    const map = readSynced(config.scriptUrl);
+    events.forEach(e => { map[e.tag || e.id] = calendarEventFingerprint(e, config); });
+    localStorage.setItem(SYNCED_KEY(config.scriptUrl), JSON.stringify(map));
+  } catch { /* التخزين غير متاح: تُرسل كل المواعيد كما في السابق */ }
+}
+/** المواعيد الجديدة أو التي تغيرت (العنوان/التاريخ/المبلغ/التنبيه...) منذ آخر مزامنة */
+export function filterChangedCalendarEvents(config: GoogleCalendarConfig, events: GoogleCalendarEvent[]): GoogleCalendarEvent[] {
+  const map = readSynced(config.scriptUrl);
+  return events.filter(e => map[e.tag || e.id] !== calendarEventFingerprint(e, config));
+}
+export function resetCalendarSyncMemory(config: GoogleCalendarConfig) {
+  try { localStorage.removeItem(SYNCED_KEY(config.scriptUrl)); } catch { /* ignore */ }
+}
+
 export async function syncEventsToGoogleCalendar(config: GoogleCalendarConfig, events: GoogleCalendarEvent[], targetEmails?: string[], options?: SyncOptions): Promise<SyncResult> {
   if (calendarRequests.has(config.scriptUrl)) throw new Error('توجد مزامنة قيد التنفيذ. انتظر اكتمالها.');
   if (getCalendarRetrySeconds(config.scriptUrl)) throw new Error('يرجى الانتظار ' + getCalendarRetrySeconds(config.scriptUrl) + ' ثانية قبل إعادة محاولة المزامنة.');
@@ -1148,6 +1178,7 @@ async function performCalendarSync(
     totalUpdated += result.updatedCount || 0;
     totalDeleted += result.deletedCount || 0;
     totalProcessed += batchEvents.length;
+    markEventsSynced(config, batchEvents);
 
     options?.onProgress?.({
       currentBatch: bIndex + 1,

@@ -1,3 +1,4 @@
+import { billboardLevelsShared, contractSharedDesignLoader, getActiveContract, getCorporatePrice, getYearlyContractCode, latestExtensionLoader, latestTaskLoader } from '@/lib/billboardCardLoaders';
 import React, { useState, useEffect, memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { BillboardCardActions } from './billboards/BillboardCardActions';
@@ -101,7 +102,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   // ✅ NEW: حالة العقد الساري (من billboard_ids)
   const [activeContract, setActiveContract] = useState<any>(null);
   
-  // ✅ NEW: تصميم مشترك من مهام التركيب لنفس العقد
+  // ✅ NEW: تصميم مشترك من أوامر التركيب لنفس العقد
   const [contractSharedDesign, setContractSharedDesign] = useState<string | null>(null);
   
   // حالة التعديل السريع - عرض الأسعار من جدول pricing
@@ -130,31 +131,11 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
 
   useEffect(() => {
     let active = true;
-    const fetchCorporatePrice = async () => {
-      const sizeName = billboard.Size || billboard.size || '';
-      const levelName = billboard.Level || billboard.level || 'A';
-      if (!sizeName) return;
-      try {
-        const { data, error } = await supabase
-          .from('pricing')
-          .select('one_month, "2_months", "3_months", "6_months", full_year, one_day')
-          .eq('size', sizeName)
-          .eq('billboard_level', levelName)
-          .eq('customer_category', 'شركات')
-          .maybeSingle();
-
-        if (active && !error && data) {
-          const price = data.one_month || data['2_months'] || data['3_months'] || data['6_months'] || data.full_year || data.one_day || null;
-          setCorporatePrice(price);
-        }
-      } catch (e) {
-        console.error('Error fetching corporate price for card:', e);
-      }
-    };
-    fetchCorporatePrice();
-    return () => {
-      active = false;
-    };
+    const sizeName = billboard.Size || billboard.size || '';
+    const levelName = billboard.Level || billboard.level || 'A';
+    if (!sizeName) return;
+    getCorporatePrice(sizeName, levelName).then(p => { if (active && p != null) setCorporatePrice(p); }).catch(() => {});
+    return () => { active = false; };
   }, [billboard.Size, billboard.Level]);
 
   // ✅ استخراج اللون الغالب من تصميم الوجه الأمامي (من latestTask أو billboard)
@@ -194,7 +175,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
       } catch {}
     }
     
-    // 5. من تصميم مشترك من مهام التركيب لنفس العقد
+    // 5. من تصميم مشترك من أوامر التركيب لنفس العقد
     if (!designImage && contractSharedDesign) {
       designImage = contractSharedDesign;
     }
@@ -250,233 +231,68 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   }, [latestTask, (billboard as any).design_face_a, activeContract, contractSharedDesign]);
 
   useEffect(() => {
-    const loadTaskData = async () => {
-      if (!billboard.ID) return;
-      
-      setLoadingTask(true);
-      try {
-        // Loading task for billboard
-        
-        // First get the task item
-        const { data: taskItem, error: taskError } = await supabase
-          .from('installation_task_items')
-          .select('*')
-          .eq('billboard_id', billboard.ID)
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (taskError) {
-          console.error('❌ Supabase error loading task:', taskError);
-          return;
-        }
-        
-        if (!taskItem) {
-          // No task data found
-          setLatestTask(null);
-          return;
-        }
-
-        // Get the design if selected_design_id exists
-        let designData = null;
-        if (taskItem.selected_design_id) {
-          const { data: design } = await supabase
-            .from('task_designs')
-            .select('*')
-            .eq('id', taskItem.selected_design_id)
-            .single();
-          designData = design;
-        }
-
-        // Get the task details
-        let taskDetails = null;
-        if (taskItem.task_id) {
-          const { data: task } = await supabase
-            .from('installation_tasks')
-            .select(`
-              *,
-              team:installation_teams(*)
-            `)
-            .eq('id', taskItem.task_id)
-            .single();
-          taskDetails = task;
-        }
-
-        const enrichedTask = {
-          ...taskItem,
-          selected_design: designData,
-          task: taskDetails
-        };
-
-        // Task loaded
-        setLatestTask(enrichedTask);
-      } catch (error) {
-        console.error('❌ Error loading task:', error);
-      } finally {
-        setLoadingTask(false);
-      }
-    };
-    
-    if (isAdmin && billboard.ID) {
-      loadTaskData();
-    }
+    if (!(isAdmin && billboard.ID)) return;
+    let active = true;
+    setLoadingTask(true);
+    latestTaskLoader.load(Number(billboard.ID))
+      .then(t => { if (active) setLatestTask(t ?? null); })
+      .catch(e => console.error('❌ Error loading task:', e))
+      .finally(() => { if (active) setLoadingTask(false); });
+    return () => { active = false; };
   }, [billboard.ID, isAdmin]);
 
-  // التحقق من وجود تمديد للوحة وجلب تفاصيله
+  // التحقق من وجود تمديد للوحة وجلب تفاصيله (مجمّع لكل الصفحة)
   useEffect(() => {
-    const checkExtension = async () => {
-      if (!billboard.ID) return;
-      
-      const { data } = await supabase
-        .from('billboard_extensions')
-        .select('extension_days, old_end_date, new_end_date, reason, extension_type')
-        .eq('billboard_id', billboard.ID)
-        .order('created_at', { ascending: false })
-        .limit(1);
-      
-      if (data && data.length > 0) {
-        setHasExtension(true);
-        setExtensionData(data[0]);
-      } else {
-        setHasExtension(false);
-        setExtensionData(null);
-      }
-    };
-    
-    checkExtension();
+    if (!billboard.ID) return;
+    let active = true;
+    latestExtensionLoader.load(Number(billboard.ID)).then(ext => {
+      if (!active) return;
+      setHasExtension(!!ext);
+      setExtensionData(ext ?? null);
+    }).catch(() => {});
+    return () => { active = false; };
   }, [billboard.ID]);
 
-  // ✅ NEW: جلب كود العقد السنوي
+  // ✅ كود العقد السنوي (من فهرس عقود مشترك)
   useEffect(() => {
-    const loadYearlyCode = async () => {
-      const contractNum = (billboard as any).Contract_Number || (billboard as any).contractNumber;
-      const startDate = billboard.Rent_Start_Date || (billboard as any).contract?.start_date;
-      
-      if (!contractNum || !startDate) {
-        setYearlyContractCode('');
-        return;
-      }
-      
-      try {
-        const startDateObj = new Date(startDate);
-        if (isNaN(startDateObj.getTime())) {
-          setYearlyContractCode('');
-          return;
-        }
-        
-        const year = startDateObj.getFullYear();
-        const yearShort = year.toString().slice(-2);
-        
-        // جلب كل العقود في نفس السنة لحساب الترتيب
-        const { data: contracts } = await supabase
-          .from('Contract')
-          .select('Contract_Number, "Contract Date"')
-          .gte('"Contract Date"', `${year}-01-01`)
-          .lte('"Contract Date"', `${year}-12-31`)
-          .order('"Contract Date"', { ascending: true });
-        
-        if (contracts && contracts.length > 0) {
-          const index = contracts.findIndex((c: any) => c.Contract_Number === contractNum);
-          if (index !== -1) {
-            setYearlyContractCode(`${index + 1}/${yearShort}`);
-            return;
-          }
-        }
-        
-        setYearlyContractCode(yearShort);
-      } catch (error) {
-        console.error('Error loading yearly code:', error);
-        setYearlyContractCode('');
-      }
-    };
-    
-    loadYearlyCode();
+    let active = true;
+    const contractNum = (billboard as any).Contract_Number || (billboard as any).contractNumber;
+    const startDate = billboard.Rent_Start_Date || (billboard as any).contract?.start_date;
+    getYearlyContractCode(contractNum, startDate)
+      .then(code => { if (active) setYearlyContractCode(code); })
+      .catch(() => { if (active) setYearlyContractCode(''); });
+    return () => { active = false; };
   }, [billboard.Contract_Number, billboard.Rent_Start_Date]);
 
-  // جلب المستويات المتاحة
+  // المستويات المتاحة (تُجلب مرة واحدة للتطبيق)
   useEffect(() => {
-    const loadLevels = async () => {
-      const { data } = await supabase.from('billboard_levels').select('level_code').order('level_code');
-      if (data) setLevels(data.map(l => l.level_code));
-    };
-    if (isAdmin) loadLevels();
+    if (!isAdmin) return;
+    let active = true;
+    billboardLevelsShared.get().then(l => { if (active) setLevels(l); }).catch(() => {});
+    return () => { active = false; };
   }, [isAdmin]);
 
-  // ✅ NEW: جلب العقد الساري من جدول العقود عبر billboard_ids
+  // ✅ العقد الساري للوحة (من فهرس عقود مشترك)
   useEffect(() => {
-    const loadActiveContract = async () => {
-      if (!billboard.ID) return;
-      
-      const idStr = String(billboard.ID);
-      const today = new Date().toISOString().split('T')[0];
-      
-      try {
-        const { data: contractData } = await supabase
-          .from('Contract')
-          .select('Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", billboard_ids, Total, "Total Rent", Discount, billboard_prices, design_data')
-          .or(`billboard_ids.ilike."%25,${idStr},%25",billboard_ids.ilike."${idStr},%25",billboard_ids.ilike."%25,${idStr}",billboard_ids.eq.${idStr}`)
-          .gte('End Date', today)
-          .order('"End Date"', { ascending: false })
-          .limit(1)
-          .maybeSingle();
-        
-        if (contractData) {
-          setActiveContract(contractData);
-        } else {
-          setActiveContract(null);
-        }
-      } catch (error) {
-        console.error('Error loading active contract:', error);
-        setActiveContract(null);
-      }
-    };
-    
-    loadActiveContract();
+    if (!billboard.ID) return;
+    let active = true;
+    getActiveContract(Number(billboard.ID))
+      .then(c => { if (active) setActiveContract(c); })
+      .catch(() => { if (active) setActiveContract(null); });
+    return () => { active = false; };
   }, [billboard.ID]);
 
-  // ✅ NEW: جلب تصميم مشترك من مهام التركيب لنفس العقد عند عدم وجود تصميم محلي
+  // ✅ تصميم مشترك من أوامر تركيب نفس العقد عند عدم وجود تصميم محلي (مجمّع)
   useEffect(() => {
-    const loadSharedDesign = async () => {
-      const contractNum = activeContract?.Contract_Number || billboard.Contract_Number;
-      if (!contractNum) {
-        setContractSharedDesign(null);
-        return;
-      }
-      
-      // إذا كان latestTask يحتوي على تصميم، لا حاجة
-      if (latestTask?.design_face_a || latestTask?.selected_design?.design_face_a_url) return;
-      // إذا كان contractDesigns يحتوي على تصميم
-      if ((billboard as any).design_face_a) return;
-      
-      try {
-        // أولاً: جلب مهام التركيب لنفس العقد
-        const { data: tasks } = await supabase
-          .from('installation_tasks')
-          .select('id')
-          .eq('contract_id', contractNum);
-        
-        if (!tasks || tasks.length === 0) return;
-        
-        const taskIds = tasks.map(t => t.id);
-        
-        // ثانياً: جلب أي تصميم من عناصر هذه المهام
-        const { data: taskItems } = await supabase
-          .from('installation_task_items')
-          .select('design_face_a')
-          .in('task_id', taskIds)
-          .not('design_face_a', 'is', null)
-          .not('design_face_a', 'eq', '')
-          .limit(1);
-        
-        if (taskItems && taskItems.length > 0) {
-          setContractSharedDesign(taskItems[0].design_face_a);
-        }
-      } catch (error) {
-        console.error('Error loading shared design:', error);
-      }
-    };
-    
-    loadSharedDesign();
+    const contractNum = activeContract?.Contract_Number || billboard.Contract_Number;
+    if (!contractNum) { setContractSharedDesign(null); return; }
+    if (latestTask?.design_face_a || latestTask?.selected_design?.design_face_a_url) return;
+    if ((billboard as any).design_face_a) return;
+    let active = true;
+    contractSharedDesignLoader.load(Number(contractNum))
+      .then(d => { if (active && d) setContractSharedDesign(d); })
+      .catch(() => {});
+    return () => { active = false; };
   }, [activeContract, billboard.Contract_Number, latestTask]);
 
   // تحميل أسعار جميع الفئات السعرية من جدول pricing للمقاس والمستوى المحدد
@@ -840,7 +656,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
     if (contractDesigns.faceA) return contractDesigns.faceA;
     // fallback من البيانات الممررة عبر الهوك
     if ((billboard as any).design_face_a) return (billboard as any).design_face_a;
-    // ✅ NEW: fallback من تصميم مشترك من مهام التركيب لنفس العقد
+    // ✅ NEW: fallback من تصميم مشترك من أوامر التركيب لنفس العقد
     if (contractSharedDesign) return contractSharedDesign;
     return null;
   };
@@ -1658,7 +1474,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                           </div>
                         )}
 
-                        {/* التصاميم من العقد (fallback عند عدم وجود مهمة تركيب بتصاميم) */}
+                        {/* التصاميم من العقد (fallback عند عدم وجود أمر تركيب بتصاميم) */}
                         {!latestTask?.design_face_a && !latestTask?.design_face_b && !latestTask?.selected_design?.design_face_a_url && activeContract?.design_data && (() => {
                           let contractDesignA: string | null = null;
                           let contractDesignB: string | null = null;
@@ -1799,7 +1615,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                           <XCircle className="h-10 w-10 text-muted-foreground/40" />
                         </div>
                         <p className="text-sm font-medium text-muted-foreground">لا توجد بيانات تركيب</p>
-                        <p className="text-xs text-muted-foreground/70 mt-1">لم يتم إضافة هذه اللوحة إلى أي مهمة تركيب</p>
+                        <p className="text-xs text-muted-foreground/70 mt-1">لم يتم إضافة هذه اللوحة إلى أي أمر تركيب</p>
                       </div>
                     )}
                   </div>

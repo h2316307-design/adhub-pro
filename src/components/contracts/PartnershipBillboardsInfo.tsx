@@ -269,7 +269,7 @@ export function PartnershipBillboardsInfo({ billboardIds, startDate, endDate }: 
         <Alert>
           <DollarSign className="h-4 w-4" />
           <AlertDescription className="text-xs">
-            سيتم حجز المبلغ مؤقتاً عند إضافة اللوحات في العقد، وتأكيد الخصم عند إكمال مهمة التركيب
+            سيتم حجز المبلغ مؤقتاً عند إضافة اللوحات في العقد، وتأكيد الخصم عند إكمال أمر التركيب
           </AlertDescription>
         </Alert>
       </CardContent>

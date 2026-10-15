@@ -48,11 +48,11 @@ export const SYNC_TABLES_ORDER: TableSyncConfig[] = [
   { tableName: 'billboard_extensions', primaryKey: 'id', label: 'تمديدات العقود' },
 
   // 4. Tasks & Invoices
-  { tableName: 'installation_tasks', primaryKey: 'id', label: 'مهام التركيب' },
-  { tableName: 'installation_task_items', primaryKey: 'id', label: 'عناصر مهام التركيب' },
+  { tableName: 'installation_tasks', primaryKey: 'id', label: 'أوامر التركيب' },
+  { tableName: 'installation_task_items', primaryKey: 'id', label: 'عناصر أوامر التركيب' },
   { tableName: 'print_tasks', primaryKey: 'id', label: 'أوامر الطباعة' },
   { tableName: 'cutout_tasks', primaryKey: 'id', label: 'مهام القص (Cutout)' },
-  { tableName: 'composite_tasks', primaryKey: 'id', label: 'المهام المجمعة' },
+  { tableName: 'composite_tasks', primaryKey: 'id', label: 'أوامر العمل' },
   { tableName: 'printed_invoices', primaryKey: 'id', label: 'فواتير الطباعة' },
   { tableName: 'print_invoices_standalone', primaryKey: 'id', label: 'الفواتير المستقلة' },
 

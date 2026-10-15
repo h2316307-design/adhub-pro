@@ -21,6 +21,7 @@ import {
 } from '@/components/ui/table';
 import { toast } from '@/components/ui/sonner';
 import { supabase } from '@/integrations/supabase/client';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import {
   Calendar,
   Bell,
@@ -880,25 +881,7 @@ export function CustomerAlertsSyncDialog({
       </Dialog>
 
       {/* Image Preview Modal */}
-      <Dialog open={!!previewDesign} onOpenChange={open => !open && setPreviewDesign(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ImageIcon className="h-5 w-5 text-primary" />
-              {previewDesign?.title || 'معاينة التصميم الإعلاني'}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="flex items-center justify-center p-3 bg-muted/20 rounded-lg max-h-[70vh] overflow-hidden">
-            {previewDesign?.url && (
-              <img
-                src={previewDesign.url}
-                alt={previewDesign.title || 'تصميم'}
-                className="max-h-[65vh] w-auto object-contain rounded border shadow-sm"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {previewDesign && <ImageViewer images={[{ src: previewDesign.url }]} onClose={() => setPreviewDesign(null)} title="" />}
     </>
   );
 }

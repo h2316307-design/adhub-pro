@@ -68,6 +68,7 @@ function applyThemeVariables(theme: SiteThemeSettings) {
   const fontFamily = theme.site_font_family || 'Doran';
   document.body.style.fontFamily = `'${fontFamily}', 'Cairo', 'Tajawal', sans-serif`;
   root.style.setProperty('--app-font-family', `'${fontFamily}', 'Cairo', 'Tajawal', sans-serif`);
+  try { localStorage.setItem('app-font-family', fontFamily); } catch { /* ignore */ }
 
   // Favicon
   if (theme.favicon_url) {

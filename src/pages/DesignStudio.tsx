@@ -1058,7 +1058,7 @@ export default function DesignStudio() {
       setGroupedContracts(enrichedGrouped);
     } catch (e) {
       console.error(e);
-      toast.error('فشل في تحميل مهام التركيب');
+      toast.error('فشل في تحميل أوامر التركيب');
     } finally {
       setLoadingTasks(false);
     }
@@ -1267,11 +1267,11 @@ export default function DesignStudio() {
               setSelectedTaskId(compTask.installation_task_id);
               loadTaskItems([compTask.installation_task_id]);
             }
-            toast.success(`تم فتح المهمة المجمعة للعقد #${compTask.contract_id || ''}`);
+            toast.success(`تم فتح أمر العمل للعقد #${compTask.contract_id || ''}`);
           }
         } catch (err) {
           console.error('Failed to load composite task from URL:', err);
-          toast.error('تعذر جلب تفاصيل المهمة المجمعة');
+          toast.error('تعذر جلب تفاصيل أمر العمل');
         }
       })();
       return;
@@ -3884,19 +3884,19 @@ export default function DesignStudio() {
                     <h2 className="text-base font-bold text-foreground">
                       {modalSelectedContractId ? (
                         <span className="flex items-center gap-2">
-                          <span>مهام التركيب للعقد #{modalSelectedContractId}</span>
+                          <span>أوامر التركيب للعقد #{modalSelectedContractId}</span>
                           {selectedModalContract?.customerName && (
                             <span className="text-sm font-normal text-muted-foreground">— {selectedModalContract.customerName}</span>
                           )}
                         </span>
                       ) : (
-                        'اختيار العقد ومهمة التركيب'
+                        'اختيار العقد وأمر التركيب'
                       )}
                     </h2>
                     <p className="text-[11px] text-muted-foreground">
                       {modalSelectedContractId
-                        ? `يتوفر ${modalContractTasks.length} مهام تركيب — اختر المهمة لجلب تصميمها ولوحاتها`
-                        : `${groupedContracts.length} عقد متاح — اختر عقداً لاستعراض مهام تركيبه وتصاميمها`}
+                        ? `يتوفر ${modalContractTasks.length} أوامر تركيب — اختر المهمة لجلب تصميمها ولوحاتها`
+                        : `${groupedContracts.length} عقد متاح — اختر عقداً لاستعراض أوامر تركيبه وتصاميمها`}
                     </p>
                   </div>
                 </div>
@@ -4083,7 +4083,7 @@ export default function DesignStudio() {
                     <div className="flex items-center gap-2">
                       <Sparkles className="h-4 w-4 text-primary shrink-0" />
                       <span className="text-xs font-bold text-foreground">
-                        اختر مهمة التركيب المطلوبة لجلب تصميمها المحدد ولوحاتها إلى الاستوديو:
+                        اختر أمر التركيب المطلوب لجلب تصميمها المحدد ولوحاتها إلى الاستوديو:
                       </span>
                     </div>
                     {modalContractTasks.length > 1 && (
@@ -4111,7 +4111,7 @@ export default function DesignStudio() {
                     {modalContractTasks.length === 0 ? (
                       <div className="flex flex-col items-center justify-center h-48 text-muted-foreground gap-2">
                         <FolderOpen className="h-10 w-10 opacity-30" />
-                        <span className="text-xs">لا توجد مهام تركيب مسجلة لهذا العقد</span>
+                        <span className="text-xs">لا توجد أوامر تركيب مسجلة لهذا العقد</span>
                       </div>
                     ) : (
                       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -4279,7 +4279,7 @@ export default function DesignStudio() {
               <CardContent className="space-y-3 pb-4">
                 {/* Contract Selector */}
                 <div className="space-y-1.5">
-                  <Label className="text-[11px] text-muted-foreground">مهمة التركيب (العقد)</Label>
+                  <Label className="text-[11px] text-muted-foreground">أمر التركيب (العقد)</Label>
                   <Button
                     variant="outline"
                     className="w-full h-auto min-h-[60px] justify-start gap-3 px-3 py-2 text-right hover:bg-primary/5 hover:border-primary/40 transition-all rounded-xl border-border/60"
@@ -4306,7 +4306,7 @@ export default function DesignStudio() {
                     })() : (
                       <div className="flex items-center gap-2 text-muted-foreground w-full" dir="rtl">
                         <Search className="h-4 w-4" />
-                        <span className="text-xs">{loadingTasks ? 'جاري تحميل المهام...' : 'اضغط لاختيار مهمة التركيب...'}</span>
+                        <span className="text-xs">{loadingTasks ? 'جاري تحميل المهام...' : 'اضغط لاختيار أمر التركيب...'}</span>
                       </div>
                     )}
                   </Button>
@@ -4323,7 +4323,7 @@ export default function DesignStudio() {
                       <div className="flex items-center justify-between">
                         <Label className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
                           <Layers className="h-3.5 w-3.5 text-primary" />
-                          <span>مهام التركيب للعقد ({contractTasks.length})</span>
+                          <span>أوامر التركيب للعقد ({contractTasks.length})</span>
                         </Label>
                         <button
                           type="button"
@@ -9226,7 +9226,7 @@ export default function DesignStudio() {
                       }}>
                         <div style={{ textAlign: 'center', color: '#ffffff40', fontSize: '24px' }}>
                           <ImageIcon style={{ width: 60, height: 60, margin: '0 auto 12px', opacity: 0.3 }} />
-                          <div>اختر مهمة تركيب لعرض الصورة</div>
+                          <div>اختر أمر تركيب لعرض الصورة</div>
                         </div>
                       </div>
                     )}

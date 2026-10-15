@@ -122,7 +122,7 @@ export default function CutoutTasks() {
       .eq('cutout_task_id', task.id)
       .maybeSingle();
     if (!data) {
-      toast.error('لا توجد مهمة مجمعة مرتبطة');
+      toast.error('لا توجد أمر عمل مرتبط');
       return;
     }
     setInvoiceCompositeTask(data as CompositeTaskWithDetails);

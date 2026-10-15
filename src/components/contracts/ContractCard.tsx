@@ -266,7 +266,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
       });
   }, [detailsOpen, isVisible, contract]);
 
-  // جلب مهام التركيب المرتبطة بالعقد
+  // جلب أوامر التركيب المرتبطة بالعقد
   useEffect(() => {
     if (!isVisible || !detailsOpen) return;
     const fetchInstallationTasks = async () => {
@@ -286,19 +286,19 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
           });
         }
 
-        // 1. جلب مهام التركيب المباشرة لهذا العقد
+        // 1. جلب أوامر التركيب المباشرة لهذا العقد
         const { data: directTasks } = await supabase
           .from('installation_tasks')
           .select('id, status, contract_id')
           .eq('contract_id', contractNumber);
 
-        // 2. جلب مهام التركيب المدمجة (contract_ids يحتوي على هذا العقد)
+        // 2. جلب أوامر التركيب المدمجة (contract_ids يحتوي على هذا العقد)
         const { data: combinedTasks } = await supabase
           .from('installation_tasks')
           .select('id, status, contract_id')
           .contains('contract_ids', [contractNumber]);
 
-        // 3. جلب مهام التركيب عبر composite_tasks
+        // 3. جلب أوامر التركيب عبر composite_tasks
         const { data: compositeTasks } = await supabase
           .from('composite_tasks')
           .select('installation_task_id')
@@ -896,7 +896,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
     return () => { cancelled = true; img.onload = null; img.onerror = null; };
   }, [designImage]);
   
-  // جلب صور التصميم من بيانات العقد أو من مهام التركيب المرتبطة به
+  // جلب صور التصميم من بيانات العقد أو من أوامر التركيب المرتبطة به
   useEffect(() => {
     if (!isVisible) return;
 
@@ -1361,7 +1361,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
           </span>
         </div>
 
-        {/* مهام التركيب والعمليات */}
+        {/* أوامر التركيب والعمليات */}
         {detailsOpen && installationTasks.total > 0 && (
           <div className={cn("p-3 rounded-xl border space-y-2.5", bgMutedClass)}>
             <div className="flex items-center justify-between text-xs">
@@ -1658,7 +1658,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onInstall(contract)}>
                   <Hammer className="h-4 w-4 ml-2" />
-                  إنشاء مهمة تركيب
+                  إنشاء أمر تركيب
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => onBillboardPrint(contract)}>
                   <Printer className="h-4 w-4 ml-2" />

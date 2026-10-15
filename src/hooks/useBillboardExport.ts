@@ -4,7 +4,11 @@ import { supabase } from '@/integrations/supabase/client';
 import { isBillboardAvailable, isBillboardBlockedFromAvailability, isContractExpired } from '@/utils/contractUtils';
 import { addExtraSheets } from '@/utils/excelExportSheets';
 import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
-import { resolveBillboardAvailability, normalizeDateOnly } from '@/services/billboardAvailabilityService';
+import {
+  resolveBillboardAvailability, normalizeDateOnly,
+  checkIsAvailableForAvailableExports as serviceIsAvailable,
+  checkIsAvailableOrUpcomingForExport as serviceIsAvailableOrUpcoming,
+} from '@/services/billboardAvailabilityService';
 
 type ActiveContractInfo = {
   contractNumber: string | number;
@@ -1807,13 +1811,12 @@ export const useBillboardExport = () => {
   };
 };
 
+/**
+ * مصدر واحد لقرار «المتاح»: billboardAvailabilityService.
+ * هذه أغلفة رفيعة فقط (بتوقيعات التصدير القديمة) حتى لا تتكرر القواعد في مكانين.
+ */
 export function checkIsAvailableForAvailableExports(billboard: any, contracts: any[] = [], referenceDate?: string | Date): boolean {
-  const res = resolveBillboardAvailability(billboard, contracts, { referenceDate });
-  return (
-    res.classification === 'AVAILABLE_WITHOUT_CONTRACT' ||
-    res.classification === 'EXPLICIT_CONTRACT_SHOW' ||
-    res.classification === 'EXPLICIT_BILLBOARD_SHOW'
-  );
+  return serviceIsAvailable(billboard, contracts, referenceDate);
 }
 
 export function checkIsAvailableOrUpcomingForExport(
@@ -1824,13 +1827,7 @@ export function checkIsAvailableOrUpcomingForExport(
   contracts: any[] = [],
   referenceDate?: string | Date
 ): boolean {
-  const res = resolveBillboardAvailability(billboard, contracts, { upcomingMonthsWindow: monthsAhead, referenceDate });
-  return (
-    res.classification === 'AVAILABLE_WITHOUT_CONTRACT' ||
-    res.classification === 'EXPLICIT_CONTRACT_SHOW' ||
-    res.classification === 'EXPLICIT_BILLBOARD_SHOW' ||
-    res.classification === 'UPCOMING'
-  );
+  return serviceIsAvailableOrUpcoming(billboard, contracts, monthsAhead, referenceDate);
 }
 
 export const isAvailableForAvailableExports = checkIsAvailableForAvailableExports;

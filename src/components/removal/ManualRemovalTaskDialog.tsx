@@ -394,7 +394,7 @@ export function ManualRemovalTaskDialog({
         for (const billboardId of billboardIds) {
           const billboard = allBillboards.find(b => b.ID === billboardId);
           
-          // جلب صور التصميم من آخر مهمة تركيب للوحة
+          // جلب صور التصميم من آخر أمر تركيب للوحة
           const { data: installationItems } = await supabase
             .from('installation_task_items')
             .select('design_face_a, design_face_b')
@@ -406,7 +406,7 @@ export function ManualRemovalTaskDialog({
           let designFaceA = installationItems?.design_face_a || null;
           let designFaceB = installationItems?.design_face_b || null;
 
-          // جلب التصاميم من العقد كـ fallback إذا لم تتوفر في مهام التركيب
+          // جلب التصاميم من العقد كـ fallback إذا لم تتوفر في أوامر التركيب
           if ((!designFaceA || !designFaceB) && billboard?.Contract_Number) {
             const { data: contractData } = await supabase
               .from('Contract')

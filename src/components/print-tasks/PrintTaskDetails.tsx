@@ -18,6 +18,7 @@ import { Dialog, DialogContent } from '@/components/ui/dialog';
 import { DesignImageWithBlur } from '@/components/DesignImageWithBlur';
 import { UnifiedTaskInvoice, InvoiceType } from '@/components/composite-tasks/UnifiedTaskInvoice';
 import { CompositeTaskWithDetails } from '@/types/composite-task';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface PrintTaskItem {
   id: string;
@@ -63,7 +64,7 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
   const [currentInvoiceType, setCurrentInvoiceType] = useState<InvoiceType>('customer');
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
-  // جلب المهمة المجمعة المرتبطة بمهمة الطباعة
+  // جلب أمر العمل المرتبط بمهمة الطباعة
   const { data: linkedCompositeTask } = useQuery({
     queryKey: ['linked-composite-task', task?.id],
     enabled: !!task?.id,
@@ -96,18 +97,18 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
     setSelectedPrinterId(task?.printer_id || null);
   }, [task?.printer_id]);
 
-  // مزامنة قيم الأسعار مع بيانات المهمة والمهمة المجمعة
+  // مزامنة قيم الأسعار مع بيانات المهمة وأمر العمل
   useEffect(() => {
     if (!task) return;
     
     const totalArea = task.total_area || 1;
     
-    // أولوية: المهمة المجمعة المرتبطة (linkedCompositeTask) ثم بيانات المهمة المباشرة
+    // أولوية: أمر العمل المرتبط (linkedCompositeTask) ثم بيانات المهمة المباشرة
     let customerTotal = task.customer_total_amount || 0;
     let printerTotal = task.total_cost || 0;
     
     if (linkedCompositeTask) {
-      // إذا كانت المهمة المجمعة موجودة، نستخدم قيمها حتى لو كانت صفر
+      // إذا كانت أمر العمل موجود، نستخدم قيمها حتى لو كانت صفر
       customerTotal = linkedCompositeTask.customer_print_cost ?? customerTotal;
       printerTotal = linkedCompositeTask.company_print_cost ?? printerTotal;
     }
@@ -631,7 +632,7 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
             </Button>
           </>
         ) : (
-          <span className="text-xs text-muted-foreground">لا توجد مهمة مجمعة مرتبطة للفواتير</span>
+          <span className="text-xs text-muted-foreground">لا توجد أمر عمل مرتبط للفواتير</span>
         )}
       </div>
 
@@ -864,7 +865,7 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
           </div>
         ) : (
           <div className="space-y-4">
-            {/* تحذير إذا لم يتم تحديد سعر الزبون - فقط إذا لم يكن هناك مهمة مجمعة مرتبطة */}
+            {/* تحذير إذا لم يتم تحديد سعر الزبون - فقط إذا لم يكن هناك أمر عمل مرتبط */}
             {!linkedCompositeTask && 
              (task?.customer_total_amount === 0 || !task?.customer_total_amount) && 
              printerPricePerMeter > 0 && (
@@ -1197,13 +1198,7 @@ export function PrintTaskDetails({ task }: PrintTaskDetailsProps) {
       )}
 
       {/* Lightbox Dialog */}
-      <Dialog open={!!lightboxImage} onOpenChange={() => setLightboxImage(null)}>
-        <DialogContent className="max-w-4xl p-2 bg-black/95 border-none">
-          {lightboxImage && (
-            <img src={lightboxImage} alt="تكبير التصميم" className="w-full h-auto max-h-[85vh] object-contain rounded" />
-          )}
-        </DialogContent>
-      </Dialog>
+      {lightboxImage && <ImageViewer images={[{ src: lightboxImage }]} onClose={() => setLightboxImage(null)} />}
 
       {/* Unified Invoice Dialog */}
       {linkedCompositeTask && (

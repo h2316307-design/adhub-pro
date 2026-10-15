@@ -137,7 +137,7 @@ describe('طباعة الكل - خيارات نوع الإعلان وحجم ال
       return { installedImageFaceA, installedImageFaceB, mainImage, isTwoFacesInstalled };
     };
 
-    // سيناريو 1: مهمة تركيب مع وجهين مركبين - بدون تفعيل الإخفاء
+    // سيناريو 1: أمر تركيب مع وجهين مركبين - بدون تفعيل الإخفاء
     const normalInstallTwoFaces = resolveImages(
       false,
       false,
@@ -160,7 +160,7 @@ describe('طباعة الكل - خيارات نوع الإعلان وحجم ال
     expect(hiddenInstallTwoFaces.isTwoFacesInstalled).toBe(false);
     expect(hiddenInstallTwoFaces.mainImage).toBe('https://site.com/original.jpg');
 
-    // سيناريو 3: مهمة تركيب بوجه واحد مع تفعيل الإخفاء
+    // سيناريو 3: أمر تركيب بوجه واحد مع تفعيل الإخفاء
     const hiddenInstallOneFace = resolveImages(
       true,
       false,

@@ -16,7 +16,7 @@ export type InvoiceTemplateType =
   | 'friend_rental' // إيصال إيجار الشركات الصديقة
   | 'print_task' // فاتورة مهمة الطباعة
   | 'cutout_task' // فاتورة مهمة القص
-  | 'composite_task' // المهام المجمعة (طباعة + تركيب + قص)
+  | 'composite_task' // أوامر العمل (طباعة + تركيب + قص)
   | 'customer_invoice' // فاتورة الزبون
   | 'sizes_invoice'; // فاتورة المقاسات
 
@@ -230,9 +230,9 @@ export const INVOICE_TEMPLATES: InvoiceTemplateInfo[] = [
   },
   {
     id: 'composite_task',
-    name: 'المهام المجمعة',
+    name: 'أوامر العمل',
     nameEn: 'Composite Task Invoice',
-    description: 'فاتورة المهام المجمعة (طباعة + تركيب + قص)',
+    description: 'فاتورة أوامر العمل (طباعة + تركيب + قص)',
     icon: 'Layers',
     category: 'invoices',
     sections: TEMPLATE_SECTIONS.composite_task
@@ -690,7 +690,7 @@ export const INVOICE_TITLES: Record<InvoiceTemplateType, { ar: string; en: strin
   friend_rental: { ar: 'إيصال إيجار', en: 'RENTAL RECEIPT' },
   print_task: { ar: 'فاتورة مهمة طباعة', en: 'PRINT TASK' },
   cutout_task: { ar: 'فاتورة مهمة قص', en: 'CUTOUT TASK' },
-  composite_task: { ar: 'المهام المجمعة', en: 'COMPOSITE TASK' },
+  composite_task: { ar: 'أوامر العمل', en: 'COMPOSITE TASK' },
   customer_invoice: { ar: 'فاتورة الزبون', en: 'CUSTOMER INVOICE' },
   sizes_invoice: { ar: 'كشف مقاسات الطباعة', en: 'SIZES STATEMENT' },
 };

@@ -176,7 +176,7 @@ const CutoutTaskCardRow = ({ task, idx, onOpenTask, onStatusChange, onPrintInvoi
                     ? 'bg-purple-500/10 text-purple-400 border-purple-500/20'
                     : 'bg-orange-500/10 text-orange-400 border-orange-500/20'
               }`}>
-                {(task as any)._source === 'installation' ? 'عبر مهمة تركيب' : (task as any)._source === 'contract' ? 'من عقد مباشرة' : 'إضافة يدوية'}
+                {(task as any)._source === 'installation' ? 'عبر أمر تركيب' : (task as any)._source === 'contract' ? 'من عقد مباشرة' : 'إضافة يدوية'}
               </span>
             </div>
           </div>

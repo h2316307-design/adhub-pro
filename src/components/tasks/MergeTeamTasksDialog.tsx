@@ -60,7 +60,7 @@ export function MergeTeamTasksDialog({
     });
 
     if (hasDifferentType && !selectedTasks.includes(taskId)) {
-      toast.error('لا يمكن دمج مهام التركيب الجديد مع مهام إعادة التركيب. يرجى اختيار مهام من نفس النوع.');
+      toast.error('لا يمكن دمج أوامر التركيب الجديد مع مهام إعادة التركيب. يرجى اختيار مهام من نفس النوع.');
       return;
     }
 
@@ -151,7 +151,7 @@ export function MergeTeamTasksDialog({
 
       if (insertError) throw insertError;
 
-      // تحديث اسم المهمة المجمعة التلقائية في جدول composite_tasks لتطابق الاسم الجديد
+      // تحديث اسم أمر العمل التلقائي في جدول composite_tasks لتطابق الاسم الجديد
       await supabase
         .from('composite_tasks')
         .update({ task_name: taskName })
@@ -175,7 +175,7 @@ export function MergeTeamTasksDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Merge className="h-5 w-5" />
-            دمج مهام التركيب
+            دمج أوامر التركيب
           </DialogTitle>
         </DialogHeader>
 

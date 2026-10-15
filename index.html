@@ -16,6 +16,12 @@
     <link rel="apple-touch-icon" href="/logo-symbol.svg" />
     <link rel="manifest" href="/manifest.json" />
     
+    <!-- خط النظام: تحميل مسبق + تطبيق الخط المحفوظ قبل أول رسم لمنع تبدّل الخطوط -->
+    <link rel="preload" href="/Doran-Regular.otf" as="font" type="font/otf" crossorigin>
+    <link rel="preload" href="/Doran-Bold.otf" as="font" type="font/otf" crossorigin>
+    <script>
+      try { var f = localStorage.getItem('app-font-family'); if (f) document.documentElement.style.setProperty('--app-font-family', "'" + f + "', 'Cairo', 'Tajawal', sans-serif"); } catch (e) {}
+    </script>
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>

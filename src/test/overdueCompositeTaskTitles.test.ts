@@ -108,7 +108,7 @@ function formatCustomerOverdueMessage(customer: {
 
 describe('Overdue Composite Task Invoice Titles & Alert Formatting', () => {
   it('resolves installation tasks correctly to "فاتورة تركيب" when installation_task_id is set', () => {
-    // مهمة تركيب حتى وإن لم تكن التكاليف مسجلة بالتفصيل كطباعة
+    // أمر تركيب حتى وإن لم تكن التكاليف مسجلة بالتفصيل كطباعة
     const task122 = resolveCompositeInvoiceTitle({
       installation_task_id: 'inst-122',
       customer_installation_cost: 9120,

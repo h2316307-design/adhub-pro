@@ -30,7 +30,7 @@ export function OperationOrderDialog({ group }: { group: any }) {
   }
   return <><Button variant="outline" className="cursor-pointer gap-2 transition-all duration-200" disabled={group.operations.length < 2} onClick={() => { setDraft([...group.operations].reverse()); setOpen(true); }}><ListOrdered className="h-4 w-4" />ترتيب العمليات</Button>
     <Dialog open={open} onOpenChange={value => { if (!saving) setOpen(value); }}><DialogContent dir="rtl" className="max-w-2xl max-h-[90dvh] flex flex-col">
-      <DialogHeader><DialogTitle>{group.isMultiContract ? `ترتيب المهمة المجمعة · عقود #${(group.contractIds || []).join('، #')}` : `ترتيب عمليات العقد #${group.contractId}`}</DialogTitle><DialogDescription>«تركيب جديد» ثابت أسفل القائمة الرئيسية. رتّب بقية العمليات من تركيب 1 إلى آخر تركيب؛ يظهر الرقم الأكبر أعلى. هذا ترتيب العرض وترقيمه؛ تظل اللوحات والتكاليف والدفعات مرتبطة بعملياتها الأصلية.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>{group.isMultiContract ? `ترتيب أمر العمل · عقود #${(group.contractIds || []).join('، #')}` : `ترتيب عمليات العقد #${group.contractId}`}</DialogTitle><DialogDescription>«تركيب جديد» ثابت أسفل القائمة الرئيسية. رتّب بقية العمليات من تركيب 1 إلى آخر تركيب؛ يظهر الرقم الأكبر أعلى. هذا ترتيب العرض وترقيمه؛ تظل اللوحات والتكاليف والدفعات مرتبطة بعملياتها الأصلية.</DialogDescription></DialogHeader>
       <div className="space-y-3 overflow-y-auto min-h-0">{draft.map((operation, index) => {
         const image = operation.tasks.flatMap((task: any) => task.designUrls || [])[0];
         return <div key={operation.key} className="rounded-xl border bg-card p-3 flex items-center gap-3">

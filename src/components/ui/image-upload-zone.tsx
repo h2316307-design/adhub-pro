@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { uploadToImgbb } from '@/services/imgbbService';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface ImageUploadZoneProps {
   /** Current image URL (for preview) */
@@ -53,6 +54,7 @@ export function ImageUploadZone({
   className = '',
 }: ImageUploadZoneProps) {
   const [uploading, setUploading] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [progress, setProgress] = useState(0);
   const [phase, setPhase] = useState<'idle' | 'preparing' | 'uploading' | 'processing' | 'done'>('idle');
   const [isDragOver, setIsDragOver] = useState(false);
@@ -308,6 +310,8 @@ export function ImageUploadZone({
         </div>
       )}
 
+      {viewerOpen && value && <ImageViewer images={[{ src: value }]} title={label} onClose={() => setViewerOpen(false)} />}
+
       {/* Preview */}
       {showPreview && (
         <div className="flex items-center justify-center">
@@ -316,7 +320,8 @@ export function ImageUploadZone({
               <img
                 src={value}
                 alt="معاينة"
-                className="w-full h-full object-cover"
+                className="w-full h-full object-cover cursor-zoom-in"
+                onClick={() => setViewerOpen(true)}
                 onError={(e) => { (e.target as HTMLImageElement).src = '/placeholder.svg'; }}
               />
               {/* Overlay with Delete and View controls */}
@@ -343,7 +348,7 @@ export function ImageUploadZone({
                   variant="secondary"
                   onClick={(e) => {
                     e.stopPropagation();
-                    window.open(value, '_blank');
+                    setViewerOpen(true);
                   }}
                   className="h-8 px-2.5 bg-background/90 hover:bg-background text-foreground shadow text-xs"
                 >

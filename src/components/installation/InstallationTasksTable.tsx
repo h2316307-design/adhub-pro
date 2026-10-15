@@ -481,7 +481,7 @@ const TaskCardRowInner = ({
                   <Layers className="h-3.5 w-3.5 text-amber-400" />
                   <span>عقود مجمعة: #{task.effectiveContractIds.join('، #')}</span>
                   <span className="rounded-md bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-black text-amber-300">
-                    مهمة مجمعة
+                    أمر عمل
                   </span>
                 </>
               ) : (
@@ -1173,7 +1173,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
       });
 
       if (hasDifferentType) {
-        toast.error('لا يمكن تحديد مهام تركيب جديدة مع مهام إعادة تركيب في نفس الوقت.');
+        toast.error('لا يمكن تحديد أوامر تركيب جديدة مع مهام إعادة تركيب في نفس الوقت.');
         return;
       }
     }
@@ -1641,7 +1641,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
                             {groupKey.startsWith('multi-contract-') ? (
                               <span className="inline-flex items-center gap-1.5 font-extrabold text-amber-400 text-base tracking-tight">
                                 <Layers className="h-4 w-4 text-amber-400" />
-                                مهمة مجمعة (عقود #{firstTask.effectiveContractIds?.join('، #') || firstTask.contractNumber})
+                                أمر عمل (عقود #{firstTask.effectiveContractIds?.join('، #') || firstTask.contractNumber})
                               </span>
                             ) : groupKey.startsWith('reinstall-week-') ? (
                               <span className="font-extrabold text-foreground text-base tracking-tight">

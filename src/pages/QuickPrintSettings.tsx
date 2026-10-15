@@ -110,7 +110,7 @@ export default function QuickPrintSettings() {
     },
   });
 
-  // جلب مهام التركيب للمعاينة
+  // جلب أوامر التركيب للمعاينة
   const { data: installationTasks = [], isLoading: isLoadingTasks, refetch: refetchTasks } = useQuery({
     queryKey: ['installation-tasks-preview', taskSearchQuery],
     queryFn: async () => {
@@ -1005,7 +1005,7 @@ export default function QuickPrintSettings() {
                         size="sm"
                         onClick={() => setSearchMode('tasks')}
                       >
-                        مهام التركيب
+                        أوامر التركيب
                       </Button>
                       <Button
                         variant={searchMode === 'contracts' ? 'default' : 'outline'}
@@ -1054,7 +1054,7 @@ export default function QuickPrintSettings() {
                             ))}
                             {filteredTasks.length === 0 && (
                               <p className="text-center text-muted-foreground py-8">
-                                لا توجد مهام تركيب
+                                لا توجد أوامر تركيب
                               </p>
                             )}
                           </>

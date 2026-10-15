@@ -1,3 +1,4 @@
+import { mergeCompositeOperations, operationKeyOf } from '@/lib/compositeCosts';
 import { compositeTaskLabel, compositeTaskGroupKey } from './compositeTaskLabel';
 /**
  * تنسيق موحد لوصف العقد في كشف الحساب:
@@ -30,7 +31,7 @@ export function formatStatementContractLabel(
  * - خصومات العقود (Contract.Discount) وتسويات الإيقاف المخصومة (deducted_from_contract)
  *   تعتبر معلومات وصفية فقط (Informational Only) ولا تُطرح مرة ثانية من الرصيد.
  * - المدفوعات النقدية مفصولة تماماً عن التسويات والخصومات غير النقدية (Non-Cash Adjustments).
- * - استبعاد فواتير المهام المجمعة المكررة في فواتير الطباعة.
+ * - استبعاد فواتير أوامر العمل المكررة في فواتير الطباعة.
  */
 
 export type LedgerEntryType =
@@ -163,7 +164,7 @@ export interface RawCustomerFinancialSources {
 }
 
 /**
- * دالة مساعدة لتصفية فواتير الطباعة التابعة لمهام مجمعة لمنع التكرار
+ * دالة مساعدة لتصفية فواتير الطباعة التابعة لأوامر عمل لمنع التكرار
  */
 export function filterCompositeRelatedPrintedInvoices(
   printedInvoices: any[] = [],
@@ -234,6 +235,7 @@ export function buildCanonicalCustomerLedger(
     endDate?: string;
     excludeFriendRentals?: boolean;
     hidePaymentDistribution?: boolean;
+    hideStopAdjustments?: boolean;
   } = {}
 ): CanonicalCustomerLedgerResult {
   const {
@@ -272,7 +274,7 @@ export function buildCanonicalCustomerLedger(
     hidePaymentDistribution = false,
   } = options;
 
-  // 1. تصفية فواتير الطباعة لمنع التكرار مع المهام المجمعة والعقود
+  // 1. تصفية فواتير الطباعة لمنع التكرار مع أوامر العمل والعقود
   const billablePrintedInvoices = filterCompositeRelatedPrintedInvoices(
     printedInvoices,
     compositeTasks,
@@ -346,9 +348,11 @@ export function buildCanonicalCustomerLedger(
     });
   });
 
-  // 3. معالجة المهام المجمعة (Composite Tasks)
-  compositeTasks.forEach((task) => {
-    if (task.combined_invoice_id) return; // تم احتسابها من الفواتير
+  // 3. معالجة أوامر العمل (Composite Tasks)
+  // كل عملية (تركيب أول / إعادة تركيب) قيد واحد للزبون مهما كان عدد الفرق
+  const operationCompositeTasks = mergeCompositeOperations(compositeTasks, (t: any) => operationKeyOf(t, t.operation_id));
+  operationCompositeTasks.forEach((task) => {
+    // ملاحظة: فواتير أوامر العمل تُستبعد من فواتير الطباعة، لذا تُحتسب المهمة نفسها دائماً
     
     // المبالغ المالية الفعلية للمكونات من الحقول الرسمية في Schema
     const printAmount = Number(task.customer_print_cost ?? task.print_cost ?? 0) || 0;
@@ -494,7 +498,7 @@ export function buildCanonicalCustomerLedger(
   salesInvoices.forEach((inv) => {
     const totalAmount = Number(inv.total_amount) || 0;
     const discount = Number(inv.discount) || 0;
-    const netAmount = Math.max(0, totalAmount - discount);
+    const netAmount = Math.max(0, totalAmount); // total_amount صافٍ بعد الخصم عند الحفظ
     const invDate = inv.invoice_date || inv.created_at || '';
     const invNum = inv.invoice_number || inv.id?.slice(0, 8) || '—';
     const invTitle = inv.invoice_name?.trim() || `فاتورة مبيعات #${invNum}`;
@@ -590,7 +594,7 @@ export function buildCanonicalCustomerLedger(
       } else if (payment.printed_invoice_id) {
         targetRef = `فاتورة طباعة`;
       } else if (payment.composite_task_id) {
-        targetRef = `مهمة مجمعة`;
+        targetRef = `أمر عمل`;
       }
 
       const isDistributed = Boolean(payment.distributed_payment_id);
@@ -633,9 +637,13 @@ export function buildCanonicalCustomerLedger(
   });
 
   // 7. معالجة الخصومات العامة المستقلة (General Discounts)
+  const chargesBeforeDiscounts = rawEntries.reduce((s, e) => s + (Number(e.debitEffect) || 0), 0);
   generalDiscounts.forEach((disc) => {
     if (disc.status !== 'active') return;
-    const discAmount = Number(disc.discount_value) || 0;
+    const rawDisc = Number(disc.discount_value) || 0;
+    const discAmount = disc.discount_type === 'percentage'
+      ? Math.round(chargesBeforeDiscounts * rawDisc) / 100
+      : rawDisc;
     if (discAmount <= 0) return;
     const discDate = disc.applied_date || disc.created_at || '';
 

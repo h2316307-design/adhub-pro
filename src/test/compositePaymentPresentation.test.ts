@@ -32,11 +32,11 @@ describe('composite task payment presentation and receipt grouping', () => {
     // التحقق من خلو المرجع والوصف من أكواد hex العشوائية
     expect(rows[0].description).not.toContain('re72ce70');
     expect(rows[0].description).not.toContain('ref84e4c');
-    expect(rows[0].description).toContain('مهمة إعادة تركيب رقم 1');
+    expect(rows[0].description).toContain('إعادة تركيب رقم 1');
     expect(rows[0].description).toContain('عقد #1158');
 
     expect(rows[1].description).not.toContain('rea35738');
-    expect(rows[1].description).toContain('مهمة تركيب جديد');
+    expect(rows[1].description).toContain('أمر تركيب جديد');
     expect(rows[1].description).toContain('عقد #1263');
   });
 
@@ -47,7 +47,7 @@ describe('composite task payment presentation and receipt grouping', () => {
       task_type: 'reinstallation',
       reinstallation_number: 1,
     }, 'مشروب الطاقة');
-    expect(reinstallLabel).toBe('مهمة إعادة تركيب رقم 1 — عقد #1158 — مشروب الطاقة');
+    expect(reinstallLabel).toBe('إعادة تركيب رقم 1 — عقد #1158 — مشروب الطاقة');
 
     const fullyPaidLabel = compositeTaskLabel({
       id: 't-paid',
@@ -56,14 +56,14 @@ describe('composite task payment presentation and receipt grouping', () => {
       reinstallation_number: 1,
       is_fully_paid: true,
     }, 'مواد غذائية');
-    expect(fullyPaidLabel).toBe('مهمة إعادة تركيب رقم 1 — عقد #1158 (مسددة بالكامل) — مواد غذائية');
+    expect(fullyPaidLabel).toBe('إعادة تركيب رقم 1 — عقد #1158 (مسددة بالكامل) — مواد غذائية');
 
     const newInstallLabel = compositeTaskLabel({
       id: 't-2',
       contract_id: 1263,
       task_type: 'installation',
     }, 'سيارات لوتشي');
-    expect(newInstallLabel).toBe('مهمة تركيب جديد — عقد #1263 — سيارات لوتشي');
+    expect(newInstallLabel).toBe('أمر تركيب جديد — عقد #1263 — سيارات لوتشي');
   });
 
   it('groups receipt tasks for the same in-house mission into 1 row summing amounts and preserving balances', () => {
@@ -73,7 +73,7 @@ describe('composite task payment presentation and receipt grouping', () => {
         installationTaskId: 'inst-72ce70',
         groupKey: compositeTaskGroupKey(multiTeamTasks[0]),
         entityType: 'composite_task' as const,
-        contractNumber: 'مهمة إعادة تركيب رقم 1 — عقد #1158',
+        contractNumber: 'إعادة تركيب رقم 1 — عقد #1158',
         adType: 'مشروب الطاقة (طباعة + تركيب)',
         amount: 1440,
         remaining: 0,
@@ -84,7 +84,7 @@ describe('composite task payment presentation and receipt grouping', () => {
         installationTaskId: 'inst-f84e4c',
         groupKey: compositeTaskGroupKey(multiTeamTasks[1]),
         entityType: 'composite_task' as const,
-        contractNumber: 'مهمة إعادة تركيب رقم 1 — عقد #1158',
+        contractNumber: 'إعادة تركيب رقم 1 — عقد #1158',
         adType: 'مشروب الطاقة (طباعة + تركيب)',
         amount: 1920,
         remaining: 0,
@@ -95,7 +95,7 @@ describe('composite task payment presentation and receipt grouping', () => {
         installationTaskId: 'inst-a35738',
         groupKey: compositeTaskGroupKey(multiTeamTasks[2]),
         entityType: 'composite_task' as const,
-        contractNumber: 'مهمة تركيب جديد — عقد #1263',
+        contractNumber: 'أمر تركيب جديد — عقد #1263',
         adType: 'سيارات لوتشي (طباعة + تركيب)',
         amount: 2210,
         remaining: 0,
@@ -107,12 +107,12 @@ describe('composite task payment presentation and receipt grouping', () => {
     expect(grouped).toHaveLength(2);
     // دمج عبدالرزاق وعيسى في سطر واحد
     expect(grouped[0].amount).toBe(3360);
-    expect(grouped[0].contractNumber).toContain('مهمة إعادة تركيب رقم 1 — عقد #1158');
+    expect(grouped[0].contractNumber).toContain('إعادة تركيب رقم 1 — عقد #1158');
     expect(grouped[0].adType).toBe('مشروب الطاقة (طباعة + تركيب)');
 
     // مهمة العقد الثاني
     expect(grouped[1].amount).toBe(2210);
-    expect(grouped[1].contractNumber).toBe('مهمة تركيب جديد — عقد #1263');
+    expect(grouped[1].contractNumber).toBe('أمر تركيب جديد — عقد #1263');
   });
 
   it('keeps distinct missions on the same contract separate (e.g. new installation vs reinstallation)', () => {
@@ -214,7 +214,7 @@ describe('composite task payment presentation and receipt grouping', () => {
     // سطر المهمة 1 يجمع بين فرقة عبدالرزاق العاتي + دانة مصراتة
     const reinstall1Row = grouped[0];
     expect(reinstall1Row).toBeDefined();
-    expect(reinstall1Row.contractNumber).toBe('مهمة إعادة تركيب رقم 1 — عقد #1158');
+    expect(reinstall1Row.contractNumber).toBe('إعادة تركيب رقم 1 — عقد #1158');
     // لا يظهر مسددة بالكامل لأن المتبقي 3140 د.ل
     // لا يذكر الفرق في الفاتورة للزبون
     expect(reinstall1Row.adType).toBe('مواد غذائية (طباعة + تركيب)');
@@ -246,7 +246,7 @@ describe('composite task payment presentation and receipt grouping', () => {
     const consolidatedItem: DistributableItem = {
       id: 't-178',
       type: 'composite_task',
-      displayName: 'مهمة إعادة تركيب رقم 1 — عقد #1158',
+      displayName: 'إعادة تركيب رقم 1 — عقد #1158',
       adType: 'مواد غذائية',
       serviceType: 'طباعة + تركيب',
       teamName: 'فرقة عبدالرزاق العاتي + دانة مصراتة',
@@ -329,7 +329,7 @@ describe('composite task payment presentation and receipt grouping', () => {
       },
       {
         compositeTaskId: 'c-2',
-        contractNumber: 'مهمة إعادة تركيب رقم 2 — عقد #1158',
+        contractNumber: 'إعادة تركيب رقم 2 — عقد #1158',
         contractId: 1158,
         reinstallationNumber: 2,
         adType: 'مواد غذائية (طباعة + تركيب)',
@@ -338,7 +338,7 @@ describe('composite task payment presentation and receipt grouping', () => {
       },
       {
         compositeTaskId: 'c-1',
-        contractNumber: 'مهمة إعادة تركيب رقم 1 — عقد #1158',
+        contractNumber: 'إعادة تركيب رقم 1 — عقد #1158',
         contractId: 1158,
         reinstallationNumber: 1,
         adType: 'مواد غذائية (طباعة + تركيب)',
@@ -353,7 +353,7 @@ describe('composite task payment presentation and receipt grouping', () => {
     expect(ordered[0].entityType).toBe('contract');
     expect(ordered[0].contractNumber).toBe('عقد #1158');
 
-    // 2. المهام المجمعة مرتبة حسب رقم إعادة التركيب (1 ثم 2)
+    // 2. أوامر العمل مرتبة حسب رقم إعادة التركيب (1 ثم 2)
     expect(ordered[1].entityType).toBe('composite_task');
     expect(ordered[1].contractNumber).toContain('إعادة تركيب رقم 1');
     expect(ordered[2].entityType).toBe('composite_task');

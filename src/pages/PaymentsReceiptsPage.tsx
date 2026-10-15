@@ -14,6 +14,8 @@ import { EnhancedDistributePaymentDialog } from '@/components/billing/EnhancedDi
 import { DistributedPaymentDetailsDialog } from '@/components/billing/DistributedPaymentDetailsDialog';
 import { PaymentsStatementPrintDialog } from '@/components/billing/PaymentsStatementPrintDialog';
 import { SendPaymentsReportDialog } from '@/components/billing/SendPaymentsReportDialog';
+import { useUnifiedReceiptPrint } from '@/components/billing/UnifiedReceiptPrint';
+import { printDistributedUnifiedReceipt } from '@/components/billing/distributedReceiptPrint';
 
 import { calculateTotalRemainingDebt, filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
 import './PaymentsReceiptsPage.css';
@@ -67,7 +69,9 @@ export default function PaymentsReceiptsPage() {
   const { canEdit: canEditAuth } = useAuth();
   const canEditSection = canEditAuth('payments');
   const navigate = useNavigate();
+  const { print: printReceipt } = useUnifiedReceiptPrint();
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [contractTotals, setContractTotals] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [adTypeFilter, setAdTypeFilter] = useState<string>('all');
@@ -149,6 +153,7 @@ export default function PaymentsReceiptsPage() {
         supabase.from('cutout_tasks' as any).select('id, customer_id, invoice_id, is_composite, installation_task_id'),
       ]);
 
+      setContractTotals(Object.fromEntries((contractsResult.data || []).map((c: any) => [Number(c.Contract_Number), Number(c.Total) || 0])));
       return {
         contracts: contractsResult.data || [],
         salesInvoices: salesInvoicesResult.data || [],
@@ -676,457 +681,297 @@ export default function PaymentsReceiptsPage() {
     customer.phone?.includes(customerSearchTerm)
   );
 
+  // ═══════════ عرض جديد: الفترة والتصفية وتفاصيل التحصيل ═══════════
+  const [period, setPeriod] = useState<'today' | 'week' | 'month' | '3m' | 'year' | 'all' | 'custom'>('month');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [methodFilter, setMethodFilter] = useState('all');
+  const [kindFilter, setKindFilter] = useState<'all' | 'in' | 'out' | 'barter'>('all');
+  const [viaOnly, setViaOnly] = useState(false);
+  const [visibleCount, setVisibleCount] = useState(60);
+
+  const isoDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const range = useMemo(() => {
+    const now = new Date();
+    const back = (days: number) => { const d = new Date(now); d.setDate(d.getDate() - days); return isoDay(d); };
+    switch (period) {
+      case 'today': return { from: isoDay(now), to: isoDay(now) };
+      case 'week': return { from: back(6), to: isoDay(now) };
+      case 'month': return { from: back(29), to: isoDay(now) };
+      case '3m': return { from: back(89), to: isoDay(now) };
+      case 'year': return { from: back(364), to: isoDay(now) };
+      case 'custom': return { from: fromDate || '0000-01-01', to: toDate || '9999-12-31' };
+      default: return { from: '0000-01-01', to: '9999-12-31' };
+    }
+  }, [period, fromDate, toDate]);
+
+  const CREDIT = ['receipt', 'payment', 'account_payment', 'general_credit'];
+  const DEBIT = ['debt', 'general_debit'];
+  const num = (v: unknown) => Number(v) || 0;
+  const fmt = (v: number) => Math.round(v).toLocaleString('en-US');
+  const methods = useMemo(() => [...new Set(payments.map(p => p.method).filter(Boolean))].sort(), [payments]);
+
+  type Row = { key: string; date: string; customerId: string; customer: string; company?: string | null; rows: Payment[]; total: number; isGroup: boolean };
+  const allRows = useMemo<Row[]>(() => sortedItems.map(it => it.type === 'group'
+    ? (() => { const g = it.data as GroupedPayment; return { key: g.id, date: g.paidAt, customerId: g.customerId, customer: g.customerName, company: g.companyName, rows: g.distributions, total: g.totalAmount, isGroup: true }; })()
+    : (() => { const p = it.data as Payment; return { key: p.id, date: p.paid_at, customerId: p.customer_id, customer: p.customer_name, company: p.company_name, rows: [p], total: num(p.amount), isGroup: false }; })()), [sortedItems]);
+
+  const rowsInView = useMemo(() => allRows.filter(r => {
+    const d = String(r.date || '').slice(0, 10);
+    if (d < range.from || d > range.to) return false;
+    const first: any = r.rows[0];
+    if (methodFilter !== 'all' && first.method !== methodFilter) return false;
+    if (kindFilter === 'in' && !CREDIT.includes(first.entry_type)) return false;
+    if (kindFilter === 'out' && !DEBIT.includes(first.entry_type)) return false;
+    if (kindFilter === 'barter' && first.method !== 'مقايضة') return false;
+    if (viaOnly && !r.rows.some((p: any) => p.collected_via_intermediary)) return false;
+    return true;
+  }), [allRows, range, methodFilter, kindFilter, viaOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const kpi = useMemo(() => {
+    let collected = 0, debits = 0, viaAmount = 0, commission = 0, fees = 0, viaCount = 0, receipts = 0;
+    const byMethod = new Map<string, number>();
+    rowsInView.forEach(r => {
+      const first: any = r.rows[0];
+      if (CREDIT.includes(first.entry_type)) {
+        collected += r.total; receipts += 1;
+        byMethod.set(first.method || 'غير محدد', (byMethod.get(first.method || 'غير محدد') || 0) + r.total);
+        const via = r.rows.some((p: any) => p.collected_via_intermediary);
+        if (via) { viaCount += 1; viaAmount += r.total; }
+        r.rows.forEach((p: any) => { commission += num(p.intermediary_commission); fees += num(p.transfer_fee); });
+      } else if (DEBIT.includes(first.entry_type)) debits += r.total;
+    });
+    return { collected, debits, viaAmount, commission, fees, viaCount, receipts, net: collected - commission - fees, byMethod: [...byMethod.entries()].sort((a, b) => b[1] - a[1]) };
+  }, [rowsInView]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // المدفوع لكل عقد (من كل القيود المحمّلة) لحساب المتبقي الحالي على العقد
+  const contractPaidMap = useMemo(() => {
+    const m: Record<number, number> = {};
+    payments.forEach((p: any) => {
+      if (!p.contract_number || !['receipt', 'payment', 'account_payment'].includes(p.entry_type)) return;
+      const k = Number(p.contract_number);
+      m[k] = (m[k] || 0) + (Number(p.amount) || 0);
+    });
+    return m;
+  }, [payments]);
+  const targetLabel = (p: any): string => {
+    if (p.contract_number) return `عقد #${p.contract_number}${p.ad_type ? ` · ${p.ad_type}` : ''}`;
+    if (p.printed_invoice_id) return 'فاتورة طباعة';
+    if (p.sales_invoice_id) return 'فاتورة مبيعات';
+    if (p.composite_task_id) return `أمر تركيب${p.ad_type ? ` · ${p.ad_type}` : ''}`;
+    if (p.purchase_invoice_id || p.entry_type === 'purchase_invoice') return `مشتريات${purchaseInvoiceNotes[p.purchase_invoice_id] ? ` · ${purchaseInvoiceNotes[p.purchase_invoice_id]}` : ''}`;
+    if (DEBIT.includes(p.entry_type)) return getEntryTypeText(p.entry_type);
+    return 'على الحساب';
+  };
+  const barterNote = (rows: any[]): string | null => {
+    if (rows[0]?.method !== 'مقايضة') return null;
+    const notesText = rows[0]?.notes || '';
+    const m = notesText.match(/عقد\s*(\d+)/);
+    let cn: number | null = m ? Number(m[1]) : null;
+    if (!cn) {
+      const bm = notesText.match(/إيجار لوحة[:\s]+([^\n،,•]+)/);
+      const name = bm ? bm[1].trim() : '';
+      const rent = name ? friendRentals.find(r => r.billboards?.Billboard_Name?.trim() === name || r.billboard_id === name) : null;
+      if (rent) cn = rent.contract_number;
+    }
+    if (rows.some(d => d.purchase_invoice_id || d.notes?.includes('PUR-'))) return 'مقايضة بفاتورة مشتريات';
+    return cn ? `مقايضة · إيجار عقد #${cn}${friendContractsMap[cn] ? ` · ${friendContractsMap[cn]}` : ''}` : 'مقايضة · إيجار لوحة';
+  };
+
+  const openDetails = async (r: Row) => {
+    if (r.isGroup) { handleViewDistributedPayment(r.key); return; }
+    setSelectedDistributedPayments(r.rows);
+    setDistributedPaymentDialogOpen(true);
+  };
+
+  const PERIODS: [typeof period, string][] = [['today', 'اليوم'], ['week', 'أسبوع'], ['month', '30 يوماً'], ['3m', '3 أشهر'], ['year', 'سنة'], ['all', 'الكل'], ['custom', 'مخصص']];
+
   return (
-    <div className="space-y-6 p-4 md:p-8 max-w-full mx-auto" dir="rtl">
-      {/* Premium Glassmorphic Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-primary/10 via-primary/5 to-transparent border border-primary/15 p-6 md:p-8 backdrop-blur-sm shadow-sm">
-        <div className="absolute right-0 top-0 -z-10 h-32 w-32 rounded-full bg-primary/5 blur-3xl"></div>
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-12 h-12 md:w-14 md:h-14 bg-gradient-to-br from-primary to-primary/80 rounded-2xl flex items-center justify-center shadow-lg shadow-primary/20 text-white shrink-0">
-              <Receipt className="h-6 w-6 md:h-7 md:w-7" />
-            </div>
-            <div>
-              <h1 className="text-2xl md:text-3xl font-extrabold text-foreground tracking-tight">الدفعات والإيصالات</h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                إدارة وتوزيع ومتابعة جميع المقبوضات المالية والتوزيعات والحسابات
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap gap-2.5 w-full md:w-auto">
-            <Button onClick={() => setReportDialogOpen(true)} variant="outline" className="h-10 text-xs font-semibold gap-1.5 flex-1 sm:flex-none">
-              <Send className="h-3.5 w-3.5" /> إرسال تقرير
-            </Button>
-            <Button onClick={() => setStatementPrintDialogOpen(true)} variant="outline" className="h-10 text-xs font-semibold gap-1.5 flex-1 sm:flex-none">
-              <Printer className="h-3.5 w-3.5" /> طباعة كشف
-            </Button>
-            <Button onClick={handleAddDistributedPayment} className="h-10 text-xs font-semibold gap-1.5 bg-primary hover:bg-primary/90 text-white shadow-sm flex-1 sm:flex-none">
-              <Plus className="h-3.5 w-3.5" /> دفعة موزعة جديدة
-            </Button>
-            <Button onClick={loadPayments} variant="outline" size="icon" className="h-10 w-10 shrink-0">
-              <RefreshCw className="h-4 w-4" />
-            </Button>
+    <div className="mx-auto max-w-full space-y-4 p-4 md:p-6" dir="rtl">
+      {/* الرأس */}
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground"><Receipt className="h-5 w-5" /></div>
+          <div>
+            <h1 className="text-2xl font-bold">الدفعات والإيصالات</h1>
+            <p className="text-sm text-muted-foreground">كل المقبوضات والتوزيعات مع تفاصيل التحصيل (الوسيط والعمولة)</p>
           </div>
         </div>
-      </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="h-9" onClick={() => setReportDialogOpen(true)}><Send className="h-4 w-4" />إرسال تقرير</Button>
+          <Button variant="outline" size="sm" className="h-9" onClick={() => setStatementPrintDialogOpen(true)}><Printer className="h-4 w-4" />طباعة كشف</Button>
+          {canEditSection && <Button size="sm" className="h-9" onClick={handleAddDistributedPayment}><Plus className="h-4 w-4" />دفعة موزعة جديدة</Button>}
+          <Button variant="outline" size="icon" className="h-9 w-9" onClick={loadPayments} title="تحديث"><RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} /></Button>
+        </div>
+      </header>
 
-      {/* Stats Cards Dashboard */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
-        <Card className="border-border/50 bg-card/60 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">إجمالي المعاملات</p>
-              <h3 className="text-3xl font-black text-foreground tracking-tight font-numbers">{stats.totalPayments}</h3>
-            </div>
-            <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center text-primary shadow-inner">
-              <CreditCard className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/60 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">عدد الإيصالات</p>
-              <h3 className="text-3xl font-black text-foreground tracking-tight font-numbers">{stats.totalReceipts}</h3>
-            </div>
-            <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 shadow-inner">
-              <Receipt className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/60 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">إجمالي الواردات</p>
-              <h3 className="text-xl md:text-2xl font-black text-emerald-600 tracking-tight font-numbers">
-                {stats.totalCredits.toLocaleString('en-US')} <span className="text-xs font-bold text-muted-foreground">د.ل</span>
-              </h3>
-            </div>
-            <div className="h-12 w-12 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 shadow-inner">
-              <TrendingUp className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/50 bg-card/60 shadow-sm relative overflow-hidden group hover:shadow-md transition-all">
-          <CardContent className="p-5 flex items-center justify-between">
-            <div className="space-y-1">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wider">إجمالي الصادرات</p>
-              <h3 className="text-xl md:text-2xl font-black text-rose-600 tracking-tight font-numbers">
-                {stats.totalDebits.toLocaleString('en-US')} <span className="text-xs font-bold text-muted-foreground">د.ل</span>
-              </h3>
-            </div>
-            <div className="h-12 w-12 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600 shadow-inner">
-              <TrendingDown className="h-5 w-5" />
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Search Console */}
-      <Card className="border-border/50 bg-card/40 backdrop-blur-sm shadow-sm print:hidden">
-        <CardContent className="p-4">
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
-            <div className="relative flex-1">
-              <Search className="absolute right-3 top-1/2 -translate-y-1/2 h-4.5 w-4.5 text-muted-foreground/60" />
-              <Input
-                placeholder="ابحث باسم العميل، رقم العقد، أو الملاحظات..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pr-9 h-10 border-border/80 focus-visible:ring-primary/20 bg-background/80"
-              />
-            </div>
-            <div className="flex items-center gap-3">
-              <Select value={adTypeFilter} onValueChange={setAdTypeFilter}>
-                <SelectTrigger className="w-[170px] h-10 border-border/80 bg-background/85">
-                  <Filter className="h-3.5 w-3.5 ml-2 text-muted-foreground" />
-                  <SelectValue placeholder="نوع الإعلان" />
-                </SelectTrigger>
-                <SelectContent>
-                  <div className="p-2">
-                    <Input
-                      placeholder="ابحث نوع الإعلان..."
-                      value={adTypeSearch}
-                      onChange={(e) => setAdTypeSearch(e.target.value)}
-                      className="h-8 text-xs"
-                      autoFocus
-                    />
-                  </div>
-                  <SelectItem value="all">كل الأنواع</SelectItem>
-                  {uniqueAdTypes
-                    .filter(type => !adTypeSearch || type.includes(adTypeSearch))
-                    .map(type => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <div className="flex gap-2 shrink-0">
-                <Badge variant="outline" className="h-7 bg-purple-50 dark:bg-purple-950/40 border-purple-200 dark:border-purple-900/50 text-purple-700 dark:text-purple-300 font-semibold">{groupedPayments.length} مجمعة</Badge>
-                <Badge variant="outline" className="h-7 font-semibold">{standalonePayments.length} مستقلة</Badge>
-              </div>
-            </div>
+      {/* المؤشرات للفترة المحددة */}
+      <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+        {[
+          { label: 'المحصّل', value: `${fmt(kpi.collected)} د.ل`, sub: `${kpi.receipts} عملية`, tone: 'text-emerald-600 dark:text-emerald-400', icon: TrendingUp },
+          { label: 'صافي بعد الرسوم', value: `${fmt(kpi.net)} د.ل`, sub: kpi.commission + kpi.fees > 0 ? `بعد خصم ${fmt(kpi.commission + kpi.fees)}` : 'بدون رسوم', tone: '', icon: Wallet },
+          { label: 'عبر وسيط', value: `${fmt(kpi.viaAmount)} د.ل`, sub: `${kpi.viaCount} عملية`, tone: 'text-sky-600 dark:text-sky-400', icon: User },
+          { label: 'عمولات الوسطاء', value: `${fmt(kpi.commission)} د.ل`, sub: 'من المبالغ المحصلة', tone: kpi.commission ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground', icon: CreditCard },
+          { label: 'رسوم التحويل', value: `${fmt(kpi.fees)} د.ل`, sub: 'تحويلات مصرفية', tone: kpi.fees ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground', icon: CreditCard },
+          { label: 'ديون وصادرات', value: `${fmt(kpi.debits)} د.ل`, sub: 'قيود مدينة', tone: kpi.debits ? 'text-rose-600 dark:text-rose-400' : 'text-muted-foreground', icon: TrendingDown },
+        ].map(k => (
+          <div key={k.label} className="rounded-xl border border-border bg-card p-3">
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground"><k.icon className="h-3.5 w-3.5" />{k.label}</div>
+            <div className={`mt-1 text-lg font-bold tabular-nums ${k.tone}`}>{k.value}</div>
+            <div className="text-[11px] text-muted-foreground">{k.sub}</div>
           </div>
-        </CardContent>
-      </Card>
+        ))}
+      </section>
+      {kpi.byMethod.length > 1 && (
+        <div className="flex flex-wrap gap-2 text-xs">
+          {kpi.byMethod.map(([m, v]) => (
+            <button key={m} type="button" onClick={() => setMethodFilter(methodFilter === m ? 'all' : m)}
+              className={`rounded-full border px-3 py-1 ${methodFilter === m ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-background text-muted-foreground hover:bg-muted'}`}>
+              {m}: <b className="tabular-nums">{fmt(v)}</b> ({kpi.collected ? Math.round((v / kpi.collected) * 100) : 0}%)
+            </button>
+          ))}
+        </div>
+      )}
 
-      {/* Main List Container */}
-      <Card className="border-border/60 shadow-sm overflow-hidden">
-        <CardHeader className="pb-3 border-b border-border/40 bg-muted/40">
-          <CardTitle className="text-base font-bold">كل المعاملات المالية ({filteredPayments.length})</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-20 gap-3">
-              <div className="h-8 w-8 animate-spin border-2 border-primary border-t-transparent rounded-full"></div>
-              <p className="text-muted-foreground text-sm font-medium">جاري تحميل وتحديث البيانات...</p>
-            </div>
-          ) : filteredPayments.length === 0 ? (
-            <div className="text-center py-16 text-muted-foreground">
-              <Receipt className="h-12 w-12 mx-auto mb-3 opacity-30" />
-              <p className="font-semibold text-sm">لم يتم العثور على أي دفعات أو إيصالات مالية</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-muted/80 border-b border-border/50 text-muted-foreground text-[13px] font-bold">
-                    <th className="text-center px-4 py-3.5 w-12">#</th>
-                    <th className="text-right px-4 py-3.5 w-28">التاريخ</th>
-                    <th className="text-right px-4 py-3.5">العميل</th>
-                    <th className="text-center px-4 py-3.5">نوع العملية</th>
-                    <th className="text-center px-4 py-3.5">نوع الإعلان</th>
-                    <th className="text-center px-4 py-3.5 w-32">المبلغ</th>
-                    <th className="text-center px-4 py-3.5 w-32">المتبقي للحساب</th>
-                    <th className="text-center px-4 py-3.5 w-24">رقم العقد</th>
-                    <th className="text-center px-4 py-3.5 w-28">الوسيلة</th>
-                    <th className="text-center px-4 py-3.5 w-24">الإجراءات</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/40">
-                  {sortedItems.map((item, itemIndex) => {
-                    if (item.type === 'group') {
-                      const group = item.data as GroupedPayment;
-                      const isExpanded = expandedGroups.has(group.id);
-                      const contractsList = [...new Set(group.distributions.filter(d => d.contract_number).map(d => d.contract_number))];
-                      const hasCustody = !!group.custodyInfo;
-                      const adTypes = [...new Set(group.distributions.filter(d => d.ad_type).map(d => d.ad_type))];
-                      
-                      return (
-                        <React.Fragment key={group.id}>
-                          {/* Group Header Row */}
-                          <tr 
-                            className="bg-purple-500/[0.03] dark:bg-purple-500/[0.01] hover:bg-purple-500/[0.07] dark:hover:bg-purple-500/[0.04] cursor-pointer transition-colors border-r-4 border-r-purple-500"
-                            onClick={() => toggleGroupExpansion(group.id)}
-                          >
-                            <td className="px-4 py-3.5 text-center text-xs font-bold text-purple-600">{sortedItems.length - itemIndex}</td>
-                            <td className="px-4 py-3.5 font-medium whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                {isExpanded ? <ChevronDown className="h-4 w-4 text-purple-600" /> : <ChevronRight className="h-4 w-4 text-purple-600" />}
-                                <span className="text-xs font-numbers">{new Date(group.paidAt).toLocaleDateString('ar-LY')}</span>
-                              </div>
-                            </td>
-                            <td className="px-4 py-3.5">
-                              <div className="flex flex-col">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <Button 
-                                    variant="link" 
-                                    className="p-0 h-auto font-bold text-sm text-foreground hover:text-purple-600 justify-start" 
-                                    onClick={(e) => { e.stopPropagation(); handleViewCustomer(group.customerId, group.customerName); }}
-                                  >
-                                    {group.customerName}
-                                  </Button>
-                                  {group.method === 'مقايضة' && (() => {
-                                     const firstDist = group.distributions[0];
-                                     const hasPurchaseInvoice = group.distributions.some(d => d.purchase_invoice_id || d.notes?.includes('مشتريات') || d.notes?.includes('PUR-'));
-                                     
-                                     let friendContractNum: number | null = null;
-                                     let friendAdType: string | null = null;
-
-                                     const notesText = firstDist?.notes || '';
-                                     const barterMatch = notesText.match(/عقد\s*(\d+)/);
-                                     if (barterMatch) {
-                                       friendContractNum = Number(barterMatch[1]);
-                                     } else {
-                                       const billboardMatch = notesText.match(/إيجار لوحة[:\s]+([^\n،,•]+)/);
-                                       const billboardNameInNotes = billboardMatch ? billboardMatch[1].trim() : '';
-                                       if (billboardNameInNotes) {
-                                         const matchedRental = friendRentals.find(r => 
-                                           r.billboards?.Billboard_Name?.trim() === billboardNameInNotes ||
-                                           r.billboard_id === billboardNameInNotes
-                                         );
-                                         if (matchedRental) {
-                                           friendContractNum = matchedRental.contract_number;
-                                         }
-                                       }
-                                     }
-                                     if (friendContractNum) {
-                                       friendAdType = friendContractsMap[friendContractNum] || null;
-                                     }
-
-                                     let purchaseNotes = '';
-                                     if (hasPurchaseInvoice) {
-                                       const linkedPurId = group.distributions.find(d => d.purchase_invoice_id)?.purchase_invoice_id;
-                                       const purMatch = notesText.match(/PUR-\d+/);
-                                       const purCode = purMatch ? purMatch[0] : null;
-                                       purchaseNotes = (linkedPurId ? purchaseInvoiceNotes[linkedPurId] : null) || (purCode ? purchaseInvoiceNotes[purCode] : null) || '';
-                                     }
-
-                                     const adTypeSuffix = friendAdType ? ` - ${friendAdType}` : '';
-                                     
-                                     const barterLabel = hasPurchaseInvoice 
-                                       ? `مقايضة - ${purchaseNotes || 'فاتورة مشتريات'}`
-                                       : (friendContractNum 
-                                         ? `مقايضة - إيجار عقد #${friendContractNum}${adTypeSuffix}` 
-                                         : 'مقايضة - إيجار لوحة');
-                                     return (
-                                       <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300 text-[10px] gap-1 px-1.5 py-0 font-bold">
-                                         {barterLabel}
-                                       </Badge>
-                                     );
-                                   })()}
-                                  {hasCustody && (
-                                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20 text-[10px] gap-1 px-1.5 py-0 font-bold">
-                                      <Wallet className="h-3 w-3" /> عهدة
-                                    </Badge>
-                                  )}
-                                </div>
-                                {group.companyName && (
-                                  <span className="text-[11px] text-muted-foreground mt-0.5">{group.companyName}</span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-4 py-3.5 text-center">
-                              <Badge className="bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-500/20 text-xs font-bold">
-                                مجمعة ({group.distributions.length})
-                              </Badge>
-                            </td>
-                            <td className="px-4 py-3.5 text-center">
-                              {adTypes.length > 0 ? (
-                                <div className="flex flex-wrap gap-1 justify-center">
-                                  {adTypes.slice(0, 2).map((ad, i) => (
-                                    <Badge key={i} variant="outline" className="text-[10px] bg-blue-500/5 text-blue-700 dark:text-blue-300 border-blue-500/10 font-bold">{ad}</Badge>
-                                  ))}
-                                  {adTypes.length > 2 && <span className="text-[11px] text-muted-foreground font-semibold">+{adTypes.length - 2}</span>}
-                                </div>
-                              ) : <span className="text-muted-foreground/60">—</span>}
-                            </td>
-                            <td className="px-4 py-3.5 text-center">
-                              <span className="font-extrabold text-[15px] text-purple-700 dark:text-purple-400 font-numbers">
-                                {group.totalAmount.toLocaleString('en-US')} <span className="text-xs font-semibold text-muted-foreground">د.ل</span>
-                              </span>
-                            </td>
-                            <td className={`px-4 py-3.5 text-center font-bold font-numbers ${(group.distributions[0]?.remaining_debt || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                              {(group.distributions[0]?.remaining_debt || 0).toLocaleString('en-US')}
-                            </td>
-                            <td className="px-4 py-3.5 text-center text-xs text-primary font-bold whitespace-nowrap font-numbers">
-                              {contractsList.length > 0 ? contractsList.slice(0, 2).map(c => `#${c}`).join('، ') : '—'}
-                            </td>
-                            <td className="px-4 py-3.5 text-center text-xs text-muted-foreground font-medium">
-                              {group.method || '—'}
-                            </td>
-                            <td className="px-4 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
-                              <Button size="sm" variant="outline" onClick={() => handleViewDistributedPayment(group.distributedPaymentId)} className="h-7 px-2.5 text-[11px] font-bold border-border/80">
-                                <Edit className="h-3 w-3 ml-1 text-primary" /> تفاصيل
-                              </Button>
-                            </td>
-                          </tr>
-                          
-                          {/* Expanded Content */}
-                          {isExpanded && (
-                            <>
-                              {hasCustody && group.custodyInfo && (
-                                <tr className="bg-amber-500/[0.02] dark:bg-amber-500/[0.01]">
-                                  <td colSpan={10} className="px-6 py-2.5 border-r-4 border-amber-400">
-                                    <div className="flex items-center gap-4 flex-wrap text-[13px] text-muted-foreground">
-                                      <div className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-bold">
-                                        <Wallet className="h-4 w-4" />
-                                        <span>عهدة مالية مرتبطة</span>
-                                      </div>
-                                      <span>لدى الموظف: <strong className="text-foreground">{group.custodyInfo.employee_name}</strong></span>
-                                      <span>المبلغ: <strong className="text-amber-700 dark:text-amber-400 font-numbers">{group.custodyInfo.initial_amount.toLocaleString('en-US')} د.ل</strong></span>
-                                      <span>الرصيد الحالي: <strong className={`font-numbers ${group.custodyInfo.current_balance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{group.custodyInfo.current_balance.toLocaleString('en-US')} د.ل</strong></span>
- {group.custodyInfo.current_balance === 0 && <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold border-none"> مسددة</Badge>}
-                                    </div>
-                                  </td>
-                                </tr>
-                              )}
-                              
-                              {group.distributions.map((dist, distIndex) => (
-                                <tr key={dist.id} className={`border-r-4 border-purple-400 bg-purple-500/[0.01] ${distIndex % 2 === 0 ? 'bg-muted/10' : 'bg-muted/5'}`}>
-                                  <td className="px-4 py-2.5 text-center text-xs text-muted-foreground/60">{distIndex + 1}</td>
-                                  <td className="px-6 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
-                                    <span className="text-purple-400 font-bold ml-1">↳</span>
-                                    <span className="font-numbers">{new Date(dist.paid_at).toLocaleDateString('ar-LY')}</span>
-                                  </td>
-                                  <td className="px-4 py-2.5 text-xs text-muted-foreground font-medium max-w-[280px] truncate">
-                                    {dist.notes || '—'}
-                                  </td>
-                                  <td className="px-4 py-2.5 text-center">
-                                    <Badge className={`${getEntryTypeStyle(dist.entry_type)} text-[10px] font-bold`}>{getEntryTypeText(dist.entry_type)}</Badge>
-                                  </td>
-                                  <td className="px-4 py-2.5 text-center text-xs text-muted-foreground font-medium">{dist.ad_type || '—'}</td>
-                                  <td className="px-4 py-2.5 text-center font-bold font-numbers text-[14px]">
-                                    {(Number(dist.amount) || 0).toLocaleString('en-US')} <span className="text-[10px] text-muted-foreground font-semibold">د.ل</span>
-                                  </td>
-                                  <td className="px-4 py-2.5 text-center text-muted-foreground/45">—</td>
-                                  <td className="px-4 py-2.5 text-center text-xs text-primary font-bold font-numbers">
-                                    {dist.contract_number ? `#${dist.contract_number}` : '—'}
-                                  </td>
-                                  <td className="px-4 py-2.5"></td>
-                                  <td className="px-4 py-2.5"></td>
-                                </tr>
-                              ))}
-                            </>
-                          )}
-                        </React.Fragment>
-                      );
-                    } else {
-                      const payment = item.data as Payment;
-                      return (
-                        <tr key={payment.id} className={`hover:bg-muted/30 transition-colors ${itemIndex % 2 === 0 ? 'bg-muted/5' : ''}`}>
-                          <td className="px-4 py-3.5 text-center text-xs font-bold text-muted-foreground">{sortedItems.length - itemIndex}</td>
-                          <td className="px-4 py-3.5 font-medium whitespace-nowrap font-numbers">
-                            {new Date(payment.paid_at || payment.created_at).toLocaleDateString('ar-LY')}
-                          </td>
-                          <td className="px-4 py-3.5">
-                            <div className="flex flex-col">
-                              <div className="flex items-center gap-2 flex-wrap">
-                                <Button 
-                                  variant="link" 
-                                  className="p-0 h-auto font-bold text-sm text-foreground hover:text-primary justify-start" 
-                                  onClick={() => handleViewCustomer(payment.customer_id, payment.customer_name)}
-                                >
-                                  {payment.customer_name}
-                                </Button>
-                                {payment.method === 'مقايضة' && (() => {
-                                  const hasPurchaseInvoice = !!payment.purchase_invoice_id || payment.notes?.includes('مشتريات') || payment.notes?.includes('PUR-');
-                                  
-                                  let friendContractNum: number | null = null;
-                                  let friendAdType: string | null = null;
-
-                                  const notesText = payment.notes || '';
-                                  const barterMatch = notesText.match(/عقد\s*(\d+)/);
-                                  if (barterMatch) {
-                                    friendContractNum = Number(barterMatch[1]);
-                                  } else {
-                                    const billboardMatch = notesText.match(/إيجار لوحة[:\s]+([^\n،,•]+)/);
-                                    const billboardNameInNotes = billboardMatch ? billboardMatch[1].trim() : '';
-                                    if (billboardNameInNotes) {
-                                      const matchedRental = friendRentals.find(r => 
-                                        r.billboards?.Billboard_Name?.trim() === billboardNameInNotes ||
-                                        r.billboard_id === billboardNameInNotes
-                                      );
-                                      if (matchedRental) {
-                                        friendContractNum = matchedRental.contract_number;
-                                      }
-                                    }
-                                  }
-                                  if (friendContractNum) {
-                                    friendAdType = friendContractsMap[friendContractNum] || null;
-                                  }
-
-                                  let purchaseNotes = '';
-                                  if (hasPurchaseInvoice) {
-                                    const linkedPurId = payment.purchase_invoice_id;
-                                    const purMatch = notesText.match(/PUR-\d+/);
-                                    const purCode = purMatch ? purMatch[0] : null;
-                                    purchaseNotes = (linkedPurId ? purchaseInvoiceNotes[linkedPurId] : null) || (purCode ? purchaseInvoiceNotes[purCode] : null) || '';
-                                  }
-
-                                  const adTypeSuffix = friendAdType ? ` - ${friendAdType}` : '';
-                                  
-                                  const barterLabel = hasPurchaseInvoice 
-                                    ? `مقايضة - ${purchaseNotes || 'فاتورة مشتريات'}`
-                                    : (friendContractNum 
-                                      ? `مقايضة - إيجار عقد #${friendContractNum}${adTypeSuffix}` 
-                                      : 'مقايضة - إيجار لوحة');
-                                  return (
-                                    <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-300 text-[10px] gap-1 px-1.5 py-0 font-bold">
-                                      {barterLabel}
-                                    </Badge>
-                                  );
-                                })()}
-                              </div>
-                              {payment.company_name && (
-                                <span className="text-[11px] text-muted-foreground mt-0.5">{payment.company_name}</span>
-                              )}
-                              {payment.notes && (
-                                <span className="text-[11px] text-muted-foreground/80 mt-0.5 font-medium">{payment.notes}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3.5 text-center">
-                            <Badge className={`${getEntryTypeStyle(payment.entry_type)} text-xs font-bold`}>{getEntryTypeText(payment.entry_type)}</Badge>
-                          </td>
-                          <td className="px-4 py-3.5 text-center">
-                            {payment.ad_type ? <Badge variant="outline" className="text-[10px] font-bold">{payment.ad_type}</Badge> : <span className="text-muted-foreground/60">—</span>}
-                          </td>
-                          <td className={`px-4 py-3.5 text-center font-bold text-[15px] font-numbers ${Number(payment.amount) < 0 ? 'text-rose-600' : ''}`}>
-                            {(Number(payment.amount) || 0).toLocaleString('en-US')} <span className="text-xs font-semibold text-muted-foreground">د.ل</span>
-                          </td>
-                          <td className={`px-4 py-3.5 text-center font-bold font-numbers ${(payment.remaining_debt || 0) > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
-                            {(payment.remaining_debt || 0).toLocaleString('en-US')}
-                          </td>
-                          <td className="px-4 py-3.5 text-center text-xs text-primary font-bold font-numbers">
-                            {payment.contract_number ? `#${payment.contract_number}` : '—'}
-                          </td>
-                          <td className="px-4 py-3.5 text-center text-xs text-muted-foreground font-medium">
-                            {payment.method || '—'}
-                          </td>
-                          <td className="px-4 py-3.5 text-center"></td>
-                        </tr>
-                      );
-                    }
-                  })}
-                </tbody>
-              </table>
+      {/* التصفية */}
+      <section className="space-y-2 rounded-xl border border-border bg-card p-3">
+        <div className="flex flex-wrap gap-1.5">
+          {PERIODS.map(([k, l]) => (
+            <button key={k} type="button" onClick={() => { setPeriod(k); setVisibleCount(60); }}
+              className={`rounded-lg border px-3 py-1.5 text-sm ${period === k ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-background hover:bg-muted'}`}>{l}</button>
+          ))}
+          {period === 'custom' && (
+            <div className="flex items-center gap-1.5">
+              <Input type="date" value={fromDate} onChange={e => setFromDate(e.target.value)} className="h-9 w-40" />
+              <span className="text-xs text-muted-foreground">إلى</span>
+              <Input type="date" value={toDate} onChange={e => setToDate(e.target.value)} className="h-9 w-40" />
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative min-w-[220px] flex-1">
+            <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input value={searchTerm} onChange={e => setSearchTerm(e.target.value)} placeholder="زبون، رقم عقد، مرجع، ملاحظة" className="h-9 pr-9" />
+          </div>
+          <Select value={kindFilter} onValueChange={v => setKindFilter(v as any)}>
+            <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">كل الأنواع</SelectItem><SelectItem value="in">مقبوضات</SelectItem><SelectItem value="out">ديون وصادرات</SelectItem><SelectItem value="barter">مقايضة</SelectItem></SelectContent>
+          </Select>
+          <Select value={methodFilter} onValueChange={setMethodFilter}>
+            <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
+            <SelectContent><SelectItem value="all">كل الطرق</SelectItem>{methods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+          </Select>
+          {uniqueAdTypes.length > 0 && (
+            <Select value={adTypeFilter} onValueChange={setAdTypeFilter}>
+              <SelectTrigger className="h-9 w-[160px]"><SelectValue placeholder="نوع الإعلان" /></SelectTrigger>
+              <SelectContent className="max-h-72"><SelectItem value="all">كل الإعلانات</SelectItem>{uniqueAdTypes.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+            </Select>
+          )}
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs">
+            <input type="checkbox" checked={viaOnly} onChange={e => setViaOnly(e.target.checked)} className="accent-primary" />عبر وسيط فقط
+          </label>
+          <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs">
+            <input type="checkbox" checked={showCollectionDetails} onChange={e => setShowCollectionDetails(e.target.checked)} className="accent-primary" />تفاصيل التحصيل لكل عملية
+          </label>
+        </div>
+      </section>
 
+      {/* القائمة */}
+      {loading ? (
+        <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-16 animate-pulse rounded-xl bg-muted/60" />)}</div>
+      ) : !rowsInView.length ? (
+        <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">لا توجد عمليات في هذه الفترة</div>
+      ) : (
+        <section className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="hidden grid-cols-[92px_minmax(0,1.4fr)_minmax(0,1.6fr)_120px_110px_110px_88px] gap-3 border-b border-border bg-muted/50 px-4 py-2 text-xs font-semibold text-muted-foreground lg:grid">
+            <span>التاريخ</span><span>الزبون</span><span>الوجهة</span><span className="text-left">المبلغ المستلم</span><span className="text-left">المتبقي</span><span>الطريقة</span><span />
+          </div>
+          {rowsInView.slice(0, visibleCount).map(r => {
+            const first: any = r.rows[0];
+            const isDebit = DEBIT.includes(first.entry_type);
+            const via = r.rows.some((p: any) => p.collected_via_intermediary);
+            const comm = r.rows.reduce((s: number, p: any) => s + num(p.intermediary_commission), 0);
+            const fee = r.rows.reduce((s: number, p: any) => s + num(p.transfer_fee), 0);
+            const barter = barterNote(r.rows);
+            const custody = r.isGroup ? custodyDataMap[r.key] : null;
+            const expanded = expandedGroups.has(r.key);
+            const targets = [...new Set(r.rows.map(targetLabel))];
+            return (
+              <div key={r.key} className="border-b border-border last:border-b-0">
+                <div className="grid grid-cols-2 items-center gap-x-3 gap-y-1 px-4 py-3 lg:grid-cols-[92px_minmax(0,1.4fr)_minmax(0,1.6fr)_120px_110px_110px_88px]">
+                  <span className="text-xs tabular-nums text-muted-foreground">{String(r.date || '').slice(0, 10).split('-').reverse().join('/')}</span>
+                  <button type="button" className="min-w-0 text-right" onClick={() => navigate(`/admin/customer-account?id=${r.customerId}&name=${encodeURIComponent(r.customer || '')}`)}>
+                    <span className="block truncate font-semibold hover:text-primary">{r.customer || '—'}</span>
+                    {r.company && <span className="block truncate text-[11px] text-muted-foreground">{r.company}</span>}
+                  </button>
+                  <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-1 lg:col-span-1">
+                    {r.isGroup && <button type="button" onClick={() => toggleGroupExpansion(r.key)} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">{expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}موزعة ({r.rows.length})</button>}
+                    {!r.isGroup && <span className={`rounded-md px-1.5 py-0.5 text-[11px] ${getEntryTypeStyle(first.entry_type)}`}>{getEntryTypeText(first.entry_type)}</span>}
+                    {targets.slice(0, 3).map(t => <span key={t} className="truncate rounded-md border border-border px-1.5 py-0.5 text-[11px]">{t}</span>)}
+                    {targets.length > 3 && <span className="text-[11px] text-muted-foreground">+{targets.length - 3}</span>}
+                    {barter && <span className="rounded-md bg-purple-500/10 px-1.5 py-0.5 text-[11px] text-purple-700 dark:text-purple-300">{barter}</span>}
+                    {via && <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] text-sky-700 dark:text-sky-300">وسيط: {first.collector_name || '—'}</span>}
+                    {custody && <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">عهدة: {custody.employee_name}</span>}
+                  </div>
+                  <div className="lg:text-left">
+                    <div className="text-[10px] text-muted-foreground lg:hidden">{isDebit ? 'قيد مدين' : 'المبلغ المستلم'}</div>
+                    <span className={`text-base font-bold tabular-nums ${isDebit ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{isDebit ? '−' : ''}{fmt(r.total)} <span className="text-[11px] font-normal text-muted-foreground">د.ل</span></span>
+                    {(comm > 0 || fee > 0) && <div className="text-[10px] text-muted-foreground">الصافي {fmt(r.total - comm - fee)}</div>}
+                  </div>
+                  {(() => {
+                    const cs = [...new Set(r.rows.map((p: any) => Number(p.contract_number)).filter(Boolean))] as number[];
+                    const known = cs.filter(c => contractTotals[c] !== undefined);
+                    const contractRem = known.reduce((s2, c) => s2 + Math.max(0, (contractTotals[c] || 0) - (contractPaidMap[c] || 0)), 0);
+                    const custRem = num(first.remaining_debt);
+                    return (
+                      <div className="space-y-0.5 text-[11px] leading-tight lg:text-left">
+                        {known.length > 0 && (
+                          <div>
+                            <span className="text-muted-foreground">{known.length === 1 ? `على العقد #${known[0]}: ` : `على العقود (${known.length}): `}</span>
+                            <b className={`tabular-nums ${contractRem > 0.01 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{contractRem > 0.01 ? `${fmt(contractRem)} د.ل` : 'مسدد ✓'}</b>
+                          </div>
+                        )}
+                        <div>
+                          <span className="text-muted-foreground">على الزبون بعدها: </span>
+                          <b className={`tabular-nums ${custRem > 0.01 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>{custRem > 0.01 ? `${fmt(custRem)} د.ل` : 'لا شيء'}</b>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  <span className="text-xs text-muted-foreground">{first.method || '—'}</span>
+                  <div className="flex justify-end gap-1">
+                    <Button size="sm" variant="outline" className="h-8 px-2 text-xs" onClick={() => openDetails(r)}><Edit className="h-3.5 w-3.5" />تفاصيل</Button>
+                  </div>
+                </div>
+                {(showCollectionDetails || via) && CREDIT.includes(first.entry_type) && (via || comm || fee || first.source_bank || first.transfer_reference) && (
+                  <div className="flex flex-wrap gap-x-4 gap-y-1 bg-sky-500/[0.04] px-4 pb-2.5 pt-0 text-xs text-muted-foreground lg:pr-[116px]">
+                    {via && <span>المحصِّل: <b className="text-foreground">{first.collector_name || '—'}</b> ← سُلِّم إلى <b className="text-foreground">{first.receiver_name || '—'}</b>{first.delivery_location ? ` · ${first.delivery_location}` : ''}{first.collection_date ? ` · ${String(first.collection_date).split('-').reverse().join('/')}` : ''}</span>}
+                    {comm > 0 && <span>عمولة الوسيط: <b className="tabular-nums text-amber-600">{fmt(comm)} د.ل</b></span>}
+                    {fee > 0 && <span>رسوم التحويل: <b className="tabular-nums text-amber-600">{fmt(fee)} د.ل</b></span>}
+                    {(comm > 0 || fee > 0) && <span>الصافي: <b className="tabular-nums text-foreground">{fmt(r.total - comm - fee)} د.ل</b></span>}
+                    {(first.source_bank || first.destination_bank) && <span>تحويل: {first.source_bank || '—'} ← {first.destination_bank || '—'}{first.transfer_reference ? ` (${first.transfer_reference})` : ''}</span>}
+                  </div>
+                )}
+                {r.isGroup && expanded && (
+                  <div className="space-y-1 border-t border-dashed border-border bg-muted/20 px-4 py-2">
+                    {r.rows.map((p: any) => (
+                      <div key={p.id} className="flex items-center gap-3 text-xs">
+                        <span className="text-primary">↳</span>
+                        <span className="min-w-0 flex-1 truncate">{targetLabel(p)}{p.notes ? <span className="text-muted-foreground"> · {p.notes}</span> : null}</span>
+                        <b className="tabular-nums">{fmt(num(p.amount))} د.ل</b>
+                      </div>
+                    ))}
+                    {custody && <div className="text-xs text-amber-700 dark:text-amber-300">عهدة لدى {custody.employee_name}: {fmt(custody.initial_amount)} د.ل · الرصيد الحالي {fmt(custody.current_balance)} د.ل</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {rowsInView.length > visibleCount && (
+            <div className="p-3 text-center"><Button variant="outline" size="sm" onClick={() => setVisibleCount(c => c + 60)}>عرض المزيد ({rowsInView.length - visibleCount})</Button></div>
+          )}
+        </section>
+      )}
       {/* Customer Select Dialog */}
       {!distributeDialogOpen && (
         <Dialog open={customerSelectDialogOpen} onOpenChange={setCustomerSelectDialogOpen}>
@@ -1249,12 +1094,22 @@ export default function PaymentsReceiptsPage() {
           onOpenChange={setDistributedPaymentDialogOpen}
           groupedPayments={selectedDistributedPayments as any}
           totalAmount={selectedDistributedPayments.reduce((sum, p) => sum + p.amount, 0)}
-          onPrintCombined={() => toast.info('طباعة مجمعة قيد التطوير')}
-          onPrintIndividual={() => toast.info('طباعة فردية قيد التطوير')}
+          onPrintCombined={() => printDistributedUnifiedReceipt(selectedDistributedPayments as any, selectedDistributedPayments[0]?.customer_name || '', selectedDistributedPayments.reduce((s, p) => s + (Number(p.amount) || 0), 0), printReceipt).catch((e: any) => toast.error(e.message))}
+          onPrintIndividual={(p: any) => printDistributedUnifiedReceipt([p], p.customer_name || '', Number(p.amount) || 0, printReceipt).catch((e: any) => toast.error(e.message))}
           onDelete={async () => {
             const distId = selectedDistributedPayments[0]?.distributed_payment_id;
-            if (!distId) { toast.error('معرف الدفعة غير موجود'); return; }
-            if (!window.confirm('هل أنت متأكد من حذف الدفعة الموزعة بالكامل؟ سيتم حذف كل توزيعاتها وأي مصروفات مرتبطة بها سترجع لحالة "غير مسدد" تلقائياً.')) return;
+            if (!distId) {
+              // دفعة منفردة: الحذف المباشر (المشغّلات تنظف السلف والسحوبات وسدادات المصاريف المرتبطة)
+              const single = selectedDistributedPayments[0];
+              if (!single) return;
+              const { error } = await supabase.from('customer_payments').delete().eq('id', single.id);
+              if (error) { toast.error(`فشل الحذف: ${error.message}`); return; }
+              toast.success('تم حذف الدفعة');
+              setDistributedPaymentDialogOpen(false);
+              loadPayments();
+              return;
+            }
+            // التأكيد يتم داخل نافذة التفاصيل
             try {
               const { data: expensePaysToDelete } = await supabase
                 .from('expense_payments')
@@ -1308,7 +1163,7 @@ export default function PaymentsReceiptsPage() {
             }
           }}
           customerName={selectedDistributedPayments[0]?.customer_name || ''}
-          onEdit={() => {
+          onEdit={!selectedDistributedPayments[0]?.distributed_payment_id ? undefined : () => {
             const distId = selectedDistributedPayments[0]?.distributed_payment_id;
             if (distId) {
               setEditingDistributedPaymentId(distId);

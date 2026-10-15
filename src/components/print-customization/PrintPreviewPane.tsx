@@ -394,13 +394,15 @@ export function PrintPreviewPane({ settings, backgroundUrl, onZoomChange }: Prin
               className="absolute z-10"
               style={{
                 top: settings.team_name_top,
-                right: settings.team_name_right,
+                left: '50%',
+                width: 'max-content',
+                maxWidth: 'calc(100% - 16mm)',
                 fontSize: settings.team_name_font_size,
                 fontWeight: settings.team_name_font_weight,
                 color: settings.team_name_color || '#333',
                 fontFamily: `'${settings.primary_font}', Arial, sans-serif`,
-                textAlign: getTextAlign(settings.team_name_alignment || 'right'),
-                transform: getTransformWithOffset('', settings.team_name_offset_x || '0mm'),
+                textAlign: 'center',
+                transform: 'translateX(-50%)',
               }}
             >
               فريق التركيب: {textMockData.teamName}

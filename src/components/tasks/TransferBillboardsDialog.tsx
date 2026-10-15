@@ -1,3 +1,4 @@
+import { loadInstallationOperationIds, prepareInstallationOperationTask } from '@/services/installationOperation';
 import { sameInstallationOperation } from '@/lib/installationTransferIdentity';
 import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -82,10 +83,15 @@ export function TransferBillboardsDialog({
       if (items?.length !== selectedItems.length || items.some(item => item.status === 'completed')) throw new Error('تغيرت اللوحات المختارة؛ حدّث المهمة ثم أعد الاختيار');
       const { data: candidates, error: fetchError } = await supabase.from('installation_tasks').select('*').eq('team_id', targetTeamId).eq('task_type', source.task_type || 'installation').in('status', ['pending', 'in_progress']).order('created_at');
       if (fetchError) throw fetchError;
-      const target = candidates?.find(task => task.id !== source.id && sameInstallationOperation(source, task));
+      const operationIds = await loadInstallationOperationIds();
+      const operationId = operationIds[source.id];
+      const target = candidates?.find(task => task.id !== source.id && sameInstallationOperation(
+        { ...source, operation_id: operationId }, { ...task, operation_id: operationIds[task.id] },
+      ));
       let targetTaskId = target?.id;
       if (!targetTaskId) {
         const { data: created, error } = await supabase.from('installation_tasks').insert({
+          ...(operationId ? await prepareInstallationOperationTask(operationId) : {}),
           contract_id: source.contract_id, contract_ids: source.contract_ids,
           team_id: targetTeamId, task_type: source.task_type || 'installation',
           reinstallation_number: source.reinstallation_number, task_name: source.task_name, status: 'pending',

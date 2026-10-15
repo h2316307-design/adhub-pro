@@ -22,6 +22,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Slider } from '@/components/ui/slider';
+import { ImageViewer } from '@/components/shared/ImageViewer';
 import { Plus, Trash2, Save, Printer, MapPin, ArrowUp, ArrowDown, ArrowUpDown, Search, Edit2, FolderOpen, Upload, Building2, Settings2, GripVertical, ArrowLeftRight, Replace, Filter, Sticker, LayoutGrid, List, FileSpreadsheet, Camera, ImageIcon, Loader2, CheckCircle2, AlertTriangle, Sparkles, X as XIcon, XIcon as XIcon2, Info, RefreshCw, RotateCcw, Eye, Check, SlidersHorizontal, ChevronDown, Wrench, Clock, Ban, Clipboard, Maximize2, ZoomIn, ZoomOut, ExternalLink, Download, PenTool, FileText, Layers, Tag, Copy, Files, Calendar, BookOpen } from 'lucide-react';
 import { extractExifData } from '@/utils/exifExtractor';
 import { uploadImage } from '@/services/imageUploadService';
@@ -8715,78 +8716,10 @@ export default function MunicipalityBillboardOrganizer() {
         </DialogContent>
       </Dialog>
 
-      {/* ─── Image Zoom Lightbox Modal ─── */}
-      <Dialog open={!!zoomImageModalUrl} onOpenChange={(open) => { if (!open) { setZoomImageModalUrl(null); setZoomScale(1); } }}>
-        <DialogContent className="max-w-4xl border-border/10 rounded-3xl bg-black/95 backdrop-blur-2xl shadow-2xl p-0 overflow-hidden text-white flex flex-col items-center">
-          {/* Header */}
-          <div className="w-full px-6 py-4 border-b border-white/10 flex items-center justify-between bg-white/5">
-            <div className="flex items-center gap-2 font-bold text-sm">
-              <Eye className="h-4 w-4 text-emerald-400" />
-              معاينة وتكبير صورة اللوحة
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setZoomScale(s => Math.min(3.5, s + 0.25))}
-                className="h-8 w-8 p-0 text-white hover:bg-white/10 rounded-lg"
-                title="تكبير (+)"
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setZoomScale(s => Math.max(0.5, s - 0.25))}
-                className="h-8 w-8 p-0 text-white hover:bg-white/10 rounded-lg"
-                title="تصغير (-)"
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setZoomScale(1)}
-                className="h-8 text-xs text-white/70 hover:bg-white/10 px-2 rounded-lg"
-              >
-                إعادة ضبط (100%)
-              </Button>
-              {zoomImageModalUrl && (
-                <a
-                  href={zoomImageModalUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="h-8 px-2 flex items-center gap-1 text-xs text-primary hover:bg-white/10 rounded-lg transition-colors"
-                  title="فتح الحجم الكامل في تبويب جديد"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" />
-                  الرابط الأصلي
-                </a>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => { setZoomImageModalUrl(null); setZoomScale(1); }}
-                className="h-8 w-8 p-0 text-white/60 hover:text-white hover:bg-white/10 rounded-full"
-              >
-                <XIcon className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-
-          {/* Image Container with Smooth Scaling */}
-          <div className="w-full h-[75vh] p-6 flex items-center justify-center overflow-auto cursor-grab active:cursor-grabbing">
-            {zoomImageModalUrl && (
-              <img
-                src={zoomImageModalUrl}
-                alt="صورة اللوحة"
-                style={{ transform: `scale(${zoomScale})`, transition: 'transform 0.2s ease-out' }}
-                className="max-w-full max-h-full object-contain rounded-2xl shadow-2xl select-none"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* ─── تكبير الصورة: العارض الموحد ─── */}
+      {zoomImageModalUrl && (
+        <ImageViewer images={[{ src: zoomImageModalUrl, label: 'صورة اللوحة' }]} onClose={() => { setZoomImageModalUrl(null); setZoomScale(1); }} />
+      )}
     </div>
   );
 }
