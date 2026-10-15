@@ -135,6 +135,30 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
     onNavigate: path => navigate(path),
   };
 
+  /** طباعة التركيب لعدة عمليات لنفس الزبون في مستند واحد */
+  const groupPrint = async () => {
+    const customers = new Set(selectedOps.map(o => o.customerId || o.customerName));
+    if (customers.size > 1) { toast.error('اختر عمليات لزبون واحد فقط لطباعة التركيب معاً'); return; }
+    const ids = [...new Set(selectedOps.flatMap(o => o.tasks.map(t => t.installation_task_id).filter(Boolean)))] as string[];
+    if (!ids.length) { toast.error('لا توجد أوامر تركيب مرتبطة'); return; }
+    const contractIds = [...new Set(selectedOps.flatMap(o => o.contractIds))];
+    const merged: OperationRow = {
+      ...selectedOps[0],
+      key: `group:${selectedOps.map(o => o.key).join('|')}`,
+      label: `${selectedOps.length} عمليات`,
+      contractIds,
+      adTypes: [...new Set(selectedOps.flatMap(o => o.adTypes))],
+      tasks: selectedOps.flatMap(o => o.tasks),
+    };
+    setBusyKey(merged.key);
+    try {
+      const wf = await fetchInstallationWorkflowData(ids[0], ids, contractIds.length === 1 ? contractIds[0] : null);
+      if (!wf.items.length) { toast.info('لا توجد لوحات في العمليات المحددة'); return; }
+      setWorkflow({ op: merged, data: wf, mode: 'print' });
+    } catch (e: any) { toast.error(e.message || 'تعذر تحميل اللوحات'); }
+    finally { setBusyKey(null); }
+  };
+
   const groupInvoice = () => {
     const customers = new Set(selectedOps.map(o => o.customerId || o.customerName));
     if (customers.size > 1) { toast.error('اختر عمليات لزبون واحد فقط لإصدار فاتورة مجمعة'); return; }
@@ -153,6 +177,14 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
     if (sort === 'oldest') list = [...list].reverse();
     return list;
   }, [data, q, type, status, money_, sort]);
+
+  // عند عدم وجود نتائج بسبب فلتر الحالة: كم عملية مطابقة في الحالات الأخرى (المكتملة غالباً)
+  const hiddenByStatus = useMemo(() => {
+    if (rows.length || status === 'all' || !q.trim()) return 0;
+    const s = norm(q);
+    return (data || []).filter(r => (!customerId || r.customerId === customerId)
+      && (norm(r.customerName).includes(s) || r.contractIds.some(n => String(n).includes(s)) || r.teams.some(t => norm(t).includes(s)) || r.adTypes.some(a => norm(a).includes(s)))).length;
+  }, [rows.length, status, q, data, customerId]);
 
   const kpi = useMemo(() => rows.reduce((k, r) => ({
     count: k.count + 1,
@@ -250,7 +282,10 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
       ) : isLoading ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-36 w-full rounded-xl" />)}</div>
       ) : !rows.length ? (
-        <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">لا توجد عمليات مطابقة</div>
+        <div className="space-y-3 rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">
+          <div>لا توجد عمليات مطابقة{hiddenByStatus ? ' ضمن الحالة المختارة' : ''}</div>
+          {hiddenByStatus > 0 && <Button variant="outline" onClick={() => setStatus('all')}>عرض {hiddenByStatus} عملية مطابقة في كل الحالات</Button>}
+        </div>
       ) : (
         <div className="space-y-4">
           {view === 'table' ? (
@@ -274,6 +309,9 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
           <span className="text-sm font-semibold">{selected.size} عملية محددة</span>
           <span className="text-xs tabular-nums text-muted-foreground">المستحق {money(selectedOps.reduce((s, o) => s + o.money.customerTotal, 0))} · المتبقي {money(selectedOps.reduce((s, o) => s + o.money.remaining, 0))}</span>
           <Button size="sm" onClick={groupInvoice}><FileText className="h-4 w-4" />فاتورة مجمعة</Button>
+          {selected.size > 1 && new Set(selectedOps.map(o => o.customerId || o.customerName)).size === 1 && (
+            <Button size="sm" variant="outline" disabled={!!busyKey} onClick={groupPrint}><Printer className="h-4 w-4" />طباعة التركيب</Button>
+          )}
           <Button size="sm" variant="ghost" onClick={() => setSelected(new Set())}><X className="h-4 w-4" />إلغاء التحديد</Button>
         </div>
       )}

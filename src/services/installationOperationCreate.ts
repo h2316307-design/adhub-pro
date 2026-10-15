@@ -5,6 +5,36 @@ import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { installationTeamCoversBillboard } from '@/utils/teamAssignment';
 import { pickInstallationTeam, loadPreviousTeams } from '@/utils/smartTeamAssignment';
 import { prepareInstallationOperationTask } from '@/services/installationOperation';
+import { syncOperationStatus } from '@/services/operationBoards';
+
+/**
+ * عند إنشاء تركيب جديد: تُسحب اللوحات غير المركّبة من أوامر التركيب الأصلية لنفس العقود
+ * حتى لا تظهر اللوحة في أمرين. الأمر الأصلي الذي يفرغ يُحذف مع أمر عمله، إلا إن كانت عليه
+ * دفعات أو فاتورة فيبقى كما هو للمراجعة.
+ */
+export async function pullFromOriginalTasks(contractIds: number[], boardIds: number[], keepTaskIds: string[]) {
+  const nums = contractIds.join(',');
+  const { data: tasks, error } = await supabase.from('installation_tasks').select('id, task_type')
+    .or(`contract_id.in.(${nums}),contract_ids.ov.{${nums}}`);
+  if (error) throw error;
+  const others = (tasks || []).filter((t: any) => t.task_type !== 'reinstallation' && !keepTaskIds.includes(t.id)).map((t: any) => t.id);
+  if (!others.length || !boardIds.length) return 0;
+  const { data: pulled, error: e2 } = await supabase.from('installation_task_items').delete()
+    .in('task_id', others).in('billboard_id', boardIds).neq('status', 'completed').select('task_id');
+  if (e2) throw e2;
+  for (const id of [...new Set((pulled || []).map((r: any) => r.task_id as string))]) {
+    const { count } = await supabase.from('installation_task_items').select('id', { count: 'exact', head: true }).eq('task_id', id);
+    if (count) { await syncOperationStatus([id]); continue; }
+    const { data: comps } = await supabase.from('composite_tasks').select('id, paid_amount, combined_invoice_id').eq('installation_task_id', id);
+    if ((comps || []).some((c: any) => Number(c.paid_amount) > 0 || c.combined_invoice_id)) continue;
+    for (const c of comps || []) {
+      await supabase.from('composite_tasks').update({ installation_task_id: null, print_task_id: null, cutout_task_id: null } as any).eq('id', c.id);
+      await supabase.from('composite_tasks').delete().eq('id', c.id);
+    }
+    await supabase.from('installation_tasks').delete().eq('id', id);
+  }
+  return pulled?.length || 0;
+}
 
 export interface CreateOperationInput {
   contractIds: number[];
@@ -143,6 +173,10 @@ export async function createInstallationOperation(input: CreateOperationInput): 
       if (error) throw error;
     }
     taskIds.push(taskId!);
+  }
+  if (taskType === 'installation') {
+    const allIds = [...byTeam.values()].flat();
+    await pullFromOriginalTasks(contractIds, allIds, taskIds);
   }
   return { taskIds };
 }

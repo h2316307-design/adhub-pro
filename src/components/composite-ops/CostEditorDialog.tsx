@@ -115,7 +115,9 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
       const incInst = s.draft.contractIncludesInstallation && s.draft.type === 'new_installation';
       setBulkTarget(incInst ? 'company' : 'customer');
       setBulkMode('meter');
-      setBulkValue(incInst ? 0 : s.suggested.installPerMeter);
+      // سعر المتر المحفوظ لهذه العملية إن وُجد، وإلا المقترح من آخر عملية للزبون
+      const savedRates = [...new Set(s.lines.map(l => l.customerPerMeter).filter(Boolean))];
+      setBulkValue(incInst ? 0 : savedRates.length === 1 ? Number(savedRates[0]) : s.suggested.installPerMeter);
     }).catch(e => !cancelled && setError(e.message || 'تعذر تحميل البيانات'));
     return () => { cancelled = true; };
   }, [open, op]);
@@ -152,14 +154,17 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
     if (!ids.size) { toast.error('لا توجد لوحات ضمن النطاق المحدد'); return; }
     if (bulkMode === 'total') {
       const shares = smartDistribute(bulkValue, lines.filter(l => ids.has(l.id)).map(l => ({ id: l.id, weight: lineArea(l) })));
-      setLines(prev => prev.map(l => !shares.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: shares.get(l.id)! } : { ...l, company: shares.get(l.id)! }));
+      setLines(prev => prev.map(l => !shares.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: shares.get(l.id)!, customerPerMeter: null } : { ...l, company: shares.get(l.id)! }));
       toast.success(`تم توزيع ${money(bulkValue)} على ${ids.size} لوحة حسب المساحة`);
       return;
     }
     if (bulkMode === 'table') {
-      setLines(prev => prev.map(l => !ids.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: l.sizeInstallPrice } : { ...l, company: l.sizeInstallPrice }));
+      setLines(prev => prev.map(l => !ids.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: l.sizeInstallPrice, customerPerMeter: null } : { ...l, company: l.sizeInstallPrice }));
     } else {
-      setLines(prev => applyBulkPrice(prev, ids, bulkTarget, bulkMode, bulkValue) as EditorLine[]);
+      // سعر المتر على الزبون يُحفظ مع كل لوحة ليظهر في المحرر والفاتورة
+      const rate = bulkTarget === 'customer' && bulkMode === 'meter' && bulkValue > 0 ? Math.round(bulkValue * 100) / 100 : null;
+      setLines(prev => (applyBulkPrice(prev, ids, bulkTarget, bulkMode, bulkValue) as EditorLine[])
+        .map(l => ids.has(l.id) && bulkTarget === 'customer' ? { ...l, customerPerMeter: rate } : l));
     }
     toast.success(`تم تطبيق السعر على ${ids.size} لوحة`);
   };
@@ -324,7 +329,10 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                                 onCheckedChange={c => setSelected(prev => { const n = new Set(prev); c ? n.add(l.id) : n.delete(l.id); return n; })} /></td>
                               <td className="p-2"><BoardCell l={l} extra={[teams.length > 1 ? l.teamName : '', op && op.contractIds.length > 1 && l.contractNumber ? `عقد #${l.contractNumber}` : ''].filter(Boolean).join(' · ')} /></td>
                               <td className="p-2 text-center text-xs tabular-nums text-muted-foreground">{l.faces} وجه · {lineArea(l).toFixed(1)} م²</td>
-                              <td className="p-2 w-[120px]"><Num label="سعر الزبون" value={l.customer} disabled={instIncluded} onChange={v => update(l.id, { customer: v })} /></td>
+                              <td className="p-2 w-[120px]">
+                                <Num label="سعر الزبون" value={l.customer} disabled={instIncluded} onChange={v => update(l.id, { customer: v, customerPerMeter: null })} />
+                                {!instIncluded && l.customerPerMeter ? <div className="mt-0.5 text-center text-[10px] tabular-nums text-primary">{l.customerPerMeter} د.ل/م²</div> : null}
+                              </td>
                               <td className="p-2 w-[120px]">
                                 <Num label="تكلفة الفرقة" value={l.company} onChange={v => update(l.id, { company: v })} />
                                 {l.sizeInstallPrice > 0 && l.company !== l.sizeInstallPrice && (

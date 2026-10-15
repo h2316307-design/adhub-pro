@@ -1425,6 +1425,11 @@ export function UnifiedTaskInvoice({
                 actualItemInstallCost = Number(item.customer_installation_cost) || 0;
                 installPricePerPieceValue = actualItemInstallCost;
                 installCalculationType = 'piece';
+                // سعر المتر المحفوظ من التسعير الجماعي يظهر كما هو للزبون
+                if (item.pricing_type === 'meter' && Number(item.price_per_meter) > 0) {
+                  installPricePerMeterValue = Number(item.price_per_meter);
+                  installCalculationType = 'meter';
+                }
               } else if (taskInstallRatio > 0 && (sizeInfo.installationPrice || 0) > 0) {
                 actualItemInstallCost = (sizeInfo.installationPrice || 0) * taskInstallRatio;
                 installPricePerPieceValue = actualItemInstallCost;
@@ -3306,6 +3311,9 @@ export function UnifiedTaskInvoice({
                 })();
                 // سعر متر التركيب الفعلي = إجمالي تركيب البنود ÷ مساحتها (التسعير الافتراضي بالمتر)
                 const installPerMeter = (() => {
+                  // سعر محفوظ موحّد لكل البنود يُعرض كما هو
+                  const saved = [...new Set((data?.items || []).map((it: any) => Number(it.installationPricePerMeter) || 0).filter(v => v > 0))];
+                  if (saved.length === 1) return saved[0];
                   const installItems = (data?.items || []).filter(it => (it.installationCost || 0) > 0 && (it.area || 0) > 0);
                   const area = installItems.reduce((s, it) => s + (it.area || 0), 0);
                   return area > 0 ? installItems.reduce((s, it) => s + (it.installationCost || 0), 0) / area : 0;

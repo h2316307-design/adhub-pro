@@ -178,6 +178,8 @@ export interface EditorLine extends CostLine {
   sizeInstallPrice: number;
   maxFaces: number;
   contractNumber: number | null;
+  /** سعر متر التركيب على الزبون الذي حُسب به سعر اللوحة (null = سعر مقطوع) */
+  customerPerMeter: number | null;
 }
 
 export interface EditorState {
@@ -206,7 +208,7 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
 
   const [items, sizesR, printersR, printTaskR, contractsR] = await Promise.all([
     inChunks('installation_task_items',
-      'id, task_id, billboard_id, status, customer_installation_cost, customer_reinstall_cost, company_installation_cost, additional_cost, company_additional_cost, faces_to_install, reinstalled_faces, has_cutout, cutout_count, cutout_customer_cost, cutout_company_cost, design_face_a, design_face_b, installed_image_face_a_url',
+      'id, task_id, billboard_id, status, customer_installation_cost, customer_reinstall_cost, price_per_meter, pricing_type, company_installation_cost, additional_cost, company_additional_cost, faces_to_install, reinstalled_faces, has_cutout, cutout_count, cutout_customer_cost, cutout_company_cost, design_face_a, design_face_b, installed_image_face_a_url',
       'task_id', installIds, q => q.neq('status', 'replaced')),
     supabase.from('sizes').select('name, width, height, installation_price'),
     supabase.from('printers').select('id, name').eq('is_active', true).order('name'),
@@ -264,6 +266,7 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
       cutoutCustomerUnit: Number(i.cutout_customer_cost) || 0,
       cutoutCompanyUnit: Number(i.cutout_company_cost) || 0,
       contractNumber: contractOfBoard.get(Number(i.billboard_id)) ?? (op.contractIds.length === 1 ? op.contractIds[0] : null),
+      customerPerMeter: i.pricing_type === 'meter' && Number(i.price_per_meter) > 0 && Number(customer) > 0 ? Number(i.price_per_meter) : null,
     };
   });
 
@@ -319,6 +322,7 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
     const o = original.get(l.id);
     return !o || o.customer !== l.customer || o.company !== l.company || o.customerExtra !== l.customerExtra || o.companyExtra !== l.companyExtra
       || o.hasCutout !== l.hasCutout || o.cutoutCount !== l.cutoutCount || o.cutoutCustomerUnit !== l.cutoutCustomerUnit || o.cutoutCompanyUnit !== l.cutoutCompanyUnit
+      || o.customerPerMeter !== l.customerPerMeter
       || (instIncluded && o.customer !== 0);
   });
   for (const part of chunk(changed, 15)) {
@@ -326,6 +330,8 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
       const customer = instIncluded ? 0 : r2(l.customer);
       const patch: any = {
         company_installation_cost: r2(l.company),
+        price_per_meter: !instIncluded && l.customerPerMeter ? r2(l.customerPerMeter) : null,
+        pricing_type: !instIncluded && l.customerPerMeter ? 'meter' : 'piece',
         additional_cost: r2(l.customerExtra) || null,
         company_additional_cost: r2(l.companyExtra) || null,
         has_cutout: l.hasCutout,

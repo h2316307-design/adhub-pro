@@ -138,16 +138,52 @@ export function EnhancedAddInstallationTaskDialog({
       }
     },
   });
-  const { data: taskCounts = {} } = useQuery({
-    queryKey: ['task-dialog-contract-tasks', customerId, allContracts.length],
+  // حالة التركيب لكل عقد (من السجل): لوحات التركيب الأول المركّبة/الإجمالي، وعدد عمليات إعادة التركيب
+  const { data: installState = {}, isSuccess: installLoaded } = useQuery({
+    queryKey: ['task-dialog-install-state', customerId, allContracts.length],
     enabled: open && allContracts.length > 0,
     queryFn: async () => {
-      const { data } = await supabase.from('installation_tasks').select('contract_id').in('contract_id', allContracts.map(c => c.Contract_Number));
-      const m: Record<number, number> = {};
-      (data || []).forEach((t: any) => { m[t.contract_id] = (m[t.contract_id] || 0) + 1; });
+      const nums = allContracts.map(c => c.Contract_Number);
+      const { data: tasks, error } = await supabase.from('installation_tasks')
+        .select('id, contract_id, contract_ids, task_type, reinstallation_number')
+        .or(`contract_id.in.(${nums.join(',')}),contract_ids.ov.{${nums.join(',')}}`);
+      if (error) throw error;
+      const ids = (tasks || []).map((t: any) => t.id);
+      const items: any[] = [];
+      for (let i = 0; i < ids.length; i += 150) {
+        const { data, error: e2 } = await supabase.from('installation_task_items').select('task_id, billboard_id, status, installed_image_url, installed_image_face_a_url, installed_image_face_b_url').in('task_id', ids.slice(i, i + 150)).neq('status', 'replaced');
+        if (e2) throw e2;
+        items.push(...(data || []));
+      }
+      const m: Record<number, { hasFirst: boolean; total: number; done: number; photos: number; reinstalls: number; board: Record<number, { done: boolean; photo: boolean }> }> = {};
+      allContracts.forEach(c => {
+        const cn = c.Contract_Number;
+        const own = new Set(parseContractBillboardIds(c.billboard_ids));
+        const mine = (tasks || []).filter((t: any) => Number(t.contract_id) === cn || (t.contract_ids || []).map(Number).includes(cn));
+        const first = new Set(mine.filter((t: any) => t.task_type !== 'reinstallation').map((t: any) => t.id));
+        const board: Record<number, { done: boolean; photo: boolean }> = {};
+        items.filter(i => first.has(i.task_id) && (!own.size || own.has(Number(i.billboard_id)))).forEach(i => {
+          const prev = board[Number(i.billboard_id)] || { done: false, photo: false };
+          const done = i.status === 'completed';
+          board[Number(i.billboard_id)] = {
+            done: prev.done || done,
+            photo: prev.photo || (done && !!(i.installed_image_url || i.installed_image_face_a_url || i.installed_image_face_b_url)),
+          };
+        });
+        const states = Object.values(board);
+        m[cn] = {
+          hasFirst: first.size > 0,
+          total: states.length,
+          done: states.filter(s => s.done).length,
+          photos: states.filter(s => s.photo).length,
+          board,
+          reinstalls: new Set(mine.filter((t: any) => t.task_type === 'reinstallation').map((t: any) => t.reinstallation_number || t.id)).size,
+        };
+      });
       return m;
     },
   });
+  const isInstalled = (cn: number) => (installState[cn]?.done || 0) > 0;
   const isExpired = (c: ContractRow) => !installationContractIsActive(c, today());
   const contracts = useMemo(() => allContracts.filter(c => (taskType === 'reinstallation' && showExpired) || !isExpired(c) || contractIds.includes(c.Contract_Number)).sort((a, b) => Number(isExpired(a)) - Number(isExpired(b))), [allContracts, showExpired, contractIds, taskType]);
   const expiredCount = allContracts.filter(isExpired).length;
@@ -228,14 +264,20 @@ export function EnhancedAddInstallationTaskDialog({
   // تحديد افتراضي عند تحميل لوحات عقد جديد فقط (لا يمسح اختيارات المستخدم)
   const seenBoards = useRef<Set<number>>(new Set());
   useEffect(() => {
-    if (!boards.length || !currentLoaded || !pausedLoaded || loadingPaused) return;
+    if (!boards.length || !currentLoaded || !pausedLoaded || loadingPaused || !installLoaded) return;
     const fresh = boards.map(b => Number(b.ID)).filter(id => !seenBoards.current.has(id));
     if (!fresh.length) return;
     fresh.forEach(id => seenBoards.current.add(id));
     const preferTorn = taskType === 'reinstallation' && tornIds.length > 0;
-    const pick = fresh.filter(id => eligible(id) && installationContractIsActive(selectedContracts.find(contract => contract.Contract_Number === contractOf.get(id)) || {}, today()) && (selectAllActive || !preferTorn || tornIds.includes(id)));
+    // تركيب جديد: اللوحات غير المركّبة فقط؛ إعادة التركيب: المركّبة فقط (حين تكون حالة التركيب معروفة)
+    const fitsType = (id: number) => {
+      const st = installState[contractOf.get(id) as number]?.board?.[id];
+      if (!st) return true;
+      return taskType === 'installation' ? !st.done : st.done;
+    };
+    const pick = fresh.filter(id => eligible(id) && fitsType(id) && installationContractIsActive(selectedContracts.find(contract => contract.Contract_Number === contractOf.get(id)) || {}, today()) && (selectAllActive || !preferTorn || tornIds.includes(id)));
     setSelectedIds(prev => [...new Set([...prev, ...pick])]);
-  }, [boards, taskType, tornIds, pausedSet, conflicts, currentLoaded, pausedLoaded, loadingPaused, selectAllActive, contractOf]);
+  }, [boards, taskType, tornIds, pausedSet, conflicts, currentLoaded, pausedLoaded, loadingPaused, selectAllActive, contractOf, installLoaded]);
   useEffect(() => { if (!open) seenBoards.current = new Set(); }, [open]);
 
   const cities = useMemo(() => [...new Set(boards.map(b => b.City).filter(Boolean))].sort(), [boards]);
@@ -281,6 +323,20 @@ export function EnhancedAddInstallationTaskDialog({
     if (!ids.length) { toast.info(`لا توجد لوحات متبقية تناسب ${team.team_name}`); return; }
     setAssignments(p => [...p, { teamId: team.id, teamName: team.team_name, billboardIds: ids }]);
   };
+  const assignBoard = (team: InstallationTeam, id: number) => setAssignments(p => {
+    const cleaned = p.map(a => ({ ...a, billboardIds: a.billboardIds.filter(x => x !== id) })).filter(a => a.billboardIds.length);
+    const ex = cleaned.find(a => a.teamId === team.id);
+    return ex ? cleaned.map(a => a.teamId === team.id ? { ...a, billboardIds: [...a.billboardIds, id] } : a) : [...cleaned, { teamId: team.id, teamName: team.team_name, billboardIds: [id] }];
+  });
+  /** سبب عدم وجود فرقة للوحة: المدينة أو المقاس غير مغطى */
+  const noTeamReason = (b: any) => {
+    const cityOk = teams.some((t: any) => !t.cities?.length || t.cities.includes(b.City));
+    const sizeOk = teams.some((t: any) => !t.sizes?.length || t.sizes.includes(b.Size));
+    if (!b.Size) return 'مقاس اللوحة غير محدد';
+    if (!cityOk) return `لا توجد فرقة تغطي مدينة ${b.City || 'غير محددة'}`;
+    if (!sizeOk) return `لا توجد فرقة لمقاس ${b.Size}`;
+    return `لا توجد فرقة تغطي ${b.City || 'المدينة'} ومقاس ${b.Size} معاً`;
+  };
   const autoAssign = () => {
     const next: TeamAssignment[] = [];
     const taken = new Set<number>();
@@ -320,7 +376,7 @@ export function EnhancedAddInstallationTaskDialog({
     const inactiveIds = selectedContracts.filter(contract => usedContractIds.includes(contract.Contract_Number) && isExpired(contract)).map(contract => contract.Contract_Number);
     if (inactiveIds.length && (taskType !== 'reinstallation' || !acceptInactive)) { toast.error('راجع اختيار العقود غير النشطة وأكّد مراجعتها'); return; }
     if (!selectedIds.length) { toast.error('اختر لوحة واحدة على الأقل'); return; }
-    if (assignments.length && unassigned.length) { toast.error(`${unassigned.length} لوحة بدون فرقة — عيّنها أو احذف تعيينات الفرق للتوزيع التلقائي`); return; }
+    if (assignments.length && unassigned.length) { toast.error(`${unassigned.length} لوحة بدون فرقة: ${unassigned.slice(0, 5).map(b => b.Billboard_Name || b.ID).join('، ')}${unassigned.length > 5 ? '…' : ''} — القائمة أسفل قسم الفرق`); return; }
     if (!assignments.length) {
       const missing = selectedBoards.filter(board => !pickInstallationTeam(teams, board));
       if (missing.length) { toast.error(`لوحات بلا فرقة مناسبة: ${missing.map(board => `${board.Billboard_Name || board.ID} (${board.City || 'مدينة غير محددة'}، ${board.Size || 'مقاس غير محدد'})`).join('، ')}`); return; }
@@ -396,6 +452,23 @@ export function EnhancedAddInstallationTaskDialog({
                 ) : (
                   <>
                   <Button variant="outline" className="mb-3 w-full cursor-pointer text-xs" onClick={() => { setSelectAllActive(true); setContractIds(allContracts.filter(contract => !isExpired(contract)).map(contract => contract.Contract_Number)); setAssignments([]); setSelectedIds([]); seenBoards.current = new Set(); }}>اختيار جميع لوحات عقود الزبون النشطة</Button>
+                  {(() => {
+                    // كل عقد ساري فيه لوحات لم تُركّب بعد (غير مركّب كلياً أو جزئياً)؛ تُحدَّد لوحاته غير المركّبة فقط
+                    const notInstalled = allContracts.filter(c => {
+                      const s = installState[c.Contract_Number];
+                      if (isExpired(c) || !s) return false;
+                      const own = parseContractBillboardIds(c.billboard_ids);
+                      return own.some(id => !s.board?.[id]?.done);
+                    });
+                    const pendingBoards = notInstalled.reduce((n, c) => n + parseContractBillboardIds(c.billboard_ids).filter(id => !installState[c.Contract_Number]?.board?.[id]?.done).length, 0);
+                    return notInstalled.length > 0 && (
+                      <Button variant="outline" className="mb-3 h-auto w-full cursor-pointer whitespace-normal border-amber-500/40 py-2 text-xs leading-snug text-amber-600 dark:text-amber-400"
+                        onClick={() => { onTaskTypeChange('installation'); setSelectAllActive(true); setContractIds(notInstalled.map(c => c.Contract_Number)); setAssignments([]); setSelectedIds([]); seenBoards.current = new Set(); }}>
+                        تركيب جديد للوحات غير المركّبة · {pendingBoards} لوحة من {notInstalled.length} عقود
+                      </Button>
+                    );
+                  })()}
+                  {taskType === 'reinstallation' && <p className="mb-2 text-[11px] text-muted-foreground">العقود الباهتة لم يُركَّب لها تركيب أول بعد — استخدم «تركيب جديد» لها.</p>}
                   <ul className="space-y-1.5">
                     {contracts.map(c => {
                       const on = contractIds.includes(c.Contract_Number);
@@ -404,13 +477,19 @@ export function EnhancedAddInstallationTaskDialog({
                       return (
                         <li key={c.Contract_Number}>
                           <button type="button" role="checkbox" aria-checked={on} onClick={() => toggleContract(c.Contract_Number)}
-                            className={cn('flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-right transition-colors', on ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40')}>
+                            className={cn('flex w-full items-start gap-2.5 rounded-lg border px-3 py-2 text-right transition-colors', on ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40', taskType === 'reinstallation' && !on && installState[c.Contract_Number] && !isInstalled(c.Contract_Number) && 'opacity-50')}>
                             <span className={cn('mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border', on ? 'border-primary bg-primary text-primary-foreground' : 'border-input')}>{on && <Check className="h-3 w-3" />}</span>
                             <span className="min-w-0 flex-1">
                               <span className="flex items-center gap-1.5 text-sm">
                                 <b className="tabular-nums">#{c.Contract_Number}</b>
                                 {isExpired(c) && <span className="rounded bg-muted px-1 text-xs text-muted-foreground">غير نشط · اختيار يدوي</span>}
-                                {taskCounts[c.Contract_Number] ? <span className="rounded bg-sky-500/15 px-1 text-xs text-sky-500">{taskCounts[c.Contract_Number]} مهام</span> : null}
+                                {(() => {
+                                  const s = installState[c.Contract_Number];
+                                  if (!s) return null;
+                                  return s.done > 0
+                                    ? <span className="rounded bg-emerald-500/15 px-1 text-xs text-emerald-600 dark:text-emerald-400">مركّب {s.done}/{s.total} · صور {s.photos}/{s.done}{s.reinstalls ? ` · إعادة ×${s.reinstalls}` : ''}</span>
+                                    : <span className="rounded bg-amber-500/15 px-1 text-xs text-amber-600 dark:text-amber-400">{s.hasFirst ? `لم يُركّب${s.total ? ` 0/${s.total}` : ''}` : 'بلا أمر تركيب'}</span>;
+                                })()}
                               </span>
                               <span className="block truncate text-xs">{c['Ad Type'] || '—'}</span>
                               <span className="block text-xs text-muted-foreground tabular-nums">{String(c['Contract Date'] || '').slice(0, 10)} ← {String(c['End Date'] || '').slice(0, 10)} · {on ? `${used}/` : ''}{count} لوحة</span>
@@ -477,17 +556,28 @@ export function EnhancedAddInstallationTaskDialog({
                           <h4 className="text-sm font-bold">عقد #{c.Contract_Number}</h4>
                           <span className="truncate text-xs text-muted-foreground">{c['Ad Type']}</span>
                           <span className="text-xs text-muted-foreground tabular-nums">· {ids.filter(id => selectedIds.includes(id)).length}/{ids.length}</span>
-                          <Button variant="ghost" size="sm" className="mr-auto h-7 px-2 text-xs" onClick={() => toggleMany(ids)}>{allSel ? 'إلغاء الكل' : 'تحديد الكل'}</Button>
+                          <div className="mr-auto flex gap-1">
+                          {(() => {
+                            const b = installState[c.Contract_Number]?.board || {};
+                            const pending = ids.filter(id => b[id] && !b[id].done);
+                            return pending.length > 0 && pending.length < ids.length && (
+                              <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-amber-600 dark:text-amber-400" onClick={() => setSelectedIds(p => [...new Set([...p.filter(x => !ids.includes(x)), ...pending.filter(eligible)])])}>غير المركّبة فقط ({pending.length})</Button>
+                            );
+                          })()}
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => toggleMany(ids)}>{allSel ? 'إلغاء الكل' : 'تحديد الكل'}</Button>
+                          </div>
                         </div>
                         <ul className="grid gap-2 xl:grid-cols-2">
                           {list.map((b: any) => {
                             const id = Number(b.ID);
                             const on = selectedIds.includes(id);
+                            const st = installState[c.Contract_Number]?.board?.[id];
+                            const offType = !!st && (taskType === 'installation' ? st.done : !st.done);
                             return (
                               <li key={id}>
                                 <div role="checkbox" aria-checked={on} aria-disabled={!eligible(id)} tabIndex={eligible(id) ? 0 : -1} onClick={() => toggleBoard(id)}
                                   onKeyDown={e => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); toggleBoard(id); } }}
-                                  className={cn('flex cursor-pointer items-center gap-3 rounded-lg border p-2 transition-colors', on ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40')}>
+                                  className={cn('flex cursor-pointer items-center gap-3 rounded-lg border p-2 transition-colors', on ? 'border-primary bg-primary/5' : 'border-border hover:bg-muted/40', offType && !on && 'opacity-50')}>
                                   <span className={cn('flex h-5 w-5 shrink-0 items-center justify-center rounded border', on ? 'border-primary bg-primary text-primary-foreground' : 'border-input')}>{on && <Check className="h-3.5 w-3.5" />}</span>
                                   <span className="h-11 w-14 shrink-0 overflow-hidden rounded-md bg-muted">
                                     {b.Image_URL ? <img src={b.Image_URL} alt="" className="h-full w-full object-cover" loading="lazy" /> : <ImageIcon className="m-auto mt-3 h-5 w-5 text-muted-foreground/50" />}
@@ -496,6 +586,9 @@ export function EnhancedAddInstallationTaskDialog({
                                     <span className="flex items-center gap-1.5 text-sm font-semibold">
                                       <span className="truncate">{b.Billboard_Name || `#${id}`}</span>
                                       <span className="rounded bg-muted px-1.5 text-xs font-bold" dir="ltr">{b.Size}</span>
+                                      {st && (st.done
+                                        ? <span className={cn('rounded px-1.5 text-xs', st.photo ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400' : 'bg-muted text-muted-foreground')}>{st.photo ? 'مركّب · بصور' : 'مركّب · بلا صور'}</span>
+                                        : <span className="rounded bg-amber-500/15 px-1.5 text-xs text-amber-600 dark:text-amber-400">لم يُركّب</span>)}
                                       {tornIds.includes(id) && <span className="rounded bg-amber-500/15 px-1.5 text-xs text-amber-500">ممزق</span>}
                                       {conflicts.has(id) && <span className="rounded bg-destructive/10 px-1 text-xs text-destructive">محجوبة · عقد نشط #{conflicts.get(id)}</span>}
                                       {pausedSet.has(id) && <span className="rounded bg-muted px-1.5 text-xs text-muted-foreground">موقوفة</span>}
@@ -536,6 +629,24 @@ export function EnhancedAddInstallationTaskDialog({
                       </button>
                     ))}
                   </div>
+                  {assignments.length > 0 && unassigned.length > 0 && (
+                    <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-destructive/40 bg-destructive/5 p-2">
+                      <div className="text-xs font-bold text-destructive">لوحات بلا فرقة ({unassigned.length}) — اختر لها فرقة:</div>
+                      {unassigned.map(b => {
+                        const fits = sortTeamsByPriority(teams).filter(t => teamFits(t, b));
+                        return (
+                          <div key={b.ID} className="flex flex-wrap items-center gap-1.5 text-xs">
+                            <b>{b.Billboard_Name || `#${b.ID}`}</b>
+                            <span className="rounded bg-muted px-1" dir="ltr">{b.Size || '—'}</span>
+                            <span className="text-muted-foreground">{b.City || 'مدينة غير محددة'} · عقد #{contractOf.get(Number(b.ID))}</span>
+                            {fits.length
+                              ? fits.map(t => <button key={t.id} type="button" onClick={() => assignBoard(t, Number(b.ID))} className="rounded border border-primary/40 px-1.5 py-0.5 text-primary hover:bg-primary/10">{t.team_name}</button>)
+                              : <span className="text-destructive">{noTeamReason(b)} — راجع نطاق الفرق أو بيانات اللوحة</span>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </>
             )}

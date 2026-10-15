@@ -1,4 +1,5 @@
 import { loadInstallationOperationIds, prepareInstallationOperationTask } from '@/services/installationOperation';
+import { pullFromOriginalTasks } from '@/services/installationOperationCreate';
 import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
 import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { useState, useMemo, useEffect } from 'react';
@@ -891,6 +892,7 @@ export default function InstallationTasks() {
       const contractIds = [...new Set((vars.contractIds?.length ? vars.contractIds : [contractId]).map(Number).filter(Boolean))];
       const isMultiContract = contractIds.length > 1;
       let { billboardIds } = vars;
+      const usedTaskIds: string[] = [];
 
       if (!contractId) throw new Error('يرجى اختيار عقد');
       if (!billboardIds || billboardIds.length === 0) throw new Error('يرجى اختيار لوحة واحدة على الأقل');
@@ -1035,6 +1037,9 @@ export default function InstallationTasks() {
           }
         }
 
+        // تركيب جديد: سحب اللوحات من أوامر التركيب الأصلية حتى لا تتكرر
+        usedTaskIds.push(taskId!);
+        if (taskType === 'installation') await pullFromOriginalTasks(contractIds, billboardIds, usedTaskIds);
         return;
       }
 
@@ -1136,6 +1141,7 @@ export default function InstallationTasks() {
           }
         }
 
+        usedTaskIds.push(taskId!);
         for (const billboardId of autoBillboardIds) {
           const { data: existing } = await supabase
             .from('installation_task_items')
@@ -1157,6 +1163,8 @@ export default function InstallationTasks() {
           }
         }
       }
+      // تركيب جديد: سحب اللوحات من أوامر التركيب الأصلية حتى لا تتكرر
+      if (taskType === 'installation') await pullFromOriginalTasks(contractIds, billboardIds, usedTaskIds);
     },
     onSuccess: (_data, vars) => {
       toast.success(vars.teamId ? 'تم إضافة المهمة بنجاح' : 'تم توزيع المهام على الفرق تلقائياً');

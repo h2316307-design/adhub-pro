@@ -173,11 +173,16 @@ function BoardCard({ i, gallery, isDone, selected, busy, showTeam, showContract,
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3">
         <div>
-          {i.landmark && <div className="text-sm">{i.landmark}</div>}
+          {/* أقرب نقطة يميناً، واسم الفرقة دائماً على اليسار مقابلها */}
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1 text-sm">{i.landmark || <span className="text-muted-foreground">—</span>}</div>
+            <span className={cn('flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold', showTeam ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-background/80')} title="الفرقة">
+              <Users className="h-3.5 w-3.5" />{i.teamName}
+            </span>
+          </div>
           <div className="text-sm text-muted-foreground/80">{[i.area, i.municipality].filter(Boolean).join(' · ')}</div>
-          {(showTeam || showContract) && <div className="mt-1 flex flex-wrap gap-1 text-xs">
-            {showTeam && <span className="rounded bg-background/80 px-1.5 py-0.5"><Users className="ml-1 inline h-3 w-3" />{i.teamName}</span>}
-            {showContract && i.contractNumber && <span className="rounded bg-background/80 px-1.5 py-0.5 tabular-nums">عقد #{i.contractNumber}</span>}
+          {showContract && i.contractNumber && <div className="mt-1 flex flex-wrap gap-1 text-xs">
+            <span className="rounded bg-background/80 px-1.5 py-0.5 tabular-nums">عقد #{i.contractNumber}</span>
           </div>}
         </div>
         <div className="grid grid-cols-4 gap-1.5">
@@ -368,9 +373,15 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
               <ShieldOff className="h-3.5 w-3.5" /><Switch checked={override} onCheckedChange={setOverride} />تجاوز أحكام الفرق
             </label>
             <CardSizeControl />
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Checkbox checked={visible.length > 0 && visible.every(i => selected.has(i.id))} onCheckedChange={c => setSelected(c ? new Set(visible.map(i => i.id)) : new Set())} />تحديد الظاهر
-            </label>
+          </div>
+          {/* أدوات التحديد: تعمل على اللوحات الظاهرة حسب البحث والفلاتر */}
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="text-muted-foreground">التحديد:</span>
+            <Button size="sm" variant="outline" className="h-8" disabled={!visible.length} onClick={() => setSelected(new Set(visible.map(i => i.id)))}>تحديد الكل ({visible.length})</Button>
+            <Button size="sm" variant="outline" className="h-8" disabled={!visible.length} onClick={() => setSelected(p => { const n = new Set(p); visible.forEach(i => (n.has(i.id) ? n.delete(i.id) : n.add(i.id))); return n; })}>عكس التحديد</Button>
+            {visible.some(i => i.status !== 'completed') && <Button size="sm" variant="outline" className="h-8" onClick={() => setSelected(new Set(visible.filter(i => i.status !== 'completed').map(i => i.id)))}>غير المركبة ({visible.filter(i => i.status !== 'completed').length})</Button>}
+            {visible.some(i => i.status === 'completed') && <Button size="sm" variant="outline" className="h-8" onClick={() => setSelected(new Set(visible.filter(i => i.status === 'completed').map(i => i.id)))}>المركبة ({visible.filter(i => i.status === 'completed').length})</Button>}
+            {selected.size > 0 && <Button size="sm" variant="ghost" className="h-8" onClick={() => setSelected(new Set())}>إلغاء ({selected.size})</Button>}
           </div>
         </header>
 
