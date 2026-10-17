@@ -74,15 +74,17 @@ export function OperationMenu({ r, a }: { r: OperationRow; a: OperationActions }
   );
 }
 
-export function OperationCard({ r, selected, onToggle, busy, a }: { r: OperationRow; selected: boolean; onToggle: () => void; busy: boolean; a: OperationActions }) {
+export function OperationCard({ r, selected, onToggle, busy, a, layout = 'vertical' }: { r: OperationRow; selected: boolean; onToggle: () => void; busy: boolean; a: OperationActions; layout?: 'horizontal' | 'vertical' }) {
   const { urls, colors } = useDesignPalette(r.contractIds[0] || 0);
   const pct = r.boards ? Math.round((r.boardsDone / r.boards) * 100) : 0;
   const paidPct = r.money.customerTotal > 0 ? Math.min(100, Math.round((r.money.paid / r.money.customerTotal) * 100)) : 100;
   const accent = colors ? `rgb(${colors[0]})` : undefined;
+  /** عرضي: الصورة بجانب التفاصيل (مثل بطاقات العقود) */
+  const H = layout === 'horizontal';
 
   return (
-    <article style={tintStyle(colors)} className={cn('flex flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-sm', selected ? 'ring-2 ring-primary' : '', !colors && 'border-border')}>
-      <div className="relative shrink-0 border-b border-border/60" style={{ height: 'var(--img-h,230px)' }}>
+    <article style={tintStyle(colors)} className={cn('flex flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-sm', H && 'md:flex-row', selected ? 'ring-2 ring-primary' : '', !colors && 'border-border')}>
+      <div className={cn('relative h-[var(--img-h,230px)] shrink-0 border-b border-border/60', H && 'md:h-auto md:min-h-[var(--img-h,230px)] md:w-[42%] md:border-b-0 md:border-l')}>
         {/* الصورة الرئيسية التصميم دائماً؛ صور التركيب مصغّرة في الزاوية */}
         <ZoomImage src={urls[0]} alt={`تصميم ${r.customerName}`} title={`${r.customerName} · ${r.label}`} className="h-full w-full bg-black/5"
           gallery={[...urls.map((s, i) => ({ src: s, label: `تصميم ${i + 1}` })), ...r.installedPhotos.map((s, i) => ({ src: s, label: `تركيب ${i + 1}` }))]} />
@@ -133,13 +135,13 @@ export function OperationCard({ r, selected, onToggle, busy, a }: { r: Operation
           <div className="h-2 overflow-hidden rounded-full bg-muted"><div className="h-full" style={{ width: `${pct}%`, background: accent || 'hsl(var(--primary))' }} /></div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3 rounded-xl bg-background/70 p-3">
+        <div className={cn('grid grid-cols-2 gap-3 rounded-xl bg-background/70 p-3', H && 'lg:grid-cols-4')}>
           <div><div className="text-xs text-muted-foreground">المستحق على الزبون</div><div className="text-lg font-bold tabular-nums">{money(r.money.customerTotal)}</div></div>
           <div><div className="text-xs text-muted-foreground">المتبقي</div><div className={cn('text-lg font-bold tabular-nums', r.money.remaining > 0.5 ? 'text-amber-600' : 'text-emerald-600')}>{money(r.money.remaining)}</div></div>
           <div><div className="text-xs text-muted-foreground">تكلفة التنفيذ</div><div className="tabular-nums">{money(r.money.companyTotal)}</div>
             {r.money.contractExpense > 0 && <div className="text-xs text-emerald-700 dark:text-emerald-400">منها {money(r.money.contractExpense)} على العقد</div>}</div>
           <div><div className="text-xs text-muted-foreground">ربح المهمة</div><div className={cn('font-bold tabular-nums', r.money.profit < 0 ? 'text-destructive' : 'text-emerald-600')}>{money(r.money.profit)}</div></div>
-          <div className="col-span-2">
+          <div className={cn('col-span-2', H && 'lg:col-span-4')}>
             <div className="h-2 overflow-hidden rounded-full bg-muted"><div className={cn('h-full', paidPct >= 100 ? 'bg-emerald-500' : 'bg-amber-500')} style={{ width: `${paidPct}%` }} /></div>
             <div className="mt-1 text-xs tabular-nums text-muted-foreground">مدفوع {money(r.money.paid)} · {paidPct}% · {fmtDate(r.createdAt)}</div>
           </div>

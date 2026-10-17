@@ -192,23 +192,30 @@ const allSidebarItems = new Map(sidebarInventory.flatMap(section => section.item
 const group = (id: string, title: string, icon: LucideIcon, ids: string[]): SidebarSection => ({
   id, title, icon, items: ids.map(key => allSidebarItems.get(key)!).filter(Boolean),
 });
-// الوصول السريع: الأكثر استخداماً — العقود وما يتبعها مباشرة (المهام الشاملة، الدفعات، المتأخرات، التنبيهات)
+// الوصول السريع بترتيب الأهمية لدى المستخدم
 const coreMap = new Map(coreItems.map(item => [item.id, item]));
+const quickLabels: Record<string, string> = {
+  comprehensive_installation_tasks: 'التركيب',
+  pricing: 'الأسعار',
+  municipality_organizer: 'تنظيم البلديات',
+};
 const quickItems: SidebarItem[] = [
-  'dashboard', 'contracts', 'comprehensive_installation_tasks', 'payments', 'overdue_payments', 'alerts_center',
-  'customers', 'offers', 'billboards', 'events_contracts', 'events_pricing', 'booking_requests',
-].map(id => coreMap.get(id) || allSidebarItems.get(id)!).filter(Boolean);
+  'dashboard', 'offers', 'contracts', 'comprehensive_installation_tasks', 'removal_tasks', 'customers', 'pricing',
+  'municipality_organizer', 'correspondence', 'overdue_payments', 'billboards', 'alerts_center',
+  'payments', 'events_contracts', 'events_pricing', 'booking_requests',
+].map(id => coreMap.get(id) || allSidebarItems.get(id)!).filter(Boolean)
+  .map(item => (quickLabels[item.id] ? { ...item, label: quickLabels[item.id] } : item));
 
 const sidebarSections: SidebarSection[] = [
-  group('sales', 'الأسعار والعملاء', Calculator, ['pricing', 'pricing_factors', 'export_pricing', 'customer_merge']),
+  group('sales', 'الأسعار والعملاء', Calculator, ['pricing_factors', 'export_pricing', 'customer_merge']),
   group('billboards', 'إدارة اللوحات والمواقع', MapPin, ['billboard_photos', 'extended_billboards', 'delayed_billboards', 'billboard_maintenance', 'smart_distribution', 'billboard_cleanup']),
-  group('operations', 'التنفيذ والتصميم', FolderKanban, ['tasks', 'removal_tasks', 'design_studio', 'image_gallery', 'field_photos', 'rephotography', 'drive_uploader']),
+  group('operations', 'التنفيذ والتصميم', FolderKanban, ['tasks', 'design_studio', 'image_gallery', 'field_photos', 'rephotography', 'drive_uploader']),
   group('finance', 'المالية والحسابات', DollarSign, ['account_overdue_payments', 'revenue', 'expenses', 'custody', 'salaries', 'printed_invoices_page', 'printer_accounts', 'installation_team_accounts', 'contract_closure_simulator', 'google_calendar']),
   group('partnerships', 'الشركات والشراكات', Building2, ['company_management', 'shared_companies', 'shared_billboards', 'friend_billboards', 'friend_accounts', 'logo_management']),
-  group('municipalities', 'البلديات', MapPin, ['municipality_organizer', 'municipality_stickers', 'municipality_rent_prices', 'municipality_stats']),
+  group('municipalities', 'البلديات', MapPin, ['municipality_stickers', 'municipality_rent_prices', 'municipality_stats']),
   group('reports', 'التقارير والأداء', BarChart3, ['reports', 'periodic_reports', 'kpi_dashboard', 'profitability_reports', 'activity_log']),
   group('team', 'الفريق والصلاحيات', Users, ['installation_teams', 'printers', 'users', 'roles']),
-  group('communication', 'التواصل والمساعد', MessageSquare, ['correspondence', 'bulk_whatsapp', 'messaging_settings', 'ai_assistant']),
+  group('communication', 'التواصل والمساعد', MessageSquare, ['bulk_whatsapp', 'messaging_settings', 'ai_assistant']),
   group('settings', 'الإعدادات والطباعة', Settings, ['settings', 'currency_settings', 'contract_terms', 'print_design', 'billboard_print_settings', 'export_content_settings', 'site_appearance', 'font_settings', 'system_settings', 'database_backup', 'database_setup']),
 ];
 

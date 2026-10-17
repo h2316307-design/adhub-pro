@@ -18,6 +18,8 @@ import { smartArabicMatch } from '@/lib/arabicSearch';
 import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { normalizeSize } from '@/lib/utils';
+import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
+import { fetchCustomerPricingCategory } from '@/utils/customerPricingCategory';
 import { addBillboardsToContract, getContractWithBillboards, removeBillboardFromContract, updateContract } from '@/services/contractService';
 import { checkLinkedTasks, removeBillboardFromAllTasks, addBillboardToExistingTasks, type BillboardTaskLinks, type TaskTypeSelection } from '@/services/smartBillboardService';
 import { calculateInstallationCostFromIds } from '@/services/installationService';
@@ -90,6 +92,7 @@ const CONTRACT_EDIT_BILLBOARDS_QUERY_KEY = ['contract-edit', 'billboards'] as co
 const CONTRACT_EDIT_BILLBOARDS_STALE_TIME = 5 * 60 * 1000;
 
 export default function ContractEdit() {
+  const { category: defaultPricingCategory } = useDefaultPricingCategory();
   const [compensationChoices, setCompensationChoices] = useState<CompensationChoices>({});
   const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing' | 'friends' | 'designs'>('basics');
   // صفحة واحدة: الأقسام كلها ظاهرة، والتنقل يمرّر إلى القسم؛ اختيار اللوحات طبقة كاملة فوق الصفحة
@@ -1382,8 +1385,8 @@ export default function ContractEdit() {
       
     }
     
-    // FALLBACK: If no size_id or not found, try by size name with normalization
-    if (!dbRow && sizeName) {
+    // بمعرّف المقاس فقط؛ الاسم فقط إذا لم يكن للوحة معرّف مقاس
+    if (!dbRow && sizeName && !sizeId) {
       const normalizedInputSize = normalizeSize(sizeName);
       
       dbRow = pricingData.find(p => {
@@ -1399,8 +1402,9 @@ export default function ContractEdit() {
       if (price !== null) return price;
     }
     
-    if (customer !== 'عادي') {
-      return getPriceFromDatabase(sizeId, level, 'عادي', months, sizeName);
+    // الرجوع للفئة الافتراضية من الإعدادات — نفس منطق العرض وإنشاء العقد
+    if (customer !== defaultPricingCategory) {
+      return getPriceFromDatabase(sizeId, level, defaultPricingCategory, months, sizeName);
     }
     
     return null;
@@ -1413,14 +1417,14 @@ export default function ContractEdit() {
     // Try by size_id first if available
     if (sizeId) {
       dbRow = pricingData.find(p => 
-        p.size_id === sizeId && 
+        p.size_id !== null && p.size_id !== undefined && Number(p.size_id) === Number(sizeId) && 
         String(p.billboard_level || '').trim().toUpperCase() === String(level || '').trim().toUpperCase() && 
         String(p.customer_category || '').trim().toUpperCase() === String(customer || '').trim().toUpperCase()
       );
     }
     
-    // ✅ FALLBACK: If no size_id or not found, try by size name with normalization
-    if (!dbRow && sizeName) {
+    // بمعرّف المقاس فقط؛ الاسم فقط إذا لم يكن للوحة معرّف مقاس
+    if (!dbRow && sizeName && !sizeId) {
       const normalizedInputSize = normalizeSize(sizeName);
       
       dbRow = pricingData.find(p => {
@@ -1436,8 +1440,8 @@ export default function ContractEdit() {
       return dailyPrice;
     }
     
-    if (customer !== 'عادي') {
-      return getDailyPriceFromDatabase(sizeId, level, 'عادي', sizeName);
+    if (customer !== defaultPricingCategory) {
+      return getDailyPriceFromDatabase(sizeId, level, defaultPricingCategory, sizeName);
     }
     
     console.warn(`❌ No daily price found for size_id=${sizeId}, sizeName=${sizeName}`);
@@ -1584,7 +1588,7 @@ export default function ContractEdit() {
     const convertedPrice = applyExchangeRate(basePrice);
     
     return convertedPrice;
-  }, [useStoredPrices, useFactorsPricing, pricingMode, durationMonths, durationDays, pricingCategory, pricingData, durations, contractCurrency, exchangeRate, basePrices, municipalityFactors, categoryFactors, currentContract, billboardPriceOverrides]);
+  }, [useStoredPrices, useFactorsPricing, pricingMode, durationMonths, durationDays, pricingCategory, pricingData, defaultPricingCategory, durations, contractCurrency, exchangeRate, basePrices, municipalityFactors, categoryFactors, currentContract, billboardPriceOverrides]);
 
   // Supplier costs are frozen contract inputs. Only an explicit supplier pricing
   // action may replace them; customer pricing changes must never overwrite them.
@@ -2016,7 +2020,7 @@ export default function ContractEdit() {
   const combinedDiscountBase = money(activeDiscountBase + historicalDiscount);
   const discountAmount = money(discountType === 'percent'
     ? activeDiscountBase * Math.max(0, Math.min(100, discountValue)) / 100 + historicalDiscount
-    : Math.max(0, discountValue));
+    : Math.min(Math.max(0, discountValue), combinedDiscountBase)); // لا يتجاوز قاعدة الخصم (مثل العرض)
   const selectedDiscountShare = money(Math.max(0, discountAmount - historicalDiscount));
   const rentalAfterDiscount = money(Math.max(0, baseTotal - selectedDiscountShare));
   const unifiedPricingByBillboard = useMemo(() => {
@@ -2399,29 +2403,22 @@ export default function ContractEdit() {
       // Check if billboard is in current contract selection
       const isInContract = selected.includes(String((billboard as any).ID ?? (billboard as any).id));
 
-      const hasSearch = searchQuery.trim().length > 0;
-
-      // Status filter logic
+      // الحالة تُطبَّق بصرامة حتى مع البحث؛ لوحات العقد الحالي تُعامل كمتاحة له
       let matchesStatus = false;
-      if (hasSearch) {
-        matchesStatus = true; // Search overrides status tabs to find any matching billboard!
-      } else if (statusFilter === 'all') {
+      if (statusFilter === 'all') {
         matchesStatus = true; // "الكل" matches all billboards
       } else if (statusFilter === 'available') {
         matchesStatus = (isAvailable || isInContract) && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'nearExpiry') {
-        matchesStatus = isNearExpiry;
+        matchesStatus = isNearExpiry && !isInContract;
       } else if (statusFilter === 'rented') {
-        matchesStatus = isBooked;
+        matchesStatus = isBooked && !isInContract;
       } else if (statusFilter === 'maintenance') {
         matchesStatus = isUnderMaintenance;
       } else if (statusFilter === 'hidden') {
         matchesStatus = isHidden;
       }
 
-      // Always keep selected billboards visible
-      if (isInContract) matchesStatus = true;
-      
       return matchesMunicipality && matchesCity && matchesSize && matchesStatus;
     });
     
@@ -2544,44 +2541,15 @@ export default function ContractEdit() {
     setCustomerOpen(false);
     setCustomerQuery('');
 
-    if (customer.id) {
-      try {
-        let pricingCategory = null;
-
-        // 1. Try to fetch directly from customer record
-        const { data: custData } = await supabase
-          .from('customers')
-          .select('pricing_category')
-          .eq('id', customer.id)
-          .maybeSingle();
-        if (custData && custData.pricing_category) {
-          pricingCategory = custData.pricing_category;
-        }
-
-        // 2. Fallback to last contract category
-        if (!pricingCategory) {
-          const { data, error } = await supabase
-            .from('Contract')
-            .select('customer_category')
-            .eq('customer_id', customer.id)
-            .order('id', { ascending: false })
-            .limit(1)
-            .maybeSingle();
-          
-          if (!error && data && data.customer_category) {
-            pricingCategory = data.customer_category;
-          }
-        }
-
-        if (pricingCategory) {
-          if (pricingCategories && pricingCategories.includes(pricingCategory)) {
-            setPricingCategory(pricingCategory);
-            toast.info(`تم تطبيق الفئة السعرية للزبون تلقائياً: ${pricingCategory}`);
-          }
-        }
-      } catch (err) {
-        console.warn('Failed to fetch customer pricing category:', err);
+    // آخر فئة سعرية استُخدمت للزبون (عقد أو عرض) تُطبَّق فوراً
+    try {
+      const category = await fetchCustomerPricingCategory(customer.id, customer.name);
+      if (category && category !== pricingCategory && (!pricingCategories?.length || pricingCategories.includes(category))) {
+        handlePricingCategoryChange(category);
+        toast.info(`تم تطبيق آخر فئة سعرية للزبون: ${category}`);
       }
+    } catch (err) {
+      console.warn('Failed to fetch customer pricing category:', err);
     }
   };
 

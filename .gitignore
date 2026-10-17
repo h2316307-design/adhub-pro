@@ -69,6 +69,7 @@ supabase/.temp/
 .vscode/*
 !.vscode/extensions.json
 .idea
+.claude/
 .DS_Store
 Thumbs.db
 *.suo

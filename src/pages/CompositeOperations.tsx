@@ -21,6 +21,7 @@ import { ImagePlus, Palette, Trash2, X, Plus, Calculator, FileText, FolderOpen, 
 import { OperationCard, OperationsTable, type OperationActions } from '@/components/composite-ops/OperationCard';
 import { LayoutGrid, Table2, Boxes } from 'lucide-react';
 import { CARD_GRID, CardSizeControl, cardVars, useCardSize } from '@/components/composite-ops/CardSize';
+import { CardLayoutToggle, useCardLayout } from '@/components/shared/CardLayout';
 import { UnifiedTaskInvoice } from '@/components/composite-tasks/UnifiedTaskInvoice';
 import { CostEditorDialog } from '@/components/composite-ops/CostEditorDialog';
 import { money } from '@/lib/compositeCosts';
@@ -51,12 +52,14 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
   const navigate = useNavigate();
   const qc = useQueryClient();
   const { data, isLoading, error, refetch, isFetching } = useQuery({ queryKey: ['composite-operations'], queryFn: loadOperations, staleTime: 30_000 });
-  const [q, setQ] = useState('');
-  const [type, setType] = useState('all');
+  // كل الفلاتر والخيارات محفوظة في الجلسة (تبقى عند التنقل بين الصفحات)
+  const pk = embedded ? 'compositeOperations.embedded' : 'compositeOperations';
+  const [q, setQ] = usePersistedState(`${pk}.q`, '');
+  const [type, setType] = usePersistedState(`${pk}.type`, 'all');
   const [status, setStatus] = usePersistedState(embedded ? 'compositeOperations.embedded.status' : 'compositeOperations.status', embedded ? 'all' : 'active');
-  const [money_, setMoney] = useState('all');
+  const [money_, setMoney] = usePersistedState(`${pk}.money`, 'all');
   const [sort, setSort] = usePersistedState('compositeOperations.sort', 'newest');
-  const [limit, setLimit] = useState(24);
+  const [limit, setLimit] = usePersistedState(`${pk}.limit`, 24);
   const [editing, setEditing] = useState<OperationRow | null>(null);
   const [invoiceOp, setInvoiceOp] = useState<OperationRow | null>(null);
   const [invoiceTasks, setInvoiceTasks] = useState<any[] | null>(null);
@@ -84,6 +87,7 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
   const [view, setViewState] = useState<'cards' | 'table'>(() => { try { return localStorage.getItem('composite-ops-view') === 'table' ? 'table' : 'cards'; } catch { return 'cards'; } });
   const setView = (v: 'cards' | 'table') => { setViewState(v); try { localStorage.setItem('composite-ops-view', v); } catch { /* ignore */ } };
   const [cardSize] = useCardSize();
+  const [cardLayout, setCardLayout] = useCardLayout('composite-ops');
   const selectedOps = useMemo(() => (data || []).filter(r => selected.has(r.key)), [data, selected]);
   const toggleSel = (key: string) => setSelected(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
@@ -272,6 +276,7 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
           <button type="button" role="radio" aria-checked={view === 'cards'} aria-label="بطاقات" onClick={() => setView('cards')} className={cn('flex h-9 items-center gap-1 rounded-md px-3 text-sm', view === 'cards' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><LayoutGrid className="h-4 w-4" />بطاقات</button>
           <button type="button" role="radio" aria-checked={view === 'table'} aria-label="جدول" onClick={() => setView('table')} className={cn('flex h-9 items-center gap-1 rounded-md px-3 text-sm', view === 'table' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><Table2 className="h-4 w-4" />جدول</button>
         </div>
+        {view === 'cards' && <CardLayoutToggle value={cardLayout} onChange={setCardLayout} />}
         {view === 'cards' && <CardSizeControl />}
         <Select value={sort} onValueChange={setSort}>
           <SelectTrigger className="h-10 w-[140px]"><SelectValue /></SelectTrigger>
@@ -298,9 +303,9 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
             <OperationsTable rows={rows.slice(0, limit)} selected={selected} onToggle={toggleSel} a={actions}
               onToggleAll={on => setSelected(on ? new Set(rows.slice(0, limit).map(r => r.key)) : new Set())} />
           ) : (
-            <div className={cn(CARD_GRID[cardSize].grid, CARD_GRID[cardSize].text)} style={cardVars(cardSize)}>
+            <div className={cn(cardLayout === 'horizontal' ? 'grid grid-cols-1 items-start gap-4 min-[1800px]:grid-cols-2' : CARD_GRID[cardSize].grid, CARD_GRID[cardSize].text)} style={cardVars(cardSize)}>
               {rows.slice(0, limit).map(r => (
-                <OperationCard key={r.key} r={r} selected={selected.has(r.key)} onToggle={() => toggleSel(r.key)} busy={busyKey === r.key} a={actions} />
+                <OperationCard key={r.key} r={r} layout={cardLayout} selected={selected.has(r.key)} onToggle={() => toggleSel(r.key)} busy={busyKey === r.key} a={actions} />
               ))}
             </div>
           )}

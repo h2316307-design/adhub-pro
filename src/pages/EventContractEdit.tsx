@@ -47,6 +47,7 @@ import { BillboardImage } from '@/components/BillboardImage';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { isBillboardAvailable } from '@/utils/contractUtils';
+import { smartArabicMatch } from '@/lib/arabicSearch';
 import { ContractDatesForm } from '@/components/contracts/edit/ContractDatesForm';
 import { ContractEditHeader } from '@/components/contracts/edit/ContractEditHeader';
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
@@ -97,7 +98,9 @@ export default function EventContractEdit() {
   const [search, setSearch] = useState('');
   const [cityFilter, setCityFilter] = useState<string>('all');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
-  const [showUnavailable, setShowUnavailable] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('available');
+  const [municipalityFilter, setMunicipalityFilter] = useState<string>('all');
+  const [sizeFilters, setSizeFilters] = useState<string[]>([]);
 
   // ✅ نفس تخطيط صفحة تعديل العقد
   const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing'>('boards');
@@ -206,22 +209,60 @@ export default function EventContractEdit() {
     return Array.from(set).sort();
   }, [allBillboards]);
 
+  const municipalityOptions = useMemo(() => {
+    const set = new Set<string>();
+    allBillboards.forEach((b) => {
+      if (cityFilter !== 'all' && String(b.City || b.city || '') !== cityFilter) return;
+      const m = b.Municipality || b.municipality;
+      if (m) set.add(String(m));
+    });
+    return Array.from(set).sort();
+  }, [allBillboards, cityFilter]);
+
+  // متاحة للمناسبة = متاحة حالياً وغير محجوزة لمناسبة أخرى في نفس الفترة
+  const isEventAvailable = (b: any) => isBillboardAvailable(b) && !reservedIds.has(String(b.ID));
+  const isUnderMaintenance = (b: any) => {
+    const st = String(b.Status ?? b.status ?? '').trim().toLowerCase();
+    const ms = String(b.maintenance_status ?? '').trim().toLowerCase();
+    return st === 'صيانة' || st === 'maintenance' || ['maintenance', 'repair_needed', 'out_of_service', 'قيد الصيانة', 'متضررة اللوحة'].includes(ms);
+  };
+  const isNearExpiring = (b: any) => {
+    const end = new Date(b.Rent_End_Date || b.rent_end_date || '');
+    if (Number.isNaN(end.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((end.getTime() - today.getTime()) / 86400000);
+    return diff > 0 && diff <= 30;
+  };
+
   const filtered = useMemo(() => {
-    const q = search.trim();
     return allBillboards.filter((b) => {
       const bid = String(b.ID);
-      if (!showUnavailable && !selected[bid] && !isBillboardAvailable(b)) return false;
-      if (q) {
-        const hay = [b.Billboard_Name, b.City, b.District, b.Size, b.Nearest_Landmark]
-          .map((v: any) => String(v || ''))
-          .join(' ');
-        if (!hay.includes(q)) return false;
-      }
+      const code = b.code || b.Code || `TR-${bid.padStart(4, '0')}`;
+      if (search.trim() && !smartArabicMatch([
+        code, b.Billboard_Name, b.Nearest_Landmark, b.Municipality, b.City, b.District,
+        b.Customer_Name, b.Size, b.Level, b.Ad_Type, b.Contract_Number, b.ID, bid,
+      ], search)) return false;
       if (cityFilter !== 'all' && String(b.City || b.city || '') !== cityFilter) return false;
-      if (sizeFilter !== 'all' && String(b.Size || b.size || '') !== sizeFilter) return false;
-      return true;
+      if (municipalityFilter !== 'all' && String(b.Municipality || b.municipality || '') !== municipalityFilter) return false;
+      const sz = String(b.Size || b.size || '').trim();
+      if (sizeFilters.length > 0 ? !sizeFilters.includes(sz) : (sizeFilter !== 'all' && sz !== sizeFilter)) return false;
+
+      // الحالة تُطبَّق بصرامة: اللوحات المتاحة لا تظهر إلا في «الكل» أو «متاح»
+      const avail = isEventAvailable(b);
+      const hidden = b.is_visible_in_available === false;
+      const maint = isUnderMaintenance(b);
+      switch (statusFilter) {
+        case 'all': return true;
+        case 'available': return avail && !hidden && !maint;
+        case 'nearExpiry': return !avail && isNearExpiring(b);
+        case 'rented': return !avail;
+        case 'maintenance': return maint;
+        case 'hidden': return hidden;
+        default: return true;
+      }
     });
-  }, [allBillboards, search, cityFilter, sizeFilter, showUnavailable, selected]);
+  }, [allBillboards, search, cityFilter, municipalityFilter, sizeFilter, sizeFilters, statusFilter, reservedIds]);
 
   const availableCount = useMemo(
     () => allBillboards.filter((b) => isBillboardAvailable(b) || selected[String(b.ID)]).length,
@@ -560,8 +601,13 @@ export default function EventContractEdit() {
                     setCityFilter={setCityFilter}
                     sizeFilter={sizeFilter}
                     setSizeFilter={setSizeFilter}
-                    statusFilter={showUnavailable ? 'all' : 'available'}
-                    setStatusFilter={(v: string) => setShowUnavailable(v !== 'available')}
+                    statusFilter={statusFilter}
+                    setStatusFilter={setStatusFilter}
+                    municipalities={municipalityOptions}
+                    municipalityFilter={municipalityFilter}
+                    setMunicipalityFilter={setMunicipalityFilter}
+                    sizeFilters={sizeFilters}
+                    setSizeFilters={setSizeFilters}
                     pricingCategory={pricingCategory}
                     setPricingCategory={setPricingCategory}
                     cities={cityOptions}
@@ -602,7 +648,8 @@ export default function EventContractEdit() {
                       durationDays={days}
                       pricingCategory={pricingCategory}
                       onSelectCityFilter={(c) => setCityFilter(c)}
-                      onSelectSizeFilter={(sz) => setSizeFilter(sz)}
+                      onSelectMunicipalityFilter={(m) => setMunicipalityFilter(m)}
+                      onSelectSizeFilter={(sz) => setSizeFilters([sz])}
                     />
                   </div>
                 </TabsContent>

@@ -2311,8 +2311,8 @@ export default function MunicipalityBillboardOrganizer() {
             if (isSelected && selectedItems.has(item.sequence_number)) {
               return { ...item, size: updates.size };
             }
-            // Apply to all items sharing the exact same old size
-            if (oldSize && item.size === oldSize) {
+            // Apply to all items sharing the exact same old size (only when nothing is selected)
+            if (selectedItems.size === 0 && oldSize && item.size === oldSize) {
               return { ...item, size: updates.size };
             }
           }

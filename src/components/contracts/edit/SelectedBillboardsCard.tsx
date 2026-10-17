@@ -147,6 +147,8 @@ interface SelectedBillboardsCardProps {
   onUpdateBillboardCustomDates?: (billboardId: string, startDate: string, startDateReason: string) => void;
   customerName?: string;
   adType?: string;
+  /** لوحات مؤجرة حالياً (id -> تاريخ انتهاء الإيجار) — تمييزها في القائمة (صفحة العروض) */
+  rentedBillboards?: Map<string, string | null>;
 }
 
 export function SelectedBillboardsCard({
@@ -198,6 +200,7 @@ export function SelectedBillboardsCard({
   onUpdateBillboardCustomDates,
   customerName = '',
   adType = '',
+  rentedBillboards,
 }: SelectedBillboardsCardProps) {
   const { map: activeLoansByBillboard } = useActiveLoansByBillboard();
 
@@ -1247,11 +1250,14 @@ export function SelectedBillboardsCard({
                 // Renewal check
                 const isRenewed = previousContractBillboardIds.has(billboardId);
                 const sf = billboardFields(b);
+                const isRented = !!rentedBillboards?.has(billboardId);
+                const rentedUntil = rentedBillboards?.get(billboardId) || null;
 
                 return (
                   <BillboardCardFrame
                     key={(b as any).ID}
                     tone={bulkSelectMode && bulkSelectedIds.has(billboardId) ? 'danger' : replacementsMap.has(billboardId) ? 'replacement' : isRenewed ? 'renewed' : 'default'}
+                    className={isRented && !(bulkSelectMode && bulkSelectedIds.has(billboardId)) ? '!border-amber-500 ring-2 ring-amber-500/40 bg-amber-500/5' : undefined}
                     onClick={bulkSelectMode ? () => toggleBulkSelect(billboardId) : undefined}
                     code={sf.code}
                     size={getDisplaySize(b)}
@@ -1349,6 +1355,7 @@ export function SelectedBillboardsCard({
                     imageHeight="h-40"
                     statusBadges={
                       <>
+                        {isRented && <CardStatusBadge kind="rented" label={rentedUntil ? `مؤجرة حتى ${String(rentedUntil).slice(0, 10)}` : 'مؤجرة'} />}
                         {isPartnership && <CardStatusBadge kind="info" icon={Users} label="مشتركة" />}
                         {isPartnership && partnershipInfo && partnershipInfo.partnerShares.length > 0 && (
                           <CardStatusBadge kind="info" label={partnershipInfo.partnerShares.map(ps => ps.partnerName).join(' • ')} />

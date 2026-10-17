@@ -16,6 +16,7 @@ import { useQuery } from '@tanstack/react-query';
 import { calculateInstallationCostFromIds } from '@/services/installationService';
 import { getPriceFor, getDailyPriceFor, CustomerType } from '@/data/pricing';
 import { useContractPricing } from '@/hooks/useContractPricing';
+import { fetchCustomerPricingCategory } from '@/utils/customerPricingCategory';
 import { calculateAllBillboardPrices } from '@/utils/contractBillboardPricing';
 import { allocateMoney, money } from '@/utils/contractEditMoney';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -87,6 +88,12 @@ export default function OfferEdit() {
   const pricing = useContractPricing();
   const [pricingCategories, setPricingCategories] = useState<string[]>([]);
   const [pricingCategory, setPricingCategory] = useState<string>('عادي');
+  const userPickedCategoryRef = useRef(false);
+
+  // عرض جديد: الفئة الافتراضية من الإعدادات إلى أن يُختار زبون أو فئة
+  useEffect(() => {
+    if (!isEditing && !customerId && !userPickedCategoryRef.current) setPricingCategory(pricing.defaultPricingCategory);
+  }, [isEditing, pricing.defaultPricingCategory]);
 
   // Installation and operating costs
   const [installationCost, setInstallationCost] = useState<number>(0);
@@ -523,7 +530,7 @@ export default function OfferEdit() {
       }
     }
     return price || 0;
-  }, [useStoredPrices, currentOffer, pricingMode, durationMonths, durationDays, pricingCategory, pricing.pricingData, durations]);
+  }, [useStoredPrices, currentOffer, pricingMode, durationMonths, durationDays, pricingCategory, pricing.pricingData, pricing.sizeNames, pricing.defaultPricingCategory, durations]);
 
   // ✅ تحديث فوري وإعادة احتساب عند تغيير معايير التسعير
   const handlePricingCategoryChange = (newVal: string) => {
@@ -630,7 +637,7 @@ export default function OfferEdit() {
       }
       return acc + (p || 0);
     }, 0);
-  }, [billboards, selected, pricingMode, durationMonths, durationDays, pricingCategory, pricing.pricingData]);
+  }, [billboards, selected, pricingMode, durationMonths, durationDays, pricingCategory, pricing.pricingData, pricing.sizeNames, pricing.defaultPricingCategory]);
 
   const baseTotal = useMemo(() => {
     if (userEditedRentCost) return Math.max(0, rentCost);
@@ -1032,16 +1039,14 @@ export default function OfferEdit() {
         maintenanceStatus === 'قيد الصيانة' || 
         maintenanceStatus === 'متضررة اللوحة';
 
-      const hasSearch = searchQuery.trim().length > 0;
+      // الحالة تُطبَّق بصرامة حتى مع البحث: اللوحات المتاحة لا تظهر إلا في «الكل» أو «متاح»
       let shouldShow = false;
-      if (hasSearch) {
-        shouldShow = true; // Search overrides status tabs to find any matching billboard!
-      } else if (statusFilter === 'all') {
-        shouldShow = true; // "الكل" matches all billboards
+      if (statusFilter === 'all') {
+        shouldShow = true;
       } else if (statusFilter === 'available') {
-        shouldShow = (isAvail || isInSelection) && !isHidden && !isUnderMaintenance;
+        shouldShow = isAvail && !isHidden && !isUnderMaintenance;
       } else if (statusFilter === 'nearExpiry') {
-        shouldShow = isNear;
+        shouldShow = !isAvail && isNear;
       } else if (statusFilter === 'rented') {
         shouldShow = !isAvail;
       } else if (statusFilter === 'maintenance') {
@@ -1049,8 +1054,6 @@ export default function OfferEdit() {
       } else if (statusFilter === 'hidden') {
         shouldShow = isHidden;
       }
-
-      if (isInSelection) shouldShow = true;
 
       return matchesQ && matchesCity && matchesMunicipality && matchesSize && shouldShow;
     });
@@ -1186,10 +1189,20 @@ export default function OfferEdit() {
     setCustomerOpen(false); setCustomerQuery('');
   };
 
-  const handleSelectCustomer = (customer: { id: string; name: string; company?: string; phone?: string }) => {
+  const handleSelectCustomer = async (customer: { id: string; name: string; company?: string; phone?: string }) => {
     setCustomerName(customer.name); setCustomerId(customer.id);
     setCustomerCompany(customer.company || null); setCustomerPhone(customer.phone || null);
     setCustomerOpen(false); setCustomerQuery('');
+    // آخر فئة سعرية استُخدمت للزبون تُطبَّق فوراً
+    try {
+      const category = await fetchCustomerPricingCategory(customer.id, customer.name);
+      if (category && category !== pricingCategory) {
+        handlePricingCategoryChange(category);
+        toast.info(`تم تطبيق آخر فئة سعرية للزبون: ${category}`);
+      }
+    } catch (err) {
+      console.warn('Failed to fetch customer pricing category:', err);
+    }
   };
 
 
@@ -1770,7 +1783,7 @@ export default function OfferEdit() {
               adType={adType}
               setAdType={setAdType}
               pricingCategory={pricingCategory}
-              setPricingCategory={handlePricingCategoryChange}
+              setPricingCategory={(v: string) => { userPickedCategoryRef.current = true; handlePricingCategoryChange(v); }}
               pricingCategories={pricingCategories}
               customers={customers}
               customerOpen={customerOpen}
@@ -1980,6 +1993,12 @@ export default function OfferEdit() {
               endDate={endDate}
               customerName={customerName}
               adType={adType}
+              rentedBillboards={new Map(selected.flatMap(id => {
+                const b = billboards.find(bb => String((bb as any).ID) === id);
+                if (!b || !isBillboardRented(b)) return [];
+                const end = occupiedBillboardIds.get(Number(id)) ?? (b as any).Rent_End_Date ?? (b as any).rent_end_date ?? null;
+                return [[id, end ? String(end) : null] as [string, string | null]];
+              }))}
             />
 
             </>
@@ -2022,14 +2041,14 @@ export default function OfferEdit() {
                   statusFilter={statusFilter}
                   setStatusFilter={setStatusFilter}
                   pricingCategory={pricingCategory}
-                  setPricingCategory={setPricingCategory}
+                  setPricingCategory={(v: string) => { userPickedCategoryRef.current = true; handlePricingCategoryChange(v); }}
                   cities={cities}
                   municipalities={municipalities}
                   sizes={sizes}
                   pricingCategories={pricingCategories}
                   sizeFilters={sizeFilters}
                   setSizeFilters={setSizeFilters}
-                  totalCount={billboards.length}
+                  totalCount={filtered.length}
                   selectedCount={selected.length}
                 />
                 )}

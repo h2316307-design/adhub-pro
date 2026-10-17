@@ -1,3 +1,4 @@
+import { fetchCustomerPricingCategory } from '@/utils/customerPricingCategory';
 import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
 import { usePricingDurations } from '@/hooks/usePricingDurations';
 import { durationEnd, durationPrice } from '@/utils/pricingDuration';
@@ -134,59 +135,12 @@ export const useContractForm = (initialData?: Partial<ContractFormData>) => {
 
     (async () => {
       try {
-        let pricingCategory = null;
-
-        // 1. Try to fetch directly from customer record
-        if (formData.customerId) {
-          const { data: custData } = await supabase
-            .from('customers')
-            .select('pricing_category')
-            .eq('id', formData.customerId)
-            .maybeSingle();
-          if (custData && custData.pricing_category) {
-            pricingCategory = custData.pricing_category;
-          }
-        }
-
-        // 2. Fallback to last contract category
-        if (!pricingCategory) {
-          let row: any = null;
-
-          if (formData.customerId) {
-            const { data } = await supabase
-              .from('Contract')
-              .select('customer_category, created_at, id')
-              .eq('customer_id', formData.customerId)
-              .not('customer_category', 'is', null)
-              .order('created_at', { ascending: false, nullsFirst: false })
-              .order('id', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            row = data;
-          }
-
-          if (!row && name) {
-            const safe = name.replace(/[,()"']/g, ' ').trim();
-            const { data } = await supabase
-              .from('Contract')
-              .select('customer_category, created_at, id, customer_name, "Customer Name"')
-              .or(`customer_name.ilike.${safe},"Customer Name".ilike.${safe}`)
-              .not('customer_category', 'is', null)
-              .order('created_at', { ascending: false, nullsFirst: false })
-              .order('id', { ascending: false })
-              .limit(1)
-              .maybeSingle();
-            row = data;
-          }
-
-          if (row && (row as any).customer_category) {
-            pricingCategory = (row as any).customer_category as string;
-          }
-        }
+        // آخر فئة استُخدمت للزبون (عقد أو عرض)، ثم فئة بطاقة الزبون
+        const pricingCategory = await fetchCustomerPricingCategory(formData.customerId, name);
 
         if (pricingCategory && !userPickedCategoryRef.current) {
           setFormData(prev => (prev.pricingCategory === pricingCategory ? prev : { ...prev, pricingCategory }));
-          toast.info(`تم تطبيق الفئة السعرية للعميل: ${pricingCategory}`);
+          toast.info(`تم تطبيق آخر فئة سعرية للزبون: ${pricingCategory}`);
         }
       } catch (err) {
         console.warn('Failed to fetch customer pricing category:', err);

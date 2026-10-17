@@ -84,7 +84,7 @@ function Chip({ children, onClick, title, strong }: { children: ReactNode; onCli
 
 export function BillboardCardFrame({
   tone = 'default', onClick, code, size, onSizeClick, level, faces, headerExtra, headerActions, banner,
-  image, imageHeight = 'aspect-[16/10]', statusBadges, selectMark, imageOverlayBottom,
+  image, imageHeight = 'aspect-[16/10]', statusBadges, selectMark, onSelectMarkClick, imageOverlayBottom,
   title, landmark, municipality, district, city, onMunicipalityClick, onDistrictClick, onCityClick, billboardType, compact = false, managementLayout = false, onLevelClick,
   children, priceLabel, price, priceTone = 'primary', footer, after, className, style, dimmed, horizontal = false, imageAspect, sideExtra,
 }: {
@@ -109,6 +109,8 @@ export function BillboardCardFrame({
   statusBadges?: ReactNode;
   /** null = لا تظهر علامة الاختيار، true/false = حالة الاختيار */
   selectMark?: boolean | null;
+  /** عند تمريره تصبح علامة الاختيار زراً قابلاً للنقر */
+  onSelectMarkClick?: () => void;
   imageOverlayBottom?: ReactNode;
   title: string;
   billboardType?: string;
@@ -140,7 +142,11 @@ export function BillboardCardFrame({
       : cn('w-full border-y border-border/60', imageAspect || imageHeight))}>
       {horizontal ? <div className="absolute inset-0">{image}</div> : image}
       {statusBadges && <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-[80%] flex-col items-end gap-1">{statusBadges}</div>}
-      {selectMark !== null && selectMark !== undefined && <span className={cn('absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border shadow-sm backdrop-blur-sm', selectMark ? 'border-primary bg-primary text-primary-foreground' : 'border-white/30 bg-black/50 text-white/60')}><Check className="h-4 w-4" /></span>}
+      {selectMark !== null && selectMark !== undefined && (onSelectMarkClick ? (
+        <button type="button" aria-pressed={selectMark} aria-label={selectMark ? 'إلغاء تحديد اللوحة' : 'تحديد اللوحة'} title={selectMark ? 'إلغاء التحديد' : 'تحديد'}
+          onClick={e => { e.stopPropagation(); onSelectMarkClick(); }}
+          className={cn('absolute left-3 top-3 z-20 flex h-8 w-8 cursor-pointer items-center justify-center rounded-lg border shadow-sm backdrop-blur-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary', selectMark ? 'border-primary bg-primary text-primary-foreground' : 'border-white/30 bg-black/50 text-white/60 hover:bg-black/70 hover:text-white')}><Check className="h-4 w-4" /></button>
+      ) : <span className={cn('absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border shadow-sm backdrop-blur-sm', selectMark ? 'border-primary bg-primary text-primary-foreground' : 'border-white/30 bg-black/50 text-white/60')}><Check className="h-4 w-4" /></span>)}
       {imageOverlayBottom}
     </div>
   );

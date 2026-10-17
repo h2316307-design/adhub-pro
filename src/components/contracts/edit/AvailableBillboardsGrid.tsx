@@ -352,6 +352,7 @@ export function AvailableBillboardsGrid({
                     />
                   }
                   selectMark={isSelected}
+                  onSelectMarkClick={handleCardClick}
                   statusBadges={
                     <>
                       {!canSelect ? (

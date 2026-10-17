@@ -4,6 +4,7 @@ import { durationName } from '@/utils/pricingDuration';
 // @ts-nocheck
 import React, { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate, useSearchParams } from 'react-router-dom';
