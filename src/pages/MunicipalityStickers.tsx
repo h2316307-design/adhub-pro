@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -153,9 +154,9 @@ export default function MunicipalityStickers() {
   const [sizes, setSizes] = useState<SizeData[]>([]);
   const [selectedMunicipality, setSelectedMunicipality] = useState<string>('');
   const [phoneNumber, setPhoneNumber] = useState<string>('');
-  const [useUnifiedSize, setUseUnifiedSize] = useState<boolean>(false);
-  const [unifiedSizeWidth, setUnifiedSizeWidth] = useState<number>(30);
-  const [unifiedSizeHeight, setUnifiedSizeHeight] = useState<number>(30);
+  const [useUnifiedSize, setUseUnifiedSize] = usePersistedState<boolean>('municipalityStickers.useUnifiedSize', false);
+  const [unifiedSizeWidth, setUnifiedSizeWidth] = usePersistedState<number>('municipalityStickers.unifiedSizeWidth', 30);
+  const [unifiedSizeHeight, setUnifiedSizeHeight] = usePersistedState<number>('municipalityStickers.unifiedSizeHeight', 30);
   const [loading, setLoading] = useState(false);
   const [qrCodes, setQrCodes] = useState<{ [key: string]: { whatsapp: string; gps: string } }>({});
   const [sizeConfigs, setSizeConfigs] = useState<{ [sizeName: string]: SizeConfig }>({});
@@ -166,7 +167,7 @@ export default function MunicipalityStickers() {
   const [showSettings, setShowSettings] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [settingsId, setSettingsId] = useState<string | null>(null);
-  const [printLayoutMode, setPrintLayoutMode] = useState<'single' | 'grouped'>('single');
+  const [printLayoutMode, setPrintLayoutMode] = usePersistedState<'single' | 'grouped'>('municipalityStickers.printLayoutMode', 'single');
   
   // Reserve numbers
   const [reserveCount, setReserveCount] = useState<number>(0);

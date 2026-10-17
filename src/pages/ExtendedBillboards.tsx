@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect } from 'react';
 
 import { Card, CardContent } from '@/components/ui/card';
@@ -35,8 +36,8 @@ const EXTENSION_TYPE_LABELS: Record<string, string> = {
 export default function ExtendedBillboards() {
   const [extensions, setExtensions] = useState<ExtendedBillboard[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = usePersistedState('extendedBillboards.searchTerm', '');
+  const [filterType, setFilterType] = usePersistedState<string>('extendedBillboards.filterType', 'all');
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [selectedBillboard, setSelectedBillboard] = useState<any>(null);
   const navigate = useNavigate();

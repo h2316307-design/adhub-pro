@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Input } from '@/components/ui/input';
@@ -43,9 +44,9 @@ function getImageSource(url: string): { label: string; color: string } | null {
 export default function BillboardPhotosGallery() {
   const [photos, setPhotos] = useState<PhotoRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [cityFilter, setCityFilter] = useState('all');
-  const [municipalityFilter, setMunicipalityFilter] = useState('all');
+  const [searchQuery, setSearchQuery] = usePersistedState('billboardPhotosGallery.searchQuery', '');
+  const [cityFilter, setCityFilter] = usePersistedState('billboardPhotosGallery.cityFilter', 'all');
+  const [municipalityFilter, setMunicipalityFilter] = usePersistedState('billboardPhotosGallery.municipalityFilter', 'all');
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState({ current: 0, total: 0 });
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);

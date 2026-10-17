@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useRef, useMemo, useCallback } from 'react';
 import { useFieldPhotos, useDeleteFieldPhoto, useInsertFieldPhoto } from '@/hooks/useFieldPhotos';
 import { exportFieldPhotosToExcel, parseFieldPhotosExcel, type FieldPhotoImportRow } from '@/utils/fieldPhotosExcel';
@@ -20,7 +21,7 @@ export default function FieldPhotoGallery() {
   const deletePhoto = useDeleteFieldPhoto();
   const insertPhoto = useInsertFieldPhoto();
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = usePersistedState('fieldPhotoGallery.searchQuery', '');
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [importing, setImporting] = useState(false);

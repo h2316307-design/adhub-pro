@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect, useMemo, startTransition } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -54,14 +55,14 @@ export default function BillboardMaintenance() {
   const [billboards, setBillboards] = useState<Billboard[]>([]);
   const [maintenanceHistory, setMaintenanceHistory] = useState<MaintenanceRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = usePersistedState('billboardMaintenance.searchTerm', '');
+  const [statusFilter, setStatusFilter] = usePersistedState('billboardMaintenance.statusFilter', 'all');
+  const [priorityFilter, setPriorityFilter] = usePersistedState('billboardMaintenance.priorityFilter', 'all');
   const [selectedBillboard, setSelectedBillboard] = useState<Billboard | null>(null);
   const [isMaintenanceDialogOpen, setIsMaintenanceDialogOpen] = useState(false);
   const [manageStatusesOpen, setManageStatusesOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'cards' | 'table'>('cards');
-  const [activeTab, setActiveTab] = useState('all');
+  const [viewMode, setViewMode] = usePersistedState<'cards' | 'table'>('billboardMaintenance.viewMode', 'cards');
+  const [activeTab, setActiveTab] = usePersistedState('billboardMaintenance.activeTab', 'all');
   const [dynamicStatuses, setDynamicStatuses] = useState<any[]>([]);
   const [maintenanceForm, setMaintenanceForm] = useState({
     type: '',

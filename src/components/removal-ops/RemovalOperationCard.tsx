@@ -55,7 +55,7 @@ export function RemovalOperationMenu({ r, a }: { r: RemovalOperation; a: Removal
   );
 }
 
-export function RemovalOperationCard({ r, selected, onToggle, a }: { r: RemovalOperation; selected: boolean; onToggle: () => void; a: RemovalActions }) {
+export function RemovalOperationCard({ r, selected, onToggle, a, horizontal = false }: { r: RemovalOperation; selected: boolean; onToggle: () => void; a: RemovalActions; horizontal?: boolean }) {
   const [colors, setColors] = useState<[string, string] | null>(null);
   useEffect(() => {
     let alive = true; setColors(null);
@@ -68,8 +68,8 @@ export function RemovalOperationCard({ r, selected, onToggle, a }: { r: RemovalO
   const pending = r.boards - r.boardsDone;
 
   return (
-    <article style={tintStyle(colors)} className={cn('flex flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-sm', selected && 'ring-2 ring-primary', !colors && 'border-border')}>
-      <div className="relative shrink-0 border-b border-border/60" style={{ height: 'var(--img-h,230px)' }}>
+    <article style={tintStyle(colors)} className={cn('flex flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-sm', horizontal && 'sm:flex-row', selected && 'ring-2 ring-primary', !colors && 'border-border')}>
+      <div className={cn('relative shrink-0 border-b border-border/60', horizontal && 'sm:min-h-[var(--img-h,230px)] sm:w-[38%] sm:max-w-[320px] sm:self-stretch sm:border-b-0 sm:border-l')} style={horizontal ? undefined : { height: 'var(--img-h,230px)' }}>
         {gallery.length
           ? <ZoomImage src={gallery[0].src} alt={`تصميم ${r.customerName}`} title={`${r.customerName} · عقد #${r.contractId}`} className="h-full w-full bg-black/5" gallery={gallery} />
           : <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-muted/60 text-sm text-muted-foreground"><ImageOff className="h-7 w-7 opacity-60" />بدون تصميم</div>}

@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -38,9 +39,9 @@ interface CustomerProfit {
 }
 
 const ProfitabilityReports = () => {
-  const [tab, setTab] = useState('billboards');
-  const [period, setPeriod] = useState('current');
-  const [search, setSearch] = useState('');
+  const [tab, setTab] = usePersistedState('profitabilityReports.tab', 'billboards');
+  const [period, setPeriod] = usePersistedState('profitabilityReports.period', 'current');
+  const [search, setSearch] = usePersistedState('profitabilityReports.search', '');
   const [billboardProfits, setBillboardProfits] = useState<BillboardProfit[]>([]);
   const [customerProfits, setCustomerProfits] = useState<CustomerProfit[]>([]);
   const [loading, setLoading] = useState(true);

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -45,7 +46,7 @@ export default function EventsContracts() {
   const [items, setItems] = useState<EventContract[]>([]);
   const [loading, setLoading] = useState(true);
   const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = usePersistedState<string>('eventsContracts.statusFilter', 'all');
 
   const load = async () => {
     try {

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { FinancePageHeader, FinanceStatCard, FinanceDialogContent, FinanceDialogHeader, FinanceDialogFooter } from '@/components/finance/FinanceUI';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -165,8 +166,8 @@ export default function OperatingExpenses() {
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [paymentSources, setPaymentSources] = useState<Record<string, PaymentSource>>({});
-  const [withdrawalSearch, setWithdrawalSearch] = useState('');
-  const [withdrawalSourceFilter, setWithdrawalSourceFilter] = useState('all');
+  const [withdrawalSearch, setWithdrawalSearch] = usePersistedState('expenses.withdrawalSearch', '');
+  const [withdrawalSourceFilter, setWithdrawalSourceFilter] = usePersistedState('expenses.withdrawalSourceFilter', 'all');
   const [selectedSource, setSelectedSource] = useState<PaymentSource | null>(null);
   const filteredWithdrawals = useMemo(() => withdrawals.filter(w => {
     if (withdrawalSourceFilter === 'distributed' && !w.distributed_payment_id) return false;

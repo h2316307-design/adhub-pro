@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -41,9 +42,9 @@ export default function ExpensesReport() {
   const [expenses, setExpenses] = useState<ExpenseRow[]>([]);
   const [payments, setPayments] = useState<Record<string, PaymentRow[]>>({});
   const [employees, setEmployees] = useState<Array<{ id: string; name: string }>>([]);
-  const [filterEmployee, setFilterEmployee] = useState<string>('all');
-  const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterEmployee, setFilterEmployee] = usePersistedState<string>('expensesReport.filterEmployee', 'all');
+  const [filterStatus, setFilterStatus] = usePersistedState<string>('expensesReport.filterStatus', 'all');
+  const [filterCategory, setFilterCategory] = usePersistedState<string>('expensesReport.filterCategory', 'all');
   const [from, setFrom] = useState<string>('');
   const [to, setTo] = useState<string>('');
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});

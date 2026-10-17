@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -82,9 +83,9 @@ export default function InstallationTeams() {
   const [friendCompanies, setFriendCompanies] = useState<FriendCompany[]>([]);
 
   // Search & View Mode State
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterType, setFilterType] = useState<'all' | 'general' | 'partner'>('all');
-  const [viewMode, setViewMode] = useState<'grid' | 'table'>('grid');
+  const [searchTerm, setSearchTerm] = usePersistedState('installationTeams.searchTerm', '');
+  const [filterType, setFilterType] = usePersistedState<'all' | 'general' | 'partner'>('installationTeams.filterType', 'all');
+  const [viewMode, setViewMode] = usePersistedState<'grid' | 'table'>('installationTeams.viewMode', 'grid');
 
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editMode, setEditMode] = useState(false);

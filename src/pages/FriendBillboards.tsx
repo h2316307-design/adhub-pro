@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
@@ -52,7 +53,7 @@ export default function FriendBillboards() {
   const { canEdit: canEditAuth } = useAuth();
   const canEditSection = canEditAuth('friend_billboards');
   const [isAddingCompany, setIsAddingCompany] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = usePersistedState('friendBillboards.searchQuery', '');
   const [newCompany, setNewCompany] = useState<{ name: string; contact_person: string; phone: string; email: string; notes: string }>({
     name: '',
     contact_person: '',

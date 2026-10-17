@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
@@ -54,8 +55,8 @@ export default function Printers() {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Record<string, PrinterStats>>({});
   const [defaults, setDefaults] = useState<PrinterDefaults | null>(null);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [search, setSearch] = usePersistedState('printers.search', '');
+  const [statusFilter, setStatusFilter] = usePersistedState<'all' | 'active' | 'inactive'>('printers.statusFilter', 'all');
   const [metersOpen, setMetersOpen] = useState(false);
   const [metersPrinterId, setMetersPrinterId] = useState<string | undefined>(undefined);
   const [dialogOpen, setDialogOpen] = useState(false);

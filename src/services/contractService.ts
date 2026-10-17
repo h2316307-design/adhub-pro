@@ -565,7 +565,19 @@ const CONTRACT_SUMMARY_LIST_COLUMNS = `
 
 // جلب جميع العقود مع معالجة محسنة - يستخدم contract_summary view للأداء
 // linkedCustomerId: إذا كان المستخدم مربوطاً بعميل معين، يتم فلترة العقود لهذا العميل فقط
+// إصلاح ذاتي مرة في كل جلسة: ربط لوحات العقود السارية العالقة على عقود منتهية (SQL 13)
+let billboardLinksHealed = false;
+function healContractBillboardLinksOnce() {
+  if (billboardLinksHealed) return;
+  billboardLinksHealed = true;
+  void (supabase.rpc as any)('heal_contract_billboard_links').then(({ data, error }: any) => {
+    if (error) console.warn('heal_contract_billboard_links:', error.message);
+    else if (Number(data) > 0) console.info(`تم ربط ${data} لوحة بعقودها السارية`);
+  });
+}
+
 export async function getContracts(linkedCustomerId?: string | null) {
+  healContractBillboardLinksOnce();
   let data: any[] = [];
 
   // استخدام الـ view الذي يجمع بيانات العملاء والمدفوعات والمصاريف

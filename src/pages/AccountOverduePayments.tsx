@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { BrowserWhatsAppBatchDialog } from "@/components/billing/BrowserWhatsAppBatch";
 import { OverdueWorkspace } from '@/components/billing/OverdueWorkspace';
 import { useEffect, useMemo, useState } from 'react';
@@ -63,10 +64,10 @@ export default function AccountOverduePayments() {
   const [copied, setCopied] = useState(false);
 
   // فلاتر
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('accountOverduePayments.searchTerm', '');
   const [minDays, setMinDays] = useState<number>(0);
   const [minAmount, setMinAmount] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'oldest' | 'newest'>('oldest');
+  const [sortBy, setSortBy] = usePersistedState<'oldest' | 'newest'>('accountOverduePayments.sortBy', 'oldest');
 
   useEffect(() => {
     loadData();

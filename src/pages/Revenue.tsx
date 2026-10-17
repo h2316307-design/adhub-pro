@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +33,7 @@ interface RevenueStats {
 export default function Revenue() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
-  const [period, setPeriod] = useState<'week' | 'month' | 'year'>('month');
+  const [period, setPeriod] = usePersistedState<'week' | 'month' | 'year'>('revenue.period', 'month');
   const [stats, setStats] = useState<RevenueStats | null>(null);
 
   // Calculate date ranges based on period

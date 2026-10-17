@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useAuth } from '@/contexts/AuthContext';
 import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -73,8 +74,8 @@ export default function PaymentsReceiptsPage() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [contractTotals, setContractTotals] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [adTypeFilter, setAdTypeFilter] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = usePersistedState('paymentsReceiptsPage.searchTerm', '');
+  const [adTypeFilter, setAdTypeFilter] = usePersistedState<string>('paymentsReceiptsPage.adTypeFilter', 'all');
   const [adTypeSearch, setAdTypeSearch] = useState('');
   const [distributeDialogOpen, setDistributeDialogOpen] = useState(false);
   const [customerSelectDialogOpen, setCustomerSelectDialogOpen] = useState(false);
@@ -89,7 +90,7 @@ export default function PaymentsReceiptsPage() {
     totalCredits: 0,
     totalDebits: 0
   });
-  const [showCollectionDetails, setShowCollectionDetails] = useState(false);
+  const [showCollectionDetails, setShowCollectionDetails] = usePersistedState('paymentsReceiptsPage.showCollectionDetails', false);
   const [isPrinting, setIsPrinting] = useState(false);
   const [distributedPaymentDialogOpen, setDistributedPaymentDialogOpen] = useState(false);
   const [selectedDistributedPayments, setSelectedDistributedPayments] = useState<Payment[]>([]);
@@ -682,11 +683,11 @@ export default function PaymentsReceiptsPage() {
   );
 
   // ═══════════ عرض جديد: الفترة والتصفية وتفاصيل التحصيل ═══════════
-  const [period, setPeriod] = useState<'today' | 'week' | 'month' | '3m' | 'year' | 'all' | 'custom'>('month');
+  const [period, setPeriod] = usePersistedState<'today' | 'week' | 'month' | '3m' | 'year' | 'all' | 'custom'>('paymentsReceiptsPage.period', 'month');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [methodFilter, setMethodFilter] = useState('all');
-  const [kindFilter, setKindFilter] = useState<'all' | 'in' | 'out' | 'barter'>('all');
+  const [methodFilter, setMethodFilter] = usePersistedState('paymentsReceiptsPage.methodFilter', 'all');
+  const [kindFilter, setKindFilter] = usePersistedState<'all' | 'in' | 'out' | 'barter'>('paymentsReceiptsPage.kindFilter', 'all');
   const [viaOnly, setViaOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(60);
 

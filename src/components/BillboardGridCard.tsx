@@ -59,6 +59,8 @@ interface BillboardGridCardProps {
   onLocalUpdate?: (id: number | string, updates: Record<string, any>) => void;
   activeStatuses?: BillboardStatus[];
   onOpenOverlayEditor?: (billboard: Billboard) => void;
+  /** بطاقة بالعرض: الصورة بجانب التفاصيل */
+  horizontal?: boolean;
 }
 
 const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
@@ -80,6 +82,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   onLocalUpdate,
   activeStatuses,
   onOpenOverlayEditor,
+  horizontal = false,
 }) => {
   const isTorn = !!activeStatuses?.some((s) => s.status_type === 'torn_ad');
   const { isAdmin } = useAuth();
@@ -665,6 +668,15 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   };
 
   const frontDesignUrl = getFrontDesignUrl();
+  /** صورة التصميم بنسبة 8:3 — في البطاقة العرضية تظهر أعلى عمود التفاصيل */
+  const designSection = frontDesignUrl ? (
+    <section aria-label="تصميم الوجه الأول" className={horizontal ? 'overflow-hidden rounded-xl border border-border/60' : '-mx-4 border-y border-border/60'}>
+      <div className="flex items-center justify-between px-3 py-1.5 text-[11px]"><span className="font-semibold">تصميم الوجه الأول</span><span className="text-muted-foreground">اضغط للتكبير</span></div>
+      <button type="button" onClick={event => { event.stopPropagation(); openDesignPreview(frontDesignUrl, 'تصميم الوجه الأول'); }} aria-label="تكبير تصميم الوجه الأول" className="block w-full cursor-pointer overflow-hidden bg-background/40 transition-all duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+        <DesignImageWithBlur src={frontDesignUrl} alt="تصميم الوجه الأول" className="aspect-[8/3] w-full" />
+      </button>
+    </section>
+  ) : null;
   const [designColors, setDesignColors] = useState<[string, string] | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -805,6 +817,8 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
         } : undefined}
         className="billboard-grid-card h-full shadow-card motion-safe:transition-[border-color,box-shadow] duration-200 hover:shadow-md"
         compact
+        horizontal={horizontal}
+        imageAspect="aspect-[8/3]"
         billboardType={getBillboardTypeDisplay() !== 'غير محدد' ? getBillboardTypeDisplay() : undefined}
         tone={isTorn ? 'danger' : isSelected ? 'selected' : 'default'}
         code={billboard.Billboard_Name || gf.code}
@@ -1016,12 +1030,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
         city={gf.city}
       >
             <CardContent className="flex flex-1 flex-col gap-3 p-0">
-              {frontDesignUrl && <section aria-label="تصميم الوجه الأول" className="-mx-4 border-y border-border/60">
-                <div className="flex items-center justify-between px-3 py-1.5 text-[11px]"><span className="font-semibold">تصميم الوجه الأول</span><span className="text-muted-foreground">اضغط للتكبير</span></div>
-                <button type="button" onClick={event => { event.stopPropagation(); openDesignPreview(frontDesignUrl, 'تصميم الوجه الأول'); }} aria-label="تكبير تصميم الوجه الأول" className="block w-full cursor-pointer overflow-hidden bg-background/40 transition-all duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
-                  <DesignImageWithBlur src={frontDesignUrl} alt="تصميم الوجه الأول" naturalSize className="w-full" />
-                </button>
-              </section>}
+              {designSection}
               {/* ملخص العقد وقيمة اللوحة */}
               {hasActiveContract && !contractExpired && (
                 <section className="rounded-lg border border-border bg-muted/25 p-2.5 space-y-2.5">

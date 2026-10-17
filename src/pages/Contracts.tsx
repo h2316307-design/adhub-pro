@@ -26,6 +26,7 @@ import { SendContractReportDialog } from '@/components/contracts/SendContractRep
 import { QuickContractDialog } from '@/components/contracts/QuickContractDialog';
 import { MissingContractNumbersDialog } from '@/components/contracts/MissingContractNumbersDialog';
 import { ContractCard } from '@/components/contracts/ContractCard';
+import { CardLayoutToggle, useCardLayout } from '@/components/shared/CardLayout';
 import { DoubleBillboardDetector } from '@/components/contracts/DoubleBillboardDetector';
 import { ContractStats } from '@/components/contracts/ContractStats';
 import { SizesInvoicePrintDialog } from '@/components/contracts/SizesInvoicePrintDialog';
@@ -111,12 +112,14 @@ export default function Contracts() {
   const [statusFilter, setStatusFilter] = usePersistedState<string>('contracts.statusFilter', 'all');
   const [customerFilter, setCustomerFilter] = usePersistedState<string>('contracts.customerFilter', 'all');
   const [yearFilter, setYearFilter] = usePersistedState<string>('contracts.yearFilter', 'all');
-  const [showTrash, setShowTrash] = useState(false);
+  const [showTrash, setShowTrash] = usePersistedState('contracts.showTrash', false);
   const [showUnpaid, setShowUnpaid] = usePersistedState<boolean>('contracts.showUnpaid', false);
   const [viewMode, setViewMode] = usePersistedState<'cards' | 'table'>('contracts.viewMode', 'cards');
+  const [cardLayout, setCardLayout] = useCardLayout('contracts');
+  const cardsGrid = cardLayout === 'horizontal' ? 'grid grid-cols-1 items-start gap-4 min-[1800px]:grid-cols-2' : 'grid grid-cols-1 items-start gap-5 lg:grid-cols-2 2xl:grid-cols-3';
   const [statsOpen, setStatsOpen] = useState(false);
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
-  const [showYearlyCode, setShowYearlyCode] = useState(true);
+  const [showYearlyCode, setShowYearlyCode] = usePersistedState('contracts.showYearlyCode', true);
   const [separateExpired, setSeparateExpired] = useState(true);
 
   
@@ -1355,6 +1358,7 @@ export default function Contracts() {
                 <span>جدول</span>
               </ToggleGroupItem>
             </ToggleGroup>
+            {viewMode === 'cards' && <CardLayoutToggle value={cardLayout} onChange={setCardLayout} />}
 
         </div>
         <CardContent className="p-4 sm:p-5">
@@ -1668,9 +1672,10 @@ export default function Contracts() {
                   <CheckCircle className="h-5 w-5 text-primary" />
                   العقود النشطة ({allFilteredActiveContracts.length})
                 </h3>
-                <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+                <div className={cardsGrid}>
                   {activeContracts.map((contract) => (
                     <ContractCard
+                      layout={cardLayout}
                       key={contract.id}
                       contract={contract}
                       yearlyCode={showYearlyCode ? getContractYearlyOrder(contract) : undefined}
@@ -1792,9 +1797,10 @@ export default function Contracts() {
                     <AlertCircle className="h-5 w-5" />
                     العقود المنتهية ({allFilteredExpiredContracts.length})
                   </h3>
-                  <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+                  <div className={cardsGrid}>
                     {expiredContracts.map((contract) => (
                       <ContractCard
+                        layout={cardLayout}
                         key={contract.id}
                         contract={contract}
                         yearlyCode={showYearlyCode ? getContractYearlyOrder(contract) : undefined}
@@ -1909,7 +1915,7 @@ export default function Contracts() {
               )}
             </>
           ) : (
-            <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-2 2xl:grid-cols-3">
+            <div className={cardsGrid}>
 
               {/* Pagination أعلى */}
               {totalPages > 1 && (
@@ -1960,6 +1966,7 @@ export default function Contracts() {
 
               {paginatedContracts.map((contract) => (
                 <ContractCard
+                  layout={cardLayout}
                   key={contract.id}
                   contract={contract}
                   yearlyCode={showYearlyCode ? getContractYearlyOrder(contract) : undefined}

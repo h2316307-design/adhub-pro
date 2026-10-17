@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
@@ -30,7 +31,7 @@ export default function Tasks() {
   const canEditSection = canEdit('tasks');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
-  const [filter, setFilter] = useState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('all');
+  const [filter, setFilter] = usePersistedState<'all' | 'pending' | 'in_progress' | 'completed' | 'cancelled'>('tasks.filter', 'all');
 
   const { data: tasks = [], isLoading } = useQuery({
     queryKey: ['tasks'],

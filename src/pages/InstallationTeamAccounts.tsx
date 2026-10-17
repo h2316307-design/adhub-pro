@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useState, useMemo } from 'react';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,9 +106,9 @@ export default function InstallationTeamAccounts() {
   const [expenseNotes, setExpenseNotes] = useState('');
 
   // Filters
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'paid'>('all');
-  const [showCharts, setShowCharts] = useState(false);
+  const [searchTerm, setSearchTerm] = usePersistedState('installationTeamAccounts.searchTerm', '');
+  const [filterStatus, setFilterStatus] = usePersistedState<'all' | 'pending' | 'paid'>('installationTeamAccounts.filterStatus', 'all');
+  const [showCharts, setShowCharts] = usePersistedState('installationTeamAccounts.showCharts', false);
 
   const overallStats = useMemo(() => {
     return summaries.reduce((acc, s) => ({

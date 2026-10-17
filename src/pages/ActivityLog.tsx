@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useState, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -177,10 +178,10 @@ export default function ActivityLog() {
   const [entries, setEntries] = useState<ActivityLogEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [totalCount, setTotalCount] = useState(0);
-  const [page, setPage] = useState(0);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [actionFilter, setActionFilter] = useState<string>('all');
-  const [entityFilter, setEntityFilter] = useState<string>('all');
+  const [page, setPage] = usePersistedState('activityLog.page', 0);
+  const [searchTerm, setSearchTerm] = usePersistedState('activityLog.searchTerm', '');
+  const [actionFilter, setActionFilter] = usePersistedState<string>('activityLog.actionFilter', 'all');
+  const [entityFilter, setEntityFilter] = usePersistedState<string>('activityLog.entityFilter', 'all');
 
   useEffect(() => {
     loadEntries();

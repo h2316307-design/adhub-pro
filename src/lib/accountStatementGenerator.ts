@@ -66,6 +66,8 @@ function generateSimpleStatementRows(
   currency: Currency
 ): string {
   let html = '';
+  // صف الرصيد السابق أول صف ولا يُرقَّم، فتبدأ الحركات من 1
+  const numOffset = entries[0]?.type === 'opening_balance' ? 0 : 1;
 
   entries.forEach((entry, index) => {
     const isEven = index % 2 === 0;
@@ -86,7 +88,7 @@ function generateSimpleStatementRows(
           <td style="text-align:right;"><strong>${entry.description}</strong></td>
           <td style="text-align:center;">${entry.displayCharge > 0 ? `<span class="num">${currency.symbol} ${fmtNum(entry.displayCharge)}</span>` : '—'}</td>
           <td style="text-align:center;">${entry.displayReduction > 0 ? `<span class="num">${currency.symbol} ${fmtNum(entry.displayReduction)}</span>` : '—'}</td>
-          <td style="text-align:center;font-weight:bold;"><span class="num">${currency.symbol} ${fmtNum(entry.runningBalance)}</span></td>
+          <td style="text-align:center;font-weight:bold;"><span class="num">${entry.runningBalance < 0 ? `${fmtNum(Math.abs(entry.runningBalance))} ${currency.symbol} (دائن)` : `${currency.symbol} ${fmtNum(entry.runningBalance)}`}</span></td>
         </tr>
       `;
       return;
@@ -97,7 +99,7 @@ function generateSimpleStatementRows(
 
     html += `
       <tr class="${rowClass}">
-        <td style="text-align:center;">${index + 1}</td>
+        <td style="text-align:center;">${index + numOffset}</td>
         <td style="text-align:center;font-size:9px;"><span class="num">${formatDate(entry.date)}</span></td>
         <td style="text-align:right;">
           <div style="font-weight:600;">${displayTitle}</div>
@@ -129,6 +131,8 @@ function generateDetailedStatementRows(
   currency: Currency
 ): string {
   let html = '';
+  // صف الرصيد السابق أول صف ولا يُرقَّم، فتبدأ الحركات من 1
+  const numOffset = entries[0]?.type === 'opening_balance' ? 0 : 1;
 
   entries.forEach((entry, index) => {
     const isEven = index % 2 === 0;
@@ -180,7 +184,7 @@ function generateDetailedStatementRows(
           <td style="text-align:right;"><strong>${entry.description}</strong></td>
           <td style="text-align:center;">${entry.displayCharge > 0 ? `<span class="num">${currency.symbol} ${fmtNum(entry.displayCharge)}</span>` : '—'}</td>
           <td style="text-align:center;">${entry.displayReduction > 0 ? `<span class="num">${currency.symbol} ${fmtNum(entry.displayReduction)}</span>` : '—'}</td>
-          <td style="text-align:center;font-weight:bold;"><span class="num">${currency.symbol} ${fmtNum(entry.runningBalance)}</span></td>
+          <td style="text-align:center;font-weight:bold;"><span class="num">${entry.runningBalance < 0 ? `${fmtNum(Math.abs(entry.runningBalance))} ${currency.symbol} (دائن)` : `${currency.symbol} ${fmtNum(entry.runningBalance)}`}</span></td>
         </tr>
       `;
       return;
@@ -191,7 +195,7 @@ function generateDetailedStatementRows(
 
     html += `
       <tr class="${rowClass}">
-        <td style="text-align:center;">${index + 1}</td>
+        <td style="text-align:center;">${index + numOffset}</td>
         <td style="text-align:center;font-size:9px;"><span class="num">${formatDate(entry.date)}</span></td>
         <td style="text-align:center;">
           <span style="font-size:8px;padding:2px 5px;border-radius:4px;border:1px solid ${typeBadgeColor}40;color:${typeBadgeColor};font-weight:600;white-space:nowrap;">
@@ -295,7 +299,10 @@ export async function generateAccountStatementHTML(data: AccountStatementData, p
   };
 
   const entries = ledgerResult.displayedEntries || [];
-  const totals = ledgerResult.totals;
+  // مجاميع الفترة المطبوعة فقط: الرصيد السابق + المستحقات - المدفوع - التسويات = الرصيد النهائي
+  const totals = ledgerResult.periodTotals ?? ledgerResult.totals;
+  const openingBalance = ledgerResult.openingBalance || 0;
+  const isPeriod = openingBalance !== 0 || !!data.endDate;
   const finalBalance = ledgerResult.endingBalance;
 
   const periodStart = data.startDate ? formatDate(data.startDate) : 'بداية التعامل';
@@ -345,16 +352,24 @@ export async function generateAccountStatementHTML(data: AccountStatementData, p
       </div>
       <div style="padding:12px 16px;background:#fff;">
         <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(170px, 1fr));gap:10px;margin-bottom:12px;">
-          
+          ${openingBalance !== 0 ? `
           <div style="background:#f8fafc;padding:9px 12px;border-radius:6px;border:1px solid #e2e8f0;">
-            <div style="font-size:10px;color:#64748b;font-weight:600;">إجمالي المستحقات</div>
+            <div style="font-size:10px;color:#64748b;font-weight:600;">رصيد سابق مرحّل</div>
+            <div style="font-size:15px;font-weight:bold;color:#475569;margin-top:3px;">
+              <span class="num">${data.currency.symbol} ${fmtNum(Math.abs(openingBalance))}${openingBalance < 0 ? ' (دائن)' : ''}</span>
+            </div>
+          </div>
+          ` : ''}
+
+          <div style="background:#f8fafc;padding:9px 12px;border-radius:6px;border:1px solid #e2e8f0;">
+            <div style="font-size:10px;color:#64748b;font-weight:600;">${isPeriod ? 'مستحقات الفترة' : 'إجمالي المستحقات'}</div>
             <div style="font-size:15px;font-weight:bold;color:#b91c1c;margin-top:3px;">
               <span class="num">${data.currency.symbol} ${fmtNum(totals.totalCustomerCharges)}</span>
             </div>
           </div>
 
           <div style="background:#f8fafc;padding:9px 12px;border-radius:6px;border:1px solid #e2e8f0;">
-            <div style="font-size:10px;color:#64748b;font-weight:600;">إجمالي المدفوع نقداً</div>
+            <div style="font-size:10px;color:#64748b;font-weight:600;">${isPeriod ? 'المدفوع نقداً خلال الفترة' : 'إجمالي المدفوع نقداً'}</div>
             <div style="font-size:15px;font-weight:bold;color:#15803d;margin-top:3px;">
               <span class="num">${data.currency.symbol} ${fmtNum(totals.cashPayments)}</span>
             </div>

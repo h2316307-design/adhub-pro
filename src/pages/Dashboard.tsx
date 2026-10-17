@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { ContractExpiryPanel } from "@/components/contracts/SendAlertsDialog";
 // @ts-nocheck
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -122,13 +123,13 @@ export default function Dashboard() {
   
   const [chartsOpen, setChartsOpen] = useState(false);
   const [alertsOpen, setAlertsOpen] = useState(false);
-  const [chartPeriod, setChartPeriod] = useState<'monthly' | 'quarterly' | 'semi-annual' | 'annual'>('monthly');
+  const [chartPeriod, setChartPeriod] = usePersistedState<'monthly' | 'quarterly' | 'semi-annual' | 'annual'>('dashboard.chartPeriod', 'monthly');
   
   const [selectedImage, setSelectedImage] = useState<{url: string; name: string} | null>(null);
 
   // Unified Search state for Tasks Tab
-  const [taskSearch, setTaskSearch] = useState('');
-  const [taskStatusFilter, setTaskStatusFilter] = useState('all');
+  const [taskSearch, setTaskSearch] = usePersistedState('dashboard.taskSearch', '');
+  const [taskStatusFilter, setTaskStatusFilter] = usePersistedState('dashboard.taskStatusFilter', 'all');
   
   // WhatsApp Dialog state expanded for Smart Templates
   const [whatsappDialog, setWhatsappDialog] = useState<{

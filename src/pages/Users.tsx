@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 /**
  * Users Management Page - Role-Based Permission System
  * 
@@ -62,11 +63,11 @@ export default function Users() {
   const [count, setCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [page, setPage] = useState<number>(1);
+  const [page, setPage] = usePersistedState<number>('users.page', 1);
   const PAGE_SIZE = 20;
   const [savingId, setSavingId] = useState<string | null>(null);
   const [pricingCategories, setPricingCategories] = useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('users.searchTerm', '');
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   

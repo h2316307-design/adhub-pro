@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { BillboardGridCard } from '@/components/BillboardGridCard';
+import { CardLayoutToggle, useCardLayout } from '@/components/shared/CardLayout';
 import { useAllActiveBillboardStatuses } from '@/hooks/useBillboardStatuses';
 import { BillboardFilters } from '@/components/BillboardFilters';
 import { BillboardActions } from '@/components/BillboardActions';
@@ -51,6 +52,7 @@ export default function Billboards() {
   const marketerCustomerId = user?.linkedCustomerId;
   const [currentPage, setCurrentPage] = usePersistedState<number>('billboards.currentPage', 1);
   const [gridColumns, setGridColumns] = usePersistedState<number>('billboards.gridColumns', 260);
+  const [cardLayout, setCardLayout] = useCardLayout('billboards');
   const [expandedGallery, setExpandedGallery] = useState(false);
   useEffect(() => {
     if (!expandedGallery) return;
@@ -1671,12 +1673,12 @@ export default function Billboards() {
             ))}
           </div>
           <PaginationControls />
-          <div className="hidden sm:block w-[100px]" />
+          <CardLayoutToggle value={cardLayout} onChange={setCardLayout} />
         </div>
       )}
 
       {/* Billboard Grid - Dynamic responsive */}
-      <div className="grid gap-2 sm:gap-3 items-stretch" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${gridColumns}px), 1fr))` }}>
+      <div className="grid gap-2 sm:gap-3 items-stretch" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${cardLayout === 'horizontal' ? Math.round(gridColumns * 2.8) : gridColumns}px), 1fr))`, ['--img-w' as any]: `${Math.round(gridColumns * 0.8 + 30)}px` }}>
         {pagedBillboards.map((billboard, idx) => {
           const keyVal = String((billboard as any).id ?? (billboard as any).ID ?? `${(billboard as any).Billboard_Name ?? 'bb'}-${startIndex + idx}`);
           const hasContract = hasActiveContract(billboard);
@@ -1714,6 +1716,7 @@ export default function Billboards() {
               }}
               hasActiveContractCheck={hasActiveContract}
               onOpenOverlayEditor={handleOpenOverlayForBillboard}
+              horizontal={cardLayout === 'horizontal'}
             />
             </div>
           );

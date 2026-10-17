@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useMemo, useState } from 'react';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -461,15 +462,15 @@ export default function Customers() {
 
   const [friendCompanies, setFriendCompanies] = useState<any[]>([]);
   
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = usePersistedState('customers.search', '');
   const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
   const [selectedCustomerName, setSelectedCustomerName] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
   
   // Filter and Sort states
-  const [sortBy, setSortBy] = useState('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [filterStatus, setFilterStatus] = useState('all');
+  const [sortBy, setSortBy] = usePersistedState('customers.sortBy', 'name');
+  const [sortOrder, setSortOrder] = usePersistedState<'asc' | 'desc'>('customers.sortOrder', 'asc');
+  const [filterStatus, setFilterStatus] = usePersistedState('customers.filterStatus', 'all');
   
   // print invoice dialog state
   const [printInvOpen, setPrintInvOpen] = useState(false);

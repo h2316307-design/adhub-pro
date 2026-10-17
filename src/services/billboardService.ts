@@ -245,10 +245,16 @@ export async function loadBillboards(): Promise<Billboard[]> {
       .select(BILLBOARD_LIST_COLUMNS)
       .order('ID', { ascending: true });
 
-    // Keep the existing list usable while the additive schema migration is deployed.
-    if (dbError && ['42703', 'PGRST204'].includes(dbError.code) && dbError.message.includes('print_size')) {
+    // Keep the existing list usable while additive schema migrations are deployed:
+    // drop each optional column the database does not have yet and retry.
+    const optionalColumns = ['print_size', 'face_dimensions'];
+    let columns = BILLBOARD_LIST_COLUMNS;
+    for (let i = 0; i < optionalColumns.length && dbError && ['42703', 'PGRST204'].includes(dbError.code); i++) {
+      const missing = optionalColumns.find((col) => dbError!.message.includes(col) && columns.includes(`  ${col},`));
+      if (!missing) break;
+      columns = columns.replace(`  ${missing},`, '');
       const fallback = await supabase.from('billboards')
-        .select(BILLBOARD_LIST_COLUMNS.replace('  print_size,', ''))
+        .select(columns)
         .order('ID', { ascending: true });
       rows = fallback.data;
       dbError = fallback.error;

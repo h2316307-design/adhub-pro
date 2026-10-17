@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -166,9 +167,9 @@ export default function CustomerAccount() {
     await refetch();
   };
 
-  const [tab, setTab] = useState<TabKey>('contracts');
-  const [invoiceTab, setInvoiceTab] = useState<'printed' | 'sales' | 'purchase'>('printed');
-  const [contractFilter, setContractFilter] = useState<'all' | 'unpaid' | 'active'>('all');
+  const [tab, setTab] = usePersistedState<TabKey>('customerAccount.tab', 'contracts');
+  const [invoiceTab, setInvoiceTab] = usePersistedState<'printed' | 'sales' | 'purchase'>('customerAccount.invoiceTab', 'printed');
+  const [contractFilter, setContractFilter] = usePersistedState<'all' | 'unpaid' | 'active'>('customerAccount.contractFilter', 'all');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [showCollection, setShowCollection] = useState(false);
   const [ledgerFrom, setLedgerFrom] = useState('');
@@ -667,7 +668,7 @@ export default function CustomerAccount() {
       )}
 
       {receipt && <ReceiptPrintDialog open onOpenChange={o => !o && setReceipt(null)} payment={receipt} customerName={c.name} />}
-      <AccountStatementDialog open={statementOpen} onOpenChange={setStatementOpen} customerId={customerId} customerName={c.name} />
+      <AccountStatementDialog open={statementOpen} onOpenChange={setStatementOpen} customerId={customerId} customerName={c.name} initialStartDate={ledgerFrom} initialEndDate={ledgerTo} />
       <SendAccountStatementDialog
         open={sendOpen}
         onOpenChange={setSendOpen}

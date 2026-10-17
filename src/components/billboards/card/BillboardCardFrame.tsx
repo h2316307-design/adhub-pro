@@ -86,8 +86,12 @@ export function BillboardCardFrame({
   tone = 'default', onClick, code, size, onSizeClick, level, faces, headerExtra, headerActions, banner,
   image, imageHeight = 'aspect-[16/10]', statusBadges, selectMark, imageOverlayBottom,
   title, landmark, municipality, district, city, onMunicipalityClick, onDistrictClick, onCityClick, billboardType, compact = false, managementLayout = false, onLevelClick,
-  children, priceLabel, price, priceTone = 'primary', footer, after, className, style, dimmed, horizontal = false,
+  children, priceLabel, price, priceTone = 'primary', footer, after, className, style, dimmed, horizontal = false, imageAspect, sideExtra,
 }: {
+  /** بالعرض مع نسبة ثابتة: محتوى إضافي تحت الصورة في العمود الجانبي (مثل التصميم) */
+  sideExtra?: ReactNode;
+  /** نسبة ثابتة للصورة في الوضعين (مثل aspect-[8/3]) */
+  imageAspect?: string;
   /** بطاقة بالعرض: الصورة في جانب والتفاصيل بجانبها (عرض الصورة من --img-w) */
   horizontal?: boolean;
   tone?: CardTone;
@@ -131,19 +135,18 @@ export function BillboardCardFrame({
   const displayTitle = managementLayout ? code : title;
   const displayLandmark = managementLayout ? (landmark || (title !== code ? title : null)) : landmark;
   const imageBox = (
-    <div className={cn('relative shrink-0 overflow-hidden bg-muted/40', horizontal ? 'min-h-[calc(var(--img-w,260px)*0.75)] w-[var(--img-w,260px)] self-stretch border-l border-border/60' : cn('w-full border-y border-border/60', imageHeight))}>
+    <div className={cn('relative shrink-0 overflow-hidden bg-muted/40', horizontal
+      ? (imageAspect ? cn('w-full flex-1 rounded-xl border border-border/60', imageAspect) : 'min-h-[calc(var(--img-w,260px)*0.75)] w-[var(--img-w,260px)] self-stretch border-l border-border/60')
+      : cn('w-full border-y border-border/60', imageAspect || imageHeight))}>
       {horizontal ? <div className="absolute inset-0">{image}</div> : image}
       {statusBadges && <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-[80%] flex-col items-end gap-1">{statusBadges}</div>}
       {selectMark !== null && selectMark !== undefined && <span className={cn('absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border shadow-sm backdrop-blur-sm', selectMark ? 'border-primary bg-primary text-primary-foreground' : 'border-white/30 bg-black/50 text-white/60')}><Check className="h-4 w-4" /></span>}
       {imageOverlayBottom}
     </div>
   );
-  const Shell = horizontal ? 'div' : Fragment;
-  return (
-    <article dir="rtl" onClick={onClick} style={style}
-      className={cn('group relative flex min-w-0 overflow-hidden rounded-2xl border bg-card text-right shadow-sm motion-safe:transition-all motion-safe:duration-200 hover:shadow-md', horizontal ? 'flex-row' : 'flex-col', TONE[tone], onClick && 'cursor-pointer', dimmed && 'opacity-90', className)}>
-      {horizontal && imageBox}
-      <Shell {...(horizontal ? { className: 'flex min-w-0 flex-1 flex-col' } : {})}>
+  /** بالعرض مع نسبة ثابتة: الرأس والعنوان والصورة والتصميم في العمود الجانبي، والتفاصيل في الآخر */
+  const sided = horizontal && !!imageAspect;
+  const headerEl = (
       <header className="billboard-card-header flex min-h-12 items-center justify-between gap-2 px-3.5 py-2">
         {managementLayout ? (
           <div className="billboard-management-specs flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
@@ -209,6 +212,27 @@ export function BillboardCardFrame({
         )}
         {headerActions && <div className="flex shrink-0 items-center gap-1">{headerActions}</div>}
       </header>
+  );
+  const titleBlock = (
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h4 className="min-w-0 flex-1 break-words text-sm font-semibold leading-relaxed text-foreground">{displayTitle}</h4></div>{!managementLayout && billboardType && <span className="max-w-[40%] truncate rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground" title={billboardType}>{billboardType}</span>}</div>
+          {displayLandmark && displayLandmark !== displayTitle && <p className="flex items-start gap-1.5 text-[15px] font-bold leading-relaxed text-foreground"><MapPin className="mt-1 h-4 w-4 shrink-0 text-primary" /><span className="break-words">{displayLandmark}</span></p>}
+          {(municipality || district || city) && <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {municipality && <Chip onClick={onMunicipalityClick} title="البلدية">{municipality}</Chip>}
+            {district && district !== municipality && <Chip onClick={onDistrictClick} title="المنطقة">{district}</Chip>}
+            {city && city !== district && city !== municipality && <Chip onClick={onCityClick} title="المدينة">{city}</Chip>}
+          </div>}
+        </div>
+  );
+  const Shell = horizontal ? 'div' : Fragment;
+  return (
+    <article dir="rtl" onClick={onClick} style={style}
+      className={cn('group relative flex min-w-0 overflow-hidden rounded-2xl border bg-card text-right shadow-sm motion-safe:transition-all motion-safe:duration-200 hover:shadow-md', horizontal ? 'flex-row' : 'flex-col', TONE[tone], onClick && 'cursor-pointer', dimmed && 'opacity-90', className)}>
+      {horizontal && (imageAspect
+        ? <div className="flex w-1/2 shrink-0 flex-col gap-2 border-l border-border/60 pb-2.5">{headerEl}<div className="flex flex-1 flex-col gap-2 px-2.5">{titleBlock}{imageBox}{sideExtra}</div></div>
+        : imageBox)}
+      <Shell {...(horizontal ? { className: 'flex min-w-0 flex-1 flex-col' } : {})}>
+      {!sided && headerEl}
       {banner}
       {!horizontal && imageBox}
       {!managementLayout && (size || level || faces || headerExtra) && <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-2 text-xs">
@@ -217,16 +241,8 @@ export function BillboardCardFrame({
         {faces && <span className="text-muted-foreground">{faces}</span>}
         {headerExtra}
       </div>}
-      <div className={cn('billboard-card-body flex min-w-0 flex-1 flex-col', horizontal ? 'gap-2 px-3 pb-3 pt-1' : 'p-4', !horizontal && (compact ? 'gap-3' : 'gap-4'))}>
-        <div className="min-w-0 space-y-2">
-          <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h4 className="min-w-0 flex-1 break-words text-sm font-semibold leading-relaxed text-foreground">{displayTitle}</h4></div>{!managementLayout && billboardType && <span className="max-w-[40%] truncate rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground" title={billboardType}>{billboardType}</span>}</div>
-          {displayLandmark && displayLandmark !== displayTitle && <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="break-words">{displayLandmark}</span></p>}
-          {(municipality || district || city) && <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-            {municipality && <Chip onClick={onMunicipalityClick} title="البلدية">{municipality}</Chip>}
-            {district && district !== municipality && <Chip onClick={onDistrictClick} title="المنطقة">{district}</Chip>}
-            {city && city !== district && city !== municipality && <Chip onClick={onCityClick} title="المدينة">{city}</Chip>}
-          </div>}
-        </div>
+      <div className={cn('billboard-card-body flex min-w-0 flex-1 flex-col', horizontal ? (sided ? 'gap-2.5 p-3' : 'gap-2 px-3 pb-3 pt-1') : 'p-4', !horizontal && (compact ? 'gap-3' : 'gap-4'))}>
+        {!sided && titleBlock}
         {children}
       </div>
       {price !== undefined && price !== null && <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-3"><span className="text-xs text-muted-foreground">{priceLabel || 'السعر'}</span><span className={cn('font-manrope text-base font-bold tabular-nums', priceTone === 'good' ? 'text-emerald-500' : 'text-primary')}>{price}</span></footer>}

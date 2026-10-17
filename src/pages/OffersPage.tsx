@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { Button } from '@/components/ui/button';
@@ -6,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
+import { syncContractBillboardsReconciliation } from '@/services/contractService';
 import type { Billboard } from '@/types';
 import { getBillboardDimensions } from '@/lib/billboardDimensions';
 import { useContractPricing } from '@/hooks/useContractPricing';
@@ -21,6 +23,7 @@ import { LevelDiscountsCard } from '@/components/contracts/edit/LevelDiscountsCa
 import { ContractDatesForm } from '@/components/contracts/edit/ContractDatesForm';
 import { CostSummaryCard } from '@/components/contracts/edit/CostSummaryCard';
 import { OfferCard } from '@/components/offers/OfferCard';
+import { CardLayoutToggle, useCardLayout } from '@/components/shared/CardLayout';
 import { 
   DollarSign, List, Map as MapIcon, Printer, FileText, Calendar, Eye, Edit, Trash2, 
   Search, Filter, Plus, Copy, RefreshCw, Wrench, Settings, ArrowRight, CheckCircle2, 
@@ -98,9 +101,9 @@ export default function OffersPage() {
   // List state
   const [offers, setOffers] = useState<Offer[]>([]);
   const [loadingOffers, setLoadingOffers] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [listViewMode, setListViewMode] = useState<'table' | 'cards'>('cards');
+  const [searchQuery, setSearchQuery] = usePersistedState('offersPage.searchQuery', '');
+  const [statusFilter, setStatusFilter] = usePersistedState<string>('offersPage.statusFilter', 'all');
+  const [listViewMode, setListViewMode] = usePersistedState<'table' | 'cards'>('offersPage.listViewMode', 'cards');
   
   // Create state
   const [billboards, setBillboards] = useState<Billboard[]>([]);
@@ -187,10 +190,11 @@ export default function OffersPage() {
 
   // Filters for billboards
   const [bbSearchQuery, setBbSearchQuery] = useState('');
-  const [cityFilter, setCityFilter] = useState<string>('all');
-  const [sizeFilter, setSizeFilter] = useState<string>('all');
+  const [cityFilter, setCityFilter] = usePersistedState<string>('offersPage.cityFilter', 'all');
+  const [sizeFilter, setSizeFilter] = usePersistedState<string>('offersPage.sizeFilter', 'all');
   const [bbAvailableOnly, setBbAvailableOnly] = useState<boolean>(false);
-  const [viewMode, setViewMode] = useState<'list' | 'map'>('list');
+  const [viewMode, setViewMode] = usePersistedState<'list' | 'map'>('offersPage.viewMode', 'list');
+  const [cardLayout, setCardLayout] = useCardLayout('offers');
 
   // Create from contract dialog
   const [showContractDialog, setShowContractDialog] = useState(false);
@@ -1311,6 +1315,29 @@ export default function OffersPage() {
     }
   };
 
+  // إعدادات الحساب المشتركة بين العرض والعقد (تُنقل كما هي عند التحويل)
+  const pickOfferCalcSettings = (offer: Offer) => {
+    const o: any = offer;
+    const out: Record<string, any> = {};
+    const copy = (key: string, value: any) => { if (value !== undefined) out[key] = value; };
+    copy('include_installation_in_price', o.include_installation_in_price);
+    copy('include_print_in_billboard_price', o.include_print_in_billboard_price);
+    copy('use_30_day_month', o.use_30_day_month);
+    copy('duration_months', o.duration_months);
+    copy('level_discounts', o.level_discounts);
+    copy('pricing_snapshot', o.pricing_snapshot);
+    copy('single_face_billboards', o.single_face_billboards);
+    copy('installment_count', o.installment_count);
+    copy('installment_interval', o.installment_interval);
+    copy('installment_auto_calculate', o.installment_auto_calculate);
+    copy('installment_distribution_type', o.installment_distribution_type);
+    copy('installment_first_at_signing', o.installment_first_at_signing);
+    copy('installment_first_payment_type', o.installment_first_payment_type);
+    copy('installment_first_payment_amount', o.installment_first_payment_amount);
+    if (o.duration_label) out.Duration = o.duration_label;
+    return out;
+  };
+
   // Check billboard availability for conversion
   const checkBillboardsAvailability = async (offer: Offer) => {
     setLoadingBillboardStatus(true);
@@ -1405,7 +1432,16 @@ export default function OffersPage() {
         .trim();
       // Default to 'إعلان' if empty after cleanup
       if (!cleanAdType) cleanAdType = 'إعلان';
-      
+
+      // بيانات اللوحات المحفوظة في العقد (من العرض، مقصورة على اللوحات المختارة)
+      let offerBillboardsData: any[] = [];
+      try {
+        const raw: any = convertingOffer.billboards_data;
+        offerBillboardsData = Array.isArray(raw) ? raw : JSON.parse(raw || '[]');
+      } catch { offerBillboardsData = []; }
+      const selectedIdSet = new Set(billboardIds);
+      const contractBillboardsData = offerBillboardsData.filter((b: any) => selectedIdSet.has(String(b.id ?? b.ID)));
+
       // Create contract in database
       const { data: newContract, error } = await supabase
         .from('Contract')
@@ -1420,6 +1456,7 @@ export default function OffersPage() {
           Total: convertingOffer.total,
           billboard_ids: billboardIds.join(','),
           billboards_count: billboardIds.length,
+          billboards_data: JSON.stringify(contractBillboardsData),
           customer_category: convertingOffer.pricing_category,
           contract_currency: convertingOffer.currency || 'LYD',
           exchange_rate: String(convertingOffer.exchange_rate || 1),
@@ -1435,17 +1472,35 @@ export default function OffersPage() {
           billboard_prices: typeof convertingOffer.billboard_prices === 'string'
             ? convertingOffer.billboard_prices
             : JSON.stringify(convertingOffer.billboard_prices || {}),
+          // ✅ نفس إعدادات الحساب في العرض حتى يطابق إجمالي العقد إجمالي العرض
+          ...pickOfferCalcSettings(convertingOffer),
           payment_status: 'unpaid',
         })
         .select('Contract_Number')
         .single();
       
       if (error) throw error;
-      
+
+      // ربط اللوحات المتاحة بالعقد في جدول اللوحات (اللوحات المؤجرة لعقد آخر لا تُسحب منه)
+      if (newContract?.Contract_Number) {
+        const linkableIds = offerBillboardsStatus.available.map((b: any) => String(b.ID));
+        try {
+          await syncContractBillboardsReconciliation(newContract.Contract_Number, [], linkableIds, {
+            startDate: convertingOffer.start_date,
+            endDate: convertingOffer.end_date,
+            customerName: convertingOffer.customer_name,
+            adType: cleanAdType,
+          });
+        } catch (linkErr: any) {
+          console.error('Linking billboards to converted contract failed:', linkErr);
+          toast.error(linkErr?.message || 'تم إنشاء العقد لكن فشل ربط اللوحات');
+        }
+      }
+
       // Update offer status to converted
       await supabase
         .from('offers')
-        .update({ status: 'converted' })
+        .update({ status: 'converted', converted_contract_number: newContract?.Contract_Number ?? null } as any)
         .eq('id', convertingOffer.id);
       
       setShowConvertDialog(false);
@@ -1824,6 +1879,7 @@ export default function OffersPage() {
                       <SelectItem value="converted">تم التحويل</SelectItem>
                     </SelectContent>
                   </Select>
+                  {listViewMode === 'cards' && <CardLayoutToggle value={cardLayout} onChange={setCardLayout} />}
                   <div className="flex gap-1 border rounded-lg p-1 bg-background/80">
                     <Button
                       variant={listViewMode === 'cards' ? 'default' : 'ghost'}
@@ -1870,13 +1926,14 @@ export default function OffersPage() {
                 </CardContent>
               </Card>
             ) : listViewMode === 'cards' ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+              <div className={cardLayout === 'horizontal' ? 'grid grid-cols-1 items-start gap-4 min-[1800px]:grid-cols-2' : 'grid grid-cols-1 items-start gap-5 lg:grid-cols-2 2xl:grid-cols-3'}>
                 {filteredOffers.map((offer) => {
                   const customerInfo = getCustomerInfo(offer.customer_id);
                   const currencySymbol = CURRENCIES.find(c => c.code === offer.currency)?.symbol || 'د.ل';
                   
                   return (
                     <OfferCard
+                      layout={cardLayout}
                       key={offer.id}
                       offer={offer}
                       customerInfo={customerInfo}

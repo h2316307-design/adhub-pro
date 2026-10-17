@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -31,7 +32,7 @@ export default function Reports() {
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [viewReport, setViewReport] = useState<Report | null>(null);
   const [printReport, setPrintReport] = useState<Report | null>(null);
-  const [activeTab, setActiveTab] = useState<'daily' | 'weekly' | 'monthly'>('daily');
+  const [activeTab, setActiveTab] = usePersistedState<'daily' | 'weekly' | 'monthly'>('reports.activeTab', 'daily');
 
   const { data: allReports = [], isLoading, refetch } = useQuery({
     queryKey: ['reports'],

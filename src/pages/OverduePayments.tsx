@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { OverdueWorkspace } from '@/components/billing/OverdueWorkspace';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -103,10 +104,10 @@ export default function OverduePayments() {
   };
 
   // Search & Filters State
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('overduePayments.searchTerm', '');
   const [minDays, setMinDays] = useState<number>(0);
   const [minAmount, setMinAmount] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'oldest' | 'newest'>('oldest');
+  const [sortBy, setSortBy] = usePersistedState<'oldest' | 'newest'>('overduePayments.sortBy', 'oldest');
 
   const filteredOverdues = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();

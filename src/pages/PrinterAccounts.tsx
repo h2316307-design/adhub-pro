@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useAuth } from '@/contexts/AuthContext';
 import { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -105,14 +106,14 @@ export default function PrinterAccounts() {
   const canEditSection = canEditAuth('printer_accounts');
   const queryClient = useQueryClient();
   const { confirm: systemConfirm } = useSystemDialog();
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('printerAccounts.searchTerm', '');
   const [selectedPrinterId, setSelectedPrinterId] = useState<string | null>(null);
   const [expandedContracts, setExpandedContracts] = useState<Set<number>>(new Set());
   const [unifiedInvoiceOpen, setUnifiedInvoiceOpen] = useState(false);
   const [unifiedInvoiceTask, setUnifiedInvoiceTask] = useState<CompositeTaskWithDetails | null>(null);
   const [unifiedInvoiceType, setUnifiedInvoiceType] = useState<InvoiceType>('print_vendor');
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState('tasks');
+  const [activeTab, setActiveTab] = usePersistedState('printerAccounts.activeTab', 'tasks');
   const [pendingQueue, setPendingQueue] = useState<{ task: CompositeTaskWithDetails; type: InvoiceType }[]>([]);
   const [pendingQueueIndex, setPendingQueueIndex] = useState(0);
   const [fullStatementDialogOpen, setFullStatementDialogOpen] = useState(false);

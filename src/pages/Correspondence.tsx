@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -137,7 +138,7 @@ export default function Correspondence() {
   const [editingCompany, setEditingCompany] = useState<Partial<LetterheadCompany> | null>(null);
   const [q, setQ] = useState('');
   const [saving, setSaving] = useState(false);
-  const [mode, setMode] = useState<LetterPrintMode>('full');
+  const [mode, setMode] = usePersistedState<LetterPrintMode>('correspondence.mode', 'full');
   const [fit, setFit] = useState<{ scale: number; overflow: boolean }>({ scale: 1, overflow: false });
 
   useEffect(() => { if (!companyId && companies.length) setCompanyId((companies.find(c => c.is_default) || companies[0]).id); }, [companies, companyId]);

@@ -14,6 +14,7 @@ import { REMOVAL_STATUS } from '@/components/removal-ops/RemovalOperationCard';
 import { completeRemovalItems, undoRemovalItem } from '@/services/removalActions';
 import type { RemovalOperation } from '@/services/removalOperations';
 import type { RemovalTaskItem } from '@/hooks/useRemovalData';
+import { CardLayoutToggle, useCardLayout } from '@/components/shared/CardLayout';
 
 type Filter = 'all' | 'pending' | 'done';
 
@@ -26,6 +27,8 @@ export function RemovalBoardsWorkspace({ op, billboardById, allItems, onClose, o
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [completeIds, setCompleteIds] = useState<string[] | null>(null);
   const { confirm } = useSystemDialog();
+  const [layout, setLayout] = useCardLayout('removal-boards');
+  const H = layout === 'horizontal';
 
   const pendingIds = useMemo(() => op.items.filter(i => i.status !== 'completed').map(i => i.id), [op]);
   const toggle = (id: string) => setSelected(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
@@ -74,6 +77,7 @@ export function RemovalBoardsWorkspace({ op, billboardById, allItems, onClose, o
                 {selected.size === pendingIds.length ? 'إلغاء التحديد' : `تحديد كل المعلقة (${pendingIds.length})`}
               </Button>
             )}
+            <CardLayoutToggle value={layout} onChange={setLayout} className="ms-auto" />
           </div>
         </header>
 
@@ -84,7 +88,7 @@ export function RemovalBoardsWorkspace({ op, billboardById, allItems, onClose, o
             return (
               <section key={part.taskId} className="space-y-2">
                 <h3 className="flex items-center gap-2 text-sm font-bold"><Users className="h-4 w-4 text-muted-foreground" />{part.teamName}<span className="font-normal tabular-nums text-muted-foreground">{part.done}/{part.items.length}</span></h3>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                <div className={cn('grid gap-3', H ? 'lg:grid-cols-2' : 'sm:grid-cols-2 lg:grid-cols-3')}>
                   {list.map(item => {
                     const bb = billboardById[item.billboard_id] || {};
                     const done = item.status === 'completed';
@@ -98,13 +102,13 @@ export function RemovalBoardsWorkspace({ op, billboardById, allItems, onClose, o
                     ].filter(g => !!g.src) as { src: string; label: string }[];
                     const sel = selected.has(item.id);
                     return (
-                      <article key={item.id} className={cn('overflow-hidden rounded-xl border bg-card', sel && 'ring-2 ring-primary', done && 'opacity-90')}>
-                        <div className="relative h-36">
+                      <article key={item.id} className={cn('overflow-hidden rounded-xl border bg-card', H && 'flex flex-row', sel && 'ring-2 ring-primary', done && 'opacity-90')}>
+                        <div className={cn('relative', H ? 'min-h-40 w-[42%] max-w-[240px] shrink-0 self-stretch' : 'h-36')}>
                           <ZoomImage src={gallery[0]?.src} alt={bb.Billboard_Name || 'لوحة'} title={bb.Billboard_Name} className="h-full w-full" gallery={gallery} />
                           {!done && <Checkbox className="absolute right-2 top-2 h-5 w-5 border-2 bg-background" aria-label={`تحديد ${bb.Billboard_Name || item.billboard_id}`} checked={sel} onCheckedChange={() => toggle(item.id)} />}
                           <span className={cn('absolute left-2 top-2 rounded-md px-2 py-0.5 text-xs font-semibold shadow', done ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white')}>{done ? `أُزيلت ${fmtDate(item.removal_date)}` : 'معلقة'}</span>
                         </div>
-                        <div className="space-y-1.5 p-3">
+                        <div className={cn('space-y-1.5 p-3', H && 'flex min-w-0 flex-1 flex-col')}>
                           <div className="flex items-center justify-between gap-2">
                             <b className="truncate">{bb.Billboard_Name || `لوحة ${item.billboard_id}`}</b>
                             {bb.Size && <span className="rounded bg-muted px-1.5 py-0.5 text-xs font-semibold tabular-nums">{bb.Size}</span>}
@@ -112,7 +116,7 @@ export function RemovalBoardsWorkspace({ op, billboardById, allItems, onClose, o
                           <div className="text-xs text-muted-foreground">{formatFacesCountArabic(Number(bb.Faces_Count) || 1)}</div>
                           <div className="flex items-start gap-1 text-xs text-muted-foreground"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span>{[bb.Municipality || bb.City, bb.District, bb.Nearest_Landmark].filter(Boolean).join(' · ') || '—'}</span></div>
                           {item.notes && <div className="rounded bg-muted/50 px-2 py-1 text-xs">{item.notes}</div>}
-                          <div className="pt-1">
+                          <div className={cn('pt-1', H && 'mt-auto')}>
                             {done
                               ? <Button size="sm" variant="ghost" className="h-8 w-full" onClick={() => undo(item)}><Undo2 className="h-4 w-4" />تراجع عن الإزالة</Button>
                               : <Button size="sm" className="h-8 w-full" onClick={() => setCompleteIds([item.id])}><CheckCircle2 className="h-4 w-4" />تمت الإزالة</Button>}

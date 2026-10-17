@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -42,7 +43,7 @@ interface KpiData {
 const KpiDashboard = () => {
   const [kpiData, setKpiData] = useState<KpiData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState('6');
+  const [period, setPeriod] = usePersistedState('kpiDashboard.period', '6');
 
   useEffect(() => {
     fetchKpiData();

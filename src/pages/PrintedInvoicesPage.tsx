@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -35,7 +36,7 @@ export default function PrintedInvoicesPage() {
   const navigate = useNavigate();
   const [invoices, setInvoices] = useState<PrintedInvoice[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = usePersistedState('printedInvoicesPage.searchTerm', '');
   const [distributeDialogOpen, setDistributeDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<PrintedInvoice | null>(null);
   const [printDialogOpen, setPrintDialogOpen] = useState(false);

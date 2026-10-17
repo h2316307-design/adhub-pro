@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useEffect } from 'react';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,8 +28,8 @@ interface DelayedBillboard {
 export default function DelayedBillboards() {
   const [delayedBillboards, setDelayedBillboards] = useState<DelayedBillboard[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterDays, setFilterDays] = useState<string>('all');
+  const [searchTerm, setSearchTerm] = usePersistedState('delayedBillboards.searchTerm', '');
+  const [filterDays, setFilterDays] = usePersistedState<string>('delayedBillboards.filterDays', 'all');
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
   const [selectedBillboard, setSelectedBillboard] = useState<any>(null);
   const navigate = useNavigate();

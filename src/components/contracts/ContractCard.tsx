@@ -50,6 +50,8 @@ interface ContractCardProps {
   onRefresh: () => void;
   isSelected?: boolean;
   onToggleSelect?: (contractId: string | number) => void;
+  /** horizontal: الصورة بجانب التفاصيل */
+  layout?: 'horizontal' | 'vertical';
 }
 
 const ContractCardComponent: React.FC<ContractCardProps> = ({
@@ -63,8 +65,10 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
   onExport,
   onRefresh,
   isSelected = false,
-  onToggleSelect
+  onToggleSelect,
+  layout = 'vertical'
 }) => {
+  const H = layout === 'horizontal';
   const navigate = useNavigate();
   const cardRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -1045,11 +1049,60 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
   const bgMutedClass = 'bg-background/55 border-border/60';
   const borderClass = 'border-border/50';
 
+  /** الرقم والزبون: فوق الصورة في البطاقة العرضية، وفي التفاصيل في الطولية */
+  const identity = (
+    <>
+        <div className={cn("flex items-baseline justify-between gap-3")}>
+          <span dir="ltr" className="font-manrope text-2xl font-extrabold leading-none tabular-nums text-foreground">#{contractNumber}</span>
+          {yearlyCode && (
+            <span className="text-xs text-muted-foreground">
+              الترقيم السنوي <span dir="ltr" className="font-manrope font-bold tabular-nums text-primary">{yearlyCode}</span>
+            </span>
+          )}
+        </div>
+
+        {/* صف معلومات العميل والشركة */}
+        <div className={cn("space-y-1")}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-1.5 min-w-0">
+              <div className="p-1.5 rounded-lg shrink-0 bg-primary/10 text-primary">
+                <User className="h-4 w-4" />
+              </div>
+              <h3 className={cn("font-bold text-base truncate", textClass)}>{contract.customer_name}</h3>
+            </div>
+            
+            {(contract.Phone || customerData?.phone) && (
+              <a 
+                href={`tel:${contract.Phone || customerData?.phone}`} 
+                onClick={(e) => e.stopPropagation()} 
+                className={cn(
+                  "text-xs hover:text-primary transition-colors font-manrope flex items-center gap-1 px-2 py-0.5 rounded-md shrink-0",
+                  "text-muted-foreground bg-muted/50 hover:bg-primary/10 cursor-pointer transition-all duration-200"
+                )}
+              >
+                <Phone className="h-3 w-3" />
+                <span>{contract.Phone || customerData?.phone}</span>
+              </a>
+            )}
+          </div>
+
+          {(contract.Company || customerData?.company) && (
+            <div className="flex items-center gap-1.5 text-xs mr-7">
+              <Building className="h-3.5 w-3.5 shrink-0 text-primary/80" />
+              <span className={cn("font-semibold truncate", textMutedClass)}>{contract.Company || customerData?.company}</span>
+            </div>
+          )}
+        </div>
+        
+    </>
+  );
+
   return (
     <Card
       ref={cardRef}
       className={cn(
         "group relative overflow-hidden rounded-2xl border bg-card text-card-foreground transition-[border-color,box-shadow,transform] duration-200 motion-safe:hover:-translate-y-0.5 flex flex-col hover:shadow-xl hover:shadow-primary/5",
+        H && "md:flex-row",
         getCardStyle(),
         isSelected && "ring-2 ring-primary ring-offset-2",
         showInAvailable && "ring-2 ring-emerald-500 ring-offset-1"
@@ -1081,8 +1134,9 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
       )}
       
       {/* منطقة الصورة - بتنسيق فاخر بداخل بطاقة بحدود ناعمة */}
-      <div className="p-3 pb-0 flex-shrink-0">
-        <div className={cn("relative w-full rounded-xl overflow-hidden bg-muted/20 border border-border/50 group/design", designImage ? "h-48 sm:h-52" : "h-14")}>
+      <div className={cn("p-3 pb-0 flex-shrink-0", H && "md:w-[52%] md:pb-3 md:pe-0")}>
+        {H && <div className={cn("mb-3 space-y-2 px-1", onToggleSelect && "ps-9")}>{identity}</div>}
+        <div className={cn("relative w-full rounded-xl overflow-hidden bg-muted/20 border border-border/50 group/design", designImage || H ? "aspect-[8/3]" : "h-14")}>
           {designImage ? (
             <div 
               className="relative h-full w-full cursor-pointer"
@@ -1233,51 +1287,10 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
       )}
 
       {/* محتوى الكارد */}
-      <CardContent className="p-4 flex-grow flex flex-col justify-between space-y-3">
-        <div className="flex items-baseline justify-between gap-3">
-          <span dir="ltr" className="font-manrope text-2xl font-extrabold leading-none tabular-nums text-foreground">#{contractNumber}</span>
-          {yearlyCode && (
-            <span className="text-xs text-muted-foreground">
-              الترقيم السنوي <span dir="ltr" className="font-manrope font-bold tabular-nums text-primary">{yearlyCode}</span>
-            </span>
-          )}
-        </div>
-
-        {/* صف معلومات العميل والشركة */}
-        <div className="space-y-1">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <div className="p-1.5 rounded-lg shrink-0 bg-primary/10 text-primary">
-                <User className="h-4 w-4" />
-              </div>
-              <h3 className={cn("font-bold text-base truncate", textClass)}>{contract.customer_name}</h3>
-            </div>
-            
-            {(contract.Phone || customerData?.phone) && (
-              <a 
-                href={`tel:${contract.Phone || customerData?.phone}`} 
-                onClick={(e) => e.stopPropagation()} 
-                className={cn(
-                  "text-xs hover:text-primary transition-colors font-manrope flex items-center gap-1 px-2 py-0.5 rounded-md shrink-0",
-                  "text-muted-foreground bg-muted/50 hover:bg-primary/10 cursor-pointer transition-all duration-200"
-                )}
-              >
-                <Phone className="h-3 w-3" />
-                <span>{contract.Phone || customerData?.phone}</span>
-              </a>
-            )}
-          </div>
-
-          {(contract.Company || customerData?.company) && (
-            <div className="flex items-center gap-1.5 text-xs mr-7">
-              <Building className="h-3.5 w-3.5 shrink-0 text-primary/80" />
-              <span className={cn("font-semibold truncate", textMutedClass)}>{contract.Company || customerData?.company}</span>
-            </div>
-          )}
-        </div>
-        
+      <CardContent className={cn("p-4 flex-grow flex flex-col justify-between space-y-3", H && "min-w-0")}>
+        {!H && identity}
         {/* نوع الإعلان وإجمالي المساحة بالأمتار */}
-        <div className="flex items-center justify-between gap-2.5 border-t border-border/50 pt-3">
+        <div className={cn("flex items-center justify-between gap-2.5 border-t border-border/50 pt-3")}>
           <div className="flex items-center gap-2 min-w-0 flex-1">
             <PaintBucket className="h-4 w-4 shrink-0 text-primary" />
             {isEditingAdType ? (
@@ -1351,7 +1364,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
         </div>
         
         {/* التواريخ */}
-        <div className="flex items-center justify-between gap-2 text-xs">
+        <div className={cn("flex items-center justify-between gap-2 text-xs")}>
           <span className="inline-flex items-center gap-1.5 text-muted-foreground">
             <Calendar className="h-3.5 w-3.5 shrink-0" />
             من <span className="font-manrope font-semibold tabular-nums text-foreground">{contract.start_date ? new Date(contract.start_date).toLocaleDateString('ar') : '—'}</span>
@@ -1419,7 +1432,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
 
         {/* تنبيه اقتراب موعد التركيب */}
         {detailsOpen && approachingDeadlineCount > 0 && (
-          <div className="p-2.5 rounded-lg border border-amber-200 text-amber-800 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-amber-300 flex items-center gap-2 text-[10px]">
+          <div className={cn("p-2.5 rounded-lg border border-amber-200 text-amber-800 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900/40 dark:text-amber-300 flex items-center gap-2 text-[10px]")}>
             <Clock className="h-3.5 w-3.5 shrink-0" />
             <span className="font-semibold">
               {approachingDeadlineCount} لوحة تقترب من انتهاء مهلة التركيب (أقل من 3 أيام)
@@ -1429,16 +1442,16 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
 
         {/* تنبيه تأخير التركيب */}
         {detailsOpen && isVisible && (
-          <ContractDelayAlert
+          <div><ContractDelayAlert
             key={`delay-${(contract as any).Contract_Number}-${(contract as any)['Contract Date']}-${(contract as any)['End Date']}-${delayRefreshKey}`}
             contractNumber={Number((contract as any).Contract_Number ?? (contract as any)['Contract Number'] ?? contract.id)}
             dominantHsl={null}
             refreshKey={`${(contract as any)['Contract Date']}-${(contract as any)['End Date']}-${delayRefreshKey}`}
-          />
+          /></div>
         )}
         
         {/* شريط السداد والمالية */}
-        <div className="p-3.5 rounded-xl bg-muted/30 space-y-3">
+        <div className={cn("p-3.5 rounded-xl bg-muted/30 space-y-3")}>
           <div className="flex justify-between items-center">
             <span className="text-xs font-semibold text-muted-foreground">السداد <span className="font-manrope tabular-nums text-foreground">{paymentPercentage.toFixed(0)}%</span></span>
             <Badge variant={progress.variant} className="text-[9px] font-bold px-2 py-0.5">
@@ -1509,7 +1522,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
           variant="ghost"
           onClick={() => setDetailsOpen((open) => !open)}
           aria-expanded={detailsOpen}
-          className="h-9 w-full justify-between rounded-xl border border-border/50 bg-muted/20 px-3 text-xs font-bold text-muted-foreground hover:bg-muted/50 hover:text-foreground cursor-pointer transition-all duration-200"
+          className={cn("h-9 w-full justify-between rounded-xl border border-border/50 bg-muted/20 px-3 text-xs font-bold text-muted-foreground hover:bg-muted/50 hover:text-foreground cursor-pointer transition-all duration-200")}
         >
           <span>{detailsOpen ? 'إخفاء التفاصيل' : 'تفاصيل العقد والعمليات'}</span>
           <ChevronDown className={cn('h-4 w-4 transition-transform duration-200', detailsOpen && 'rotate-180')} />
@@ -1517,7 +1530,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
         
         {/* التكاليف والتفاصيل الفنية */}
         {detailsOpen && (
-        <div className="p-3 rounded-xl border border-border/50 bg-muted/15 space-y-1.5 text-[11px] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200">
+        <div className={cn("p-3 rounded-xl border border-border/50 bg-muted/15 space-y-1.5 text-[11px] motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-top-1 motion-safe:duration-200")}>
           <div className="flex justify-between items-center">
             <span className={textMutedClass}>قيمة الإيجار:</span>
             <span className={cn("font-bold font-manrope", textClass)}>{totalRent.toLocaleString('ar-LY')} د.ل</span>
@@ -1601,7 +1614,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
         )}
 
         {/* أزرار العمليات (Bento Action Bar) */}
-        <div className="space-y-2 pt-3 border-t border-border/50">
+        <div className={cn("space-y-2 pt-3 border-t border-border/50")}>
           <div className="flex gap-2">
             <Button
               onClick={() => onPrint(contract)}

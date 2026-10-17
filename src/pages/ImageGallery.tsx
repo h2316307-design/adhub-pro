@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useImageGallery, type GalleryTask, type GalleryFilter } from '@/hooks/useImageGallery';
 import { exportTasksAsZip, downloadBlob, getAllImageUrls, type ZipExportResult } from '@/utils/galleryZipExport';
@@ -48,7 +49,7 @@ export default function ImageGallery() {
   const [importPreview, setImportPreview] = useState<TaskImportPreview | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
   const [serverFilterOpen, setServerFilterOpen] = useState(false);
-  const [serverFilterMode, setServerFilterMode] = useState<'all' | 'designs_only'>('all');
+  const [serverFilterMode, setServerFilterMode] = usePersistedState<'all' | 'designs_only'>('imageGallery.serverFilterMode', 'all');
   const [backfilling, setBackfilling] = useState(false);
   const [backfillProgress, setBackfillProgress] = useState('');
 

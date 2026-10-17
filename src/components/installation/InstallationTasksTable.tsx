@@ -1869,6 +1869,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
               has_cutout: item.has_cutout,
               contract_number: t.contract_id,
               ad_type: t.designName !== '—' ? t.designName : '',
+              status: item.status,
             }));
           });
           const firstContract = selectedTasks[0];

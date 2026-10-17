@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -35,7 +36,7 @@ export default function PeriodicReports() {
   const reports = useMemo(() => allLetters.filter(l => l.kind === 'report'), [allLetters]);
 
   const [companyId, setCompanyId] = useState('');
-  const [period, setPeriod] = useState<ReportPeriod>('week');
+  const [period, setPeriod] = usePersistedState<ReportPeriod>('periodicReports.period', 'week');
   const [end, setEnd] = useState(todayIso());
   const [customFrom, setCustomFrom] = useState('');
   const [sections, setSections] = useState<ReportSections>(DEFAULT_SECTIONS);
@@ -43,7 +44,7 @@ export default function PeriodicReports() {
   const [data, setData] = useState<ReportData | null>(null);
   const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState<Letter | null>(null);
-  const [mode, setMode] = useState<LetterPrintMode>('full');
+  const [mode, setMode] = usePersistedState<LetterPrintMode>('periodicReports.mode', 'full');
   const [pages, setPages] = useState(1);
   const [saving, setSaving] = useState(false);
 

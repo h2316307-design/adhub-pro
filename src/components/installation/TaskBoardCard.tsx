@@ -11,11 +11,12 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
 
-export function TaskBoardCard({ item, billboard, taskType, contractId, design, selected, printActive, paused, replacement, onSelect, onPhoto, onManage, onPreview, onRefresh, taskDesigns = [], adType, editRequest }: {
+export function TaskBoardCard({ item, billboard, taskType, contractId, design, selected, printActive, paused, replacement, onSelect, onPhoto, onManage, onPreview, onRefresh, taskDesigns = [], adType, editRequest, horizontal = false }: {
   item: any; billboard: any; taskType?: string; contractId?: number; design?: any; selected: boolean;
   printActive: boolean; paused?: boolean; replacement?: boolean; onSelect: (checked: boolean) => void;
   onPhoto: () => void; onManage: () => void; onPreview: (url: string) => void;
   onRefresh?: () => void; taskDesigns?: any[]; adType?: string; editRequest?: {mode: 'design' | 'photos'; nonce: number};
+  horizontal?: boolean;
 }) {
   const [editorMode, setEditorMode] = useState<'design' | 'photos' | null>(null);
   useEffect(() => { if (editRequest) setEditorMode(editRequest.mode); }, [editRequest]);
@@ -37,7 +38,7 @@ export function TaskBoardCard({ item, billboard, taskType, contractId, design, s
   const landmark = String(billboard?.Nearest_Landmark || billboard?.Nearest_landmark || billboard?.location || '').trim();
   const district = String(billboard?.District || billboard?.district || billboard?.Area || billboard?.area || '').trim();
   const municipality = String(billboard?.Municipality || billboard?.municipality || billboard?.Municipality_Name || '').trim();
-  return <BillboardCardFrame code={name} size={billboard?.Size} tone={selected ? 'selected' : 'default'} title={landmark || name}
+  return <BillboardCardFrame horizontal={horizontal} code={name} size={billboard?.Size} tone={selected ? 'selected' : 'default'} title={landmark || name}
     district={district} municipality={municipality} city={billboard?.City} headerExtra={contractId ? <span className="ms-auto text-[11px] text-muted-foreground">عقد #{contractId}</span> : undefined}
     headerActions={<><Checkbox checked={selected} onCheckedChange={value => onSelect(value === true)} aria-label={`تحديد ${name}`} /><Button size="icon" variant="ghost" className="h-10 w-10 cursor-pointer" onClick={onManage} aria-label="إدارة اللوحة"><Settings2 className="h-4 w-4" /><span className="sr-only">إدارة اللوحة</span></Button></>}
     image={<button type="button" className="h-full w-full cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary" onClick={() => image && onPreview(image)} aria-label={`عرض صورة ${name}`} disabled={!image}>

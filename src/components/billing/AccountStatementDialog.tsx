@@ -12,21 +12,20 @@ import {
   CanonicalCustomerLedgerResult,
   CanonicalLedgerEntry,
 } from '@/lib/canonicalCustomerLedger';
+import { loadCustomerAccount } from '@/services/customerAccount';
 
 interface AccountStatementDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   customerId?: string;
   customerName?: string;
+  /** الفترة المحددة في صفحة الزبون — تُنقل للكشف عند فتحه */
+  initialStartDate?: string;
+  initialEndDate?: string;
 }
 
-const CURRENCIES = [
-  { code: 'LYD', name: 'دينار ليبي', symbol: 'د.ل', writtenName: 'دينار ليبي' },
-  { code: 'USD', name: 'دولار أمريكي', symbol: '$', writtenName: 'دولار أمريكي' },
-  { code: 'EUR', name: 'يورو', symbol: '€', writtenName: 'يورو' },
-  { code: 'TND', name: 'دينار تونسي', symbol: 'د.ت', writtenName: 'دينار تونسي' },
-  { code: 'TRY', name: 'ليرة تركية', symbol: '₺', writtenName: 'ليرة تركية' },
-];
+// المبالغ مخزنة بالدينار الليبي ولا يوجد تحويل عملات؛ تغيير الرمز وحده كان يطبع أرقاماً مضللة
+const CURRENCY = { code: 'LYD', name: 'دينار ليبي', symbol: 'د.ل', writtenName: 'دينار ليبي' };
 
 const formatArabicNumber = (num: number): string => {
   if (isNaN(num) || num === null || num === undefined) return '0';
@@ -61,13 +60,13 @@ const getTypeBadge = (entry: CanonicalLedgerEntry) => {
   }
 };
 
-export default function AccountStatementDialog({ open, onOpenChange, customerId, customerName }: AccountStatementDialogProps) {
+export default function AccountStatementDialog({ open, onOpenChange, customerId, customerName, initialStartDate, initialEndDate }: AccountStatementDialogProps) {
   const [statementMode, setStatementMode] = useState<'simple' | 'detailed'>('simple');
   const [isLoading, setIsLoading] = useState(false);
   const [customerData, setCustomerData] = useState<any>(null);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
-  const [currency, setCurrency] = useState(CURRENCIES[0]);
+  const currency = CURRENCY;
   const [excludeFriendRentals, setExcludeFriendRentals] = useState(false);
   const [hideStopAdjustments, setHideStopAdjustments] = useState(true); // ON افتراضياً
 
@@ -116,6 +115,8 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
   // تحميل البيانات عند فتح النافذة
   useEffect(() => {
     if (open) {
+      setStartDate(initialStartDate || '');
+      setEndDate(initialEndDate || '');
       loadAccountData();
     }
   }, [open, customerId, customerName]);
@@ -123,7 +124,16 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
   const loadAccountData = async () => {
     setIsLoading(true);
     try {
-      // 1. جلب بيانات العميل
+      // نفس مصدر بيانات صفحة الزبون (معرّف العملية، العقود المتعددة، أسماء لوحات الشركة الصديقة،
+      // اللوحات الموقوفة لعقود الزبون فقط، وإيقاف التحميل عند فشل أي استعلام) لضمان تطابق الأرقام
+      if (customerId) {
+        const account = await loadCustomerAccount(customerId);
+        setCustomerData(account.customer);
+        setRawSources(account.ledgerSources);
+        return;
+      }
+
+      // 1. جلب بيانات العميل (مسار احتياطي عند عدم توفر المعرّف)
       let customerInfo: any = null;
       let effectiveCustId = customerId;
 
@@ -313,8 +323,12 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
     });
   };
 
-  const totals = ledgerResult.totals;
+  // مجاميع الفترة المعروضة (تساوي الكل عند عدم تحديد فترة) لتتطابق مع الجدول والرصيد النهائي
+  const totals = ledgerResult.periodTotals ?? ledgerResult.totals;
+  const openingBalance = ledgerResult.openingBalance;
   const endingBalance = ledgerResult.endingBalance;
+  // صف الرصيد السابق (إن وُجد) أول صف ولا يُرقَّم، فتبدأ الحركات من 1
+  const hasOpeningRow = ledgerResult.displayedEntries[0]?.type === 'opening_balance';
 
   return (
     <UIDialog.Dialog open={open} onOpenChange={onOpenChange}>
@@ -398,7 +412,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
             <>
               {/* شريط الفلاتر والخيارات */}
               <div className="bg-card/70 border border-border p-3.5 rounded-xl space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-muted-foreground mb-1.5">من تاريخ:</label>
                     <Input
@@ -416,20 +430,6 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                       onChange={(e) => setEndDate(e.target.value)}
                       className="h-9 text-xs"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-muted-foreground mb-1.5">العملة:</label>
-                    <select
-                      value={currency.code}
-                      onChange={(e) => setCurrency(CURRENCIES.find(c => c.code === e.target.value) || CURRENCIES[0])}
-                      className="w-full h-9 px-3 border border-input rounded-md text-xs bg-background text-foreground"
-                    >
-                      {CURRENCIES.map(curr => (
-                        <option key={curr.code} value={curr.code}>
-                          {curr.name} ({curr.symbol})
-                        </option>
-                      ))}
-                    </select>
                   </div>
                 </div>
 
@@ -464,16 +464,24 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
               </div>
 
               {/* بطاقات الملخص المالي المركزية */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className={`grid grid-cols-2 gap-3 ${openingBalance !== 0 ? 'sm:grid-cols-5' : 'sm:grid-cols-4'}`}>
+                {openingBalance !== 0 && (
+                  <div className="bg-card border border-border p-3 rounded-xl">
+                    <div className="text-xs text-muted-foreground font-semibold">رصيد سابق</div>
+                    <div className="text-lg font-black text-slate-500 mt-1">
+                      {formatArabicNumber(Math.abs(openingBalance))} {currency.symbol}{openingBalance < 0 ? ' (دائن)' : ''}
+                    </div>
+                  </div>
+                )}
                 <div className="bg-card border border-border p-3 rounded-xl">
-                  <div className="text-xs text-muted-foreground font-semibold">إجمالي المستحقات</div>
+                  <div className="text-xs text-muted-foreground font-semibold">{openingBalance !== 0 || endDate ? 'مستحقات الفترة' : 'إجمالي المستحقات'}</div>
                   <div className="text-lg font-black text-rose-500 mt-1">
                     {formatArabicNumber(totals.totalCustomerCharges)} {currency.symbol}
                   </div>
                 </div>
 
                 <div className="bg-card border border-border p-3 rounded-xl">
-                  <div className="text-xs text-muted-foreground font-semibold">إجمالي المدفوع نقداً</div>
+                  <div className="text-xs text-muted-foreground font-semibold">{openingBalance !== 0 || endDate ? 'المدفوع نقداً خلال الفترة' : 'إجمالي المدفوع نقداً'}</div>
                   <div className="text-lg font-black text-emerald-500 mt-1">
                     {formatArabicNumber(totals.cashPayments)} {currency.symbol}
                   </div>
@@ -539,7 +547,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
                         if (statementMode === 'simple') {
                           return (
                             <tr key={entry.id} className={isOpening ? 'bg-primary/5 font-semibold' : index % 2 === 0 ? 'bg-background' : 'bg-card/40'}>
-                              <td className="p-2.5 text-center text-muted-foreground">{isOpening ? '—' : index + 1}</td>
+                              <td className="p-2.5 text-center text-muted-foreground">{isOpening ? '—' : (hasOpeningRow ? index : index + 1)}</td>
                               <td className="p-2.5 text-center">{entry.date || '—'}</td>
                               <td className="p-2.5 text-right">
                                 <div className="font-semibold">{entry.description}</div>
@@ -564,7 +572,7 @@ export default function AccountStatementDialog({ open, onOpenChange, customerId,
 
                         return (
                           <tr key={entry.id} className={isOpening ? 'bg-primary/5 font-semibold' : index % 2 === 0 ? 'bg-background' : 'bg-card/40'}>
-                            <td className="p-2.5 text-center text-muted-foreground">{isOpening ? '—' : index + 1}</td>
+                            <td className="p-2.5 text-center text-muted-foreground">{isOpening ? '—' : (hasOpeningRow ? index : index + 1)}</td>
                             <td className="p-2.5 text-center">{entry.date || '—'}</td>
                             <td className="p-2.5 text-center">
                               <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${badge.className}`}>

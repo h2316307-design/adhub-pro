@@ -141,6 +141,8 @@ export interface CanonicalCustomerLedgerResult {
   allEntries: CanonicalLedgerEntry[];
   displayedEntries: CanonicalLedgerEntry[];
   totals: CanonicalCustomerTotals;
+  /** مجاميع حركات الفترة المحددة فقط (بدون الرصيد السابق): openingBalance + charges - payments - adjustments = endingBalance */
+  periodTotals?: CanonicalCustomerTotals;
   openingBalance: number;
   endingBalance: number;
   startDate?: string;
@@ -867,72 +869,76 @@ export function buildCanonicalCustomerLedger(
   });
 
   // 12. تجميع إحصائيات الحساب الشاملة (Canonical Totals)
-  let totalContractsDebt = 0;
-  let totalSalesDebt = 0;
-  let totalPrintedDebt = 0;
-  let totalCompositeDebt = 0;
-  let totalOtherDebts = 0;
+  const summarizeEntries = (entries: CanonicalLedgerEntry[]): CanonicalCustomerTotals => {
+    let totalContractsDebt = 0;
+    let totalSalesDebt = 0;
+    let totalPrintedDebt = 0;
+    let totalCompositeDebt = 0;
+    let totalOtherDebts = 0;
 
-  let totalCashPaid = 0;
-  let totalGenDiscounts = 0;
-  let totalPurchOffsets = 0;
-  let totalFriendOffsets = 0;
-  let totalOtherNonCash = 0;
+    let totalCashPaid = 0;
+    let totalGenDiscounts = 0;
+    let totalPurchOffsets = 0;
+    let totalFriendOffsets = 0;
+    let totalOtherNonCash = 0;
 
-  rawEntries.forEach((entry) => {
-    // تصنيف الديون
-    if (entry.type === 'contract') totalContractsDebt += entry.debitEffect;
-    else if (entry.type === 'sales_invoice') totalSalesDebt += entry.debitEffect;
-    else if (entry.type === 'printed_invoice') totalPrintedDebt += entry.debitEffect;
-    else if (entry.type === 'composite_task') totalCompositeDebt += entry.debitEffect;
-    else if (entry.type === 'other_debit') totalOtherDebts += entry.debitEffect;
+    entries.forEach((entry) => {
+      // تصنيف الديون
+      if (entry.type === 'contract') totalContractsDebt += entry.debitEffect;
+      else if (entry.type === 'sales_invoice') totalSalesDebt += entry.debitEffect;
+      else if (entry.type === 'printed_invoice') totalPrintedDebt += entry.debitEffect;
+      else if (entry.type === 'composite_task') totalCompositeDebt += entry.debitEffect;
+      else if (entry.type === 'other_debit') totalOtherDebts += entry.debitEffect;
 
-    // تصنيف الدفعات والتسويات
-    if (entry.category === 'cash_payment') {
-      totalCashPaid += entry.cashPaymentEffect;
-    } else if (entry.type === 'general_discount') {
-      totalGenDiscounts += entry.nonCashAdjustmentEffect;
-    } else if (entry.type === 'purchase_offset') {
-      totalPurchOffsets += entry.nonCashAdjustmentEffect;
-    } else if (entry.type === 'friend_company_offset') {
-      totalFriendOffsets += entry.nonCashAdjustmentEffect;
-    } else if (entry.category === 'non_cash_adjustment') {
-      totalOtherNonCash += entry.nonCashAdjustmentEffect;
-    }
-  });
+      // تصنيف الدفعات والتسويات
+      if (entry.category === 'cash_payment') {
+        totalCashPaid += entry.cashPaymentEffect;
+      } else if (entry.type === 'general_discount') {
+        totalGenDiscounts += entry.nonCashAdjustmentEffect;
+      } else if (entry.type === 'purchase_offset') {
+        totalPurchOffsets += entry.nonCashAdjustmentEffect;
+      } else if (entry.type === 'friend_company_offset') {
+        totalFriendOffsets += entry.nonCashAdjustmentEffect;
+      } else if (entry.category === 'non_cash_adjustment') {
+        totalOtherNonCash += entry.nonCashAdjustmentEffect;
+      }
+    });
 
-  const totalCustomerCharges =
-    totalContractsDebt + totalSalesDebt + totalPrintedDebt + totalCompositeDebt + totalOtherDebts;
+    const totalCustomerCharges =
+      totalContractsDebt + totalSalesDebt + totalPrintedDebt + totalCompositeDebt + totalOtherDebts;
 
-  const totalNonCashAdjustments =
-    totalGenDiscounts + totalPurchOffsets + totalFriendOffsets + totalOtherNonCash;
+    const totalNonCashAdjustments =
+      totalGenDiscounts + totalPurchOffsets + totalFriendOffsets + totalOtherNonCash;
 
-  const finalBalance = totalCustomerCharges - totalCashPaid - totalNonCashAdjustments;
+    const finalBalance = totalCustomerCharges - totalCashPaid - totalNonCashAdjustments;
 
-  const repaymentPercentage = totalCustomerCharges > 0
-    ? Math.round(((totalCashPaid + totalNonCashAdjustments) / totalCustomerCharges) * 100)
-    : 100;
+    const repaymentPercentage = totalCustomerCharges > 0
+      ? Math.round(((totalCashPaid + totalNonCashAdjustments) / totalCustomerCharges) * 100)
+      : 100;
 
-  const allTimeTotals: CanonicalCustomerTotals = {
-    totalCustomerCharges,
-    cashPayments: totalCashPaid,
-    generalDiscounts: totalGenDiscounts,
-    purchaseOffsets: totalPurchOffsets,
-    friendCompanyOffsets: totalFriendOffsets,
-    otherNonCashCredits: totalOtherNonCash,
-    totalNonCashAdjustments,
-    finalBalance,
-    repaymentPercentage: Math.min(100, Math.max(0, repaymentPercentage)),
-    informationalContractDiscounts: totalContractDiscountsInfo,
-    informationalStopAdjustments: totalStopAdjustmentsInfo,
-    debtBreakdown: {
-      contracts: totalContractsDebt,
-      salesInvoices: totalSalesDebt,
-      printedInvoices: totalPrintedDebt,
-      compositeTasks: totalCompositeDebt,
-      otherDebts: totalOtherDebts,
-    },
+    return {
+      totalCustomerCharges,
+      cashPayments: totalCashPaid,
+      generalDiscounts: totalGenDiscounts,
+      purchaseOffsets: totalPurchOffsets,
+      friendCompanyOffsets: totalFriendOffsets,
+      otherNonCashCredits: totalOtherNonCash,
+      totalNonCashAdjustments,
+      finalBalance,
+      repaymentPercentage: Math.min(100, Math.max(0, repaymentPercentage)),
+      informationalContractDiscounts: totalContractDiscountsInfo,
+      informationalStopAdjustments: totalStopAdjustmentsInfo,
+      debtBreakdown: {
+        contracts: totalContractsDebt,
+        salesInvoices: totalSalesDebt,
+        printedInvoices: totalPrintedDebt,
+        compositeTasks: totalCompositeDebt,
+        otherDebts: totalOtherDebts,
+      },
+    };
   };
+
+  const allTimeTotals = summarizeEntries(rawEntries);
 
   // 13. الفلترة حسب الفترة الزمنية وحساب الرصيد الافتتاحي (Date Range Filtering & Opening Balance)
   let openingBalance = 0;
@@ -1143,14 +1149,17 @@ export function buildCanonicalCustomerLedger(
     }
   }
 
-  const endingBalance = displayedEntries.length > 0
+  const rawEndingBalance = displayedEntries.length > 0
     ? displayedEntries[displayedEntries.length - 1].runningBalance
     : openingBalance;
+  // تقريب لمنزلتين لتفادي بقايا الفاصلة العائمة (مثل 0.0000001 تظهر «متبقي»)
+  const endingBalance = Math.round(rawEndingBalance * 100) / 100 || 0;
 
   return {
     allEntries: rawEntries,
     displayedEntries,
     totals: allTimeTotals,
+    periodTotals: summarizeEntries(filteredEntries),
     openingBalance,
     endingBalance,
     startDate,

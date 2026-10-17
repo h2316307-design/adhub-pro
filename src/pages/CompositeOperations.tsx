@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -52,9 +53,9 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
   const { data, isLoading, error, refetch, isFetching } = useQuery({ queryKey: ['composite-operations'], queryFn: loadOperations, staleTime: 30_000 });
   const [q, setQ] = useState('');
   const [type, setType] = useState('all');
-  const [status, setStatus] = useState(embedded ? 'all' : 'active');
+  const [status, setStatus] = usePersistedState(embedded ? 'compositeOperations.embedded.status' : 'compositeOperations.status', embedded ? 'all' : 'active');
   const [money_, setMoney] = useState('all');
-  const [sort, setSort] = useState('newest');
+  const [sort, setSort] = usePersistedState('compositeOperations.sort', 'newest');
   const [limit, setLimit] = useState(24);
   const [editing, setEditing] = useState<OperationRow | null>(null);
   const [invoiceOp, setInvoiceOp] = useState<OperationRow | null>(null);

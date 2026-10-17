@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
 import { CompanyPriceEditor } from '@/components/pricing/CompanyPriceEditor';
 import { normalizePrintLevels, resolvePrintLevels, type PrintLevelSelection } from '@/utils/pricingPrintLevels';
@@ -311,7 +312,7 @@ export default function PricingList() {
   const [showLevelColumn, setShowLevelColumn] = useState<boolean>(initialPrintSettings.showLevelColumn);
   const [priceMarkupPercent, setPriceMarkupPercent] = useState<number>(initialPrintSettings.priceMarkupPercent);
   const [printTheme, setPrintTheme] = useState<'dark' | 'light'>(initialPrintSettings.theme);
-  const [categorySearchTerm, setCategorySearchTerm] = useState('');
+  const [categorySearchTerm, setCategorySearchTerm] = usePersistedState('pricingList.categorySearchTerm', '');
   const [printCategorySearch, setPrintCategorySearch] = useState('');
   const [printLogo, setPrintLogo] = useState<string>(initialPrintSettings.logo);
   const [autoSavePrintSettings, setAutoSavePrintSettings] = useState<boolean>(initialPrintSettings.autoSave ?? true);
@@ -378,7 +379,7 @@ export default function PricingList() {
     toast.info('تمت استعادة الإعدادات الافتراضية للطباعة والتصدير');
   };
   const [relativeTarget, setRelativeTarget] = useState<{ customer: string; size?: string; level?: string } | null>(null);
-  const [showCompanyComparison, setShowCompanyComparison] = useState<boolean>(true);
+  const [showCompanyComparison, setShowCompanyComparison] = usePersistedState<boolean>('pricingList.showCompanyComparison', true);
   const [comparisonBenchmark, setComparisonBenchmark] = useState<string>('شركات');
 
   const orderedCategories = useMemo(() => {

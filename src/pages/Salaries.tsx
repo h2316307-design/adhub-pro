@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { FinancePageHeader, FinanceStatCard, FinanceDialogContent, FinanceDialogHeader, FinanceDialogFooter } from '@/components/finance/FinanceUI';
 import { operatingPool } from '@/lib/operatingFees';
 import { useAuth } from '@/contexts/AuthContext';
@@ -99,8 +100,8 @@ export default function Salaries() {
   const [advances, setAdvances] = useState<any[]>([]);
   const [manualTasks, setManualTasks] = useState<ManualTask[]>([]);
   const [loading, setLoading] = useState(true);
-  const [employeeSearch, setEmployeeSearch] = useState('');
-  const [employeeStatus, setEmployeeStatus] = useState('all');
+  const [employeeSearch, setEmployeeSearch] = usePersistedState('salaries.employeeSearch', '');
+  const [employeeStatus, setEmployeeStatus] = usePersistedState('salaries.employeeStatus', 'all');
   const visibleEmployees = employees.filter(employee => (employeeStatus === 'all' || employee.status === employeeStatus) && [employee.name, employee.position, employee.phone].join(' ').toLowerCase().includes(employeeSearch.trim().toLowerCase()));
   
   // Operating expenses data for linked employee

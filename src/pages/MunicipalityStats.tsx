@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -59,7 +60,7 @@ const MunicipalityStats = () => {
   const [expandedMuni, setExpandedMuni] = useState<string | null>(null);
   
   // Date filters
-  const [dateMode, setDateMode] = useState<'all' | 'range' | 'year' | 'month'>('all');
+  const [dateMode, setDateMode] = usePersistedState<'all' | 'range' | 'year' | 'month'>('municipalityStats.dateMode', 'all');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());

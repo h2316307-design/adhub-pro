@@ -75,6 +75,7 @@ export interface BillboardPrintItem {
   previous_ad?: string | null;
   previous_ad_type?: string | null;
   faces_to_install?: number | null;
+  status?: string | null;
 }
 
 const resolveFacesCount = (item: BillboardPrintItem, billboard: any): number =>
@@ -366,6 +367,9 @@ export function UnifiedPrintAllDialog({
   const [loading, setLoading] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
   const [respectCityLimits, setRespectCityLimits] = useState(false);
+  const [onlyCompleted, setOnlyCompleted] = useState(false);
+  const [contractFilter, setContractFilter] = useState<string>('all');
+  const [fetchedItemStatus, setFetchedItemStatus] = useState<Record<string, string>>({});
   const [showWhatsAppInput, setShowWhatsAppInput] = useState(false);
   const [manualPhone, setManualPhone] = useState('');
   const [sizeCutoutMap, setSizeCutoutMap] = useState<Record<string, string>>({});
@@ -899,10 +903,46 @@ export function UnifiedPrintAllDialog({
       reader.readAsDataURL(blob);
     });
 
-  const filteredItems = useMemo(() => {
-    if (!showTeamFilter) return items;
+  // جلب حالات بنود التركيب غير الممرَّرة (لخيار "المكتملة فقط")
+  useEffect(() => {
+    if (!open || contextType === 'removal' || contextType === 'offer') return;
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const ids = items.filter(i => !i.status && uuidRe.test(String(i.id))).map(i => String(i.id));
+    if (!ids.length) return;
+    let cancelled = false;
+    (async () => {
+      const map: Record<string, string> = {};
+      for (let k = 0; k < ids.length; k += 200) {
+        const { data } = await supabase.from('installation_task_items').select('id, status').in('id', ids.slice(k, k + 200));
+        (data || []).forEach((r: any) => { if (r.status) map[String(r.id)] = r.status; });
+      }
+      if (!cancelled) setFetchedItemStatus(map);
+    })();
+    return () => { cancelled = true; };
+  }, [open, items, contextType]);
 
+  const isItemCompleted = (item: BillboardPrintItem) =>
+    (item.status || fetchedItemStatus[String(item.id)]) === 'completed';
+
+  const contractOptions = useMemo(() => {
+    const set = new Set<string>();
+    items.forEach(i => { const c = String(i.contract_number ?? '').trim(); if (c) set.add(c); });
+    return Array.from(set).sort((a, b) => Number(a) - Number(b));
+  }, [items]);
+
+  const completedCount = useMemo(() => items.filter(isItemCompleted).length, [items, fetchedItemStatus]);
+
+  const baseFilteredItems = useMemo(() => {
     let result = items;
+    if (contractFilter !== 'all') result = result.filter(i => String(i.contract_number ?? '').trim() === contractFilter);
+    if (onlyCompleted) result = result.filter(isItemCompleted);
+    return result;
+  }, [items, contractFilter, onlyCompleted, fetchedItemStatus]);
+
+  const filteredItems = useMemo(() => {
+    if (!showTeamFilter) return baseFilteredItems;
+
+    let result = baseFilteredItems;
 
     // فلتر حسب الفرق المختارة
     if (selectedTeamIds.size > 0) {
@@ -928,7 +968,7 @@ export function UnifiedPrintAllDialog({
     }
 
     return result;
-  }, [items, selectedTeamIds, showTeamFilter, respectCityLimits, teams, billboards]);
+  }, [baseFilteredItems, selectedTeamIds, showTeamFilter, respectCityLimits, teams, billboards]);
 
   const toggleTeam = (teamId: string) => {
     setSelectedTeamIds(prev => {
@@ -2774,6 +2814,37 @@ export function UnifiedPrintAllDialog({
               </Badge>
             </div>
           </div>
+
+          {/* فلترة: المكتملة فقط / حسب رقم العقد */}
+          {contextType !== 'removal' && contextType !== 'offer' && (
+            <div className="p-3 bg-muted/40 rounded-xl border border-border/80 flex flex-wrap items-center gap-x-5 gap-y-2">
+              <div className="flex items-center gap-2">
+                <Switch id="onlyCompleted" checked={onlyCompleted} onCheckedChange={(c) => setOnlyCompleted(!!c)} />
+                <Label htmlFor="onlyCompleted" className="cursor-pointer text-xs font-medium">
+                  طباعة المكتملة فقط
+                </Label>
+                <Badge variant="secondary" className="text-[11px] h-4 px-1">{completedCount}/{items.length}</Badge>
+              </div>
+              {contractOptions.length > 1 && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="contractFilter" className="text-xs font-medium">رقم العقد</Label>
+                  <select
+                    id="contractFilter"
+                    value={contractFilter}
+                    onChange={(e) => setContractFilter(e.target.value)}
+                    className="h-8 rounded-md border border-border bg-card px-2 text-xs"
+                  >
+                    <option value="all">كل العقود ({items.length})</option>
+                    {contractOptions.map(c => (
+                      <option key={c} value={c}>
+                        عقد {c} ({items.filter(i => String(i.contract_number ?? '').trim() === c).length})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* 3. اختيار الفرق (إن وجدت) */}
           {showTeamFilter && Object.keys(itemsByTeam).length > 0 && (

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { FinancePageHeader, FinanceStatCard, FinanceDialogContent, FinanceDialogHeader, FinanceDialogFooter } from '@/components/finance/FinanceUI';
 import { expenseRemaining, operatingPool } from '@/lib/operatingFees';
 import { createRequestId } from '@/lib/requestId';
@@ -213,13 +214,13 @@ export default function ExpenseManagement() {
   const [editingClosure, setEditingClosure] = useState<PeriodClosure | null>(null);
   
   // Filters
-  const [activeFinanceTab, setActiveFinanceTab] = useState('expenses');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [filterStatus, setFilterStatus] = useState('all');
-  const [filterEmployee, setFilterEmployee] = useState('all');
-  const [filterSearch, setFilterSearch] = useState('');
+  const [activeFinanceTab, setActiveFinanceTab] = usePersistedState('expenseManagement.activeFinanceTab', 'expenses');
+  const [filterDateFrom, setFilterDateFrom] = usePersistedState('expenseManagement.filterDateFrom', '');
+  const [filterDateTo, setFilterDateTo] = usePersistedState('expenseManagement.filterDateTo', '');
+  const [filterCategory, setFilterCategory] = usePersistedState('expenseManagement.filterCategory', 'all');
+  const [filterStatus, setFilterStatus] = usePersistedState('expenseManagement.filterStatus', 'all');
+  const [filterEmployee, setFilterEmployee] = usePersistedState('expenseManagement.filterEmployee', 'all');
+  const [filterSearch, setFilterSearch] = usePersistedState('expenseManagement.filterSearch', '');
 
   // ✅ مصدر السداد لكل مصروف (من أي عميل/عهدة/سداد مباشر)
   const [paymentSourceMap, setPaymentSourceMap] = useState<Record<string, string>>({});

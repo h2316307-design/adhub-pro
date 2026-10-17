@@ -1,3 +1,4 @@
+import { usePersistedState } from '@/hooks/usePersistedState';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -13,6 +14,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel,
 import { cn } from '@/lib/utils';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { CARD_GRID, CardSizeControl, cardVars, useCardSize } from '@/components/composite-ops/CardSize';
+import { CardLayoutToggle, useCardLayout } from '@/components/shared/CardLayout';
 import { UnifiedPrintAllDialog, type BillboardPrintItem } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import { ExpiredContractsAlert } from '@/components/removal/ExpiredContractsAlert';
 import { ManualRemovalTaskDialog } from '@/components/removal/ManualRemovalTaskDialog';
@@ -36,14 +38,15 @@ export default function RemovalTasks() {
   const { tasks, teams, teamById, allTaskItems, itemsByTask, billboardById, contractByNumber, existingTaskContractIds, existingTaskBillboardIds, duplicateTasksCount, isLoading, refresh } = data;
 
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState('active');
+  const [status, setStatus] = usePersistedState('removalTasks.status', 'active');
   const [team, setTeam] = useState('all');
-  const [sort, setSort] = useState('newest');
+  const [sort, setSort] = usePersistedState('removalTasks.sort', 'newest');
   const [limit, setLimit] = useState(24);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [view, setViewState] = useState<'cards' | 'table'>(() => { try { return localStorage.getItem('removal-ops-view') === 'table' ? 'table' : 'cards'; } catch { return 'cards'; } });
   const setView = (v: 'cards' | 'table') => { setViewState(v); try { localStorage.setItem('removal-ops-view', v); } catch { /* تجاهل */ } };
   const [cardSize] = useCardSize();
+  const [cardLayout, setCardLayout] = useCardLayout('removal');
 
   const [boardsKey, setBoardsKey] = useState<string | null>(null);
   const [complete, setComplete] = useState<{ ids: string[]; subtitle: string } | null>(null);
@@ -232,6 +235,7 @@ export default function RemovalTasks() {
           <button type="button" role="radio" aria-checked={view === 'table'} onClick={() => setView('table')} className={cn('flex h-9 items-center gap-1 rounded-md px-3 text-sm', view === 'table' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><Table2 className="h-4 w-4" />جدول</button>
         </div>
         {view === 'cards' && <CardSizeControl />}
+        {view === 'cards' && <CardLayoutToggle value={cardLayout} onChange={setCardLayout} />}
         <Select value={sort} onValueChange={setSort}>
           <SelectTrigger className="h-10 w-[150px]"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -253,8 +257,8 @@ export default function RemovalTasks() {
             <RemovalOperationsTable rows={rows.slice(0, limit)} selected={selected} onToggle={toggleSel} a={actions}
               onToggleAll={on => setSelected(on ? new Set(rows.slice(0, limit).map(r => r.key)) : new Set())} />
           ) : (
-            <div className={cn(CARD_GRID[cardSize].grid, CARD_GRID[cardSize].text)} style={cardVars(cardSize)}>
-              {rows.slice(0, limit).map(r => <RemovalOperationCard key={r.key} r={r} selected={selected.has(r.key)} onToggle={() => toggleSel(r.key)} a={actions} />)}
+            <div className={cn(cardLayout === 'horizontal' ? 'grid gap-3 xl:grid-cols-2' : CARD_GRID[cardSize].grid, CARD_GRID[cardSize].text)} style={cardVars(cardSize)}>
+              {rows.slice(0, limit).map(r => <RemovalOperationCard horizontal={cardLayout === 'horizontal'} key={r.key} r={r} selected={selected.has(r.key)} onToggle={() => toggleSel(r.key)} a={actions} />)}
             </div>
           )}
           {rows.length > limit && <div className="text-center"><Button variant="outline" onClick={() => setLimit(l => l + 24)}>عرض المزيد ({rows.length - limit})</Button></div>}
