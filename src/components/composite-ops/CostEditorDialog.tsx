@@ -9,13 +9,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
-import { Wrench, Printer, Scissors, Percent, Search, Loader2, ShieldCheck, ImageIcon, Save } from 'lucide-react';
-import { money, applyBulkPrice, computeOperation, lineArea, smartDistribute, type BulkMode, type BulkTarget } from '@/lib/compositeCosts';
+import { Wrench, Printer, Scissors, Percent, Search, Loader2, ShieldCheck, Save, AlertTriangle, Check, MapPin } from 'lucide-react';
+import { money, changeCostLineFaces, applyBulkPrice, computeOperation, lineArea, smartDistribute, type BulkMode, type BulkTarget } from '@/lib/compositeCosts';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
-import { loadEditor, saveEditor, type EditorLine, type EditorState, type OperationRow } from '@/services/compositeOperations';
+import { ZoomImage } from '@/components/composite-ops/ImageZoom';
+import { loadEditor, saveEditor, discountAmount, type DiscountMode, type EditorLine, type EditorState, type OperationRow } from '@/services/compositeOperations';
 
 
-type Tab = 'installation' | 'print' | 'cutout' | 'discount';
+type Tab = 'installation' | 'print' | 'cutout';
 
 function Num({ value, onChange, disabled, className, label }: { value: number; onChange: (v: number) => void; disabled?: boolean; className?: string; label: string }) {
   const [text, setText] = useState(String(value ?? 0));
@@ -38,17 +39,69 @@ function Num({ value, onChange, disabled, className, label }: { value: number; o
   );
 }
 
+/** المساحة بأرقام لاتينية؛ الأُس داخل <sup> كي لا يقلبه اتجاه RTL */
+function Area({ value, className }: { value: number; className?: string }) {
+  const v = Math.round((Number(value) || 0) * 10) / 10;
+  return <span className={cn('whitespace-nowrap tabular-nums', className)}><bdi>{v.toLocaleString('en-US', { maximumFractionDigits: 1 })}</bdi> م<sup className="text-[0.7em]">2</sup></span>;
+}
+
+function FacesPicker({ l, onToggle }: { l: EditorLine; onToggle: (face: number) => void }) {
+  const max = l.maxFaces || 1;
+  const sel = l.selectedFaces || Array.from({ length: l.faces }, (_, i) => i + 1);
+  if (max <= 1) {
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <span className="rounded-md border border-border bg-muted/60 px-2.5 py-1 text-[11px] text-muted-foreground">وجه واحد{l.faceLabels?.[0] && <span className="ms-1 tabular-nums" dir="ltr">{l.faceLabels[0]}</span>}</span>
+        <Area value={lineArea(l)} className="text-[11px] text-muted-foreground" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col items-center gap-1">
+      <div className="flex gap-1">
+        {Array.from({ length: max }, (_, i) => i + 1).map(f => {
+          const active = sel.includes(f);
+          return (
+            <button key={f} type="button" onClick={() => onToggle(f)} aria-pressed={active}
+              aria-label={`الوجه ${f}، ${l.faceLabels?.[f - 1] || l.size} متر`} title={active ? 'اضغط لإلغاء هذا الوجه' : 'اضغط لإضافة هذا الوجه'}
+              className={cn('flex min-w-[58px] flex-col items-center rounded-lg border px-2 py-1 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+                active ? 'border-primary bg-primary/15 text-foreground' : 'border-dashed border-border text-muted-foreground opacity-70 hover:border-primary/50 hover:opacity-100')}>
+              <span className="flex items-center gap-1 text-[11px] font-semibold">
+                <span className={cn('flex h-3.5 w-3.5 items-center justify-center rounded-full border', active ? 'border-primary bg-primary text-primary-foreground' : 'border-muted-foreground/50')}>
+                  {active && <Check className="h-2.5 w-2.5" strokeWidth={3} />}
+                </span>
+                وجه {f}
+              </span>
+              {l.faceLabels?.[f - 1] && <span className="text-[10px] tabular-nums opacity-80" dir="ltr">{l.faceLabels[f - 1]}</span>}
+            </button>
+          );
+        })}
+      </div>
+      <span className="text-[11px] text-muted-foreground"><span className="tabular-nums">{sel.length}/{max}</span> · <Area value={lineArea(l)} /></span>
+    </div>
+  );
+}
+
 function BoardCell({ l, extra }: { l: EditorLine; extra?: string }) {
-  const place = [l.area, l.municipality].filter(Boolean).join(' · ');
   return (
     <div className="flex items-center gap-2.5">
-      <span className="flex h-14 w-20 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border bg-muted">
-        {l.image ? <img src={l.image} alt="" loading="lazy" className="h-full w-full object-cover" onError={e => { e.currentTarget.style.display = 'none'; }} /> : <ImageIcon className="h-4 w-4 text-muted-foreground" />}
-      </span>
-      <div className="min-w-0 space-y-0.5">
+      <ZoomImage src={l.image} alt={l.name} title={`${l.name} · ${l.size}`} className="h-14 w-20 shrink-0 rounded-md border border-border" />
+      <div className="min-w-0 space-y-1">
         <div className="flex items-center gap-1.5"><span className="truncate font-semibold">{l.name}</span><span className="shrink-0 rounded bg-muted px-1.5 text-[10px] tabular-nums">{l.size}</span></div>
         {l.landmark && <div className="truncate text-[11px] text-muted-foreground">{l.landmark}</div>}
-        {(place || extra) && <div className="truncate text-[11px] text-muted-foreground/80">{[place, extra].filter(Boolean).join(' · ')}</div>}
+        {(l.municipality || (l.area && l.area !== l.municipality)) && (
+          <div className="flex flex-wrap items-center gap-1">
+            {l.area && l.area !== l.municipality && (
+              <span className="inline-flex items-center gap-1 rounded-md border border-violet-500/30 bg-violet-500/10 px-1.5 py-px text-[11px] text-violet-700 dark:text-violet-300">
+                <MapPin className="h-3 w-3" />{l.area}
+              </span>
+            )}
+            {l.municipality && (
+              <span className="rounded-md border border-sky-500/30 bg-sky-500/10 px-1.5 py-px text-[11px] font-semibold text-sky-700 dark:text-sky-300">{l.municipality}</span>
+            )}
+          </div>
+        )}
+        {extra && <div className="truncate text-[11px] text-muted-foreground/80">{extra}</div>}
       </div>
     </div>
   );
@@ -78,6 +131,8 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
   const [printComp, setPrintComp] = useState(0);
   const [printerId, setPrinterId] = useState<string | null>(null);
   const [discount, setDiscount] = useState(0);
+  const [discountMode, setDiscountMode] = useState<DiscountMode>('amount');
+  const [discountPct, setDiscountPct] = useState(0);
   const [discountReason, setDiscountReason] = useState('');
   const [notes, setNotes] = useState('');
   const [tab, setTab] = useState<Tab>('installation');
@@ -107,6 +162,8 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
       setPrintComp(s.draft.printCompanyPerMeter);
       setPrinterId(s.printerId);
       setDiscount(s.draft.discount);
+      setDiscountMode(s.discountMode);
+      setDiscountPct(s.discountPercent);
       setDiscountReason(s.discountReason);
       setNotes(s.notes);
       const cut = computeOperation(s.draft).cutout;
@@ -122,12 +179,15 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
     return () => { cancelled = true; };
   }, [open, op]);
 
-  const draft = useMemo(() => state ? {
-    ...state.draft, lines, printEnabled, printCustomerPerMeter: printCust, printCompanyPerMeter: printComp, discount,
-  } : null, [state, lines, printEnabled, printCust, printComp, discount]);
+  const draft = useMemo(() => {
+    if (!state) return null;
+    const base = { ...state.draft, lines, printEnabled, printCustomerPerMeter: printCust, printCompanyPerMeter: printComp, discount: 0 };
+    return { ...base, discount: discountAmount(discountMode, discount, discountPct, computeOperation(base).customerSubtotal) };
+  }, [state, lines, printEnabled, printCust, printComp, discount, discountMode, discountPct]);
   const totals = useMemo(() => draft ? computeOperation(draft) : null, [draft]);
 
   const teams = useMemo(() => [...new Set(lines.map(l => l.teamName))], [lines]);
+  const adTypeOf = useMemo(() => new Map((op?.contracts || []).map(c => [c.number, c.adType || ''])), [op]);
   const sizes = useMemo(() => [...new Set(lines.map(l => l.size))], [lines]);
   const visible = useMemo(() => {
     const s = q.trim().toLowerCase();
@@ -139,8 +199,8 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
     if (!state) return false;
     return JSON.stringify(lines) !== JSON.stringify(state.lines) || printEnabled !== state.draft.printEnabled
       || printCust !== state.draft.printCustomerPerMeter || printComp !== state.draft.printCompanyPerMeter
-      || discount !== state.draft.discount || discountReason !== state.discountReason || notes !== state.notes || printerId !== state.printerId;
-  }, [state, lines, printEnabled, printCust, printComp, discount, discountReason, notes, printerId]);
+      || discountMode !== state.discountMode || (discountMode === 'percent' ? discountPct !== state.discountPercent : discount !== state.draft.discount) || discountReason !== state.discountReason || notes !== state.notes || printerId !== state.printerId;
+  }, [state, lines, printEnabled, printCust, printComp, discount, discountMode, discountPct, discountReason, notes, printerId]);
 
   const update = (id: string, patch: Partial<EditorLine>) => setLines(prev => prev.map(l => l.id === id ? { ...l, ...patch } : l));
 
@@ -154,12 +214,12 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
     if (!ids.size) { toast.error('لا توجد لوحات ضمن النطاق المحدد'); return; }
     if (bulkMode === 'total') {
       const shares = smartDistribute(bulkValue, lines.filter(l => ids.has(l.id)).map(l => ({ id: l.id, weight: lineArea(l) })));
-      setLines(prev => prev.map(l => !shares.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: shares.get(l.id)!, customerPerMeter: null } : { ...l, company: shares.get(l.id)! }));
+      setLines(prev => prev.map(l => !shares.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: shares.get(l.id)!, customerPerMeter: null } : { ...l, company: shares.get(l.id)!, companyPerMeter: null }));
       toast.success(`تم توزيع ${money(bulkValue)} على ${ids.size} لوحة حسب المساحة`);
       return;
     }
     if (bulkMode === 'table') {
-      setLines(prev => prev.map(l => !ids.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: l.sizeInstallPrice, customerPerMeter: null } : { ...l, company: l.sizeInstallPrice }));
+      setLines(prev => prev.map(l => !ids.has(l.id) ? l : bulkTarget === 'customer' ? { ...l, customer: l.sizeInstallPrice, customerPerMeter: null } : { ...l, company: l.sizeInstallPrice, companyPerMeter: null }));
     } else {
       // سعر المتر على الزبون يُحفظ مع كل لوحة ليظهر في المحرر والفاتورة
       const rate = bulkTarget === 'customer' && bulkMode === 'meter' && bulkValue > 0 ? Math.round(bulkValue * 100) / 100 : null;
@@ -167,6 +227,44 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
         .map(l => ids.has(l.id) && bulkTarget === 'customer' ? { ...l, customerPerMeter: rate } : l));
     }
     toast.success(`تم تطبيق السعر على ${ids.size} لوحة`);
+  };
+
+  const handleToggleLineFace = (line: EditorLine, face: number) => {
+    const current = line.selectedFaces || Array.from({ length: line.faces }, (_, i) => i + 1);
+    const selection = current.includes(face) ? current.filter(f => f !== face) : [...current, face];
+    if (!selection.length) { toast.info('يجب اختيار وجه واحد على الأقل'); return; }
+    setLines(previous => previous.map(l => l.id === line.id ? changeCostLineFaces(l, selection) : l));
+  };
+
+  const applyBulkFaces = (mode: 'single' | 'double' | 'max_available') => {
+    const targetLines = scope === 'selected'
+      ? lines.filter(l => selected.has(l.id))
+      : scope === 'visible'
+      ? visible
+      : lines.filter(l => l.size === scope.replace(/^size:/, ''));
+
+    if (!targetLines.length) {
+      toast.error('لا توجد لوحات ضمن النطاق المحدد');
+      return;
+    }
+
+    const targetIds = new Set(targetLines.map(l => l.id));
+    let updatedCount = 0;
+
+    setLines(prev => prev.map(l => {
+      if (!targetIds.has(l.id)) return l;
+      const max = l.maxFaces || 1;
+      let targetFaces = 1;
+      if (mode === 'single') targetFaces = 1;
+      else if (mode === 'double') targetFaces = Math.min(2, max);
+      else if (mode === 'max_available') targetFaces = max;
+
+      const selection = Array.from({ length: targetFaces }, (_, i) => i + 1);
+      updatedCount++;
+      return changeCostLineFaces(l, selection);
+    }));
+
+    toast.success(`تم تحديث أوجه ${updatedCount} لوحة`);
   };
 
   const distributeCutout = () => {
@@ -196,7 +294,7 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
     if (printEnabled && !lines.some(l => l.inPrint)) { toast.error('اختر لوحة واحدة على الأقل للطباعة أو أوقف الطباعة'); setTab('print'); return; }
     setSaving(true);
     try {
-      await saveEditor(state, lines, draft, { discountReason, notes, printerId });
+      await saveEditor(state, lines, draft, { discountReason, notes, printerId, discountMode, discountPercent: discountPct });
       toast.success('تم حفظ التكاليف');
       onSaved();
       onOpenChange(false);
@@ -208,23 +306,22 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
   };
 
   const instIncluded = !!totals?.installation.included;
+  const missingCustomer = useMemo(() => lines.filter(l => !(l.customer > 0)).length, [lines]);
   const printIncluded = !!totals?.print.included;
 
   const tabs: { key: Tab; label: string; icon: any; value?: string }[] = [
     { key: 'installation', label: 'التركيب', icon: Wrench, value: totals ? (instIncluded ? 'مشمول' : money(totals.installation.customer)) : '' },
     { key: 'print', label: 'الطباعة', icon: Printer, value: totals ? (!printEnabled ? 'متوقفة' : printIncluded ? 'مشمولة' : money(totals.print.customer)) : '' },
-    { key: 'cutout', label: 'المجسمات', icon: Scissors, value: totals ? (totals.cutout.count ? money(totals.cutout.customer) : '—') : '' },
-    { key: 'discount', label: 'الخصم والملاحظات', icon: Percent, value: discount ? money(discount) : '' },
-  ];
+    { key: 'cutout', label: 'المجسمات', icon: Scissors, value: totals ? (totals.cutout.count ? money(totals.cutout.customer) : '—') : '' },  ];
 
   return (
     <Dialog open={open} onOpenChange={close}>
-      <DialogContent dir="rtl" className="flex h-[94vh] max-w-[1280px] flex-col gap-0 overflow-hidden p-0 text-right">
+      <DialogContent dir="rtl" className="flex h-[95vh] max-h-[95vh] w-[95vw] max-w-[1360px] flex-col gap-0 overflow-hidden p-0 text-right">
         <header className="border-b border-border px-5 py-4 pl-12">
           <DialogTitle className="text-lg font-bold">تكاليف {op?.label}</DialogTitle>
           <DialogDescription className="mt-1 flex flex-wrap items-center gap-2 text-xs">
             <span className="font-semibold text-foreground">{op?.customerName}</span>
-            {op?.contractIds.map(n => <span key={n} className="rounded-md border border-border px-2 py-0.5 tabular-nums">عقد #{n}</span>)}
+            {op?.contractIds.map(n => <span key={n} className="rounded-md border border-border px-2 py-0.5"><b className="tabular-nums">عقد #{n}</b>{adTypeOf.get(n) && <span className="text-muted-foreground"> · {adTypeOf.get(n)}</span>}</span>)}
             {op?.teams.map(t => <span key={t} className="rounded-md bg-muted px-2 py-0.5">{t}</span>)}
             {instIncluded && <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-400">التركيب مشمول بالعقد</span>}
             {printIncluded && <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-emerald-700 dark:text-emerald-400">الطباعة مشمولة بالعقد</span>}
@@ -236,7 +333,7 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
         ) : !state || !totals ? (
           <div className="space-y-3 p-6">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
         ) : (
-          <div className="grid min-h-0 flex-1 lg:grid-cols-[1fr_340px]">
+          <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex min-h-0 flex-col">
               <nav className="flex gap-1 overflow-x-auto border-b border-border px-3 pt-2" role="tablist">
                 {tabs.map(t => (
@@ -254,9 +351,27 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                   <div className="space-y-3">
                     {instIncluded && <IncludedBanner what="التركيب" contractValue={state.contractValues.installation} expense={totals.installation.contractExpense} />}
 
-                    <section className="rounded-xl border border-border bg-muted/30 p-3">
-                      <div className="mb-2 text-xs font-bold text-muted-foreground">تسعير جماعي</div>
+                    {!instIncluded && missingCustomer > 0 && (
+                      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+                        <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-amber-700 dark:text-amber-400">{missingCustomer} لوحة بلا سعر على الزبون</div>
+                          <div className="text-xs text-muted-foreground">{state.draft.type === 'reinstallation' ? 'إعادة التركيب غير مشمولة بالعقد — ' : ''}حدّد سعر المتر أو المبلغ ثم اضغط «تطبيق».</div>
+                        </div>
+                        {state.suggested.installPerMeter > 0 && (
+                          <Button size="sm" variant="outline" className="h-8 border-amber-500/50" onClick={() => {
+                            const rate = state.suggested.installPerMeter;
+                            const ids = new Set(lines.filter(l => !(l.customer > 0)).map(l => l.id));
+                            setLines(prev => (applyBulkPrice(prev, ids, 'customer', 'meter', rate) as EditorLine[]).map(l => ids.has(l.id) ? { ...l, customerPerMeter: rate } : l));
+                            toast.success(`تم تسعير ${ids.size} لوحة بـ ${rate} د.ل/م²`);
+                          }}>تطبيق آخر سعر للزبون ({state.suggested.installPerMeter} د.ل/م²)</Button>
+                        )}
+                      </div>
+                    )}
+
+                    <section className="space-y-2.5 rounded-xl border border-border bg-muted/30 p-3">
                       <div className="flex flex-wrap items-center gap-2">
+                        <span className="w-[88px] shrink-0 text-xs font-bold text-muted-foreground">تسعير جماعي</span>
                         <Select value={bulkTarget} onValueChange={v => setBulkTarget(v as BulkTarget)}>
                           <SelectTrigger className="h-9 w-[150px]"><SelectValue /></SelectTrigger>
                           <SelectContent>
@@ -282,14 +397,22 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                             {sizes.map(s => <SelectItem key={s} value={`size:${s}`}>مقاس {s}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                        <Button size="sm" className="h-9" onClick={applyBulk}>تطبيق</Button>
-                        <Button size="sm" variant="outline" className="h-9 ms-auto" onClick={() => {
+                        <Button size="sm" className="h-9 px-5" onClick={applyBulk}>تطبيق</Button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-2.5">
+                        <span className="w-[88px] shrink-0 text-xs font-bold text-muted-foreground">الأوجه</span>
+                        <div className="inline-flex rounded-lg border border-border bg-background p-0.5">
+                          {([['single', 'وجه واحد'], ['double', 'وجهين'], ['max_available', 'حسب المتوفر']] as const).map(([m, label]) => (
+                            <Button key={m} type="button" size="sm" variant="ghost" className="h-7 px-3 text-xs hover:bg-muted" onClick={() => applyBulkFaces(m)}>{label}</Button>
+                          ))}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground">على {scope === 'selected' ? `المحددة (${selected.size})` : scope === 'visible' ? `الظاهرة (${visible.length})` : `مقاس ${scope.replace(/^size:/, '')}`}</span>
+                        <Button size="sm" variant="outline" className="h-8 ms-auto text-xs" title="سعر تركيب المقاس في الإعدادات (نصفه للوجه الواحد)" onClick={() => {
                           const missing = lines.filter(l => !l.sizeInstallPrice).length;
                           setLines(prev => prev.map(l => ({ ...l, company: l.sizeInstallPrice || l.company })));
                           toast.success(missing ? `تم جلب تكلفة الفرقة من الأسعار الافتراضية؛ ${missing} لوحة بلا سعر افتراضي لمقاسها` : 'تم جلب تكلفة الفرقة من الأسعار الافتراضية للمقاسات');
-                        }}>تكلفة الفرقة من الأسعار الافتراضية</Button>
+                        }}>تكلفة الفرقة الافتراضية</Button>
                       </div>
-                      <div className="mt-2 text-[11px] text-muted-foreground">السعر الافتراضي = سعر تركيب المقاس في الإعدادات (نصفه للوحة ذات الوجه الواحد).</div>
                     </section>
 
                     <div className="flex flex-wrap items-center gap-2">
@@ -308,42 +431,51 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                       )}
                     </div>
 
-                    <div className="overflow-x-auto rounded-xl border border-border">
-                      <table className="w-full min-w-[760px] text-sm">
-                        <thead className="bg-muted/50 text-xs text-muted-foreground">
+                    <div className="rounded-xl border border-border">
+                      <table className="w-full min-w-[860px] text-sm">
+                        <thead className="sticky -top-4 z-10 bg-muted text-[11px] text-muted-foreground shadow-[0_1px_0_hsl(var(--border))]">
                           <tr>
                             <th className="w-10 p-2"><Checkbox aria-label="تحديد الكل" checked={visible.length > 0 && visible.every(l => selected.has(l.id))}
                               onCheckedChange={c => setSelected(c ? new Set(visible.map(l => l.id)) : new Set())} /></th>
                             <th className="p-2 text-right">اللوحة</th>
-                            <th className="p-2">الأوجه / المساحة</th>
+                            <th className="p-2">الأوجه</th>
                             <th className="p-2">سعر الزبون</th>
                             <th className="p-2">تكلفة الفرقة</th>
                             <th className="p-2">إضافي زبون</th>
                             <th className="p-2">إضافي شركة</th>
+                            <th className="p-2 text-left">الربح</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {visible.map(l => (
-                            <tr key={l.id} className="border-t border-border">
+                          {visible.map(l => {
+                            const noPrice = !instIncluded && !(l.customer > 0);
+                            const lineProfit = (instIncluded ? 0 : l.customer) + l.customerExtra - (instIncluded ? l.companyExtra : l.company + l.companyExtra);
+                            return (
+                            <tr key={l.id} className={cn('border-t border-border transition-colors hover:bg-muted/30', selected.has(l.id) && 'bg-primary/5')}>
                               <td className="p-2 text-center"><Checkbox aria-label={`تحديد ${l.name}`} checked={selected.has(l.id)}
                                 onCheckedChange={c => setSelected(prev => { const n = new Set(prev); c ? n.add(l.id) : n.delete(l.id); return n; })} /></td>
-                              <td className="p-2"><BoardCell l={l} extra={[teams.length > 1 ? l.teamName : '', op && op.contractIds.length > 1 && l.contractNumber ? `عقد #${l.contractNumber}` : ''].filter(Boolean).join(' · ')} /></td>
-                              <td className="p-2 text-center text-xs tabular-nums text-muted-foreground">{l.faces} وجه · {lineArea(l).toFixed(1)} م²</td>
+                              <td className="p-2"><BoardCell l={l} extra={[teams.length > 1 ? l.teamName : '', op && op.contractIds.length > 1 && l.contractNumber ? `عقد #${l.contractNumber}${adTypeOf.get(l.contractNumber) ? ` · ${adTypeOf.get(l.contractNumber)}` : ''}` : ''].filter(Boolean).join(' · ')} /></td>
+                              <td className="p-2 text-center"><FacesPicker l={l} onToggle={f => handleToggleLineFace(l, f)} /></td>
                               <td className="p-2 w-[120px]">
-                                <Num label="سعر الزبون" value={l.customer} disabled={instIncluded} onChange={v => update(l.id, { customer: v, customerPerMeter: null })} />
+                                <Num label="سعر الزبون" value={l.customer} disabled={instIncluded} onChange={v => update(l.id, { customer: v, customerPerMeter: null })}
+                                  className={noPrice ? 'border-amber-500/70 bg-amber-500/5' : undefined} />
                                 {!instIncluded && l.customerPerMeter ? <div className="mt-0.5 text-center text-[10px] tabular-nums text-primary">{l.customerPerMeter} د.ل/م²</div> : null}
                               </td>
                               <td className="p-2 w-[120px]">
-                                <Num label="تكلفة الفرقة" value={l.company} onChange={v => update(l.id, { company: v })} />
+                                <Num label="تكلفة الفرقة" value={l.company} onChange={v => update(l.id, { company: v, companyPerMeter: null })} />
                                 {l.sizeInstallPrice > 0 && l.company !== l.sizeInstallPrice && (
-                                  <button type="button" className="mt-0.5 w-full text-center text-[10px] text-primary hover:underline" onClick={() => update(l.id, { company: l.sizeInstallPrice })}>الافتراضي {l.sizeInstallPrice}</button>
+                                  <button type="button" className="mt-0.5 w-full text-center text-[10px] text-primary hover:underline" onClick={() => update(l.id, { company: l.sizeInstallPrice, companyPerMeter: null })}>الافتراضي {l.sizeInstallPrice}</button>
                                 )}
                               </td>
-                              <td className="p-2 w-[100px]"><Num label="إضافي زبون" value={l.customerExtra} onChange={v => update(l.id, { customerExtra: v })} /></td>
-                              <td className="p-2 w-[100px]"><Num label="إضافي شركة" value={l.companyExtra} onChange={v => update(l.id, { companyExtra: v })} /></td>
+                              <td className="p-2 w-[96px]"><Num label="إضافي زبون" value={l.customerExtra} onChange={v => update(l.id, { customerExtra: v })} className="text-muted-foreground" /></td>
+                              <td className="p-2 w-[96px]"><Num label="إضافي شركة" value={l.companyExtra} onChange={v => update(l.id, { companyExtra: v })} className="text-muted-foreground" /></td>
+                              <td className={cn('p-2 w-[96px] text-left text-xs font-semibold tabular-nums', instIncluded ? 'text-muted-foreground' : lineProfit < 0 ? 'text-destructive' : 'text-emerald-600')}>
+                                {instIncluded ? 'مشمول' : money(lineProfit)}
+                              </td>
                             </tr>
-                          ))}
-                          {!visible.length && <tr><td colSpan={7} className="p-6 text-center text-muted-foreground">لا توجد لوحات</td></tr>}
+                            );
+                          })}
+                          {!visible.length && <tr><td colSpan={8} className="p-6 text-center text-muted-foreground">لا توجد لوحات</td></tr>}
                         </tbody>
                       </table>
                     </div>
@@ -380,7 +512,7 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                           </div>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">{totals.print.boards} لوحة · <b className="tabular-nums text-foreground">{totals.print.area.toFixed(2)} م²</b></span>
+                          <span className="text-muted-foreground">{totals.print.boards} لوحة · <b className="text-foreground"><Area value={totals.print.area} /></b></span>
                           <span className="flex gap-2">
                             <Button variant="outline" size="sm" onClick={() => setLines(p => p.map(l => ({ ...l, inPrint: true })))}>تحديد الكل</Button>
                             <Button variant="outline" size="sm" onClick={() => setLines(p => p.map(l => ({ ...l, inPrint: false })))}>إلغاء الكل</Button>
@@ -392,7 +524,7 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                               <Checkbox checked={l.inPrint} onCheckedChange={c => update(l.id, { inPrint: !!c })} />
                               <div className="min-w-0 flex-1"><BoardCell l={l} /></div>
                               <div className="shrink-0 text-left text-xs tabular-nums">
-                                <div className="font-semibold">{lineArea(l).toFixed(1)} م²</div>
+                                <div className="font-semibold"><Area value={lineArea(l)} /></div>
                                 <div className="text-muted-foreground">{l.faces} وجه</div>
                                 {l.inPrint && !printIncluded && printCust > 0 && <div className="text-muted-foreground">{money(lineArea(l) * printCust)}</div>}
                               </div>
@@ -443,23 +575,6 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                   </div>
                 )}
 
-                {tab === 'discount' && (
-                  <div className="max-w-xl space-y-4">
-                    <div className="space-y-1">
-                      <div className="text-sm font-semibold">خصم على المهمة</div>
-                      <Num label="الخصم" value={discount} onChange={setDiscount} className="w-[180px]" />
-                      {discount > totals.customerSubtotal && <div className="text-xs text-amber-600">الخصم أكبر من المستحق؛ سيُطبَّق بحد {money(totals.customerSubtotal)} فقط.</div>}
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-sm font-semibold">سبب الخصم</div>
-                      <Input value={discountReason} onChange={e => setDiscountReason(e.target.value)} />
-                    </div>
-                    <div className="space-y-1">
-                      <div className="text-sm font-semibold">ملاحظات</div>
-                      <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={4} />
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
 
@@ -482,9 +597,43 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                   </tbody>
                 </table>
 
-                <dl className="space-y-2 rounded-xl border border-border bg-card p-3 text-sm tabular-nums">
+                <dl className="space-y-2.5 rounded-xl border border-border bg-card p-3 text-sm tabular-nums">
                   <div className="flex justify-between"><dt className="text-muted-foreground">إجمالي الزبون</dt><dd>{money(totals.customerSubtotal)}</dd></div>
-                  {totals.discount > 0 && <div className="flex justify-between text-amber-600"><dt>الخصم</dt><dd>− {money(totals.discount)}</dd></div>}
+                  <div className="space-y-1.5 rounded-lg bg-muted/40 p-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="flex items-center gap-1.5 text-muted-foreground"><Percent className="h-3.5 w-3.5" />الخصم</dt>
+                      <dd className="flex items-center gap-1.5">
+                        <div role="radiogroup" aria-label="طريقة الخصم" className="flex rounded-md border border-border bg-background p-0.5 text-[11px]">
+                          {([['amount', 'د.ل'], ['percent', '%']] as const).map(([m, label]) => (
+                            <button key={m} type="button" role="radio" aria-checked={discountMode === m}
+                              onClick={() => {
+                                if (m === discountMode) return;
+                                const sub = totals.customerSubtotal;
+                                if (m === 'percent') setDiscountPct(sub > 0 ? Math.round((totals.discount / sub) * 10000) / 100 : 0);
+                                else setDiscount(totals.discount);
+                                setDiscountMode(m);
+                              }}
+                              className={cn('h-6 min-w-[32px] rounded px-1.5 font-semibold transition-colors', discountMode === m ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:text-foreground')}>
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                        {discountMode === 'percent'
+                          ? <Num label="نسبة الخصم" value={discountPct} onChange={v => setDiscountPct(Math.min(100, v))} className={cn('h-8 w-[80px] bg-background', discountPct > 0 && 'border-amber-500/60 text-amber-700 dark:text-amber-400')} />
+                          : <Num label="مبلغ الخصم" value={discount} onChange={setDiscount} className={cn('h-8 w-[100px] bg-background', discount > 0 && 'border-amber-500/60 text-amber-700 dark:text-amber-400')} />}
+                      </dd>
+                    </div>
+                    {totals.discount > 0 && (
+                      <div className="flex justify-between text-[11px] text-amber-700 dark:text-amber-400">
+                        <span>{discountMode === 'percent' ? `${discountPct}% من ${money(totals.customerSubtotal)}` : totals.customerSubtotal > 0 ? `${Math.round((totals.discount / totals.customerSubtotal) * 1000) / 10}% من الإجمالي` : ''}</span>
+                        <span className="font-semibold">− {money(totals.discount)}</span>
+                      </div>
+                    )}
+                    {(totals.discount > 0 || discountReason) && (
+                      <Input value={discountReason} onChange={e => setDiscountReason(e.target.value)} placeholder="سبب الخصم" aria-label="سبب الخصم" className="h-8 bg-background text-xs" />
+                    )}
+                    {discountMode === 'amount' && discount > totals.customerSubtotal && <div className="text-[11px] text-amber-600">أكبر من الإجمالي؛ سيُطبَّق بحد {money(totals.customerSubtotal)}.</div>}
+                  </div>
                   <div className="flex justify-between border-t border-border pt-2 text-base font-bold"><dt>المستحق على الزبون</dt><dd>{money(totals.customerTotal)}</dd></div>
                 </dl>
 
@@ -497,7 +646,16 @@ export function CostEditorDialog({ op, open, onOpenChange, onSaved }: { op: Oper
                   <div className={cn('flex justify-between border-t border-border pt-2 text-base font-bold', totals.profit < 0 ? 'text-destructive' : 'text-emerald-600')}>
                     <dt>ربح المهمة</dt><dd>{money(totals.profit)}{totals.customerTotal > 0 && <span className="mr-1 text-xs font-normal">({totals.margin}%)</span>}</dd>
                   </div>
+                  {!instIncluded && missingCustomer > 0 && (
+                    <button type="button" onClick={() => setTab('installation')} className="w-full rounded-md bg-amber-500/10 px-2 py-1 text-right text-[11px] text-amber-700 hover:bg-amber-500/20 dark:text-amber-400">
+                      {missingCustomer} لوحة بلا سعر على الزبون — لم يُحتسب لها مستحق
+                    </button>
+                  )}
                 </dl>
+                <div className="space-y-1.5 rounded-xl border border-border bg-card p-3">
+                  <div className="text-xs font-semibold text-muted-foreground">ملاحظات</div>
+                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={3} placeholder="ملاحظات على العملية…" aria-label="ملاحظات" className="resize-none bg-background text-sm" />
+                </div>
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   ربح المهمة = المستحق على الزبون − تكلفة الخدمات غير المشمولة. تكلفة الخدمات المشمولة في العقد تُحمَّل على العقد نفسه.
                 </p>

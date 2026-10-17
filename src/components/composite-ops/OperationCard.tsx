@@ -83,8 +83,18 @@ export function OperationCard({ r, selected, onToggle, busy, a }: { r: Operation
   return (
     <article style={tintStyle(colors)} className={cn('flex flex-col overflow-hidden rounded-2xl border-2 bg-card shadow-sm', selected ? 'ring-2 ring-primary' : '', !colors && 'border-border')}>
       <div className="relative shrink-0 border-b border-border/60" style={{ height: 'var(--img-h,230px)' }}>
+        {/* الصورة الرئيسية التصميم دائماً؛ صور التركيب مصغّرة في الزاوية */}
         <ZoomImage src={urls[0]} alt={`تصميم ${r.customerName}`} title={`${r.customerName} · ${r.label}`} className="h-full w-full bg-black/5"
-          gallery={urls.map((s, i) => ({ src: s, label: `تصميم ${i + 1}` }))} />
+          gallery={[...urls.map((s, i) => ({ src: s, label: `تصميم ${i + 1}` })), ...r.installedPhotos.map((s, i) => ({ src: s, label: `تركيب ${i + 1}` }))]} />
+        {r.installedPhotos.length > 0 && (
+          <div className="absolute bottom-2 left-2 flex items-end gap-1.5">
+            <div className="h-12 w-16 overflow-hidden rounded-md border-2 border-white shadow">
+              <ZoomImage src={r.installedPhotos[0]} alt={`تركيب ${r.customerName}`} title={`${r.customerName} · ${r.label}`} className="h-full w-full" imgClassName="object-cover"
+                gallery={[...urls.map((s, i) => ({ src: s, label: `تصميم ${i + 1}` })), ...r.installedPhotos.map((s, i) => ({ src: s, label: `تركيب ${i + 1}` }))]} />
+            </div>
+            <span className="rounded-lg bg-emerald-600 px-2 py-0.5 text-xs text-white shadow">صور تركيب {r.installedPhotos.length}</span>
+          </div>
+        )}
         <Checkbox className="absolute right-3 top-3 h-6 w-6 border-2 bg-background" aria-label={`تحديد ${r.label} - ${r.customerName}`} checked={selected} onCheckedChange={onToggle} />
         <div className="absolute left-3 top-3 flex flex-col items-end gap-1">
           <span className={cn('rounded-lg px-2.5 py-1 text-sm font-semibold shadow', STATUS[r.status].cls)}>{STATUS[r.status].label}</span>
@@ -93,7 +103,7 @@ export function OperationCard({ r, selected, onToggle, busy, a }: { r: Operation
         {urls.length > 1 && <span className="absolute bottom-2 right-3 rounded-lg bg-black/60 px-2 py-0.5 text-xs text-white">{urls.length} تصاميم</span>}
       </div>
 
-      <div className="flex min-w-0 flex-1 flex-col gap-3 p-4">
+      <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="text-xl font-bold leading-tight">{r.customerName}</h2>
@@ -135,13 +145,13 @@ export function OperationCard({ r, selected, onToggle, busy, a }: { r: Operation
           </div>
         </div>
 
-        <div className="mt-auto grid grid-cols-2 gap-2 sm:grid-cols-3">
-          <Button className="h-10" onClick={() => a.onCosts(r)}><Calculator className="h-4 w-4" />التكاليف</Button>
-          <Button variant="outline" className="h-10 bg-background/80" disabled={!r.tasks.some(t => t.installation_task_id)} onClick={() => a.onBoards(r)}><FolderOpen className="h-4 w-4" />اللوحات</Button>
-          <Button variant="outline" className="h-10 bg-background/80" onClick={() => a.onInvoice(r)}><FileText className="h-4 w-4" />الفاتورة</Button>
-          <Button variant="outline" className="h-10 bg-background/80" disabled={busy} onClick={() => a.onDesigns(r)}><ImagePlus className="h-4 w-4" />التصاميم</Button>
-          <Button variant="outline" className="h-10 bg-background/80" disabled={busy} onClick={() => a.onDistribute(r)}><Palette className="h-4 w-4" />توزيع التصاميم</Button>
-          <Button variant="outline" className="h-10 bg-background/80" disabled={busy} onClick={() => a.onPrint(r)}><Printer className="h-4 w-4" />طباعة التركيب</Button>
+        <div className="mt-auto grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+          <Button className="h-9 text-sm" onClick={() => a.onCosts(r)}><Calculator className="h-4 w-4" />التكاليف</Button>
+          <Button variant="outline" className="h-9 bg-background/80 text-sm" disabled={!r.tasks.some(t => t.installation_task_id)} onClick={() => a.onBoards(r)}><FolderOpen className="h-4 w-4" />اللوحات</Button>
+          <Button variant="outline" className="h-9 bg-background/80 text-sm" onClick={() => a.onInvoice(r)}><FileText className="h-4 w-4" />الفاتورة</Button>
+          <Button variant="outline" className="h-9 bg-background/80 text-sm" disabled={busy} onClick={() => a.onDesigns(r)}><ImagePlus className="h-4 w-4" />التصاميم</Button>
+          <Button variant="outline" className="h-9 bg-background/80 text-sm" disabled={busy} onClick={() => a.onDistribute(r)}><Palette className="h-4 w-4" />توزيع التصاميم</Button>
+          <Button variant="outline" className="h-9 bg-background/80 text-sm" disabled={busy} onClick={() => a.onPrint(r)}><Printer className="h-4 w-4" />طباعة التركيب</Button>
         </div>
       </div>
     </article>

@@ -968,7 +968,7 @@ body[data-scroll-locked] [data-radix-dialog-content] {
 .billboard-edit-dialog .text-xs { font-size: 12px; }
 .billboard-edit-dialog .text-sm { font-size: 13px; }
 .billboard-edit-dialog input:not([type="checkbox"]),
-.billboard-edit-dialog button:not(.absolute) {
+.billboard-edit-dialog button:not(.absolute):not([role="checkbox"]):not([role="switch"]) {
   min-height: 42px;
 }
 .billboard-edit-dialog input,
@@ -1082,4 +1082,12 @@ body[data-scroll-locked] [data-radix-dialog-content] {
 .billboard-grid-card { container-type: inline-size; container-name: billboard-card; }
 @container billboard-card (max-width: 220px) {
   .billboard-contract-thumbnail { display: none; }
+}
+
+/* Management cards retain the same hierarchy at miniature sizes. */
+@container billboard-card (max-width: 180px) {
+  .billboard-card-header { padding: 6px 8px; gap: 4px; align-items: center; }
+  .billboard-management-size { font-size: 15px; }
+  .billboard-card-body { padding: 8px; gap: 8px; }
+  .billboard-card-body h4 { font-size: 12px; }
 }

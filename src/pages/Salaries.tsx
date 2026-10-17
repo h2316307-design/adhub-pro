@@ -654,6 +654,15 @@ export default function Salaries() {
     }
   };
 
+  /** الراتب أو المستحقات حسب نوع العمل — يُستخدم في الجدول والبطاقات */
+  const payOf = (employee: Employee) => employee.salary_type === 'monthly'
+    ? `${(employee.base_salary || 0).toLocaleString('en-US')} د.ل`
+    : employee.installation_team_id && teamEarnings[employee.installation_team_id] != null
+      ? <span className="text-blue-600 dark:text-blue-400 font-bold">{Math.round(teamEarnings[employee.installation_team_id]).toLocaleString('en-US')} د.ل</span>
+      : employee.linked_to_operating_expenses
+        ? <span className="text-orange-600 dark:text-orange-400 font-bold">{Math.round(operatingStats.totalRevenue).toLocaleString('en-US')} د.ل</span>
+        : <span className="text-muted-foreground text-xs">بالعمل</span>;
+
   return (
     <div className="finance-page mx-auto px-4 py-6 md:px-6 space-y-6 max-w-[1440px]" dir="rtl">
       <FinancePageHeader title="الرواتب والموظفون" description="راجع مستحقات فريقك، وأنشئ دورات الرواتب وتابع السلف والمدفوعات." icon={Users}
@@ -688,11 +697,11 @@ export default function Salaries() {
               </CardTitle>
               <div className="flex flex-col sm:flex-row gap-3 pt-3">
                 <Input aria-label="البحث عن موظف" placeholder="ابحث بالاسم أو الوظيفة أو رقم الهاتف" value={employeeSearch} onChange={e => setEmployeeSearch(e.target.value)} className="sm:max-w-md bg-background" />
-                <Select value={employeeStatus} onValueChange={setEmployeeStatus}><SelectTrigger aria-label="حالة الموظف" className="sm:w-44 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">جميع الموظفين</SelectItem><SelectItem value="active">النشطون</SelectItem><SelectItem value="inactive">غير النشطين</SelectItem></SelectContent></Select>
+                <Select value={employeeStatus} onValueChange={setEmployeeStatus}><SelectTrigger aria-label="حالة الموظف" className="sm:w-52 bg-background"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">جميع الموظفين ({employees.length})</SelectItem><SelectItem value="active">النشطون ({activeEmployees})</SelectItem><SelectItem value="inactive">غير النشطين ({employees.length - activeEmployees})</SelectItem></SelectContent></Select>
               </div>
             </CardHeader>
             <CardContent className="p-0">
-              <div className="overflow-x-auto">
+              <div className="hidden overflow-x-auto md:block">
                 <Table>
                   <TableHeader className="bg-muted/50">
                     <TableRow>
@@ -710,8 +719,11 @@ export default function Salaries() {
                   <TableBody>
                     {visibleEmployees.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={9} className="text-center text-muted-foreground py-8 text-sm">
-                          {employees.length ? 'لا توجد نتائج مطابقة للبحث.' : 'ابدأ بإضافة أول موظف لتسجيل مستحقاته.'}
+                        <TableCell colSpan={9} className="text-center text-muted-foreground py-10 text-sm">
+                          <div className="flex flex-col items-center gap-3">
+                            <span>{employees.length ? 'لا توجد نتائج مطابقة للبحث أو الفلتر.' : 'ابدأ بإضافة أول موظف لتسجيل مستحقاته.'}</span>
+                            {!employees.length && canEditSection && <Button size="sm" variant="outline" onClick={() => handleOpenDialog()} className="gap-2"><Plus className="h-4 w-4" />إضافة موظف</Button>}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ) : (
@@ -740,16 +752,7 @@ export default function Salaries() {
                                 <span className="text-muted-foreground text-xs">—</span>
                               )}
                             </TableCell>
-                            <TableCell className="font-semibold font-manrope text-sm">
-                              {employee.salary_type === 'monthly' 
-                                ? `${(employee.base_salary || 0).toLocaleString('en-US')} د.ل`
-                                : employee.installation_team_id && teamEarnings[employee.installation_team_id] != null
-                                  ? <span className="text-blue-600 dark:text-blue-400 font-bold">{Math.round(teamEarnings[employee.installation_team_id]).toLocaleString('en-US')} د.ل</span>
-                                  : employee.linked_to_operating_expenses
-                                    ? <span className="text-orange-600 dark:text-orange-400 font-bold">{Math.round(operatingStats.totalRevenue).toLocaleString('en-US')} د.ل</span>
-                                    : <span className="text-muted-foreground text-xs">بالعمل</span>
-                              }
-                            </TableCell>
+                            <TableCell className="font-semibold font-manrope text-sm">{payOf(employee)}</TableCell>
                             <TableCell className="font-manrope text-xs text-muted-foreground">{fmtDate(employee.hire_date)}</TableCell>
                             <TableCell>
                               <Badge 
@@ -767,6 +770,7 @@ export default function Salaries() {
                                   className="h-8 w-8 p-0 rounded-lg hover:bg-primary/10 hover:text-primary transition-colors"
                                   onClick={() => navigate(`/admin/employees/${employee.id}`)}
                                   title="الملف الشخصي"
+                                  aria-label={`الملف الشخصي لـ ${employee.name}`}
                                 >
                                   <User className="h-4 w-4" />
                                 </Button>
@@ -776,6 +780,7 @@ export default function Salaries() {
                                   className="h-8 w-8 p-0 rounded-lg hover:bg-blue-500/10 hover:text-blue-600 transition-colors"
                                   onClick={() => handleOpenDialog(employee)}
                                   title="تعديل"
+                                  aria-label={`تعديل ${employee.name}`}
                                 >
                                   <Edit className="h-4 w-4" />
                                 </Button>
@@ -785,6 +790,7 @@ export default function Salaries() {
                                   className="h-8 w-8 p-0 rounded-lg hover:bg-rose-500/10 hover:text-rose-600 transition-colors"
                                   onClick={() => handleDelete(employee.id)}
                                   title="حذف"
+                                  aria-label={`حذف ${employee.name}`}
                                 >
                                   <Trash2 className="h-4 w-4 text-rose-600" />
                                 </Button>
@@ -796,6 +802,51 @@ export default function Salaries() {
                     )}
                   </TableBody>
                 </Table>
+              </div>
+              {/* بطاقات الجوال: بديل الجدول على الشاشات الصغيرة */}
+              <div className="grid gap-3 p-3 md:hidden">
+                {visibleEmployees.length === 0 ? (
+                  <div className="py-8 text-center text-sm text-muted-foreground">
+                    {employees.length ? 'لا توجد نتائج مطابقة للبحث أو الفلتر.' : 'ابدأ بإضافة أول موظف لتسجيل مستحقاته.'}
+                  </div>
+                ) : visibleEmployees.map(employee => {
+                  const team = installationTeams.find(t => t.id === employee.installation_team_id);
+                  return (
+                    <article key={employee.id} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <h3 className="truncate text-base font-bold">{employee.name}</h3>
+                          <p className="text-xs text-muted-foreground">{employee.position || 'بدون وظيفة'}</p>
+                        </div>
+                        <Badge variant={employee.status === 'active' ? 'default' : 'secondary'} className={`shrink-0 text-xs ${employee.status === 'active' ? 'bg-emerald-600 text-white hover:bg-emerald-700' : ''}`}>
+                          {employee.status === 'active' ? 'نشط' : 'غير نشط'}
+                        </Badge>
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-1.5">
+                        <Badge variant={employee.salary_type === 'monthly' ? 'default' : 'secondary'} className="text-xs">
+                          {employee.salary_type === 'monthly' ? 'راتب شهري' : employee.salary_type === 'hourly' ? 'بالعمل' : employee.salary_type}
+                        </Badge>
+                        {team && <Badge variant="outline" className="border-blue-500/20 text-xs text-blue-600">{team.team_name}</Badge>}
+                        {employee.linked_to_operating_expenses && <Badge className="bg-orange-500 text-xs text-white hover:bg-orange-600">مرتبط بالتشغيل</Badge>}
+                      </div>
+                      <div className="mt-3 flex items-end justify-between gap-2 border-t border-border/60 pt-3">
+                        <div>
+                          <div className="text-[11px] text-muted-foreground">الراتب / المستحقات</div>
+                          <div className="font-manrope text-base font-bold tabular-nums">{payOf(employee)}</div>
+                        </div>
+                        <div className="text-end">
+                          <div className="text-[11px] text-muted-foreground">تاريخ التعيين</div>
+                          <div className="font-manrope text-xs tabular-nums">{fmtDate(employee.hire_date)}</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-2">
+                        <Button size="sm" variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => navigate(`/admin/employees/${employee.id}`)}><User className="h-3.5 w-3.5" />الملف</Button>
+                        <Button size="sm" variant="outline" className="h-9 gap-1.5 text-xs" onClick={() => handleOpenDialog(employee)}><Edit className="h-3.5 w-3.5" />تعديل</Button>
+                        <Button size="sm" variant="outline" className="h-9 gap-1.5 text-xs text-rose-600 hover:text-rose-700" onClick={() => handleDelete(employee.id)}><Trash2 className="h-3.5 w-3.5" />حذف</Button>
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
             </CardContent>
           </Card>

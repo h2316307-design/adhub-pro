@@ -25,7 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/components/ui/switch';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getSharedOperationCostsForTask } from '@/lib/compositeTaskOperation';
-import { resolveInstallationFacesCount } from '@/lib/installationFaces';
+import { resolveInstallationFacesCount, getAvailableFacesCount } from '@/lib/installationFaces';
 
 interface EnhancedEditCompositeTaskCostsDialogProps {
   task: CompositeTaskWithDetails | null;
@@ -86,7 +86,7 @@ interface CutoutItem {
 interface Billboard {
   ID: number;
   Size: string;
-  Faces_Count?: number;
+  Faces_Count?: number | string | null;
   Billboard_Name?: string;
   billboard_type?: string;
   Nearest_Landmark?: string;
@@ -566,6 +566,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
       const bb = billboards[item.billboard_id] || { ID: item.billboard_id, Size: 'غير محدد' };
       const sizeName = bb.Size || 'غير محدد';
       const singleFaceArea = calculateEnhancedCompositeAreaFromSize(sizeName, sizesMap);
+      const availableFaces = getAvailableFacesCount(bb);
       const faces = resolveInstallationFacesCount({
         faces_to_install: item.faces_to_install,
         billboard: bb,
@@ -597,6 +598,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
         itemCustPrice,
         itemCompCost,
         faces,
+        availableFaces,
         iterationsCount,
       };
     });
@@ -724,13 +726,72 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
   };
 
   const handleToggleItemFaces = (itemId: string, newFaces: number) => {
-    setTaskItems(prev => prev.map(item => {
-      if (item.id !== itemId) return item;
+    const item = taskItems.find(i => i.id === itemId);
+    if (!item) return;
+
+    const bb = billboards[item.billboard_id];
+    const availableFaces = getAvailableFacesCount(bb);
+    const validNewFaces = Math.max(1, Math.min(newFaces, availableFaces));
+
+    const currentFaces = resolveInstallationFacesCount({
+      faces_to_install: item.faces_to_install,
+      billboard: bb,
+    });
+
+    if (validNewFaces === currentFaces && item.faces_to_install === validNewFaces) return;
+
+    const isTaskRe = (primaryTask as any)?.task_type === 'reinstallation';
+    const isReinstalled = isTaskRe && (item.reinstall_count || 0) > 0;
+    const iterationsCount = isReinstalled ? Math.max(1, item.reinstall_count || 1) : 1;
+
+    const sizeName = bb?.Size || 'غير محدد';
+    const singleFaceArea = calculateEnhancedCompositeAreaFromSize(sizeName, sizesMap);
+
+    const isCustCostFree = isInstallFreeByContract || 
+      (isReinstalled ? (item.customer_reinstall_cost === 0 && (item.customer_installation_cost === 0 || !item.customer_installation_cost)) : item.customer_installation_cost === 0);
+
+    let nextCustomerCost: number = isReinstalled 
+      ? (Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0)
+      : (item.customer_installation_cost ?? 0);
+
+    if (!isCustCostFree) {
+      if (item.pricing_type === 'meter') {
+        const ratePerMeter = item.price_per_meter || batchPriceValue || 0;
+        if (ratePerMeter > 0 && singleFaceArea > 0) {
+          nextCustomerCost = Math.round(ratePerMeter * singleFaceArea * validNewFaces * iterationsCount);
+        }
+      } else {
+        if (currentFaces > 0 && nextCustomerCost > 0) {
+          nextCustomerCost = Math.round((nextCustomerCost / currentFaces) * validNewFaces);
+        }
+      }
+    }
+
+    let nextCompanyCost: number | null = item.company_installation_cost;
+    const sizeInfo = sizesMap[sizeName] || sizesMap[sizeName.toLowerCase()];
+    const baseSizePrice = sizeInfo?.installation_price || 0;
+
+    if (nextCompanyCost !== null && nextCompanyCost !== undefined) {
+      if (currentFaces > 0 && nextCompanyCost > 0) {
+        nextCompanyCost = Math.round((nextCompanyCost / currentFaces) * validNewFaces);
+      }
+    } else if (baseSizePrice > 0) {
+      nextCompanyCost = Math.round(baseSizePrice * (validNewFaces / Math.max(1, availableFaces)));
+    }
+
+    setTaskItems(prev => prev.map(it => {
+      if (it.id !== itemId) return it;
       return {
-        ...item,
-        faces_to_install: newFaces,
+        ...it,
+        faces_to_install: validNewFaces,
+        customer_installation_cost: nextCustomerCost,
+        customer_reinstall_cost: nextCustomerCost,
+        company_installation_cost: nextCompanyCost,
       };
     }));
+
+    const faceText = validNewFaces === 1 ? 'وجه واحد' : validNewFaces === 2 ? 'وجهين' : `${validNewFaces} أوجه`;
+    toast.success(`تم تعيين ${faceText} للوحة #${item.billboard_id} وتحديث التكلفة`);
   };
 
   const handleToggleItemIterations = (itemId: string, iterations: number) => {
@@ -751,12 +812,86 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
     }));
   };
 
-  const handleSetAllFaces = (faces: number) => {
-    setTaskItems(prev => prev.map(item => ({
-      ...item,
-      faces_to_install: faces,
-    })));
-    toast.success(`تم تعيين جميع اللوحات على ${faces === 1 ? 'وجه واحد' : 'وجهين'}`);
+  const handleSetAllFaces = (mode: 'single' | 'double' | 'max_available' | number) => {
+    setTaskItems(prev => prev.map(item => {
+      const bb = billboards[item.billboard_id];
+      const availableFaces = getAvailableFacesCount(bb);
+
+      let targetFaces = 1;
+      if (mode === 'single' || mode === 1) {
+        targetFaces = 1;
+      } else if (mode === 'double' || mode === 2) {
+        targetFaces = Math.min(2, availableFaces);
+      } else if (mode === 'max_available') {
+        targetFaces = availableFaces;
+      } else if (typeof mode === 'number') {
+        targetFaces = Math.max(1, Math.min(mode, availableFaces));
+      }
+
+      const currentFaces = resolveInstallationFacesCount({
+        faces_to_install: item.faces_to_install,
+        billboard: bb,
+      });
+
+      if (targetFaces === currentFaces && item.faces_to_install === targetFaces) {
+        return item;
+      }
+
+      const isTaskRe = (primaryTask as any)?.task_type === 'reinstallation';
+      const isReinstalled = isTaskRe && (item.reinstall_count || 0) > 0;
+      const iterationsCount = isReinstalled ? Math.max(1, item.reinstall_count || 1) : 1;
+
+      const sizeName = bb?.Size || 'غير محدد';
+      const singleFaceArea = calculateEnhancedCompositeAreaFromSize(sizeName, sizesMap);
+
+      const isCustCostFree = isInstallFreeByContract || 
+        (isReinstalled ? (item.customer_reinstall_cost === 0 && (item.customer_installation_cost === 0 || !item.customer_installation_cost)) : item.customer_installation_cost === 0);
+
+      let nextCustomerCost: number = isReinstalled 
+        ? (Number(item.customer_reinstall_cost) || Number(item.customer_installation_cost) || 0)
+        : (item.customer_installation_cost ?? 0);
+
+      if (!isCustCostFree) {
+        if (item.pricing_type === 'meter') {
+          const ratePerMeter = item.price_per_meter || batchPriceValue || 0;
+          if (ratePerMeter > 0 && singleFaceArea > 0) {
+            nextCustomerCost = Math.round(ratePerMeter * singleFaceArea * targetFaces * iterationsCount);
+          }
+        } else {
+          if (currentFaces > 0 && nextCustomerCost > 0) {
+            nextCustomerCost = Math.round((nextCustomerCost / currentFaces) * targetFaces);
+          }
+        }
+      }
+
+      let nextCompanyCost: number | null = item.company_installation_cost;
+      const sizeInfo = sizesMap[sizeName] || sizesMap[sizeName.toLowerCase()];
+      const baseSizePrice = sizeInfo?.installation_price || 0;
+
+      if (nextCompanyCost !== null && nextCompanyCost !== undefined) {
+        if (currentFaces > 0 && nextCompanyCost > 0) {
+          nextCompanyCost = Math.round((nextCompanyCost / currentFaces) * targetFaces);
+        }
+      } else if (baseSizePrice > 0) {
+        nextCompanyCost = Math.round(baseSizePrice * (targetFaces / Math.max(1, availableFaces)));
+      }
+
+      return {
+        ...item,
+        faces_to_install: targetFaces,
+        customer_installation_cost: nextCustomerCost,
+        customer_reinstall_cost: nextCustomerCost,
+        company_installation_cost: nextCompanyCost,
+      };
+    }));
+
+    if (mode === 'single' || mode === 1) {
+      toast.success('تم تعيين وجه واحد لجميع اللوحات وتحديث التكاليف');
+    } else if (mode === 'double' || mode === 2) {
+      toast.success('تم تعيين وجهين للوحات المزدوجة مع مراعاة اللوحات ذات الوجه الواحد');
+    } else {
+      toast.success('تم تعيين الأوجه حسب المتوفر فيزيائياً لكل لوحة وتحديث التكاليف');
+    }
   };
 
   const handleToggleItemCutout = (itemId: string, checked: boolean) => {
@@ -875,10 +1010,12 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
       } else {
         // بالقطعة: السعر المدخل يُعامل كسعر اللوحة كاملة (وجهين). إذا كانت اللوحة وجه واحد تأخذ النصف
         const bb = billboards[item.billboard_id];
-        const totalFaces = bb?.Faces_Count || 2;
-        const facesToInstall = item.faces_to_install || totalFaces;
-        const faceMultiplier = totalFaces > 0 ? (facesToInstall / totalFaces) : 1;
-        newPrice = Math.round(priceVal * faceMultiplier * iterationsCount);
+        const facesToInstall = resolveInstallationFacesCount({
+          faces_to_install: item.faces_to_install,
+          billboard: bb,
+        });
+        const baseTwoFaceUnit = priceVal / 2;
+        newPrice = Math.round(baseTwoFaceUnit * facesToInstall * iterationsCount);
       }
 
       return {
@@ -908,10 +1045,12 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
             const isRe = isTaskRe && (item.reinstall_count || 0) > 0;
             const iterationsCount = isRe ? Math.max(1, item.reinstall_count || 1) : 1;
             const bb = billboards[item.billboard_id];
-            const totalFaces = bb?.Faces_Count || 2;
-            const facesToInstall = item.faces_to_install || totalFaces;
-            const faceMultiplier = totalFaces > 0 ? (facesToInstall / totalFaces) : 1;
-            const newPrice = Math.round(priceVal * faceMultiplier * iterationsCount);
+            const facesToInstall = resolveInstallationFacesCount({
+              faces_to_install: item.faces_to_install,
+              billboard: bb,
+            });
+            const baseTwoFaceUnit = priceVal / 2;
+            const newPrice = Math.round(baseTwoFaceUnit * facesToInstall * iterationsCount);
             return {
               ...item,
               customer_installation_cost: newPrice,
@@ -1079,10 +1218,12 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
               const isRe = isTaskRe && (item.reinstall_count || 0) > 0;
               const iterationsCount = isRe ? Math.max(1, item.reinstall_count || 1) : 1;
               const bb = billboards[item.billboard_id];
-              const totalFaces = bb?.Faces_Count || 2;
-              const facesToInstall = item.faces_to_install || totalFaces;
-              const faceMultiplier = totalFaces > 0 ? (facesToInstall / totalFaces) : 1;
-              const newPrice = Math.round(priceVal * faceMultiplier * iterationsCount);
+              const facesToInstall = resolveInstallationFacesCount({
+                faces_to_install: item.faces_to_install,
+                billboard: bb,
+              });
+              const baseTwoFaceUnit = priceVal / 2;
+              const newPrice = Math.round(baseTwoFaceUnit * facesToInstall * iterationsCount);
               return {
                 ...item,
                 customer_installation_cost: newPrice,
@@ -1198,7 +1339,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
               return {
                 task_id: effectivePrintTaskId!,
                 billboard_id: bbId,
-                description: `${sizeName} - ${faces === 1 ? 'وجه واحد' : 'وجهين'}`,
+                description: `${sizeName} - ${faces === 1 ? 'وجه واحد' : faces === 2 ? 'وجهين' : `${faces} أوجه`}`,
                 width: sizesMap[sizeName]?.width || null,
                 height: sizesMap[sizeName]?.height || null,
                 area: area,
@@ -1605,8 +1746,9 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                             size="sm"
                             variant="ghost"
                             type="button"
-                            onClick={() => handleSetAllFaces(1)}
+                            onClick={() => handleSetAllFaces('single')}
                             className="h-7 px-2.5 text-[11px] font-bold text-amber-300 hover:bg-amber-500/10 rounded-lg gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                            title="تعيين وجه واحد لجميع اللوحات وتحديث التكاليف"
                           >
                             وجه واحد
                           </Button>
@@ -1614,10 +1756,21 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                             size="sm"
                             variant="ghost"
                             type="button"
-                            onClick={() => handleSetAllFaces(2)}
+                            onClick={() => handleSetAllFaces('double')}
                             className="h-7 px-2.5 text-[11px] font-bold text-amber-300 hover:bg-amber-500/10 rounded-lg gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                            title="تعيين وجهين للوحات المزدوجة مع مراعاة اللوحات ذات الوجه الواحد"
                           >
-                            وجهين
+                            وجهين (للمزدوجة)
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            type="button"
+                            onClick={() => handleSetAllFaces('max_available')}
+                            className="h-7 px-2.5 text-[11px] font-bold text-emerald-400 hover:bg-emerald-500/10 rounded-lg gap-1 shrink-0 cursor-pointer whitespace-nowrap"
+                            title="تعيين كامل الأوجه المتوفرة فيزيائياً لكل لوحة حسب مواصفاتها"
+                          >
+                            حسب المتوفر للوحة
                           </Button>
                         </div>
 
@@ -1947,31 +2100,43 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                       ({item.itemTotalArea.toFixed(1)} م²)
                                     </span>
                                   </div>
-                                  <div className="flex items-center gap-1 mt-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleItemFaces(item.id, 1)}
-                                      className={cn(
-                                        "px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer",
-                                        item.faces === 1
-                                          ? "bg-amber-500 text-black border-amber-500 shadow-xs"
-                                          : "bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/70 hover:text-foreground"
-                                      )}
-                                    >
-                                      وجه واحد
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleToggleItemFaces(item.id, 2)}
-                                      className={cn(
-                                        "px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer",
-                                        item.faces === 2
-                                          ? "bg-amber-500 text-black border-amber-500 shadow-xs"
-                                          : "bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/70 hover:text-foreground"
-                                      )}
-                                    >
-                                      وجهين
-                                    </button>
+                                  <div className="mt-1.5">
+                                    {item.availableFaces <= 1 ? (
+                                      <span
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold border border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                        title="اللوحة متوفرة بوجه واحد فقط حسب مواصفاتها"
+                                      >
+                                        <Check className="h-3 w-3 text-amber-400" />
+                                        وجه واحد فقط (المتوفر: 1)
+                                      </span>
+                                    ) : (
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        {Array.from({ length: item.availableFaces }).map((_, idx) => {
+                                          const faceCount = idx + 1;
+                                          const isSelected = item.faces === faceCount;
+                                          const label = faceCount === 1 ? 'وجه واحد' : faceCount === 2 ? 'وجهين' : `${faceCount} أوجه`;
+                                          return (
+                                            <button
+                                              key={faceCount}
+                                              type="button"
+                                              onClick={() => handleToggleItemFaces(item.id, faceCount)}
+                                              className={cn(
+                                                "px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer",
+                                                isSelected
+                                                  ? "bg-amber-500 text-black border-amber-500 shadow-xs font-black"
+                                                  : "bg-muted/40 text-muted-foreground border-border/50 hover:bg-muted/70 hover:text-foreground"
+                                              )}
+                                              title={`تحديد تركيب ${label} (من أصل ${item.availableFaces} متوفرة)`}
+                                            >
+                                              {label}
+                                            </button>
+                                          );
+                                        })}
+                                        <span className="text-[9px] text-muted-foreground font-mono" title={`اللوحة تدعم حتى ${item.availableFaces} أوجه`}>
+                                          / {item.availableFaces}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                   {isTaskRe && (
                                     <div className="flex items-center gap-1 mt-1">
@@ -2212,30 +2377,32 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                   </span>
                                 ) : null}
                                 <div className="inline-flex items-center gap-1 p-0.5 rounded-md bg-muted/40 border border-border/30">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleItemFaces(item.id, 1)}
-                                    className={cn(
-                                      "px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
-                                      item.faces === 1
-                                        ? "bg-amber-500 text-black shadow-xs"
-                                        : "text-muted-foreground hover:text-foreground"
-                                    )}
-                                  >
-                                    وجه واحد
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleItemFaces(item.id, 2)}
-                                    className={cn(
-                                      "px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
-                                      item.faces === 2
-                                        ? "bg-amber-500 text-black shadow-xs"
-                                        : "text-muted-foreground hover:text-foreground"
-                                    )}
-                                  >
-                                    وجهين
-                                  </button>
+                                  {item.availableFaces <= 1 ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold text-amber-300 bg-amber-500/15">
+                                      وجه واحد (المتوفر: 1)
+                                    </span>
+                                  ) : (
+                                    Array.from({ length: item.availableFaces }).map((_, idx) => {
+                                      const faceCount = idx + 1;
+                                      const isSelected = item.faces === faceCount;
+                                      const label = faceCount === 1 ? 'وجه واحد' : faceCount === 2 ? 'وجهين' : `${faceCount} أوجه`;
+                                      return (
+                                        <button
+                                          key={faceCount}
+                                          type="button"
+                                          onClick={() => handleToggleItemFaces(item.id, faceCount)}
+                                          className={cn(
+                                            "px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer",
+                                            isSelected
+                                              ? "bg-amber-500 text-black shadow-xs font-black"
+                                              : "text-muted-foreground hover:text-foreground"
+                                          )}
+                                        >
+                                          {label}
+                                        </button>
+                                      );
+                                    })
+                                  )}
                                 </div>
                                 {item.iterationsCount > 1 && (
                                   <span className="bg-orange-500/15 text-orange-400 border border-orange-500/30 px-1.5 py-0.5 rounded text-[9px] font-bold">
@@ -2556,7 +2723,7 @@ export const EnhancedEditCompositeTaskCostsDialog: React.FC<EnhancedEditComposit
                                     {item.billboard.Billboard_Name || `لوحة #${item.billboard_id}`}
                                   </div>
                                   <div className="text-[10px] text-muted-foreground/75 font-mono">
-                                    {item.billboard.Size} • {item.faces === 1 ? 'وجه' : 'وجهين'} ({item.itemTotalArea.toFixed(1)} م²)
+                                    {item.billboard.Size} • {item.faces === 1 ? 'وجه واحد' : item.faces === 2 ? 'وجهين' : `${item.faces} أوجه`} ({item.itemTotalArea.toFixed(1)} م²)
                                   </div>
                                 </div>
                               </div>

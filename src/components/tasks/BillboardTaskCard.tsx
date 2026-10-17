@@ -1,3 +1,5 @@
+import { getAvailableFacesCount, resolveInstallationFacesCount } from '@/lib/installationFaces';
+import { saveInstallationFaceSelection } from '@/services/installationFaceSelection';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
@@ -108,24 +110,16 @@ export function BillboardTaskCard({
   const [editingDate, setEditingDate] = useState(item.installation_date || '');
   const [savingDate, setSavingDate] = useState(false);
   const [extendDialogOpen, setExtendDialogOpen] = useState(false);
-  const availableFacesCount = Math.max(1, Number(
-    billboard?.Faces_Count || 
-    billboard?.faces_count || 
-    billboard?.faces || 
-    item?.billboard?.Faces_Count || 
-    item?.billboard?.faces_count || 
-    item?.faces_to_install || 
-    2
-  ));
+  const availableFacesCount = getAvailableFacesCount(billboard || item.billboard);
   const [facesToInstall, setFacesToInstall] = useState<number>(
-    item.faces_to_install ? Math.min(item.faces_to_install, availableFacesCount) : availableFacesCount
+    resolveInstallationFacesCount(item, billboard || item.billboard, item.task_type)
   );
 
   useEffect(() => {
     if (item.faces_to_install !== undefined && item.faces_to_install !== null) {
-      setFacesToInstall(item.faces_to_install);
+      setFacesToInstall(resolveInstallationFacesCount(item, billboard || item.billboard, item.task_type));
     }
-  }, [item.faces_to_install]);
+  }, [item.faces_to_install, item.selected_faces, item.reinstalled_faces, availableFacesCount]);
   const [photoHistoryItems, setPhotoHistoryItems] = useState<any[]>([]);
   const [isBranchesExpanded, setIsBranchesExpanded] = useState(false);
   const { confirm: systemConfirm } = useSystemDialog();
@@ -152,7 +146,7 @@ export function BillboardTaskCard({
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
 
   const renderDesignPreview = () => {
-    const displayDesign = selectedDesign !== 'none' && selectedDesign ? taskDesigns.find(d => d.id === selectedDesign) : null;
+    const displayDesign = selectedDesignId !== 'none' ? taskDesigns.find(d => d.id === selectedDesignId) : null;
     const fallbackDesign = item.design_face_a || item.design_face_b ? {
       design_name: 'التصميم المحفوظ',
       design_face_a_url: item.design_face_a,
@@ -170,7 +164,7 @@ export function BillboardTaskCard({
     const finalDesign = displayDesign || fallbackDesign;
     if (!finalDesign) return null;
     const faceAUrl = finalDesign.design_face_a_url;
-    const faceBUrl = finalDesign.design_face_b_url;
+    const faceBUrl = availableFacesCount > 1 ? finalDesign.design_face_b_url : null;
     if (!faceAUrl && !faceBUrl) return null;
 
     const hasBoth = Boolean(faceAUrl && faceBUrl);
@@ -507,14 +501,7 @@ export function BillboardTaskCard({
   const handleFacesChange = async (faces: number) => {
     setFacesToInstall(faces);
     try {
-      const { error } = await supabase
-        .from('installation_task_items')
-        .update({
-          faces_to_install: faces,
-          reinstalled_faces: faces === 1 ? 'face_a' : 'both',
-        } as any)
-        .eq('id', item.id);
-      if (error) throw error;
+      await saveInstallationFaceSelection({ id: item.id, taskId: item.task_id, maxFaces: availableFacesCount }, Array.from({ length: Math.min(faces, availableFacesCount) }, (_, i) => i + 1));
       toast.success(
         faces === 1 ? 'تم تحديد وجه واحد للتركيب' :
         faces === 2 ? 'تم تحديد وجهين للتركيب' :
@@ -610,7 +597,8 @@ export function BillboardTaskCard({
         updateData.replacement_cost_percentage = null;
         updateData.reinstalled_faces = null;
         updateData.total_reinstalled_faces = 0;
-        updateData.faces_to_install = billboard?.Faces_Count || 2;
+        updateData.faces_to_install = availableFacesCount;
+        updateData.selected_faces = null;
         updateData.customer_reinstall_cost = 0;
         updateData.customer_installation_cost = item.customer_original_install_cost || item.customer_installation_cost || 0;
       } else {
@@ -830,7 +818,7 @@ export function BillboardTaskCard({
                       src={photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_a_url || item.installed_image_face_a_url || item.billboardImage}
                       alt="صورة التركيب الأصلي - أمامي"
                       className="h-10 w-14 object-cover rounded-lg border border-emerald-500/40 cursor-pointer hover:opacity-90 shadow-sm"
-                      onClick={() => setPreviewImageUrl(photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_a_url || item.installed_image_face_a_url || item.billboardImage)}
+                      onClick={() => setLightboxImage(photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_a_url || item.installed_image_face_a_url || item.billboardImage)}
                       title="الوجه الأمامي"
                     />
                   ) : null}
@@ -839,7 +827,7 @@ export function BillboardTaskCard({
                       src={photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_b_url || item.installed_image_face_b_url}
                       alt="صورة التركيب الأصلي - خلفي"
                       className="h-10 w-14 object-cover rounded-lg border border-blue-500/40 cursor-pointer hover:opacity-90 shadow-sm"
-                      onClick={() => setPreviewImageUrl(photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_b_url || item.installed_image_face_b_url)}
+                      onClick={() => setLightboxImage(photoHistoryItems.find(h => h.reinstall_number === 1)?.installed_image_face_b_url || item.installed_image_face_b_url)}
                       title="الوجه الخلفي"
                     />
                   ) : null}
@@ -879,7 +867,7 @@ export function BillboardTaskCard({
                           src={hist?.installed_image_face_a_url || item.installed_image_face_a_url || ''}
                           alt={`صورة إعادة تركيب ${rNum} - أمامي`}
                           className="h-10 w-14 object-cover rounded-lg border border-emerald-500/40 cursor-pointer hover:opacity-90 shadow-sm"
-                          onClick={() => setPreviewImageUrl(hist?.installed_image_face_a_url || item.installed_image_face_a_url || '')}
+                          onClick={() => setLightboxImage(hist?.installed_image_face_a_url || item.installed_image_face_a_url || '')}
                           title="الوجه الأمامي"
                         />
                       ) : null}
@@ -888,7 +876,7 @@ export function BillboardTaskCard({
                           src={hist?.installed_image_face_b_url || item.installed_image_face_b_url || ''}
                           alt={`صورة إعادة تركيب ${rNum} - خلفي`}
                           className="h-10 w-14 object-cover rounded-lg border border-blue-500/40 cursor-pointer hover:opacity-90 shadow-sm"
-                          onClick={() => setPreviewImageUrl(hist?.installed_image_face_b_url || item.installed_image_face_b_url || '')}
+                          onClick={() => setLightboxImage(hist?.installed_image_face_b_url || item.installed_image_face_b_url || '')}
                           title="الوجه الخلفي"
                         />
                       ) : null}

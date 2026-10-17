@@ -85,8 +85,9 @@ export const fetchBillboardsWithContracts = async (): Promise<BillboardWithContr
       // جلب أوامر التركيب المرتبطة باللوحات
       const { data: installationItems } = await supabase
         .from('installation_task_items')
-        .select('billboard_id, design_face_a, design_face_b, installed_image_face_a_url, installed_image_face_b_url')
-        .in('billboard_id', billboardIds);
+        .select('billboard_id, design_face_a, design_face_b, installed_image_face_a_url, installed_image_face_b_url, created_at')
+        .in('billboard_id', billboardIds)
+        .order('created_at', { ascending: true });
       
       if (installationItems && installationItems.length > 0) {
         console.log('📸 Found installation items with designs:', installationItems.length);

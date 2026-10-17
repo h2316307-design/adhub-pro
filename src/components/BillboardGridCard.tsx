@@ -1,3 +1,6 @@
+import { extractDualPaletteFromImage } from '@/components/composite-tasks/list/shared';
+import { cn } from '@/lib/utils';
+import { getAvailableFacesCount } from '@/lib/installationFaces';
 import { billboardLevelsShared, contractSharedDesignLoader, getActiveContract, getCorporatePrice, getYearlyContractCode, latestExtensionLoader, latestTaskLoader } from '@/lib/billboardCardLoaders';
 import React, { useState, useEffect, memo } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
@@ -662,6 +665,18 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   };
 
   const frontDesignUrl = getFrontDesignUrl();
+  const [designColors, setDesignColors] = useState<[string, string] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setDesignColors(null);
+    if (!showBookingActions && frontDesignUrl) extractDualPaletteFromImage(frontDesignUrl, colors => { if (!cancelled) setDesignColors(colors); });
+    return () => { cancelled = true; };
+  }, [frontDesignUrl, showBookingActions]);
+  const designTint: React.CSSProperties | undefined = !showBookingActions && designColors ? {
+    backgroundImage: `linear-gradient(135deg, rgba(${designColors[0]}, 0.16), rgba(${designColors[1]}, 0.07) 60%, transparent)`,
+    ...(!isTorn && !isSelected ? { borderColor: `rgba(${designColors[0]}, 0.55)` } : {}),
+  } : undefined;
+
 
   // دالة فتح تكبير التصميم/الصورة
   const openDesignPreview = (url: string, title: string) => {
@@ -781,6 +796,13 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
   return (
     <>
       <BillboardCardFrame
+        style={designTint}
+        managementLayout={!showBookingActions}
+        level={!showBookingActions ? getLevelDisplay() : undefined}
+        onLevelClick={!showBookingActions && isAdmin ? () => {
+          setIsEditMode(false); setQuickEditLevel(billboard.Level || 'A');
+          loadPricingForSizeLevel(billboard.Size || '', billboard.Level || 'A'); setQuickEditOpen(true);
+        } : undefined}
         className="billboard-grid-card h-full shadow-card motion-safe:transition-[border-color,box-shadow] duration-200 hover:shadow-md"
         compact
         billboardType={getBillboardTypeDisplay() !== 'غير محدد' ? getBillboardTypeDisplay() : undefined}
@@ -790,7 +812,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
         faces={getFaceCountDisplay()}
         headerExtra={
           <>
-            {getLevelDisplay() !== 'غير حدد' && getLevelDisplay() !== 'غير محدد' && (
+            {showBookingActions && getLevelDisplay() !== 'غير حدد' && getLevelDisplay() !== 'غير محدد' && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -830,11 +852,11 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
         }
         headerActions={
           <>
-            <CardIconButton
+            {showBookingActions && <CardIconButton
               icon={Copy}
               title="نسخ اسم اللوحة"
               onClick={() => { navigator.clipboard.writeText(billboard.Billboard_Name || `لوحة رقم ${billboard.ID}`); toast.success('تم نسخ اسم اللوحة'); }}
-            />
+            />}
             {(onEdit || onDelete || onContractAction || onMaintenance) ? (
               <BillboardCardActions
                 billboard={billboard}
@@ -994,15 +1016,17 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
         city={gf.city}
       >
             <CardContent className="flex flex-1 flex-col gap-3 p-0">
-              {/* ملخص العقد: تصميم مصغر، بيانات واضحة، وقيمة اللوحة */}
+              {frontDesignUrl && <section aria-label="تصميم الوجه الأول" className="-mx-4 border-y border-border/60">
+                <div className="flex items-center justify-between px-3 py-1.5 text-[11px]"><span className="font-semibold">تصميم الوجه الأول</span><span className="text-muted-foreground">اضغط للتكبير</span></div>
+                <button type="button" onClick={event => { event.stopPropagation(); openDesignPreview(frontDesignUrl, 'تصميم الوجه الأول'); }} aria-label="تكبير تصميم الوجه الأول" className="block w-full cursor-pointer overflow-hidden bg-background/40 transition-all duration-200 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary">
+                  <DesignImageWithBlur src={frontDesignUrl} alt="تصميم الوجه الأول" naturalSize className="w-full" />
+                </button>
+              </section>}
+              {/* ملخص العقد وقيمة اللوحة */}
               {hasActiveContract && !contractExpired && (
                 <section className="rounded-lg border border-border bg-muted/25 p-2.5 space-y-2.5">
                   <div className="flex items-start gap-2.5">
-                    {frontDesignUrl && (
-                      <button type="button" onClick={(e) => { e.stopPropagation(); openDesignPreview(frontDesignUrl, 'التصميم الإعلاني'); }} title="تكبير التصميم الإعلاني" aria-label="تكبير التصميم الإعلاني" className="billboard-contract-thumbnail relative h-14 w-16 shrink-0 overflow-hidden rounded-md border border-border bg-muted cursor-pointer transition-all duration-200 hover:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
-                        <DesignImageWithBlur src={frontDesignUrl} alt="التصميم الإعلاني" className="h-full w-full" />
-                      </button>
-                    )}
+
                     <div className="min-w-0 flex-1 space-y-1.5">
                       <div className="flex items-center justify-between gap-1.5 text-[11px]">
                         {contractId ? <a href={`/admin/contracts/edit?contract=${contractId}`} onClick={e => e.stopPropagation()} title="فتح العقد" className="inline-flex shrink-0 items-center gap-1 text-primary cursor-pointer transition-colors hover:underline"><FileText className="h-3.5 w-3.5" /><span className="font-manrope">#{contractId}</span></a> : <span className="text-primary">العقد الحالي</span>}
@@ -1411,7 +1435,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                                 </Badge>
                               )}
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className={cn("grid gap-3", getAvailableFacesCount(billboard) > 1 ? "grid-cols-2" : "grid-cols-1")}>
                               {/* التصميم الأمامي */}
                               {(latestTask.design_face_a || latestTask.selected_design?.design_face_a_url) && (
                                 <div className="space-y-2">
@@ -1442,7 +1466,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                                 </div>
                               )}
                               {/* التصميم الخلفي */}
-                              {(latestTask.design_face_b || latestTask.selected_design?.design_face_b_url) && (
+                              {getAvailableFacesCount(billboard) > 1 && (latestTask.design_face_b || latestTask.selected_design?.design_face_b_url) && (
                                 <div className="space-y-2">
                                   <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
                                   <div 
@@ -1503,7 +1527,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                                 </div>
                                 <h4 className="font-bold text-sm text-foreground">التصاميم (من العقد)</h4>
                               </div>
-                              <div className="grid grid-cols-2 gap-3">
+                              <div className={cn("grid gap-3", getAvailableFacesCount(billboard) > 1 ? "grid-cols-2" : "grid-cols-1")}>
                                 {contractDesignA && (
                                   <div className="space-y-2">
                                     <p className="text-xs text-muted-foreground font-medium">الوجه الأمامي</p>
@@ -1518,7 +1542,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                                     </div>
                                   </div>
                                 )}
-                                {contractDesignB && (
+                                {getAvailableFacesCount(billboard) > 1 && contractDesignB && (
                                   <div className="space-y-2">
                                     <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
                                     <div 
@@ -1546,7 +1570,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                               </div>
                               <h4 className="font-bold text-sm text-foreground">صور التركيب الفعلي</h4>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className={cn("grid gap-3", getAvailableFacesCount(billboard) > 1 ? "grid-cols-2" : "grid-cols-1")}>
                               {/* صورة التركيب الأمامي */}
                               {(latestTask.installed_image_url || latestTask.installed_image_face_a_url) && (
                                 <div className="space-y-2">
@@ -1577,7 +1601,7 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
                                 </div>
                               )}
                               {/* صورة التركيب الخلفي */}
-                              {latestTask.installed_image_face_b_url && (
+                              {getAvailableFacesCount(billboard) > 1 && latestTask.installed_image_face_b_url && (
                                 <div className="space-y-2">
                                   <p className="text-xs text-muted-foreground font-medium">الوجه الخلفي</p>
                                   <div 
@@ -1625,8 +1649,8 @@ const BillboardGridCardInner: React.FC<BillboardGridCardProps> = ({
 
             {/* CTA Dock — كل العناصر في صف أفقي واحد */}
             <div className="mt-auto pt-3 border-t border-border/50">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {canEditBillboards && onEdit && <Button size="sm" onClick={(e) => { e.stopPropagation(); onEdit(billboard); }} className="w-full gap-1.5 cursor-pointer"><Pencil className="h-3.5 w-3.5" />تعديل اللوحة</Button>}
+              <div className="flex items-center gap-1.5 flex-wrap [&_button]:cursor-pointer [&_button]:transition-all [&_button]:duration-200">
+                {canEditBillboards && onEdit && <Button size="sm" onClick={(e) => { e.stopPropagation(); onEdit(billboard); }} className="h-10 flex-1 gap-1.5 cursor-pointer text-xs"><Pencil className="h-3.5 w-3.5" />تعديل اللوحة</Button>}
                 {!showBookingActions && billboard.GPS_Coordinates && <Button size="sm" variant="outline" title="فتح موقع اللوحة" aria-label="فتح موقع اللوحة" className="h-9 w-9 shrink-0 p-0 cursor-pointer" onClick={(e) => { e.stopPropagation(); window.open(`https://maps.google.com/?q=${billboard.GPS_Coordinates}`, '_blank', 'noopener,noreferrer'); }}><MapPin className="h-4 w-4" /></Button>}
 
                 {/* حجز سريع */}

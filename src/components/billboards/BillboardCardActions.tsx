@@ -6,8 +6,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuLabel,
 } from '@/components/ui/dropdown-menu';
-import { MoreVertical, Edit, Link, Unlink, Trash2, ExternalLink, Camera, Wrench, Settings, AlertTriangle, Sparkles, CalendarPlus } from 'lucide-react';
+import { MoreVertical, Copy, Edit, Link, Unlink, Trash2, ExternalLink, Camera, Wrench, Settings, AlertTriangle, Sparkles, CalendarPlus } from 'lucide-react';
 import { Billboard } from '@/types';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -82,30 +83,35 @@ export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
 
   return (
     <>
-    <DropdownMenu>
+    <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>
         <Button
           variant="ghost"
           size="icon"
-          aria-label="إعدادات اللوحة"
-          title="إعدادات اللوحة"
-          className="h-8 w-8 rounded-xl bg-background/95 dark:bg-card/95 backdrop-blur-md border border-border/60 text-foreground shadow-sm hover:bg-primary hover:text-primary-foreground hover:border-primary hover:shadow-md hover:scale-105 transition-all"
+          aria-label="خيارات اللوحة"
+          title="خيارات اللوحة"
+          onClick={event => event.stopPropagation()}
+          className="h-10 w-10 cursor-pointer rounded-lg border border-border bg-background text-muted-foreground transition-all duration-200 hover:border-primary hover:bg-primary/10 hover:text-primary"
         >
-          <Settings className="h-4 w-4 transition-transform duration-500 hover:rotate-90" />
+          <MoreVertical className="h-4 w-4" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-56">
+      <DropdownMenuContent align="end" sideOffset={6} className="w-72 max-w-[calc(100vw-24px)] max-h-[75vh] overflow-y-auto rounded-xl p-1.5 text-right [&_[role=menuitem]]:min-h-10 [&_[role=menuitem]]:rounded-md [&_[role=menuitem]]:text-xs [&_[role=menuitem]]:transition-all [&_[role=menuitem]]:duration-200">
+        <DropdownMenuLabel className="px-2 py-2"><span className="block text-xs font-semibold">{billboard.Billboard_Name || `لوحة #${billboardId}`}</span><span className="mt-1 block text-[11px] font-normal text-muted-foreground">{hasContract ? 'مرتبطة بعقد' : 'بدون عقد'}</span></DropdownMenuLabel>
+        <DropdownMenuItem onClick={() => { navigator.clipboard.writeText(billboard.Billboard_Name || String(billboardId)); toast.success('تم نسخ اسم اللوحة'); }} className="cursor-pointer gap-2"><Copy className="h-4 w-4 text-primary" />نسخ اسم اللوحة</DropdownMenuItem>
+        <DropdownMenuSeparator />
         {canEdit && (
           <>
+            <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">بيانات اللوحة والعقد</DropdownMenuLabel>
             {onOpenOverlayEditor && (
-              <DropdownMenuItem onClick={() => onOpenOverlayEditor(billboard)} className="cursor-pointer gap-2 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 focus:bg-amber-500/20">
+              <DropdownMenuItem onClick={() => onOpenOverlayEditor(billboard)} className="cursor-pointer gap-2 text-foreground focus:bg-primary/10">
                 <Sparkles className="h-4 w-4 text-amber-500" />
-                محرر التراكب والواقعية
+                تعديل صورة اللوحة والتراكب
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => onEdit(billboard)} className="cursor-pointer gap-2">
-              <Edit className="h-4 w-4 text-blue-500" />
-              تعديل
+              <Edit className="h-4 w-4 text-primary" />
+              تعديل بيانات اللوحة
             </DropdownMenuItem>
             <DropdownMenuItem 
               onClick={() => onContractAction(billboard)} 
@@ -132,15 +138,16 @@ export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
             <DropdownMenuSeparator />
           </>
         )}
+        <DropdownMenuLabel className="text-[10px] font-normal text-muted-foreground">الموقع والمتابعة</DropdownMenuLabel>
         <DropdownMenuItem onClick={handleOpenLocation} className="cursor-pointer gap-2">
-          <ExternalLink className="h-4 w-4 text-sky-500" />
+          <ExternalLink className="h-4 w-4 text-primary" />
           فتح الموقع
         </DropdownMenuItem>
         {canEdit && (
           <>
             <DropdownMenuItem onClick={handleToggleRephotography} className="cursor-pointer gap-2">
-              <Camera className="h-4 w-4 text-violet-500" />
-              {(billboard as any).needs_rephotography ? 'إلغاء التصوير' : 'إعادة تصوير'}
+              <Camera className="h-4 w-4 text-primary" />
+              {(billboard as any).needs_rephotography ? 'إلغاء طلب إعادة التصوير' : 'إعادة تصوير'}
             </DropdownMenuItem>
             {hasContract && (
               <DropdownMenuItem
@@ -153,12 +160,12 @@ export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
                 className="cursor-pointer gap-2"
               >
                 <AlertTriangle className="h-4 w-4 text-red-500" />
-                تسجيل حالة (ممزق / تغيير مقاس / إزالة)
+                تسجيل حالة اللوحة
               </DropdownMenuItem>
             )}
             <DropdownMenuItem onClick={() => onMaintenance(billboard)} className="cursor-pointer gap-2">
               <Wrench className="h-4 w-4 text-amber-500" />
-              صيانة
+              إدارة صيانة اللوحة
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem 
@@ -166,7 +173,7 @@ export const BillboardCardActions: React.FC<BillboardCardActionsProps> = ({
               className="cursor-pointer gap-2 text-destructive focus:text-destructive"
             >
               <Trash2 className="h-4 w-4" />
-              حذف
+              حذف اللوحة
             </DropdownMenuItem>
           </>
         )}

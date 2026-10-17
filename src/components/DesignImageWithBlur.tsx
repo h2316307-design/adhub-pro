@@ -7,13 +7,15 @@ interface DesignImageWithBlurProps {
   className?: string;
   alt?: string;
   onClick?: () => void;
+  naturalSize?: boolean;
 }
 
 export const DesignImageWithBlur: React.FC<DesignImageWithBlurProps> = ({ 
   src, 
   className = '', 
   alt = 'التصميم',
-  onClick
+  onClick,
+  naturalSize = false
 }) => {
   const [hasError, setHasError] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -75,7 +77,8 @@ export const DesignImageWithBlur: React.FC<DesignImageWithBlurProps> = ({
         src={displaySrc}
         alt={alt}
         className={cn(
-          "relative w-full h-full transition-opacity duration-300 object-contain",
+          "relative block w-full transition-opacity duration-300 object-contain",
+          naturalSize ? "h-auto" : "h-full",
           isLoaded ? "opacity-100" : "opacity-0"
         )}
         onError={handleImageError}

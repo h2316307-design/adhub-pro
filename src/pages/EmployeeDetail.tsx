@@ -651,7 +651,7 @@ export default function EmployeeDetail() {
   return (
     <div className="finance-page container mx-auto p-4 sm:p-6 space-y-6 text-right max-w-[1440px]" dir="rtl">
       {/* Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#d6ac40]/12 via-[#f4c25a]/5 to-transparent border border-[#d6ac40]/25 p-6 backdrop-blur-md shadow-sm flex flex-col lg:flex-row items-center justify-between gap-6 transition-all duration-300">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#d6ac40]/12 via-[#f4c25a]/5 to-transparent border border-[#d6ac40]/25 p-4 sm:p-6 backdrop-blur-md shadow-sm flex flex-col lg:flex-row items-center justify-between gap-5 sm:gap-6 transition-all duration-300">
         <div className="absolute top-0 right-0 -mt-6 -mr-6 w-32 h-32 bg-[#d6ac40]/10 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute bottom-0 left-0 -mb-6 -ml-6 w-32 h-32 bg-[#f4c25a]/5 rounded-full blur-2xl pointer-events-none" />
         
@@ -688,7 +688,7 @@ export default function EmployeeDetail() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2.5 w-full sm:w-auto justify-center lg:justify-end">
+        <div className="grid grid-cols-2 gap-2.5 w-full sm:flex sm:w-auto sm:flex-wrap justify-center lg:justify-end [&>button]:w-full sm:[&>button]:w-auto">
           <Button 
             onClick={() => setTaskDialogOpen(true)} 
             className="bg-gradient-to-r from-[#b8860b] to-[#d6ac40] hover:from-[#d6ac40] hover:to-[#f4c25a] text-white hover:shadow-lg hover:shadow-yellow-500/10 rounded-xl transition-all duration-200 cursor-pointer font-bold gap-2"

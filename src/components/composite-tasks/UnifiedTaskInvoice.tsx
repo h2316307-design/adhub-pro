@@ -705,7 +705,7 @@ export function UnifiedTaskInvoice({
         if (allInstallIds.length > 0) {
           const { data: installItems } = await supabase
             .from('installation_task_items')
-            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, Faces_Count, design_face_a, design_face_b, has_cutout, Image_URL, Nearest_Landmark, District, City, billboard_type, Contract_Number)')
+            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, Faces_Count, face_dimensions, design_face_a, design_face_b, has_cutout, Image_URL, Nearest_Landmark, District, City, billboard_type, Contract_Number)')
             .in('task_id', allInstallIds)
             .neq('status', 'replaced'); // استبعاد اللوحات المستبدلة
 
@@ -1148,7 +1148,7 @@ export function UnifiedTaskInvoice({
           // استخدام العلاقة الصريحة لتجنب خطأ PGRST201 - مع جلب has_cutout وبيانات اللوحة + بيانات التسعير
           const { data: installItems, error: installError } = await supabase
             .from('installation_task_items')
-            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, Faces_Count, design_face_a, design_face_b, has_cutout, Image_URL, Nearest_Landmark, District, City, billboard_type, Contract_Number)')
+            .select('*, billboard:billboards!installation_task_items_billboard_id_fkey(ID, Billboard_Name, Size, Faces_Count, face_dimensions, design_face_a, design_face_b, has_cutout, Image_URL, Nearest_Landmark, District, City, billboard_type, Contract_Number)')
             .in('task_id', allInstallIds)
             .neq('status', 'replaced'); // استبعاد اللوحات المستبدلة
 

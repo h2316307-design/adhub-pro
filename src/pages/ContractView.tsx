@@ -106,14 +106,17 @@ export default function ContractView() {
     try {
       const contractId = contractData.Contract_Number || contractData.ID;
       
-      const { data: tasks } = await supabase
-        .from('installation_tasks')
-        .select('id')
-        .eq('contract_id', contractId);
+      const [directRes, combinedRes] = await Promise.all([
+        supabase.from('installation_tasks').select('id').eq('contract_id', contractId),
+        supabase.from('installation_tasks').select('id').contains('contract_ids', [String(contractId)]),
+      ]);
       
-      if (!tasks || tasks.length === 0) return;
+      const taskIds = [...new Set([
+        ...(directRes.data || []).map((t: any) => t.id),
+        ...(combinedRes.data || []).map((t: any) => t.id),
+      ])];
       
-      const taskIds = tasks.map(t => t.id);
+      if (taskIds.length === 0) return;
       const { data: items } = await supabase
         .from('installation_task_items')
         .select('billboard_id, design_face_a, design_face_b, installed_image_face_a_url, installed_image_face_b_url, status')

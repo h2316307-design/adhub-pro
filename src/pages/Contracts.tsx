@@ -85,7 +85,7 @@ export default function Contracts() {
       ]);
       return {
         contracts: contractsData as Contract[],
-        availableBillboards: (billboardsData || []) as Billboard[],
+        availableBillboards: (billboardsData || []) as unknown as Billboard[],
       };
     },
   });
@@ -310,7 +310,7 @@ export default function Contracts() {
 
   const handleDeleteContract = async (contractId: string) => {
     const targetContract = contracts.find(c => String(c.id) === String(contractId) || String(c.Contract_Number) === String(contractId));
-    const paidAmount = Number(targetContract?.actual_paid ?? (targetContract as any)?.['Total Paid'] ?? 0);
+    const paidAmount = Number((targetContract as any)?.actual_paid ?? (targetContract as any)?.['Total Paid'] ?? 0);
 
     if (paidAmount > 0) {
       toast.warning(`لا يمكن حذف العقد #${contractId} نظراً لوجود دفعة مسددة مرتبطة به بقيمة ${paidAmount.toLocaleString()} د.ل. يرجى تسوية أو إلغاء الدفعات أولاً.`);
@@ -1700,7 +1700,7 @@ export default function Contracts() {
                           setPrintAllData({
                             contractNumber: (c as any).Contract_Number || c.id,
                             customerName: c.customer_name || '',
-                            adType: c.ad_type || (c as any)['Ad Type'] || (contractWithBillboards as any)['Ad Type'] || '',
+                            adType: (c as any).ad_type || (c as any)['Ad Type'] || (contractWithBillboards as any)['Ad Type'] || '',
                             items,
                             billboards: billboardsMap
                           });
@@ -1824,7 +1824,7 @@ export default function Contracts() {
                             setPrintAllData({
                               contractNumber: (c as any).Contract_Number || c.id,
                               customerName: c.customer_name || '',
-                              adType: c.ad_type || (c as any)['Ad Type'] || (contractWithBillboards as any)['Ad Type'] || '',
+                              adType: (c as any).ad_type || (c as any)['Ad Type'] || (contractWithBillboards as any)['Ad Type'] || '',
                               items,
                               billboards: billboardsMap
                             });
@@ -2264,7 +2264,7 @@ export default function Contracts() {
                                 <Edit className="h-4 w-4" />
                               </Button>
                               {canCreateOrDelete && (() => {
-                                const rowPaid = Number(contract.actual_paid ?? (contract as any)['Total Paid'] ?? 0);
+                                const rowPaid = Number((contract as any).actual_paid ?? (contract as any)['Total Paid'] ?? 0);
                                 const hasRowPaid = rowPaid > 0;
                                 return hasRowPaid ? (
                                   <Button
@@ -2610,7 +2610,7 @@ export default function Contracts() {
                 <div className="flex items-center gap-2 text-muted-foreground">
                   <Calendar className="h-3.5 w-3.5" />
                   <span>عدد اللوحات: <strong className="text-foreground">
-                    {(() => { const ids = renewSource.billboard_ids; if (!ids) return 0; if (Array.isArray(ids)) return ids.length; return String(ids).split(',').filter(Boolean).length; })()}
+                    {(() => { const ids = (renewSource as any).billboard_ids; if (!ids) return 0; if (Array.isArray(ids)) return ids.length; return String(ids).split(',').filter(Boolean).length; })()}
                   </strong> لوحة</span>
                 </div>
               </div>
@@ -2630,7 +2630,7 @@ export default function Contracts() {
                     if (newStart && renewEnd && renewSource) {
                       setRenewChecking(true);
                       try {
-                        const ids = renewSource.billboard_ids;
+                        const ids = (renewSource as any).billboard_ids;
                         const bbIds: string[] = Array.isArray(ids)
                           ? ids.map(String)
                           : String(ids || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -2658,7 +2658,7 @@ export default function Contracts() {
                     if (renewStart && newEnd && renewSource) {
                       setRenewChecking(true);
                       try {
-                        const ids = renewSource.billboard_ids;
+                        const ids = (renewSource as any).billboard_ids;
                         const bbIds: string[] = Array.isArray(ids)
                           ? ids.map(String)
                           : String(ids || '').split(',').map(s => s.trim()).filter(Boolean);

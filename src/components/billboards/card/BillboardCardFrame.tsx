@@ -1,4 +1,4 @@
-import type { ComponentType, MouseEvent, ReactNode } from 'react';
+import { Fragment, type ComponentType, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import { Check, MapPin } from 'lucide-react';
 
@@ -61,7 +61,7 @@ export function CardIconButton({ icon: Icon, onClick, title, tone = 'default', a
   return (
     <button type="button" title={title} aria-label={title}
       onClick={e => { e.stopPropagation(); onClick(e); }}
-      className={cn('inline-flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
+      className={cn('inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60',
         tones[tone], active && 'bg-muted')}>
       <Icon className="h-4 w-4" />
     </button>
@@ -85,9 +85,11 @@ function Chip({ children, onClick, title, strong }: { children: ReactNode; onCli
 export function BillboardCardFrame({
   tone = 'default', onClick, code, size, onSizeClick, level, faces, headerExtra, headerActions, banner,
   image, imageHeight = 'aspect-[16/10]', statusBadges, selectMark, imageOverlayBottom,
-  title, landmark, municipality, district, city, onMunicipalityClick, onDistrictClick, onCityClick, billboardType, compact = false,
-  children, priceLabel, price, priceTone = 'primary', footer, after, className, dimmed,
+  title, landmark, municipality, district, city, onMunicipalityClick, onDistrictClick, onCityClick, billboardType, compact = false, managementLayout = false, onLevelClick,
+  children, priceLabel, price, priceTone = 'primary', footer, after, className, style, dimmed, horizontal = false,
 }: {
+  /** بطاقة بالعرض: الصورة في جانب والتفاصيل بجانبها (عرض الصورة من --img-w) */
+  horizontal?: boolean;
   tone?: CardTone;
   onClick?: () => void;
   code: string;
@@ -107,6 +109,8 @@ export function BillboardCardFrame({
   title: string;
   billboardType?: string;
   compact?: boolean;
+  managementLayout?: boolean;
+  onLevelClick?: () => void;
   landmark?: string | null;
   municipality?: string;
   district?: string;
@@ -121,85 +125,113 @@ export function BillboardCardFrame({
   footer?: ReactNode;
   after?: ReactNode;
   className?: string;
+  style?: CSSProperties;
   dimmed?: boolean;
 }) {
+  const displayTitle = managementLayout ? code : title;
+  const displayLandmark = managementLayout ? (landmark || (title !== code ? title : null)) : landmark;
+  const imageBox = (
+    <div className={cn('relative shrink-0 overflow-hidden bg-muted/40', horizontal ? 'min-h-[calc(var(--img-w,260px)*0.75)] w-[var(--img-w,260px)] self-stretch border-l border-border/60' : cn('w-full border-y border-border/60', imageHeight))}>
+      {horizontal ? <div className="absolute inset-0">{image}</div> : image}
+      {statusBadges && <div className="pointer-events-none absolute right-3 top-3 z-10 flex max-w-[80%] flex-col items-end gap-1">{statusBadges}</div>}
+      {selectMark !== null && selectMark !== undefined && <span className={cn('absolute left-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-lg border shadow-sm backdrop-blur-sm', selectMark ? 'border-primary bg-primary text-primary-foreground' : 'border-white/30 bg-black/50 text-white/60')}><Check className="h-4 w-4" /></span>}
+      {imageOverlayBottom}
+    </div>
+  );
+  const Shell = horizontal ? 'div' : Fragment;
   return (
-    <article
-      dir="rtl"
-      onClick={onClick}
-      className={cn('group relative flex flex-col overflow-hidden rounded-xl border bg-card text-right shadow-sm transition-colors',
-        TONE[tone], onClick && 'cursor-pointer', dimmed && 'opacity-90', className)}
-    >
-      {/* الرأس */}
-      <header className="flex min-h-11 items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-1.5">
-        <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-          <span className="font-manrope text-sm font-bold tracking-wide text-foreground">{code}</span>
-          {size && (
+    <article dir="rtl" onClick={onClick} style={style}
+      className={cn('group relative flex min-w-0 overflow-hidden rounded-2xl border bg-card text-right shadow-sm motion-safe:transition-all motion-safe:duration-200 hover:shadow-md', horizontal ? 'flex-row' : 'flex-col', TONE[tone], onClick && 'cursor-pointer', dimmed && 'opacity-90', className)}>
+      {horizontal && imageBox}
+      <Shell {...(horizontal ? { className: 'flex min-w-0 flex-1 flex-col' } : {})}>
+      <header className="billboard-card-header flex min-h-12 items-center justify-between gap-2 px-3.5 py-2">
+        {managementLayout ? (
+          <div className="billboard-management-specs flex min-w-0 flex-1 items-center gap-2 overflow-hidden">
             <span
               dir="ltr"
               onClick={onSizeClick ? (e => { e.stopPropagation(); onSizeClick(); }) : undefined}
+              className={cn(
+                'billboard-management-size shrink-0 font-manrope text-xl font-black leading-none tracking-tight text-primary',
+                onSizeClick && 'cursor-pointer hover:underline'
+              )}
               title={onSizeClick ? `تصفية بالمقاس ${size}` : undefined}
-              className={cn('rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 font-manrope text-xs font-extrabold text-primary',
-                onSizeClick && 'cursor-pointer hover:bg-primary/20')}
+              aria-label={`المقاس ${size || 'غير محدد'}`}
             >
-              {size}
+              {size || '—'}
             </span>
-          )}
-          {level && <span className="rounded-md border border-border bg-muted/50 px-1.5 py-0.5 text-xs font-bold">مستوى {level}</span>}
-          {faces && <span className="text-xs text-muted-foreground">{faces}</span>}
-          {headerExtra}
-        </div>
-        {headerActions && <div className="flex shrink-0 items-center gap-0.5">{headerActions}</div>}
+
+            {faces && (
+              <span className="shrink-0 text-xs font-semibold text-foreground/85" aria-label={`عدد الأوجه: ${faces}`}>
+                {faces}
+              </span>
+            )}
+
+            {level && (
+              onLevelClick ? (
+                <button
+                  type="button"
+                  onClick={event => { event.stopPropagation(); onLevelClick(); }}
+                  className="inline-flex h-5 min-w-5 shrink-0 cursor-pointer items-center justify-center rounded-md border border-primary/30 bg-primary/10 px-1.5 font-manrope text-[11px] font-bold text-primary transition-all duration-200 hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary"
+                  title="تعديل مستوى اللوحة"
+                  aria-label="تعديل مستوى اللوحة"
+                >
+                  {level}
+                </button>
+              ) : (
+                <span
+                  className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-md bg-muted px-1.5 font-manrope text-[11px] font-bold text-muted-foreground"
+                  aria-label={`المستوى ${level}`}
+                >
+                  {level}
+                </span>
+              )
+            )}
+
+            {billboardType && (
+              <span
+                className="truncate rounded-md bg-muted/60 border border-border/40 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground"
+                title={`نوع اللوحة: ${billboardType}`}
+                aria-label={`نوع اللوحة: ${billboardType}`}
+              >
+                {billboardType}
+              </span>
+            )}
+
+            {headerExtra && <div className="flex shrink-0 items-center gap-1">{headerExtra}</div>}
+          </div>
+        ) : (
+          <div className="min-w-0">
+            <span className="mb-0.5 block text-[10px] font-medium text-muted-foreground">اللوحة</span>
+            <span className="block truncate font-manrope text-sm font-bold tracking-wide text-foreground" title={code}>
+              {code}
+            </span>
+          </div>
+        )}
+        {headerActions && <div className="flex shrink-0 items-center gap-1">{headerActions}</div>}
       </header>
-
       {banner}
-
-      {/* الصورة */}
-      <div className={cn('relative w-full shrink-0 overflow-hidden bg-muted/40', imageHeight)}>
-        {image}
-        {statusBadges && (
-          <div className="pointer-events-none absolute right-2 top-2 z-10 flex max-w-[85%] flex-col items-end gap-1">{statusBadges}</div>
-        )}
-        {selectMark !== null && selectMark !== undefined && (
-          <span className={cn('absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border shadow-md backdrop-blur-sm transition-colors',
-            selectMark ? 'border-primary bg-primary text-primary-foreground' : 'border-white/30 bg-black/50 text-white/60')}>
-            <Check className="h-4 w-4" />
-          </span>
-        )}
-        {imageOverlayBottom}
-      </div>
-
-      {/* الموقع */}
-      <div className={cn('flex flex-1 flex-col p-3', compact ? 'gap-2.5' : 'gap-3')}>
-        <div className="min-w-0">
-          <div className="flex items-start justify-between gap-2">
-            <h4 className={cn('min-w-0 flex-1 font-semibold text-foreground', compact ? 'line-clamp-2 text-[13px] leading-5' : 'line-clamp-1 text-sm')}>{title}</h4>
-            {billboardType && <span title={`نوع اللوحة: ${billboardType}`} className="inline-flex max-w-[45%] shrink-0 items-center rounded-md bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground"><span className="truncate">{billboardType}</span></span>}
-          </div>
-          {landmark && (
-            <p className="mt-0.5 flex items-start gap-1 text-xs text-muted-foreground">
-              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-              <span className="line-clamp-2">{landmark}</span>
-            </p>
-          )}
+      {!horizontal && imageBox}
+      {!managementLayout && (size || level || faces || headerExtra) && <div className="flex min-w-0 flex-wrap items-center gap-2 border-b border-border/60 bg-muted/20 px-4 py-2 text-xs">
+        {size && <button type="button" dir="ltr" disabled={!onSizeClick} onClick={e => { e.stopPropagation(); onSizeClick?.(); }} title={onSizeClick ? `تصفية بالمقاس ${size}` : 'مقاس اللوحة'} className={cn('rounded-md bg-primary/10 px-2 py-1 font-manrope text-xs font-bold text-primary transition-all duration-200 disabled:cursor-default', onSizeClick && 'cursor-pointer hover:bg-primary/20')}>{size}</button>}
+        {level && <span className="text-muted-foreground">مستوى <b className="font-semibold text-foreground">{level}</b></span>}
+        {faces && <span className="text-muted-foreground">{faces}</span>}
+        {headerExtra}
+      </div>}
+      <div className={cn('billboard-card-body flex min-w-0 flex-1 flex-col', horizontal ? 'gap-2 px-3 pb-3 pt-1' : 'p-4', !horizontal && (compact ? 'gap-3' : 'gap-4'))}>
+        <div className="min-w-0 space-y-2">
+          <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><h4 className="min-w-0 flex-1 break-words text-sm font-semibold leading-relaxed text-foreground">{displayTitle}</h4></div>{!managementLayout && billboardType && <span className="max-w-[40%] truncate rounded-md bg-muted px-2 py-1 text-[10px] text-muted-foreground" title={billboardType}>{billboardType}</span>}</div>
+          {displayLandmark && displayLandmark !== displayTitle && <p className="flex items-start gap-1.5 text-xs leading-relaxed text-muted-foreground"><MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0" /><span className="break-words">{displayLandmark}</span></p>}
+          {(municipality || district || city) && <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            {municipality && <Chip onClick={onMunicipalityClick} title="البلدية">{municipality}</Chip>}
+            {district && district !== municipality && <Chip onClick={onDistrictClick} title="المنطقة">{district}</Chip>}
+            {city && city !== district && city !== municipality && <Chip onClick={onCityClick} title="المدينة">{city}</Chip>}
+          </div>}
         </div>
-        {(municipality || district || city) && (
-          <div className="flex flex-wrap items-center gap-1">
-            {municipality && <Chip strong onClick={onMunicipalityClick} title={onMunicipalityClick ? `تصفية ببلدية ${municipality}` : 'البلدية'}>{municipality}</Chip>}
-            {district && district !== municipality && <Chip onClick={onDistrictClick} title={onDistrictClick ? `تصفية بـ ${district}` : 'المنطقة'}>{district}</Chip>}
-            {city && <Chip onClick={onCityClick} title={onCityClick ? `تصفية بمدينة ${city}` : 'المدينة'}>{city}</Chip>}
-          </div>
-        )}
         {children}
       </div>
-
-      {(price !== undefined && price !== null) && (
-        <footer className="flex items-center justify-between gap-2 border-t border-border px-3 py-2">
-          <span className="truncate text-xs text-muted-foreground">{priceLabel || 'السعر'}</span>
-          <span className={cn('shrink-0 font-manrope text-base font-bold tabular-nums', priceTone === 'good' ? 'text-emerald-500' : 'text-primary')}>{price}</span>
-        </footer>
-      )}
+      {price !== undefined && price !== null && <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border bg-muted/20 px-4 py-3"><span className="text-xs text-muted-foreground">{priceLabel || 'السعر'}</span><span className={cn('font-manrope text-base font-bold tabular-nums', priceTone === 'good' ? 'text-emerald-500' : 'text-primary')}>{price}</span></footer>}
       {footer}
+      </Shell>
       {after}
     </article>
   );

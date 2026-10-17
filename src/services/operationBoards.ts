@@ -1,3 +1,4 @@
+import { getAvailableFacesCount, getInstallationFaceIndices } from '@/lib/installationFaces';
 import { supabase } from '@/integrations/supabase/client';
 import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import type { OperationRow } from '@/services/compositeOperations';
@@ -10,6 +11,8 @@ export interface BoardItem {
   name: string;
   size: string;
   faces: number;
+  maxFaces: number;
+  selectedFaces: number[];
   photo: string | null;
   landmark: string | null;
   area: string | null;
@@ -56,7 +59,9 @@ export async function loadOperationBoards(op: OperationRow): Promise<BoardItem[]
       billboardId: Number(i.billboard_id),
       name: b.Billboard_Name || `لوحة ${i.billboard_id}`,
       size: b.Size || '—',
-      faces: Number(i.faces_to_install) || Number(b.Faces_Count) || 2,
+      faces: getInstallationFaceIndices(i, b, op.type).length,
+      maxFaces: getAvailableFacesCount(b),
+      selectedFaces: getInstallationFaceIndices(i, b, op.type),
       photo: b.Image_URL || null,
       landmark: b.Nearest_Landmark || null,
       area: b.District || b.City || null,

@@ -1,3 +1,7 @@
+import { BillboardCardFrame, CardStatusBadge } from '@/components/billboards/card/BillboardCardFrame';
+import { BillboardFaceMedia } from '@/components/billboards/card/BillboardFaceMedia';
+import { InstallationFaceSelector } from '@/components/installation/InstallationFaceSelector';
+import { saveInstallationFaceSelection } from '@/services/installationFaceSelection';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -16,7 +20,7 @@ import { cn } from '@/lib/utils';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import {
-  Calculator, Camera, CheckCircle2, Sparkles, Star, ShieldOff, ImageIcon, ImagePlus, Loader2, MoreHorizontal, Palette, Plus, Printer, RotateCcw, Search, Trash2, Undo2, Upload, Users, CalendarDays,
+  Calculator, Camera, CheckCircle2, Sparkles, Star, ShieldOff, ImageIcon, ImagePlus, Loader2, MoreHorizontal, Palette, Plus, Printer, RotateCcw, Search, Trash2, Undo2, Upload, Users, CalendarDays, Rows3, LayoutGrid,
 } from 'lucide-react';
 import { AddBillboardsToTaskDialog } from '@/components/installation/AddBillboardsToTaskDialog';
 import {
@@ -24,12 +28,18 @@ import {
 } from '@/services/operationBoards';
 import type { OperationRow } from '@/services/compositeOperations';
 import { ZoomImage } from '@/components/composite-ops/ImageZoom';
-import { tintStyle } from '@/components/composite-ops/OperationCard';
 import { CARD_GRID, CardSizeControl, cardVars, useCardSize } from '@/components/composite-ops/CardSize';
 import { ScrollTopButton } from '@/components/shared/ScrollTopButton';
-import { extractDualPaletteFromImage } from '@/components/composite-tasks/list/shared';
 
 const today = () => format(new Date(), 'yyyy-MM-dd');
+/** أدنى عرض للبطاقة في نافذة إدارة اللوحات: الأعمدة تتكيّف مع عرض النافذة */
+const BOARD_CARD_MIN_W = { sm: 300, md: 360, lg: 460 } as const;
+/** البطاقة بالعرض: أقل عرض للبطاقة وعرض الصورة لكل حجم */
+const BOARD_ROW_MIN_W = { sm: 480, md: 560, lg: 680 } as const;
+const BOARD_ROW_IMG_W = { sm: '230px', md: '270px', lg: '330px' } as const;
+type BoardLayout = 'horizontal' | 'vertical';
+const LAYOUT_KEY = 'operation-boards-layout';
+const readLayout = (): BoardLayout => { try { return localStorage.getItem(LAYOUT_KEY) === 'vertical' ? 'vertical' : 'horizontal'; } catch { return 'horizontal'; } };
 const dmy = (s?: string | null) => (s ? String(s).slice(0, 10).split('-').reverse().join('/') : '');
 
 function PhotoDialog({ item, op, onClose, onSaved }: { item: BoardItem; op: OperationRow; onClose: () => void; onSaved: () => void }) {
@@ -53,11 +63,12 @@ function PhotoDialog({ item, op, onClose, onSaved }: { item: BoardItem; op: Oper
     catch (e: any) { toast.error(e.message || 'فشل الحفظ'); } finally { setBusy(null); }
   };
   const [showLinks, setShowLinks] = useState(false);
-  const faces: ['A' | 'B', string, string, (v: string) => void, React.RefObject<HTMLInputElement>][] = [['A', 'الوجه الأمامي', a, setA, fileA]];
-  if (item.faces > 1) faces.push(['B', 'الوجه الخلفي', b, setB, fileB]);
+  const faces: ['A' | 'B', string, string, (v: string) => void, React.RefObject<HTMLInputElement>][] = [];
+  if (item.selectedFaces.includes(1)) faces.push(['A', 'الوجه الأمامي', a, setA, fileA]);
+  if (item.selectedFaces.includes(2)) faces.push(['B', 'الوجه الخلفي', b, setB, fileB]);
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent dir="rtl" className="max-w-2xl text-right">
+      <DialogContent dir="rtl" className="max-h-[92vh] max-w-5xl overflow-y-auto text-right">
         <DialogTitle>صور التركيب · {item.name}</DialogTitle>
         <DialogDescription>ارفع صورة، أو انقر على مربع الوجه ثم الصق صورة من الحافظة (Ctrl+V)</DialogDescription>
         <div className="grid gap-4 sm:grid-cols-2">
@@ -110,7 +121,7 @@ function MoveMenu({ options, override, onMove, trigger }: { options: MoveOption[
   return (
     <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-[60vh] w-64 overflow-y-auto text-right">
+      <DropdownMenuContent align="end" className="max-h-[70vh] w-80 overflow-y-auto text-right text-sm">
         {rec && (<><DropdownMenuItem onClick={() => onMove(rec)} className="flex items-center gap-2 font-semibold text-primary"><Sparkles className="h-3.5 w-3.5" />الأنسب: {rec.name}</DropdownMenuItem><DropdownMenuSeparator /></>)}
         {section('فرق العملية', options.filter(o => o.inOperation))}
         {section('فرق أخرى', options.filter(o => !o.inOperation))}
@@ -125,7 +136,7 @@ function DesignMenu({ designs, current, onPick, trigger }: { designs: OpDesign[]
   return (
     <DropdownMenu dir="rtl">
       <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="max-h-[60vh] w-80 overflow-y-auto p-1 text-right">
+      <DropdownMenuContent align="end" className="max-h-[70vh] w-[26rem] overflow-y-auto p-1.5 text-right">
         {!designs.length && <div className="p-3 text-center text-xs text-muted-foreground">لا توجد تصاميم — أضفها من زر «التصاميم» أعلى النافذة</div>}
         {designs.map((d, k) => (
           <DropdownMenuItem key={`${d.id || 'u'}-${k}`} onClick={() => onPick(d)} className={cn('flex items-center gap-2 p-1.5', current && current === d.a && 'bg-primary/10')}>
@@ -144,70 +155,60 @@ function DesignMenu({ designs, current, onPick, trigger }: { designs: OpDesign[]
   );
 }
 
-function BoardCard({ i, gallery, isDone, selected, busy, showTeam, showContract, moveOptions, override, designs, onToggle, onComplete, onUncomplete, onPhotos, onMove, onDesign, onRemove }: {
-  i: BoardItem; gallery: { src: string; label?: string }[]; isDone: boolean; selected: boolean; busy: boolean; showTeam: boolean; showContract: boolean;
+function BoardCard({ horizontal = false, i, gallery, isDone, selected, busy, showTeam, showContract, moveOptions, override, designs, onToggle, onComplete, onUncomplete, onPhotos, onMove, onDesign, onRemove, onFacesChange }: {
+  horizontal?: boolean; i: BoardItem; gallery: { src: string; label?: string }[]; isDone: boolean; selected: boolean; busy: boolean; showTeam: boolean; showContract: boolean;
   moveOptions: MoveOption[]; override: boolean; designs: OpDesign[]; onToggle: (c: boolean) => void; onComplete: () => void; onUncomplete: () => void; onPhotos: () => void;
+  onFacesChange: (faces: number[]) => void;
   onMove: (o: MoveOption) => void; onDesign: (d: OpDesign) => void; onRemove: () => void;
 }) {
-  const [colors, setColors] = useState<[string, string] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    setColors(null);
-    if (i.designA) extractDualPaletteFromImage(i.designA, c => { if (!cancelled) setColors(c); });
-    return () => { cancelled = true; };
-  }, [i.designA]);
-  return (
-    <article style={tintStyle(colors)} className={cn('flex flex-col overflow-hidden rounded-2xl border-2 bg-card', selected ? 'ring-2 ring-primary' : '', !colors && 'border-border')}>
-      <header className="flex flex-wrap items-center gap-2 border-b border-border/60 bg-background/60 px-3 py-2">
-        <Checkbox className="h-5 w-5 border-2" checked={selected} onCheckedChange={c => onToggle(!!c)} aria-label={`تحديد ${i.name}`} />
-        <b className="text-lg leading-tight">{i.name}</b>
-        <span className="rounded-md bg-primary/10 px-2 py-0.5 text-base font-bold tabular-nums text-primary">{i.size}</span>
-        <span className="rounded-md bg-muted px-2 py-0.5 text-sm">{i.faces === 1 ? 'وجه واحد' : `${i.faces} أوجه`}</span>
-        <span className={cn('ms-auto rounded-md px-2.5 py-0.5 text-sm font-semibold', isDone ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white')}>
-          {isDone ? `مركبة ${dmy(i.installationDate)}` : 'غير مركبة'}
-        </span>
-      </header>
-      <div className="flex flex-1 flex-col">
-      <div className="relative shrink-0 border-b border-border/60" style={{ height: 'var(--img-h,200px)' }}>
-        <ZoomImage src={i.photo} alt={i.name} title={i.name} gallery={gallery} className="h-full w-full" />
-      </div>
-      <div className="flex min-w-0 flex-1 flex-col gap-2.5 p-3">
-        <div>
-          {/* أقرب نقطة يميناً، واسم الفرقة دائماً على اليسار مقابلها */}
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1 text-sm">{i.landmark || <span className="text-muted-foreground">—</span>}</div>
-            <span className={cn('flex shrink-0 items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold', showTeam ? 'border-primary/40 bg-primary/10 text-primary' : 'border-border bg-background/80')} title="الفرقة">
-              <Users className="h-3.5 w-3.5" />{i.teamName}
-            </span>
+  return <BillboardCardFrame code={i.name} size={i.size} tone={selected ? 'selected' : 'default'}
+    title={i.landmark || i.name} municipality={i.municipality || undefined} district={i.area || undefined} city={i.city || undefined}
+    imageHeight="h-[var(--img-h,200px)]" horizontal={horizontal}
+    headerActions={<><Checkbox className="h-5 w-5" checked={selected} onCheckedChange={c => onToggle(c === true)} aria-label={`تحديد ${i.name}`} /><Button type="button" size="icon" variant="ghost" className="h-10 w-10 cursor-pointer text-muted-foreground hover:text-destructive" disabled={busy || isDone} onClick={onRemove} aria-label={`إزالة ${i.name}`} title={isDone ? 'ألغِ الإكمال أولاً' : 'إزالة اللوحة'}><Trash2 className="h-4 w-4" /></Button></>}
+    image={<ZoomImage src={i.photo} alt={i.name} title={i.name} gallery={gallery} className="h-full w-full" />}
+    statusBadges={<CardStatusBadge kind={isDone ? 'available' : 'warning'} icon={isDone ? CheckCircle2 : CalendarDays} label={isDone ? `مركبة ${dmy(i.installationDate)}` : 'بانتظار التركيب'} />}
+    headerExtra={<span className="ms-auto inline-flex min-w-0 max-w-full items-center gap-1.5 text-[11px] text-muted-foreground" title={i.teamName}><Users className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{i.teamName}</span></span>}>
+    {showContract && i.contractNumber && <div className="text-xs text-muted-foreground">العقد <span className="font-semibold text-foreground">#{i.contractNumber}</span></div>}
+    <InstallationFaceSelector maxFaces={i.maxFaces} selectedFaces={i.selectedFaces} disabled={busy} onChange={onFacesChange} />
+    {horizontal ? (
+      // شريط مصغّر: تصميم وتركيب لكل وجه بدل الصناديق الكبيرة
+      <div className="grid grid-cols-4 gap-1.5">
+        {i.selectedFaces.flatMap(face => ([['تصميم', face === 1 ? i.designA : face === 2 ? i.designB : null], ['تركيب', face === 1 ? i.installedA : face === 2 ? i.installedB : null]] as const).map(([label, src]) => (
+          <div key={`${face}-${label}`} className="min-w-0 space-y-0.5">
+            <ZoomImage src={src} alt={`${label} الوجه ${face}`} title={i.name} gallery={gallery} className="h-10 w-full rounded-md border border-border" imgClassName="object-contain" />
+            <div className="truncate text-center text-[10px] text-muted-foreground">و{face} · {src ? label : label === 'تصميم' ? 'بلا تصميم' : 'لم يُرفع'}</div>
           </div>
-          <div className="text-sm text-muted-foreground/80">{[i.area, i.municipality].filter(Boolean).join(' · ')}</div>
-          {showContract && i.contractNumber && <div className="mt-1 flex flex-wrap gap-1 text-xs">
-            <span className="rounded bg-background/80 px-1.5 py-0.5 tabular-nums">عقد #{i.contractNumber}</span>
-          </div>}
-        </div>
-        <div className="grid grid-cols-4 gap-1.5">
-          {([['تصميم أ', i.designA], ['تصميم ب', i.faces > 1 ? i.designB : null], ['تركيب أ', i.installedA], ['تركيب ب', i.faces > 1 ? i.installedB : null]] as const).map(([label, src]) => (
-            <div key={label} className="space-y-0.5">
-              <ZoomImage src={src} alt={`${label} · ${i.name}`} title={i.name} gallery={gallery} className="aspect-square w-full rounded-md border border-border" imgClassName="object-contain" />
-              <div className="text-center text-[11px] text-muted-foreground">{label}</div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-auto grid grid-cols-2 gap-1.5">
-          {isDone
-            ? <Button size="sm" variant="outline" className="h-10 bg-background/80" disabled={busy} onClick={onUncomplete}><Undo2 className="h-4 w-4" />إلغاء الإكمال</Button>
-            : <Button size="sm" className="h-10" disabled={busy} onClick={onComplete}><CheckCircle2 className="h-4 w-4" />تم التركيب</Button>}
-          <Button size="sm" variant="outline" className="h-10 bg-background/80" onClick={onPhotos}><Camera className="h-4 w-4" />صور التركيب</Button>
-          <MoveMenu options={moveOptions} override={override} onMove={onMove}
-            trigger={<Button size="sm" variant="outline" className="h-10 bg-background/80" disabled={busy}><Users className="h-4 w-4" />نقل لفرقة</Button>} />
-          <DesignMenu designs={designs} current={i.designA} onPick={onDesign}
-            trigger={<Button size="sm" variant="outline" className="h-10 bg-background/80" disabled={busy}><Palette className="h-4 w-4" />التصميم</Button>} />
-          <Button size="sm" variant="ghost" className="h-10 text-destructive" disabled={busy || isDone} title={isDone ? 'ألغِ الإكمال أولاً' : undefined} onClick={onRemove}><Trash2 className="h-4 w-4" />إزالة</Button>
-        </div>
+        )))}
       </div>
+    ) : (
+      <BillboardFaceMedia faces={i.selectedFaces.map(face => ({ face, design: face === 1 ? i.designA : face === 2 ? i.designB : null, installed: face === 1 ? i.installedA : face === 2 ? i.installedB : null }))}
+        renderImage={(src, label) => <ZoomImage src={src} alt={label} title={i.name} gallery={gallery} className="h-24 w-full rounded-md" imgClassName="object-contain" />} />
+    )}
+    {horizontal ? (
+      // بالعرض: زران رئيسيان بنص، والفرقة/التصميم أيقونتان بتلميح — لا تداخل في العرض الضيق
+      <footer className="mt-auto flex items-center gap-1.5 border-t border-border pt-2 [&_button]:cursor-pointer [&_button]:transition-all [&_button]:duration-200">
+        <Button size="sm" variant={isDone ? 'outline' : 'default'} className="h-8 min-w-0 flex-1 gap-1 px-2 text-xs" disabled={busy} onClick={isDone ? onUncomplete : onComplete}>
+          {isDone ? <Undo2 className="h-4 w-4 shrink-0" /> : <CheckCircle2 className="h-4 w-4 shrink-0" />}<span className="truncate">{isDone ? 'إلغاء الإكمال' : 'تم التركيب'}</span>
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 min-w-0 flex-1 gap-1 px-2 text-xs" disabled={busy} onClick={onPhotos}>
+          <Camera className="h-4 w-4 shrink-0" /><span className="truncate">صور التركيب</span>
+        </Button>
+        <MoveMenu options={moveOptions} override={override} onMove={onMove} trigger={<Button size="icon" variant="outline" className="h-8 w-8 shrink-0 text-muted-foreground" disabled={busy} title="تغيير الفرقة" aria-label="تغيير الفرقة"><Users className="h-4 w-4" /></Button>} />
+        <DesignMenu designs={designs} current={i.designA} onPick={onDesign} trigger={<Button size="icon" variant="outline" className="h-8 w-8 shrink-0 text-muted-foreground" disabled={busy} title="تغيير التصميم" aria-label="تغيير التصميم"><Palette className="h-4 w-4" /></Button>} />
+      </footer>
+    ) : (
+    <footer className="mt-auto space-y-2 border-t border-border pt-3 [&_button]:cursor-pointer [&_button]:transition-all [&_button]:duration-200">
+      <div className="grid grid-cols-2 gap-2">
+        <Button size="sm" variant={isDone ? 'outline' : 'default'} className="h-10 gap-1.5 text-xs" disabled={busy} onClick={isDone ? onUncomplete : onComplete}>{isDone ? <Undo2 className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}{isDone ? 'إلغاء الإكمال' : 'تم التركيب'}</Button>
+        <Button size="sm" variant="outline" className="h-10 gap-1.5 text-xs" disabled={busy} onClick={onPhotos}><Camera className="h-4 w-4" />صور التركيب</Button>
       </div>
-    </article>
-  );
+      <div className="grid grid-cols-2 gap-2">
+        <MoveMenu options={moveOptions} override={override} onMove={onMove} trigger={<Button size="sm" variant="ghost" className="h-10 gap-1.5 text-xs text-muted-foreground" disabled={busy}><Users className="h-4 w-4" />تغيير الفرقة</Button>} />
+        <DesignMenu designs={designs} current={i.designA} onPick={onDesign} trigger={<Button size="sm" variant="ghost" className="h-10 gap-1.5 text-xs text-muted-foreground" disabled={busy}><Palette className="h-4 w-4" />تغيير التصميم</Button>} />
+      </div>
+    </footer>
+    )}
+  </BillboardCardFrame>;
 }
 
 export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, onDesigns, onDistribute, onPrint }: {
@@ -232,6 +233,9 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
   const [photoItem, setPhotoItem] = useState<BoardItem | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [cardSize] = useCardSize();
+  const [layout, setLayoutState] = useState<BoardLayout>(readLayout);
+  const setLayout = (v: BoardLayout) => { setLayoutState(v); try { localStorage.setItem(LAYOUT_KEY, v); } catch { /* ignore */ } };
+  const horizontal = layout === 'horizontal';
   const [override, setOverride] = useState(false);
   const [allTeams, setAllTeams] = useState<any[]>([]);
   const [opTeamIds, setOpTeamIds] = useState<Map<string, string>>(new Map()); // team_id -> installation task id
@@ -325,7 +329,7 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
 
   return (
     <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
-      <DialogContent dir="rtl" className="flex h-[96vh] max-w-[1400px] flex-col gap-0 overflow-hidden p-0 text-right">
+      <DialogContent dir="rtl" className="flex h-[96vh] max-w-[min(1600px,98vw)] flex-col gap-0 overflow-hidden p-0 text-right">
         <header className="space-y-3 border-b border-border px-5 py-4 pl-12">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -372,6 +376,10 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
             <label className={cn('flex items-center gap-1.5 rounded-lg border px-2 py-1 text-xs', override ? 'border-destructive/50 bg-destructive/5 text-destructive' : 'border-border text-muted-foreground')} title="يسمح بنقل اللوحة لأي فرقة حتى لو كانت خارج مدنها أو مقاساتها">
               <ShieldOff className="h-3.5 w-3.5" /><Switch checked={override} onCheckedChange={setOverride} />تجاوز أحكام الفرق
             </label>
+            <div role="radiogroup" aria-label="شكل البطاقات" className="flex rounded-lg border border-border p-0.5">
+              <button type="button" role="radio" aria-checked={horizontal} onClick={() => setLayout('horizontal')} className={cn('flex h-8 items-center gap-1 rounded-md px-2.5 text-xs', horizontal ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><Rows3 className="h-4 w-4" />بالعرض</button>
+              <button type="button" role="radio" aria-checked={!horizontal} onClick={() => setLayout('vertical')} className={cn('flex h-8 items-center gap-1 rounded-md px-2.5 text-xs', !horizontal ? 'bg-primary text-primary-foreground' : 'text-muted-foreground')}><LayoutGrid className="h-4 w-4" />بالطول</button>
+            </div>
             <CardSizeControl />
           </div>
           {/* أدوات التحديد: تعمل على اللوحات الظاهرة حسب البحث والفلاتر */}
@@ -391,15 +399,16 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
             : !items ? <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-56 rounded-xl" />)}</div>
             : !visible.length ? <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">لا توجد لوحات</div>
             : (
-              <div className={cn(CARD_GRID[cardSize].grid, CARD_GRID[cardSize].text)} style={cardVars(cardSize)}>
+              <div className={cn('grid gap-3', CARD_GRID[cardSize].text)} style={{ ...cardVars(cardSize), ['--img-w' as any]: BOARD_ROW_IMG_W[cardSize], gridTemplateColumns: `repeat(auto-fill, minmax(min(100%, ${(horizontal ? BOARD_ROW_MIN_W : BOARD_CARD_MIN_W)[cardSize]}px), 1fr))` }}>
                 {visible.map(i => {
                   const isDone = i.status === 'completed';
-                  const gallery = ([['صورة اللوحة', i.photo], ['تصميم أ', i.designA], ['تصميم ب', i.designB], ['تركيب أ', i.installedA], ['تركيب ب', i.installedB]] as const)
+                  const gallery = ([['صورة اللوحة', i.photo], ...i.selectedFaces.flatMap(face => [[`تصميم الوجه ${face}`, face === 1 ? i.designA : face === 2 ? i.designB : null], [`تركيب الوجه ${face}`, face === 1 ? i.installedA : face === 2 ? i.installedB : null]])])
                     .filter(([, src]) => !!src).map(([label, src]) => ({ src: src as string, label }));
                   return (
-                    <BoardCard key={i.id} i={i} gallery={gallery} isDone={isDone} selected={selected.has(i.id)} busy={busy}
+                    <BoardCard key={i.id} horizontal={horizontal} i={i} gallery={gallery} isDone={isDone} selected={selected.has(i.id)} busy={busy}
                       showTeam={teams.length > 1} showContract={op.contractIds.length > 1}
                       moveOptions={optionsFor([i])} override={override} designs={designs}
+                      onFacesChange={faces => run(() => saveInstallationFaceSelection({ id: i.id, taskId: i.taskId, maxFaces: i.maxFaces }, faces, op), 'تم حفظ أوجه التركيب وتحديث التكاليف')}
                       onDesign={d => run(() => setBoardsDesign([i], d), 'تم تعيين التصميم')}
                       onToggle={c => toggle(i.id, c)}
                       onComplete={() => run(() => completeBoards([i], date), 'تم تسجيل التركيب')}

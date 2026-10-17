@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useState, useEffect, useMemo, useRef, lazy, Suspense, startTransition } from 'react';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { useAuth } from '@/contexts/AuthContext';
@@ -6,7 +7,7 @@ import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { MapPin, ChevronDown, ChevronUp, BarChart3, Map as MapIcon, Zap, Loader2, Sparkles, Camera } from 'lucide-react';
+import { MapPin, ChevronDown, ChevronUp, BarChart3, Map as MapIcon, Zap, Loader2, Sparkles, Camera, Maximize2, Minimize2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -50,6 +51,13 @@ export default function Billboards() {
   const marketerCustomerId = user?.linkedCustomerId;
   const [currentPage, setCurrentPage] = usePersistedState<number>('billboards.currentPage', 1);
   const [gridColumns, setGridColumns] = usePersistedState<number>('billboards.gridColumns', 260);
+  const [expandedGallery, setExpandedGallery] = useState(false);
+  useEffect(() => {
+    if (!expandedGallery) return;
+    const close = (event: KeyboardEvent) => { if (event.key === 'Escape') setExpandedGallery(false); };
+    window.addEventListener('keydown', close);
+    return () => window.removeEventListener('keydown', close);
+  }, [expandedGallery]);
   const PAGE_SIZE = 24; // fixed page size
 
   // Filter states
@@ -728,8 +736,8 @@ export default function Billboards() {
       const matchesDistrict = selectedDistricts.length === 0 || selectedDistricts.includes(districtVal);
       
       // ✅ FIXED: Better ad type matching
-      const adTypeVal = String(billboard.Ad_Type || billboard.adType || billboard.ad_type || billboard.AdType || 
-                              (billboard.contracts && billboard.contracts[0]?.['Ad Type']) || '').trim();
+      const adTypeVal = String(billboard.Ad_Type || billboard.adType || (billboard as any).ad_type || (billboard as any).AdType || 
+                              ((billboard as any).contracts && (billboard as any).contracts[0]?.['Ad Type']) || '').trim();
       const matchesAdType = selectedAdTypes.length === 0 || selectedAdTypes.includes(adTypeVal);
       
       const customerVal = String((billboard as any).Customer_Name ?? (billboard as any).clientName ?? '');
@@ -877,15 +885,15 @@ export default function Billboards() {
   const overlayItems: CollectionItemForOverlay[] = useMemo(() => {
     return sortedFilteredBillboards.map(b => ({
       sequence_number: Number(b.ID || (b as any).sequence_number || 0),
-      billboard_name: b.Name || (b as any).billboard_name || `لوحة #${b.ID}`,
-      location_text: b.Location || (b as any).location_text || '',
+      billboard_name: (b as any).Name || (b as any).billboard_name || `لوحة #${b.ID}`,
+      location_text: (b as any).Location || (b as any).location_text || '',
       nearest_landmark: b.Nearest_Landmark || (b as any).nearest_landmark || '',
       size: b.Size || (b as any).size || '4x3',
-      faces_count: String(b.Faces || (b as any).faces_count || '1'),
+      faces_count: String((b as any).Faces || (b as any).faces_count || '1'),
       image_url: b.Image_URL || (b as any).image_url || null,
       municipality: b.Municipality || (b as any).municipality || '',
-      latitude: b.Latitude || (b.GPS_Coordinates ? parseFloat(String(b.GPS_Coordinates).split(',')[0]) : null),
-      longitude: b.Longitude || (b.GPS_Coordinates ? parseFloat(String(b.GPS_Coordinates).split(',')[1]) : null),
+      latitude: (b as any).Latitude || (b.GPS_Coordinates ? parseFloat(String(b.GPS_Coordinates).split(',')[0]) : null),
+      longitude: (b as any).Longitude || (b.GPS_Coordinates ? parseFloat(String(b.GPS_Coordinates).split(',')[1]) : null),
       overlay_config: (b as any).overlay_config,
     }));
   }, [sortedFilteredBillboards]);
@@ -900,11 +908,11 @@ export default function Billboards() {
 
       const { error } = await supabase
         .from('billboards')
-        .update({ overlay_config: cleanConfig as any })
+        .update({ overlay_config: cleanConfig as any } as any)
         .eq('ID', targetId);
 
       if (!error) {
-        updateBillboardLocal(targetId, { overlay_config: cleanConfig });
+        updateBillboardLocal(targetId, { overlay_config: cleanConfig } as any);
  toast.success(`تم حفظ إعدادات التراكب البصري والتناسب الواقعي للوحة #${sequenceNumber} بنجاح! `);
       } else {
         console.error('[save-overlay-error]', error);
@@ -929,7 +937,7 @@ export default function Billboards() {
           GPS_Coordinates: coordsStr,
           coordinates: coordsStr,
           GPS_Link: `https://www.google.com/maps?q=${coordsStr}`
-        })
+        } as any)
         .eq('ID', targetId);
 
       if (!error) {
@@ -1039,8 +1047,8 @@ export default function Billboards() {
       const districtVal = String((billboard as any).District || (billboard as any).district || '').trim();
       const matchesDistrict = selectedDistricts.length === 0 || selectedDistricts.includes(districtVal);
       
-      const adTypeVal = String(billboard.Ad_Type || billboard.adType || billboard.ad_type || billboard.AdType || 
-                              (billboard.contracts && billboard.contracts[0]?.['Ad Type']) || '').trim();
+      const adTypeVal = String(billboard.Ad_Type || billboard.adType || (billboard as any).ad_type || (billboard as any).AdType || 
+                              ((billboard as any).contracts && (billboard as any).contracts[0]?.['Ad Type']) || '').trim();
       const matchesAdType = selectedAdTypes.length === 0 || selectedAdTypes.includes(adTypeVal);
       
       const customerVal = String((billboard as any).Customer_Name ?? (billboard as any).clientName ?? '');
@@ -1348,8 +1356,9 @@ export default function Billboards() {
     );
   }
 
-  return (
-    <div className="min-h-screen bg-background">
+  const pageContent = (
+    <div className={expandedGallery ? 'fixed inset-0 z-[100] overflow-y-auto overscroll-contain bg-background' : 'min-h-screen bg-background'}>
+      {expandedGallery && <Button type="button" variant="outline" onClick={() => setExpandedGallery(false)} className="fixed left-3 top-3 z-50 h-10 cursor-pointer gap-2 bg-background shadow-md transition-all duration-200"><Minimize2 className="h-4 w-4" />العودة للعرض العادي</Button>}
       {/* Editorial Header */}
       <div className="bg-gradient-to-b from-card/85 to-background border-b border-border/40 mb-4 sm:mb-6 shadow-sm backdrop-blur-md">
         <div className="px-4 sm:px-6 py-4 sm:py-6">
@@ -1368,6 +1377,7 @@ export default function Billboards() {
               <div className="h-0.5 w-12 bg-primary rounded-full mt-2" />
             </div>
             <div className="flex flex-wrap items-center gap-2">
+              {!expandedGallery && <Button type="button" variant="outline" onClick={() => setExpandedGallery(true)} className="h-10 cursor-pointer gap-2 transition-all duration-200"><Maximize2 className="h-4 w-4" />توسيع مساحة اللوحات</Button>}
               <Button
                 onClick={() => setOverlaySelectorOpen(true)}
                 size="sm"
@@ -1422,7 +1432,7 @@ export default function Billboards() {
         </div>
       </div>
 
-      <div className="px-4 sm:px-6 space-y-4 sm:space-y-6">
+      <div className="px-2 sm:px-3 space-y-4 sm:space-y-6">
         {/* Stats Strip */}
         <div className="flex items-center justify-between py-1 sm:py-2">
           <div className="flex items-center gap-3 sm:gap-4 text-xs sm:text-sm">
@@ -1541,7 +1551,7 @@ export default function Billboards() {
                     const maintTypeRaw = String((b as any).maintenance_type ?? '').trim().toLowerCase();
                     const contractNumRaw = String(b.Contract_Number ?? b.contractNumber ?? '').trim();
                     const hasContract = !!contractNumRaw && contractNumRaw !== '0';
-                    const endDate = b.Rent_End_Date ?? b.rent_end_date ?? (b as any).expiryDate ?? null;
+                    const endDate = b.Rent_End_Date ?? (b as any).rent_end_date ?? (b as any).expiryDate ?? null;
                     const isExpired = !!endDate && !isNaN(new Date(endDate).getTime()) && new Date(endDate) < new Date();
                     
                     let displayStatus: 'available' | 'maintenance' | 'rented' | 'removal' | 'out_of_service' = 'available';
@@ -1633,13 +1643,15 @@ export default function Billboards() {
 
       {/* Top Pagination with Grid Control */}
       {sortedFilteredBillboards.length > 0 && (
-        <div className="flex items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-4">
-          <div className="flex items-center gap-0.5 sm:gap-1 bg-muted/40 rounded-full p-0.5 border border-border/40 overflow-x-auto max-w-[200px] sm:max-w-none">
+        <div className="flex flex-wrap items-center justify-between mb-3 sm:mb-4 gap-2 sm:gap-4">
+          <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border/40 bg-muted/40 p-1" role="group" aria-label="حجم كروت إدارة اللوحات">
             {[
               { label: 'كبير', value: 320 },
               { label: 'متوسط', value: 260 },
               { label: 'صغير', value: 200 },
               { label: 'مصغر', value: 160 },
+              { label: 'أصغر', value: 128 },
+              { label: 'أصغر حجم', value: 112 },
             ].map(opt => (
               <button
                 key={opt.value}
@@ -1647,7 +1659,8 @@ export default function Billboards() {
                   setGridColumns(opt.value);
                   setCurrentPage(1);
                 }}
-                className={`h-6 sm:h-7 px-2 sm:px-3 rounded-full text-[10px] sm:text-[11px] font-medium whitespace-nowrap transition-all duration-200 ${
+                aria-pressed={gridColumns === opt.value}
+                className={`h-10 cursor-pointer px-2 sm:px-3 rounded-lg text-[11px] font-medium whitespace-nowrap transition-all duration-200 ${
                   gridColumns === opt.value
                     ? 'bg-primary text-primary-foreground shadow-sm font-bold'
                     : 'text-muted-foreground hover:text-foreground'
@@ -1971,4 +1984,5 @@ export default function Billboards() {
       </div>
     </div>
   );
+  return expandedGallery ? createPortal(pageContent, document.body) : pageContent;
 }

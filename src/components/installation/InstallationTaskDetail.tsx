@@ -1,3 +1,5 @@
+import { getAvailableFacesCount } from '@/lib/installationFaces';
+import { saveInstallationFaceSelections } from '@/services/installationFaceSelection';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useQueryClient } from '@tanstack/react-query';
@@ -286,8 +288,12 @@ export const InstallationTaskDetail: React.FC<Props> = ({
   const applyFacesToAll = useCallback(async (faces: number) => {
     const ids = pendingRows.map(r => r.item.id);
     if (!ids.length) return;
-    const { error } = await supabase.from('installation_task_items').update({ faces_to_install: faces } as any).in('id', ids);
-    if (error) { toast.error('فشل تعميم الأوجه'); return; }
+    try {
+      await saveInstallationFaceSelections(pendingRows.map(row => {
+        const maxFaces = getAvailableFacesCount(row.billboard);
+        return { item: { id: row.item.id, taskId: row.item.task_id, maxFaces }, selection: Array.from({ length: Math.min(faces, maxFaces) }, (_, i) => i + 1) };
+      }));
+    } catch (error: any) { toast.error(error.message || 'فشل تعميم الأوجه'); onRefreshItems(); return; }
     toast.success(`تم التعميم على ${ids.length} لوحة`);
     onRefreshItems();
   }, [pendingRows, onRefreshItems]);

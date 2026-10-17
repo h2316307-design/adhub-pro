@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
 import { supabase } from '@/integrations/supabase/client';
 import { assignBoardDesign, saveBoardPhotos } from '@/services/boardMediaService';
-import { resolveInstallationFacesCount } from '@/lib/installationFaces';
+import { getAvailableFacesCount, getInstallationFaceIndices } from '@/lib/installationFaces';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -29,7 +29,9 @@ export function BoardMediaEditor({ mode, item, billboard, taskType, designs, con
   const available = [...designs, ...extraDesigns.filter(d => !designs.some(existing => existing.id === d.id))];
   const folder = `${mode === 'photos' ? 'installation-photos' : 'designs'}/C${contractId || 'task'}_re${String(item.task_id).slice(0, 6)}`;
   const uploadName = `${billboard?.Billboard_Name || item.billboard_id}_${item.id}_${Date.now()}`;
-  const twoFaces = mode === 'design' || resolveInstallationFacesCount(item, billboard, taskType) > 1;
+  const selectedFaces = getInstallationFaceIndices(item, billboard, taskType);
+  const showA = mode === 'design' || selectedFaces.includes(1);
+  const twoFaces = mode === 'design' ? getAvailableFacesCount(billboard) > 1 : selectedFaces.includes(2);
 
   const applyDesign = async (design: any | null) => {
     setSaving(true);
@@ -70,7 +72,7 @@ export function BoardMediaEditor({ mode, item, billboard, taskType, designs, con
       {item.selected_design_id && <Button size="sm" variant="ghost" disabled={busy} onClick={() => applyDesign(null)}>إزالة تعيين التصميم</Button>}
     </> : <>
       {mode === 'design' && <Input value={name} onChange={e => setName(e.target.value)} placeholder="اسم التصميم (اختياري)" aria-label="اسم التصميم الجديد" disabled={busy} />}
-      <ImageUploadZone value={faceA} showPreview={!!faceA} onChange={setFaceA} onUploadingChange={uploadAChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الأمامي' : 'صورة تركيب الوجه الأمامي'} imageName={`${uploadName}_face-A`} folder={folder} disabled={saving} previewHeight="h-28" />
+      {showA && <ImageUploadZone value={faceA} showPreview={!!faceA} onChange={setFaceA} onUploadingChange={uploadAChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الأمامي' : 'صورة تركيب الوجه الأمامي'} imageName={`${uploadName}_face-A`} folder={folder} disabled={saving} previewHeight="h-28" />}
       {twoFaces && <ImageUploadZone value={faceB} showPreview={!!faceB} onChange={setFaceB} onUploadingChange={uploadBChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الخلفي (اختياري)' : 'صورة تركيب الوجه الخلفي'} imageName={`${uploadName}_face-B`} folder={folder} disabled={saving} previewHeight="h-28" />}
       <Button size="sm" className="w-full" onClick={save} disabled={busy || (mode === 'design' ? !faceA : !faceA && !faceB)}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{mode === 'design' ? 'حفظ وتطبيق التصميم' : 'حفظ صور التركيب'}</Button>
       {mode === 'design' && <Button size="sm" variant="ghost" disabled={busy} onClick={() => setNewDesign(false)}>اختيار تصميم موجود</Button>}

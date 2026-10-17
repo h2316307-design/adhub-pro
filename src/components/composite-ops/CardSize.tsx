@@ -30,9 +30,9 @@ export function useCardSize(): [CardSize, (s: CardSize) => void] {
 
 /** أصناف الشبكة وارتفاع البطاقة لكل حجم */
 export const CARD_GRID: Record<CardSize, { grid: string; height: string; img: string; text: string }> = {
-  sm: { grid: 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4', height: '300px', img: '170px', text: 'text-[0.92rem]' },
-  md: { grid: 'grid gap-4 sm:grid-cols-2 2xl:grid-cols-3', height: '380px', img: '230px', text: 'text-base' },
-  lg: { grid: 'grid gap-4 lg:grid-cols-2', height: '460px', img: '300px', text: 'text-[1.08rem]' },
+  sm: { grid: 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[1900px]:grid-cols-5', height: '280px', img: '130px', text: 'text-[0.9rem]' },
+  md: { grid: 'grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4', height: '340px', img: '170px', text: 'text-[0.95rem]' },
+  lg: { grid: 'grid gap-4 lg:grid-cols-2 2xl:grid-cols-3', height: '420px', img: '220px', text: 'text-base' },
 };
 
 export const cardVars = (s: CardSize) => ({ ['--card-h' as any]: CARD_GRID[s].height, ['--img-h' as any]: CARD_GRID[s].img }) as CSSProperties;

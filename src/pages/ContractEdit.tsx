@@ -903,8 +903,14 @@ export default function ContractEdit() {
         // ✅ التصاميم المطبّقة في أوامر تركيب هذا العقد (أوامر العمل) تظهر في صفحة العقد — الأحدث لكل لوحة
         (async () => {
           try {
-            const { data: tasks } = await supabase.from('installation_tasks').select('id').eq('contract_id', Number(contractNumber));
-            const taskIds = (tasks || []).map((t: any) => t.id);
+            const [directRes, combinedRes] = await Promise.all([
+              supabase.from('installation_tasks').select('id').eq('contract_id', Number(contractNumber)),
+              supabase.from('installation_tasks').select('id').contains('contract_ids', [String(contractNumber)]),
+            ]);
+            const taskIds = [...new Set([
+              ...(directRes.data || []).map((t: any) => t.id),
+              ...(combinedRes.data || []).map((t: any) => t.id),
+            ])];
             if (!taskIds.length) return;
             const { data: items } = await supabase
               .from('installation_task_items')

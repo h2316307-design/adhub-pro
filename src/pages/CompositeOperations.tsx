@@ -18,12 +18,13 @@ import { BulkDesignAssigner } from '@/components/tasks/BulkDesignAssigner';
 import { fetchInstallationWorkflowData, type InstallationWorkflowData } from '@/components/composite-tasks/list/shared';
 import { ImagePlus, Palette, Trash2, X, Plus, Calculator, FileText, FolderOpen, MoreHorizontal, RefreshCw, Search, ShieldCheck, Users, Printer, Scissors, Layers } from 'lucide-react';
 import { OperationCard, OperationsTable, type OperationActions } from '@/components/composite-ops/OperationCard';
-import { LayoutGrid, Table2 } from 'lucide-react';
+import { LayoutGrid, Table2, Boxes } from 'lucide-react';
 import { CARD_GRID, CardSizeControl, cardVars, useCardSize } from '@/components/composite-ops/CardSize';
 import { UnifiedTaskInvoice } from '@/components/composite-tasks/UnifiedTaskInvoice';
 import { CostEditorDialog } from '@/components/composite-ops/CostEditorDialog';
 import { money } from '@/lib/compositeCosts';
 import { OperationBoardsWorkspace } from '@/components/composite-ops/OperationBoardsWorkspace';
+import { OperationsInventory } from '@/components/composite-ops/OperationsInventory';
 import { EnhancedAddInstallationTaskDialog } from '@/components/installation/EnhancedAddInstallationTaskDialog';
 import { UnifiedPrintAllDialog } from '@/components/shared/printing/UnifiedPrintAllDialog';
 import { createInstallationOperation } from '@/services/installationOperationCreate';
@@ -69,6 +70,7 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
     if (fresh) setBoardsOp(fresh);
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const [createType, setCreateType] = useState<'installation' | 'reinstallation' | null>(null);
+  const [showInventory, setShowInventory] = useState(false);
   const [creating, setCreating] = useState(false);
   const { data: teamsList = [] } = useQuery({ queryKey: ['installation-teams-all'], queryFn: async () => {
     const { data, error } = await supabase.from('installation_teams').select('*');
@@ -210,9 +212,12 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
         <div className="flex flex-wrap gap-2">
           <Button onClick={() => setCreateType('installation')}><Plus className="h-4 w-4" />أمر تركيب</Button>
           <Button variant="secondary" onClick={() => setCreateType('reinstallation')}><Plus className="h-4 w-4" />إعادة تركيب</Button>
+          {!embedded && <Button variant="outline" onClick={() => setShowInventory(true)}><Boxes className="h-4 w-4" />الجرد</Button>}
           <Button variant="outline" onClick={() => refetch()} disabled={isFetching}><RefreshCw className={cn('h-4 w-4', isFetching && 'animate-spin')} />تحديث</Button>
         </div>
       </header>
+
+      {!embedded && <OperationsInventory open={showInventory} onOpenChange={setShowInventory} />}
 
       <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         {[

@@ -1,3 +1,6 @@
+import { BillboardSettingsPanels } from './forms/BillboardSettingsPanels';
+import { FaceDimensionsEditor } from './forms/FaceDimensionsEditor';
+import { validateFaceDimensions } from '@/lib/billboardFaces';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -191,6 +194,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
         Nearest_Landmark: bb.Nearest_Landmark || bb.location || bb.landmark || bb.Location || bb.nearest_landmark || '',
         GPS_Coordinates: bb.GPS_Coordinates || bb.gps_coordinates || bb.coords || bb.coordinates || bb.GPS || bb.lat_lng || '',
         Faces_Count: facesCount,
+        face_dimensions: bb.face_dimensions || [],
         Size: size,
         print_size: initialPrintSize,
         Status: bb.Status || bb.status || 'available',
@@ -387,6 +391,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
         finalSizeId = matchedSize?.id || null;
       }
 
+      validateFaceDimensions(editForm);
       const payload: any = { 
         ...(Billboard_Name ? { Billboard_Name } : {}),
         City, 
@@ -395,6 +400,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
         Nearest_Landmark, 
         GPS_Coordinates: GPS_Coordinates || null,
         Faces_Count: Faces_Count ? parseInt(String(Faces_Count)) : null,
+        face_dimensions: (editForm.face_dimensions || []).slice(0, Number(Faces_Count) || 1),
         Size, 
         size_id: finalSizeId,
         ...(editForm.print_size?.trim() || editing.print_size !== undefined ? { print_size: editForm.print_size?.trim() || null } : {}),
@@ -538,11 +544,8 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
           <DialogDescription className="text-xs text-muted-foreground">بيانات اللوحة وموقعها ومواصفاتها في مكان واحد</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
-          <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,1.65fr)_minmax(0,1fr)]">
-          <div className="min-w-0 space-y-4">
-          {/* معلومات أساسية */}
-          <section className="edit-section">
+        <BillboardSettingsPanels key={String(editing?.ID || 'edit')}
+          details={<><section className="edit-section">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <SlidersHorizontal className="h-4 w-4 text-primary" />
               البيانات الأساسية
@@ -684,10 +687,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 )}
               </div>
             </div>
-          </section>
-
-          {/* الموقع */}
-          <section className="edit-section">
+          </section><section className="edit-section">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <MapPin className="h-4 w-4 text-primary" />
               الموقع
@@ -713,10 +713,8 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 />
               </div>
             </div>
-          </section>
-
-          {/* المواصفات الفنية */}
-          <section className="edit-section">
+          </section></>}
+          specifications={<><section className="edit-section">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Ruler className="h-4 w-4 text-primary" />
               المواصفات الفنية
@@ -877,6 +875,9 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                           </SelectItem>
                         );
                       })}
+                    {[1, 2, 3, 4].filter(n => !faces.some(f => Number(f.count || f.face_count) === n)).map(n => (
+                        <SelectItem key={`physical-${n}`} value={String(n)}>{n} أوجه</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Button
@@ -958,12 +959,9 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 </div>
               </div>
             </div>
-          </section>
-          
-          </div>
-          <div className="min-w-0 space-y-4">
-          {/* صورة اللوحة */}
-          <section className="edit-section">
+            <FaceDimensionsEditor form={editForm} setForm={setEditForm} sizes={sizes} />
+          </section></>}
+          image={<><section className="edit-section">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Upload className="h-3.5 w-3.5" />
               صورة اللوحة
@@ -1045,10 +1043,8 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 </div>
               </div>
             </div>
-          </section>
-
-          {/* الشركة المالكة (شركاتنا) */}
-          <section className="edit-section">
+          </section></>}
+          ownership={<><section className="edit-section">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Building2 className="h-4 w-4 text-primary" />
               الشركة المالكة
@@ -1075,10 +1071,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 </SelectContent>
               </Select>
             </div>
-          </section>
-
-          {/* الشركة الصديقة */}
-          <section className="edit-section">
+          </section><section className="edit-section">
             <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
               <Handshake className="h-4 w-4 text-primary" />
               الشركة الصديقة
@@ -1105,9 +1098,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 </SelectContent>
               </Select>
             </div>
-          </section>
-          {/* الشراكة */}
-          <section className="edit-section">
+          </section><section className="edit-section">
             <div className="flex items-center gap-3">
               <input 
                 type="checkbox" 
@@ -1120,9 +1111,7 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 لوحة شراكة
               </Label>
             </div>
-          </section>
-
-          {editForm.is_partnership && (
+          </section>          {editForm.is_partnership && (
             <div className="edit-section space-y-3">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 bg-primary rounded-full" />
@@ -1219,11 +1208,8 @@ export const BillboardEditDialog: React.FC<BillboardEditDialogProps> = ({
                 </div>
               )}
             </div>
-          )}
-
-          </div>
-          </div>
-        </div>
+          )}</>}
+        />
 
         {/* أزرار الحفظ */}
         <div className="shrink-0 flex items-center justify-end gap-2 border-t border-border bg-muted/20 px-4 pt-3 pb-[max(12px,env(safe-area-inset-bottom))] sm:px-5">

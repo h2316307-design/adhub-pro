@@ -1,3 +1,6 @@
+import { BillboardSettingsPanels } from './forms/BillboardSettingsPanels';
+import { FaceDimensionsEditor } from './forms/FaceDimensionsEditor';
+import { validateFaceDimensions } from '@/lib/billboardFaces';
 import React, { useEffect, useState, useMemo } from 'react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -455,6 +458,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       console.warn('Collision check warning:', colErr);
     }
 
+    try { validateFaceDimensions(addForm); } catch (error: any) { toast.error(error.message); return; }
     setAdding(true);
     const { ID, Billboard_Name, City, Municipality, District, Nearest_Landmark, GPS_Coordinates, Faces_Count, Size, Level, Image_URL, image_name, billboard_type, is_partnership, partner_companies, capital, capital_remaining } = addForm as any;
     
@@ -588,6 +592,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
       Nearest_Landmark,
       GPS_Coordinates: GPS_Coordinates || null,
       Faces_Count: Faces_Count ? parseInt(String(Faces_Count)) : null,
+      face_dimensions: (addForm.face_dimensions || []).slice(0, Number(Faces_Count) || 1),
       Size,
  size_id: sizeId, // سيتم حفظه بشكل صحيح
       Level,
@@ -655,8 +660,8 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
 
   return (
     <Dialog open={addOpen} onOpenChange={setAddOpen}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col bg-card border-border">
-        <DialogHeader className="pb-2 border-b border-border">
+      <DialogContent dir="rtl" className="billboard-edit-dialog w-[calc(100vw-24px)] max-w-6xl max-h-[calc(100dvh-24px)] overflow-hidden flex flex-col gap-0 bg-card border-border p-0">
+        <DialogHeader className="shrink-0 border-b border-border px-5 py-4 pl-14">
           <DialogTitle className="text-xl font-bold text-foreground flex items-center gap-2">
             <div className="p-2 rounded-lg bg-primary/10">
               <Upload className="h-5 w-5 text-primary" />
@@ -666,10 +671,8 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
           <DialogDescription className="sr-only">نموذج إضافة لوحة إعلانية جديدة</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto space-y-5 py-4 px-1">
-          
-          {/* القسم 1: المعلومات الأساسية */}
-          <fieldset className="rounded-xl border border-border p-4 space-y-4">
+        <BillboardSettingsPanels key={addOpen ? 'open' : 'closed'}
+          details={<><fieldset className="rounded-xl border border-border p-4 space-y-4">
             <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><ClipboardList className="h-4 w-4" /> المعلومات الأساسية</legend>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-start">
               {/* رقم اللوحة مع ميزة اختيار الأرقام الفارغة من السابق */}
@@ -902,10 +905,7 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
                 </div>
               </div>
             </div>
-          </fieldset>
-
-          {/* القسم 2: الموقع */}
-          <fieldset className="rounded-xl border border-border p-4 space-y-4">
+          </fieldset><fieldset className="rounded-xl border border-border p-4 space-y-4">
             <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><MapPin className="h-4 w-4" /> الموقع</legend>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div>
@@ -1002,10 +1002,8 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
                 />
               </div>
             </div>
-          </fieldset>
-
-          {/* القسم 3: المواصفات */}
-          <fieldset className="rounded-xl border border-border p-4 space-y-4">
+          </fieldset></>}
+          specifications={<><fieldset className="rounded-xl border border-border p-4 space-y-4">
             <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><Ruler className="h-4 w-4" /> المواصفات الفنية</legend>
             <div className="grid grid-cols-3 gap-3">
               <div>
@@ -1089,6 +1087,9 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
                           </SelectItem>
                         );
                       })}
+                    {[1, 2, 3, 4].filter(n => !faces.some(f => Number(f.count || f.face_count) === n)).map(n => (
+                        <SelectItem key={`physical-${n}`} value={String(n)}>{n} أوجه</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <Button
@@ -1104,10 +1105,9 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
                 </div>
               </div>
             </div>
-          </fieldset>
-
-          {/* القسم 4: الصورة */}
-          <fieldset className="rounded-xl border border-border p-4 space-y-3" onPaste={handleBillboardImagePaste} tabIndex={0}>
+            <FaceDimensionsEditor form={addForm} setForm={setAddForm} sizes={sizes} />
+          </fieldset></>}
+          image={<><fieldset className="rounded-xl border border-border p-4 space-y-3" onPaste={handleBillboardImagePaste} tabIndex={0}>
             <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><ImageIcon className="h-4 w-4" /> صورة اللوحة</legend>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-3">
@@ -1168,10 +1168,24 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
                 )}
               </div>
             </div>
-          </fieldset>
-
-          {/* القسم 5: الشراكة (اختياري) */}
-          <fieldset className="rounded-xl border border-border p-4 space-y-3">
+          </fieldset></>}
+          ownership={<><fieldset className="rounded-xl border border-border p-4 space-y-3">
+            <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><Building className="h-4 w-4" /> الشركة المالكة</legend>
+            <Select
+              value={(addForm as any).own_company_id || 'none'}
+              onValueChange={(v) => setAddForm((p: any) => ({ ...p, own_company_id: v === 'none' ? null : v }))}
+            >
+              <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
+                <SelectValue placeholder="اختر الشركة المالكة" />
+              </SelectTrigger>
+              <SelectContent className="bg-popover border-border">
+                <SelectItem value="none">بدون تحديد</SelectItem>
+                {ownCompanies.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </fieldset><fieldset className="rounded-xl border border-border p-4 space-y-3">
             <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><Handshake className="h-4 w-4" /> الشراكة</legend>
             <div className="flex items-center gap-3">
               <Label className="text-sm text-foreground">لوحة شراكة</Label>
@@ -1207,43 +1221,11 @@ export const BillboardAddDialog: React.FC<BillboardAddDialogProps> = ({
                 </div>
               </div>
             )}
-          </fieldset>
-
-          {/* القسم 6: الشركة المالكة */}
-          <fieldset className="rounded-xl border border-border p-4 space-y-3">
-            <legend className="text-sm font-semibold text-primary px-2 flex items-center gap-1.5"><Building className="h-4 w-4" /> الشركة المالكة</legend>
-            <Select
-              value={(addForm as any).own_company_id || 'none'}
-              onValueChange={(v) => setAddForm((p: any) => ({ ...p, own_company_id: v === 'none' ? null : v }))}
-            >
-              <SelectTrigger className="text-sm bg-background border-border text-foreground h-9">
-                <SelectValue placeholder="اختر الشركة المالكة" />
-              </SelectTrigger>
-              <SelectContent className="bg-popover border-border">
-                <SelectItem value="none">بدون تحديد</SelectItem>
-                {ownCompanies.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </fieldset>
-
-          {/* معاينة الاسم المقترح */}
-          {addForm.Municipality && addForm.Level && addForm.Size && (
-            <div className="p-3 bg-primary/5 rounded-xl border border-primary/20 flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-primary/10">
-                <Sparkles className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <Label className="text-xs text-primary/70">الاسم المقترح للوحة</Label>
-                <div className="text-primary font-mono text-lg font-bold">{addForm.Billboard_Name}</div>
-              </div>
-            </div>
-          )}
-        </div>
+          </fieldset></>}
+        />
 
         {/* أزرار الحفظ */}
-        <div className="flex justify-end gap-2 pt-3 border-t border-border">
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border bg-muted/20 px-4 py-3">
           <Button variant="outline" onClick={() => {
             setAddOpen(false);
             setImagePreview('');

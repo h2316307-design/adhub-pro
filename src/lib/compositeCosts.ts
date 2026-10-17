@@ -16,11 +16,14 @@ export interface CostLine {
   billboardId: number;
   /** مساحة الوجه الواحد م² */
   faceArea: number;
+  faceAreas?: number[];
+  selectedFaces?: number[];
   faces: number;
   /** سعر التركيب على الزبون للوحة */
   customer: number;
   /** تكلفة التركيب على الشركة (الفرقة) للوحة */
   company: number;
+  companyPerMeter?: number | null;
   customerExtra: number;
   companyExtra: number;
   inPrint: boolean;
@@ -73,7 +76,28 @@ const pos = (n: unknown) => Math.max(0, Number(n) || 0);
 /** الخدمة مشمولة بالعقد فقط في التركيب الأول */
 export const isIncluded = (type: OperationType, flag: boolean) => type === 'new_installation' && !!flag;
 
-export const lineArea = (l: Pick<CostLine, 'faceArea' | 'faces'>) => pos(l.faceArea) * Math.max(1, Number(l.faces) || 1);
+export const lineArea = (l: Pick<CostLine, 'faceArea' | 'faces' | 'faceAreas' | 'selectedFaces'>) => {
+  const indices = l.selectedFaces?.length ? l.selectedFaces : Array.from({ length: Math.max(1, Number(l.faces) || 1) }, (_, i) => i + 1);
+  return indices.reduce((total, index) => total + pos(l.faceAreas?.[index - 1] ?? l.faceArea), 0);
+};
+
+/** Recalculate once for both individual and bulk face selections. */
+export function changeCostLineFaces<T extends CostLine & { maxFaces: number; sizeInstallPrice: number; tableFullPrice?: number; faceInstallPrices?: number[]; customerPerMeter: number | null }>(line: T, selection: number[]): T {
+  const selectedFaces = [...new Set(selection)].filter(n => Number.isInteger(n) && n >= 1 && n <= line.maxFaces).sort((a, b) => a - b);
+  if (!selectedFaces.length) return line;
+  const faces = selectedFaces.length;
+  const oldFaces = Math.max(1, line.faces);
+  const next = { ...line, selectedFaces, faces };
+  const sizeInstallPrice = r2(selectedFaces.reduce((sum, face) => sum + (line.faceInstallPrices?.[face - 1] ?? (line.tableFullPrice ?? line.sizeInstallPrice / oldFaces * 2) / 2), 0));
+  const tablePricing = Math.abs(line.company - line.sizeInstallPrice) < 0.01;
+  // الأوجه قد تختلف في المقاس والسعر: التناسب يكون بالسعر لا بعدد الأوجه
+  const priceRatio = line.sizeInstallPrice > 0 ? sizeInstallPrice / line.sizeInstallPrice : faces / oldFaces;
+  return {
+    ...next, sizeInstallPrice,
+    company: line.companyPerMeter != null ? r2(line.companyPerMeter * lineArea(next)) : tablePricing ? sizeInstallPrice : r2(line.company * priceRatio),
+    customer: line.customerPerMeter ? r2(line.customerPerMeter * lineArea(next)) : Math.abs(line.customer - line.sizeInstallPrice) < 0.01 ? sizeInstallPrice : r2(line.customer * priceRatio),
+  };
+}
 
 export function computeOperation(d: OperationDraft): OperationTotals {
   const instIncluded = isIncluded(d.type, d.contractIncludesInstallation);
@@ -167,13 +191,14 @@ export function faceAreaFromSize(size: string | null | undefined, sizes: Record<
 export type BulkTarget = 'customer' | 'company';
 export type BulkMode = 'piece' | 'meter';
 
-/** تسعير جماعي واضح: سعر للوحة أو للمتر، على الزبون أو الشركة، لمجموعة لوحات محددة */
+/** تسعير جماعي واضح: سعر للوحة (للمزدوجة ونصفه للوجه الواحد) أو للمتر، على الزبون أو الشركة، لمجموعة لوحات محددة */
 export function applyBulkPrice(lines: CostLine[], ids: Set<string>, target: BulkTarget, mode: BulkMode, value: number): CostLine[] {
   const v = pos(value);
   return lines.map(l => {
     if (!ids.has(l.id)) return l;
-    const price = mode === 'meter' ? r2(v * lineArea(l)) : v;
-    return target === 'customer' ? { ...l, customer: price } : { ...l, company: price };
+    const faces = Math.max(1, Number(l.faces) || 1);
+    const price = mode === 'meter' ? r2(v * lineArea(l)) : r2((v / 2) * faces);
+    return target === 'customer' ? { ...l, customer: price } : { ...l, company: price, companyPerMeter: mode === 'meter' ? v : null };
   });
 }
 

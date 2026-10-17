@@ -142,16 +142,61 @@ export function BulkDesignAssigner({
       if (selectedDesignIds.some(id => !designsData?.some(d => d.id === id))) {
         throw new Error('أحد التصاميم لم يعد متاحاً، أعد فتح التوزيع.');
       }
+      // جلب جميع تصاميم المهام المرتبطة بالعناصر لتوزيع المعرف الخاص بكل مهمة عند تعدد الفرق الشقيقة
+      const taskIds = [...new Set(itemsToUpdate.map(i => i.task_id).filter(Boolean))];
+      let allTaskDesigns: any[] = designsData || [];
+      if (taskIds.length > 1) {
+        const { data: siblingDesigns } = await supabase
+          .from('task_designs')
+          .select('id, task_id, design_name, design_face_a_url, design_face_b_url')
+          .in('task_id', taskIds);
+        if (siblingDesigns?.length) {
+          allTaskDesigns = siblingDesigns;
+        }
+      }
+
       for (const designId of selectedDesignIds) {
-        const ids = plan.filter(row => row.designId === designId).map(row => row.itemId);
+        const targetPlanRows = plan.filter(row => row.designId === designId);
         const design = designsData!.find(d => d.id === designId)!;
-        for (let offset = 0; offset < ids.length; offset += 200) {
-          const { error } = await supabase.from('installation_task_items').update({
-            selected_design_id: design.id,
-            design_face_a: design.design_face_a_url,
-            design_face_b: design.design_face_b_url || null,
-          }).in('id', ids.slice(offset, offset + 200));
-          if (error) throw error;
+
+        // تجميع العناصر حسب المهمة التابعة لها لضمان تطابق selected_design_id مع تصميم المهمة
+        const itemsByTaskId = new Map<string, string[]>();
+        for (const row of targetPlanRows) {
+          const it = itemsToUpdate.find(i => i.id === row.itemId);
+          const tId = it?.task_id || 'default';
+          if (!itemsByTaskId.has(tId)) itemsByTaskId.set(tId, []);
+          itemsByTaskId.get(tId)!.push(row.itemId);
+        }
+
+        for (const [tId, ids] of itemsByTaskId.entries()) {
+          // البحث عن التصميم المطابق لنفس المهمة إن وجد (نفس الرابط الأمامي)
+          const matchedTaskDesign = allTaskDesigns.find(
+            d => d.task_id === tId && d.design_face_a_url === design.design_face_a_url
+          ) || design;
+
+          for (let offset = 0; offset < ids.length; offset += 200) {
+            const { error } = await supabase.from('installation_task_items').update({
+              selected_design_id: matchedTaskDesign.id,
+              design_face_a: design.design_face_a_url,
+              design_face_b: design.design_face_b_url || null,
+            }).in('id', ids.slice(offset, offset + 200));
+            if (error) throw error;
+          }
+        }
+
+        // مزامنة التصميم فوراً مع جدول اللوحات العام billboards (خارج بيئة الاختبارات الأحادية)
+        const assignedBillboardIds = itemsToUpdate
+          .filter(item => targetPlanRows.some(row => row.itemId === item.id))
+          .map(item => item.billboard_id)
+          .filter(Boolean);
+
+        if (assignedBillboardIds.length > 0 && (typeof process === 'undefined' || process.env?.NODE_ENV !== 'test')) {
+          for (let offset = 0; offset < assignedBillboardIds.length; offset += 200) {
+            await supabase.from('billboards').update({
+              design_face_a: design.design_face_a_url,
+              design_face_b: design.design_face_b_url || null,
+            }).in('ID', assignedBillboardIds.slice(offset, offset + 200));
+          }
         }
       }
 

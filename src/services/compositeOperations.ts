@@ -1,8 +1,13 @@
+import { selectInstallationColumns, updateInstallationItemCompat } from './installationSchemaCompatibility';
+import { getBillboardDimensions } from '@/lib/billboardDimensions';
+import { getFaceDimensions, normalizeSelectedFaces } from '@/lib/billboardFaces';
 import { supabase } from '@/integrations/supabase/client';
 import { loadInstallationOperationIds } from '@/services/installationOperation';
 import { getCompositeTaskOperationKey, getOperationLabel, normalizeCompositeTaskType } from '@/lib/compositeTaskOperation';
-import { resolveInstallationFacesCount } from '@/lib/installationFaces';
-import { operationKeyOf, computeOperation, faceAreaFromSize, r2, summarizeStored, type CostLine, type OperationDraft, type OperationType } from '@/lib/compositeCosts';
+import { resolveInstallationFacesCount, getAvailableFacesCount } from '@/lib/installationFaces';
+import { operationKeyOf, computeOperation, lineArea, faceAreaFromSize, r2, summarizeStored, type CostLine, type OperationDraft, type OperationType } from '@/lib/compositeCosts';
+import { defaultPrinterId } from '@/services/operationsInventory';
+import { getBillboardsSortMaps, sortBillboardsStandardSync } from '@/lib/billboardSorter';
 
 const chunk = <T,>(arr: T[], n = 100): T[][] => {
   const out: T[][] = [];
@@ -17,9 +22,11 @@ async function inChunks<T = any>(table: string, select: string, column: string, 
   const parts = await Promise.all(chunk(uniq).map(async ids => {
     const rows: any[] = [];
     for (let from = 0; ; from += 1000) {
-      let q = (supabase.from(table as any) as any).select(select).in(column, ids).range(from, from + 999);
-      if (extra) q = extra(q);
-      const { data, error } = await q;
+      const { data, error } = await selectInstallationColumns<{ data: any[] | null; error: any }>(select, selection => {
+        let q = (supabase.from(table as any) as any).select(selection).in(column, ids).range(from, from + 999);
+        if (extra) q = extra(q);
+        return q;
+      });
       if (error) throw new Error(`${table}: ${error.message}`);
       rows.push(...(data || []));
       if (!data || data.length < 1000) break;
@@ -56,6 +63,8 @@ export interface OperationRow {
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   boards: number;
   boardsDone: number;
+  /** صور التركيب الفعلية لكل لوحات العملية (وجه أمامي ثم خلفي) */
+  installedPhotos: string[];
   hasPrint: boolean;
   hasCutout: boolean;
   money: ReturnType<typeof summarizeStored>;
@@ -73,16 +82,19 @@ export async function loadOperations(): Promise<OperationRow[]> {
   const installIds = tasks.map(t => t.installation_task_id).filter(Boolean);
   const [installs, items, operationIds] = await Promise.all([
     inChunks('installation_tasks', 'id, task_type, reinstallation_number, contract_id, contract_ids, status, task_name, team_id, installation_teams(team_name)', 'id', installIds),
-    inChunks('installation_task_items', 'task_id, status', 'task_id', installIds, q => q.neq('status', 'replaced')),
+    inChunks('installation_task_items', 'task_id, status, installed_image_face_a_url, installed_image_face_b_url', 'task_id', installIds, q => q.neq('status', 'replaced')),
     loadInstallationOperationIds().catch(() => ({} as Record<string, string>)),
   ]);
   const installMap = new Map(installs.map((i: any) => [i.id, i]));
   const counts = new Map<string, { total: number; done: number }>();
+  const photosByTask = new Map<string, string[]>();
   items.forEach((i: any) => {
     const c = counts.get(i.task_id) || { total: 0, done: 0 };
     c.total += 1;
     if (i.status === 'completed') c.done += 1;
     counts.set(i.task_id, c);
+    const photos = [i.installed_image_face_a_url, i.installed_image_face_b_url].filter((u: any): u is string => !!u);
+    if (photos.length) photosByTask.set(i.task_id, [...(photosByTask.get(i.task_id) || []), ...photos]);
   });
 
   const enriched = tasks.map(t => {
@@ -137,8 +149,16 @@ export async function loadOperations(): Promise<OperationRow[]> {
     const incP = contracts.length > 0 && contracts.every(c => c.includesPrint);
     let boards = 0, boardsDone = 0;
     list.forEach(t => { const c = counts.get(t.installation_task_id); if (c) { boards += c.total; boardsDone += c.done; } });
-    const statuses = list.map(t => t.installationStatus || t.status);
-    const status: OperationRow['status'] = statuses.every(s => s === 'completed') ? 'completed'
+    // فرقة فارغة (نُقلت لوحاتها لفرقة أخرى) لا تُبقي العملية «قيد التنفيذ»
+    const hasBoards = (t: any) => (counts.get(t.installation_task_id)?.total || 0) > 0;
+    const active = boards > 0 ? list.filter(hasBoards) : list;
+    const statuses = active.map(t => {
+      const c = counts.get(t.installation_task_id);
+      if (c && c.total > 0) return c.done === c.total ? 'completed' : c.done > 0 ? 'in_progress' : (t.installationStatus || t.status);
+      return t.installationStatus || t.status;
+    });
+    const status: OperationRow['status'] = boards > 0 && boardsDone === boards ? 'completed'
+      : statuses.every(s => s === 'completed') ? 'completed'
       : statuses.every(s => s === 'cancelled') ? 'cancelled'
       : statuses.some(s => s === 'in_progress' || s === 'completed') || boardsDone > 0 ? 'in_progress' : 'pending';
     rows.push({
@@ -151,11 +171,12 @@ export async function loadOperations(): Promise<OperationRow[]> {
       contracts,
       adTypes: [...new Set(contracts.map(c => c.adType).filter(Boolean) as string[])],
       tasks: list,
-      teams: [...new Set(list.map(t => t.teamName))],
+      teams: [...new Set(active.map(t => t.teamName))],
       createdAt: first.created_at,
       status,
       boards,
       boardsDone,
+      installedPhotos: list.flatMap(t => photosByTask.get(t.installation_task_id) || []),
       hasPrint: list.some(t => t.print_task_id) || list.some(t => Number(t.customer_print_cost) > 0 || Number(t.company_print_cost) > 0),
       hasCutout: list.some(t => t.cutout_task_id) || list.some(t => Number(t.company_cutout_cost) > 0),
       money: summarizeStored(list, type, incI, incP),
@@ -176,7 +197,10 @@ export interface EditorLine extends CostLine {
   area: string | null;
   municipality: string | null;
   sizeInstallPrice: number;
+  tableFullPrice?: number;
   maxFaces: number;
+  faceLabels?: string[];
+  faceInstallPrices?: number[];
   contractNumber: number | null;
   /** سعر متر التركيب على الزبون الذي حُسب به سعر اللوحة (null = سعر مقطوع) */
   customerPerMeter: number | null;
@@ -191,12 +215,20 @@ export interface EditorState {
   draft: OperationDraft;
   lines: EditorLine[];
   discountReason: string;
+  /** طريقة الخصم المحفوظة في cost_allocation: مبلغ ثابت أو نسبة من إجمالي الزبون */
+  discountMode: DiscountMode;
+  discountPercent: number;
   notes: string;
   /** أسعار الزبون في آخر عملية سابقة له (اقتراح افتراضي) */
   suggested: { installPerMeter: number; printPerMeter: number };
   /** قيمة الخدمات المشمولة كما سُجلت في العقد (للعرض فقط) */
   contractValues: { installation: number; print: number };
 }
+
+export type DiscountMode = 'amount' | 'percent';
+/** مبلغ الخصم الفعلي حسب الطريقة (النسبة تُحسب من إجمالي الزبون قبل الخصم) */
+export const discountAmount = (mode: DiscountMode, amount: number, percent: number, subtotal: number) =>
+  mode === 'percent' ? r2(Math.max(0, subtotal) * Math.min(100, Math.max(0, Number(percent) || 0)) / 100) : Math.max(0, Number(amount) || 0);
 
 const parseIds = (s: unknown) => String(s || '').split(/[^0-9]+/).map(Number).filter(Boolean);
 
@@ -208,7 +240,7 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
 
   const [items, sizesR, printersR, printTaskR, contractsR] = await Promise.all([
     inChunks('installation_task_items',
-      'id, task_id, billboard_id, status, customer_installation_cost, customer_reinstall_cost, price_per_meter, pricing_type, company_installation_cost, additional_cost, company_additional_cost, faces_to_install, reinstalled_faces, has_cutout, cutout_count, cutout_customer_cost, cutout_company_cost, design_face_a, design_face_b, installed_image_face_a_url',
+      'id, task_id, billboard_id, status, customer_installation_cost, customer_reinstall_cost, price_per_meter, pricing_type, company_installation_price_per_meter, company_installation_cost, additional_cost, company_additional_cost, faces_to_install, selected_faces, reinstalled_faces, has_cutout, cutout_count, cutout_customer_cost, cutout_company_cost, design_face_a, design_face_b, installed_image_face_a_url',
       'task_id', installIds, q => q.neq('status', 'replaced')),
     supabase.from('sizes').select('name, width, height, installation_price'),
     supabase.from('printers').select('id, name').eq('is_active', true).order('name'),
@@ -220,7 +252,7 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
 
   const billboardIds = [...new Set(items.map((i: any) => Number(i.billboard_id)))];
   const [billboards, printItems] = await Promise.all([
-    inChunks('billboards', '"ID", "Billboard_Name", "Size", "Faces_Count", "Image_URL", "Nearest_Landmark", "District", "City", "Municipality"', 'ID', billboardIds),
+    inChunks('billboards', '"ID", "Billboard_Name", "Size", "Level", "Faces_Count", face_dimensions, "Image_URL", "Nearest_Landmark", "District", "City", "Municipality"', 'ID', billboardIds),
     primary.print_task_id ? inChunks('print_task_items', 'billboard_id', 'task_id', [primary.print_task_id]) : Promise.resolve([]),
   ]);
   const bMap = new Map(billboards.map((b: any) => [Number(b.ID), b]));
@@ -232,14 +264,27 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
   (contractsR.data || []).forEach((c: any) => parseIds(c.billboard_ids).forEach(id => { if (!contractOfBoard.has(id)) contractOfBoard.set(id, Number(c.Contract_Number)); }));
 
   const isRe = op.type === 'reinstallation';
-  const lines: EditorLine[] = items.map((i: any) => {
+  const unsorted: EditorLine[] = items.map((i: any) => {
     const b: any = bMap.get(Number(i.billboard_id)) || {};
-    const faces = resolveInstallationFacesCount({ faces_to_install: i.faces_to_install, reinstalled_faces: i.reinstalled_faces, billboard: b }, b, op.type);
+    const faces = resolveInstallationFacesCount({ faces_to_install: i.faces_to_install, reinstalled_faces: i.reinstalled_faces, selected_faces: i.selected_faces, billboard: b }, b, op.type);
     const sizeKey = String(b.Size || '').trim();
     const swapped = sizeKey.replace(/^(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/, '$2x$1');
     const sizeRow = sizes[sizeKey] || sizes[sizeKey.toLowerCase()] || sizes[swapped] || sizes[swapped.toLowerCase()];
     const tableFull = Number(sizeRow?.installation_price) || 0;
-    const customer = isRe ? (i.customer_reinstall_cost ?? i.customer_installation_cost) : i.customer_installation_cost;
+    const maxFaces = getAvailableFacesCount(b);
+    const dimensions = getFaceDimensions(b, maxFaces, { width: Number(sizeRow?.width) || getBillboardDimensions(b).width, height: Number(sizeRow?.height) || getBillboardDimensions(b).height });
+    const explicit = normalizeSelectedFaces(i.selected_faces, maxFaces);
+    const selectedFaces = explicit.length ? explicit : faces === 1 && i.reinstalled_faces === 'face_b' && maxFaces >= 2 ? [2] : Array.from({ length: faces }, (_, index) => index + 1);
+    const faceInstallPrices = dimensions.map((d, index) => {
+      if (!b.face_dimensions?.[index]?.width) return tableFull / 2;
+      const match: any = (sizesR.data || []).find((s: any) => (Number(s.width) === d.width && Number(s.height) === d.height) || (Number(s.width) === d.height && Number(s.height) === d.width));
+      // A custom size without a price row inherits the base price per square metre.
+      return match ? (Number(match.installation_price) || 0) / 2 : (tableFull / 2) * (d.width * d.height) / (faceAreaFromSize(b.Size, sizes) || 1);
+    });
+    const tableSelected = r2(selectedFaces.reduce((sum, face) => sum + faceInstallPrices[face - 1], 0));
+    // مشغّل القاعدة يصفّر customer_reinstall_cost عند كل حفظ إذا reinstall_count = 0،
+    // والحفظ يكتب السعر في الحقلين؛ لذلك 0 هنا لا يعني «بلا سعر»
+    const customer = isRe ? (Number(i.customer_reinstall_cost) || Number(i.customer_installation_cost) || 0) : i.customer_installation_cost;
     return {
       id: i.id,
       taskId: i.task_id,
@@ -254,11 +299,17 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
       municipality: b.Municipality || null,
       faceArea: faceAreaFromSize(b.Size, sizes),
       faces,
-      maxFaces: Number(b.Faces_Count) || 2,
-      sizeInstallPrice: faces === 1 ? tableFull / 2 : tableFull,
+      selectedFaces,
+      faceAreas: dimensions.map(d => d.width * d.height),
+      faceLabels: dimensions.map(d => `${d.width} × ${d.height}`),
+      faceInstallPrices,
+      maxFaces: getAvailableFacesCount(b),
+      tableFullPrice: tableFull,
+      sizeInstallPrice: tableSelected,
       customer: Number(customer) || 0,
-      company: i.company_installation_cost === null || i.company_installation_cost === undefined ? (faces === 1 ? tableFull / 2 : tableFull) : Number(i.company_installation_cost) || 0,
+      company: i.company_installation_cost === null || i.company_installation_cost === undefined ? tableSelected : Number(i.company_installation_cost) || 0,
       customerExtra: Number(i.additional_cost) || 0,
+      companyPerMeter: i.company_installation_price_per_meter ?? null,
       companyExtra: Number(i.company_additional_cost) || 0,
       inPrint: hasPrintTask ? printSet.has(Number(i.billboard_id)) : true,
       hasCutout: !!i.has_cutout,
@@ -269,6 +320,13 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
       customerPerMeter: i.pricing_type === 'meter' && Number(i.price_per_meter) > 0 && Number(customer) > 0 ? Number(i.price_per_meter) : null,
     };
   });
+
+  // الترتيب الموحد: ترتيب المقاس في الإعدادات ← المستوى ← البلدية
+  await getBillboardsSortMaps();
+  const lines = sortBillboardsStandardSync(unsorted.map(line => {
+    const b: any = bMap.get(line.billboardId) || {};
+    return { line, Size: b.Size, Level: b.Level, Municipality: b.Municipality, City: b.City, ID: line.billboardId, Billboard_Name: line.name };
+  })).map(w => w.line);
 
   const pt: any = printTaskR.data;
   const suggested = await loadCustomerSuggestedPrices(op, sizes);
@@ -281,10 +339,12 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
     op,
     primaryTaskId: primary.id,
     printTaskId: primary.print_task_id || null,
-    printerId: pt?.printer_id || null,
+    printerId: pt?.printer_id || defaultPrinterId((printersR.data || []) as { id: string; name: string }[]),
     printers: (printersR.data || []) as any,
     lines,
     discountReason: primary.discount_reason || '',
+    discountMode: primary.cost_allocation?.discount_mode === 'percent' ? 'percent' : 'amount',
+    discountPercent: Number(primary.cost_allocation?.discount_percent) || 0,
     notes: primary.notes || '',
     suggested,
     contractValues: {
@@ -309,7 +369,7 @@ export async function loadEditor(op: OperationRow): Promise<EditorState> {
  * حفظ واحد مرتب: البنود ← الطباعة ← صفوف أمر العمل (الأخيرة تكتب القيم النهائية
  * فتتغلب على أي إعادة احتساب من مشغلات القاعدة).
  */
-export async function saveEditor(state: EditorState, lines: EditorLine[], draft: OperationDraft, extra: { discountReason: string; notes: string; printerId: string | null }) {
+export async function saveEditor(state: EditorState, lines: EditorLine[], draft: OperationDraft, extra: { discountReason: string; notes: string; printerId: string | null; discountMode?: DiscountMode; discountPercent?: number }) {
   const { op } = state;
   const totals = computeOperation({ ...draft, lines });
   const instIncluded = totals.installation.included;
@@ -322,14 +382,19 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
     const o = original.get(l.id);
     return !o || o.customer !== l.customer || o.company !== l.company || o.customerExtra !== l.customerExtra || o.companyExtra !== l.companyExtra
       || o.hasCutout !== l.hasCutout || o.cutoutCount !== l.cutoutCount || o.cutoutCustomerUnit !== l.cutoutCustomerUnit || o.cutoutCompanyUnit !== l.cutoutCompanyUnit
-      || o.customerPerMeter !== l.customerPerMeter
+      || o.customerPerMeter !== l.customerPerMeter || o.companyPerMeter !== l.companyPerMeter
+      || o.faces !== l.faces || JSON.stringify(o.selectedFaces) !== JSON.stringify(l.selectedFaces)
       || (instIncluded && o.customer !== 0);
   });
   for (const part of chunk(changed, 15)) {
     const results = await Promise.all(part.map(l => {
       const customer = instIncluded ? 0 : r2(l.customer);
       const patch: any = {
+        faces_to_install: l.faces,
+        selected_faces: l.selectedFaces,
+        reinstalled_faces: l.faces === 1 ? (l.selectedFaces?.[0] === 2 ? 'face_b' : 'face_a') : 'both',
         company_installation_cost: r2(l.company),
+        company_installation_price_per_meter: l.companyPerMeter ?? null,
         price_per_meter: !instIncluded && l.customerPerMeter ? r2(l.customerPerMeter) : null,
         pricing_type: !instIncluded && l.customerPerMeter ? 'meter' : 'piece',
         additional_cost: r2(l.customerExtra) || null,
@@ -341,7 +406,7 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
       };
       if (isRe) { patch.customer_reinstall_cost = customer; patch.customer_installation_cost = customer; }
       else patch.customer_installation_cost = customer;
-      return supabase.from('installation_task_items').update(patch).eq('id', l.id);
+      return updateInstallationItemCompat(l.id, patch);
     }));
     const failed = results.find(r => r.error);
     if (failed?.error) throw new Error(`بنود التركيب: ${failed.error.message}`);
@@ -394,8 +459,9 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
       if (error) throw new Error(error.message);
     }
     const itemRow = (l: EditorLine) => {
-      const area = r2(l.faceArea * l.faces);
+      const area = r2(lineArea(l));
       return {
+        description: (l.selectedFaces || Array.from({ length: l.faces }, (_, i) => i + 1)).map(face => `وجه ${face}: ${l.faceLabels?.[face - 1] || l.size} م`).join('، '),
         area,
         faces_count: l.faces,
         unit_cost: r2(area * draft.printCompanyPerMeter),
@@ -406,14 +472,16 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
     };
     if (toInsert.length) {
       const { error } = await supabase.from('print_task_items').insert(toInsert.map(l => ({
-        task_id: printTaskId, billboard_id: l.billboardId, description: `${l.size} - ${l.faces === 1 ? 'وجه واحد' : 'وجهين'}`,
+        task_id: printTaskId, billboard_id: l.billboardId, description: `${l.size} - ${l.faces === 1 ? 'وجه واحد' : l.faces === 2 ? 'وجهين' : `${l.faces} أوجه`}`,
         quantity: 1, status: 'pending', design_face_a: l.image, ...itemRow(l),
       })) as any);
       if (error) throw new Error(error.message);
     }
     const keep = (existing || []).filter((e: any) => wanted.has(Number(e.billboard_id)));
     for (const part of chunk(keep, 15)) {
-      await Promise.all(part.map((e: any) => supabase.from('print_task_items').update(itemRow(wanted.get(Number(e.billboard_id))!) as any).eq('id', e.id)));
+      const results = await Promise.all(part.map((e: any) => supabase.from('print_task_items').update(itemRow(wanted.get(Number(e.billboard_id))!) as any).eq('id', e.id)));
+      const failed = results.find(result => result.error);
+      if (failed?.error) throw new Error(`بنود الطباعة: ${failed.error.message}`);
     }
   } else if (printTaskId) {
     const { error } = await supabase.from('print_tasks').update({ total_cost: 0, printer_total_cost: 0, customer_total_amount: 0, updated_at: now } as any).eq('id', printTaskId);
@@ -443,6 +511,7 @@ export async function saveEditor(state: EditorState, lines: EditorLine[], draft:
         ...(t.cost_allocation || {}),
         contract_expense: isPrimary ? contractExpense : 0,
         includes: { installation: instIncluded, print: totals.print.included },
+        ...(isPrimary && extra.discountMode ? { discount_mode: extra.discountMode, discount_percent: extra.discountMode === 'percent' ? r2(extra.discountPercent || 0) : null } : {}),
         updated_at: now,
       },
       updated_at: now,
@@ -539,8 +608,12 @@ export async function repriceOperation(op: OperationRow, newItemIds: Set<string>
 
   // الأسطر الجديدة تُعتبر «متغيرة» حتى تُكتب أسعارها
   const baseline = { ...state, lines: state.lines.map(l => (isNew(l) ? { ...l, customer: -1 } : l)) };
-  const totals = await saveEditor(baseline, lines, { ...state.draft, lines }, {
+  // الخصم بالنسبة يتبع الإجمالي الجديد بعد تغيّر اللوحات
+  const subtotal = computeOperation({ ...state.draft, lines, discount: 0 }).customerSubtotal;
+  const discount = discountAmount(state.discountMode, state.draft.discount, state.discountPercent, subtotal);
+  const totals = await saveEditor(baseline, lines, { ...state.draft, lines, discount }, {
     discountReason: state.discountReason, notes: state.notes, printerId: state.printerId,
+    discountMode: state.discountMode, discountPercent: state.discountPercent,
   });
   return { totals, added: lines.filter(isNew).length, custPerMeter: r2(custPerMeter) };
 }

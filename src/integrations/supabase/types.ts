@@ -1362,6 +1362,7 @@ export type Database = {
           design_face_b: string | null
           District: string | null
           Faces_Count: number | null
+          face_dimensions: Json
           fallback_path_image: string | null
           friend_company_id: string | null
           GPS_Coordinates: string | null
@@ -1412,6 +1413,7 @@ export type Database = {
           design_face_b?: string | null
           District?: string | null
           Faces_Count?: number | null
+          face_dimensions?: Json
           fallback_path_image?: string | null
           friend_company_id?: string | null
           GPS_Coordinates?: string | null
@@ -1462,6 +1464,7 @@ export type Database = {
           design_face_b?: string | null
           District?: string | null
           Faces_Count?: number | null
+          face_dimensions?: Json
           fallback_path_image?: string | null
           friend_company_id?: string | null
           GPS_Coordinates?: string | null
@@ -4659,6 +4662,8 @@ export type Database = {
           design_face_a: string | null
           design_face_b: string | null
           faces_to_install: number | null
+          company_installation_price_per_meter: number | null
+          selected_faces: number[] | null
           fallback_path_design_a: string | null
           fallback_path_design_b: string | null
           fallback_path_installed_a: string | null
@@ -4707,6 +4712,8 @@ export type Database = {
           design_face_a?: string | null
           design_face_b?: string | null
           faces_to_install?: number | null
+          company_installation_price_per_meter?: number | null
+          selected_faces?: number[] | null
           fallback_path_design_a?: string | null
           fallback_path_design_b?: string | null
           fallback_path_installed_a?: string | null
@@ -4755,6 +4762,8 @@ export type Database = {
           design_face_a?: string | null
           design_face_b?: string | null
           faces_to_install?: number | null
+          company_installation_price_per_meter?: number | null
+          selected_faces?: number[] | null
           fallback_path_design_a?: string | null
           fallback_path_design_b?: string | null
           fallback_path_installed_a?: string | null
