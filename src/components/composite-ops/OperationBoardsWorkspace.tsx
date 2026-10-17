@@ -26,6 +26,7 @@ import { AddBillboardsToTaskDialog } from '@/components/installation/AddBillboar
 import {
   completeBoards, loadOperationBoards, loadOperationDesigns, moveBoards, moveBoardsToTeam, removeBoards, saveInstalledPhotos, setBoardsDate, setBoardsDesign, uncompleteBoards, uploadInstalledPhoto, type BoardItem, type OpDesign,
 } from '@/services/operationBoards';
+import { UploadProgressBar, splitFaceFiles, useUploadProgress } from '@/components/installation/UploadProgressBar';
 import type { OperationRow } from '@/services/compositeOperations';
 import { ZoomImage } from '@/components/composite-ops/ImageZoom';
 import { CARD_GRID, CardSizeControl, cardVars, useCardSize } from '@/components/composite-ops/CardSize';
@@ -45,18 +46,37 @@ const dmy = (s?: string | null) => (s ? String(s).slice(0, 10).split('-').revers
 function PhotoDialog({ item, op, onClose, onSaved }: { item: BoardItem; op: OperationRow; onClose: () => void; onSaved: () => void }) {
   const [a, setA] = useState(item.installedA || '');
   const [b, setB] = useState(item.installedB || '');
-  const [busy, setBusy] = useState<'A' | 'B' | 'save' | null>(null);
+  const [busy, setBusy] = useState<'save' | null>(null);
+  const [uploading, setUploading] = useState<Record<'A' | 'B', boolean>>({ A: false, B: false });
   const fileA = useRef<HTMLInputElement>(null);
   const fileB = useRef<HTMLInputElement>(null);
-  const upload = async (face: 'A' | 'B', file?: File) => {
-    if (!file) return;
-    setBusy(face);
+  const fileBoth = useRef<HTMLInputElement>(null);
+  const progA = useUploadProgress();
+  const progB = useUploadProgress();
+  const uploadOne = async (face: 'A' | 'B', file: File) => {
+    const prog = face === 'A' ? progA : progB;
+    setUploading(u => ({ ...u, [face]: true }));
+    prog.start(file.size);
     try {
       const url = await uploadInstalledPhoto(file, item, face, op);
       face === 'A' ? setA(url) : setB(url);
-      toast.success('تم رفع الصورة');
-    } catch (e: any) { toast.error(e.message || 'فشل الرفع'); } finally { setBusy(null); }
+      prog.finish(true);
+      return true;
+    } catch (e: any) { prog.finish(false); toast.error(`${face === 'A' ? 'الوجه الأمامي' : 'الوجه الخلفي'}: ${e.message || 'فشل الرفع'}`); return false; }
+    finally { setUploading(u => ({ ...u, [face]: false })); }
   };
+  const upload = async (face: 'A' | 'B', file?: File) => {
+    if (file && await uploadOne(face, file)) toast.success('تم رفع الصورة');
+  };
+  /** رفع صورتي الوجهين دفعة واحدة (بالتوازي) */
+  const uploadBoth = async (list: FileList | null) => {
+    const files = splitFaceFiles(list);
+    if (!files.length) { toast.error('اختر صوراً صالحة'); return; }
+    const targets = faces.map(f => f[0]);
+    const ok = (await Promise.all(files.slice(0, targets.length).map((f, idx) => uploadOne(targets[idx], f)))).filter(Boolean).length;
+    if (ok) toast.success(ok > 1 ? 'تم رفع صورتي الوجهين' : 'تم رفع الصورة');
+  };
+  const uploadingAny = uploading.A || uploading.B;
   const save = async () => {
     setBusy('save');
     try { await saveInstalledPhotos(item, a.trim() || null, b.trim() || null); toast.success('تم حفظ صور التركيب'); onSaved(); onClose(); }
@@ -67,10 +87,20 @@ function PhotoDialog({ item, op, onClose, onSaved }: { item: BoardItem; op: Oper
   if (item.selectedFaces.includes(1)) faces.push(['A', 'الوجه الأمامي', a, setA, fileA]);
   if (item.selectedFaces.includes(2)) faces.push(['B', 'الوجه الخلفي', b, setB, fileB]);
   return (
-    <Dialog open onOpenChange={o => { if (!o) onClose(); }}>
+    <Dialog open onOpenChange={o => { if (!o && !uploadingAny) onClose(); }}>
       <DialogContent dir="rtl" className="max-h-[92vh] max-w-5xl overflow-y-auto text-right">
         <DialogTitle>صور التركيب · {item.name}</DialogTitle>
         <DialogDescription>ارفع صورة، أو انقر على مربع الوجه ثم الصق صورة من الحافظة (Ctrl+V)</DialogDescription>
+        {faces.length > 1 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2"
+            onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (!busy && !uploadingAny) uploadBoth(e.dataTransfer.files); }}>
+            <input ref={fileBoth} type="file" accept="image/*" multiple className="hidden" onChange={e => { uploadBoth(e.target.files); e.target.value = ''; }} />
+            <Button type="button" size="sm" disabled={!!busy || uploadingAny} onClick={() => fileBoth.current?.click()}>
+              {uploadingAny ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}رفع الوجهين معاً
+            </Button>
+            <span className="text-[11px] text-muted-foreground">اختر صورتين أو اسحبهما هنا — الأولى بالاسم للأمامي والثانية للخلفي</span>
+          </div>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           {faces.map(([face, label, val, set, ref]) => (
             <div key={face} className="space-y-2">
@@ -78,10 +108,11 @@ function PhotoDialog({ item, op, onClose, onSaved }: { item: BoardItem; op: Oper
               <div tabIndex={0} title="انقر ثم الصق صورة (Ctrl+V)" className="flex aspect-video cursor-pointer flex-col items-center justify-center gap-1 overflow-hidden rounded-lg border border-dashed border-border bg-muted/40 outline-none focus:border-primary focus:ring-2 focus:ring-primary/30">
                 {val ? <img src={val} alt={label} className="h-full w-full object-contain" /> : <><Camera className="h-6 w-6 text-muted-foreground" /><span className="text-[11px] text-muted-foreground">انقر هنا ثم Ctrl+V</span></>}
               </div>
-              <input ref={ref} type="file" accept="image/*" className="hidden" onChange={e => upload(face, e.target.files?.[0])} />
+              <input ref={ref} type="file" accept="image/*" className="hidden" onChange={e => { upload(face, e.target.files?.[0]); e.target.value = ''; }} />
+              <UploadProgressBar value={(face === 'A' ? progA : progB).progress} />
               <div className="flex gap-2">
-                <Button type="button" variant="outline" size="sm" className="flex-1" disabled={!!busy} onClick={() => ref.current?.click()}>
-                  {busy === face ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}رفع
+                <Button type="button" variant="outline" size="sm" className="flex-1" disabled={!!busy || uploading[face]} onClick={() => ref.current?.click()}>
+                  {uploading[face] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}رفع
                 </Button>
                 {val && <Button type="button" variant="ghost" size="sm" onClick={() => set('')}>مسح</Button>}
                 <Button type="button" variant="ghost" size="sm" className="text-xs text-muted-foreground" onClick={() => setShowLinks(v => !v)}>{showLinks ? 'إخفاء الرابط' : 'إظهار الرابط'}</Button>
@@ -92,7 +123,7 @@ function PhotoDialog({ item, op, onClose, onSaved }: { item: BoardItem; op: Oper
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={onClose}>إلغاء</Button>
-          <Button onClick={save} disabled={!!busy}>{busy === 'save' && <Loader2 className="h-4 w-4 animate-spin" />}حفظ</Button>
+          <Button onClick={save} disabled={!!busy || uploadingAny}>{busy === 'save' && <Loader2 className="h-4 w-4 animate-spin" />}حفظ</Button>
         </div>
       </DialogContent>
     </Dialog>

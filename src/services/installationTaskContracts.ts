@@ -169,8 +169,7 @@ export async function syncInstallationTaskContracts(taskId: string): Promise<{
     }
     const { error } = await supabase.from('installation_tasks').update(patch as any).eq('id', taskId);
     if (error) throw error;
-    const { error: compositeError } = await supabase.from('composite_tasks').update({ contract_ids: newIds } as any).eq('installation_task_id', taskId);
-    if (compositeError) throw compositeError;
+    // أمر العمل (composite_tasks) لا يملك contract_ids؛ عقوده تُقرأ من أمر التركيب نفسه
     changed = true;
   }
   return { contracts: info, unmatched, changed };

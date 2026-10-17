@@ -1,5 +1,7 @@
 import { loadInstallationOperationIds, prepareInstallationOperationTask } from '@/services/installationOperation';
 import { pullFromOriginalTasks } from '@/services/installationOperationCreate';
+import { removeTaskItems } from '@/services/operationBoards';
+import { splitFaceFiles } from '@/components/installation/UploadProgressBar';
 import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
 import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import { useState, useMemo, useEffect } from 'react';
@@ -2463,7 +2465,7 @@ export default function InstallationTasks() {
               }}
               onUncomplete={(itemId) => uncompleteItemMutation.mutate({ itemId, taskId: selectedTaskId })}
               onDeleteItem={async (itemId) => {
-                try { await supabase.from('installation_task_items').delete().eq('id', itemId); toast.success('تم حذف اللوحة من المهمة'); refetchTaskItems(); }
+                try { const r = await removeTaskItems([itemId]); toast.success(r.returned ? 'أُعيدت اللوحة إلى أمر التركيب الأصلي' : 'تم حذف اللوحة من المهمة'); refetchTaskItems(); queryClient.invalidateQueries({ queryKey: ['installation-tasks'] }); }
                 catch (err: any) { toast.error('فشل في حذف اللوحة: ' + err.message); }
               }}
               onAddInstalledImage={(item) => { 
@@ -3392,6 +3394,16 @@ export default function InstallationTasks() {
 
             return (
               <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed border-primary/40 bg-primary/5 p-2"
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => { e.preventDefault(); const [fa, fb] = splitFaceFiles(e.dataTransfer.files); if (fa) handleInstalledFileUpload(fa, 'A'); if (fb) handleInstalledFileUpload(fb, 'B'); }}>
+                  <input type="file" accept="image/*" multiple className="hidden" id="installed-file-both"
+                    onChange={(e) => { const [fa, fb] = splitFaceFiles(e.target.files); if (fa) handleInstalledFileUpload(fa, 'A'); if (fb) handleInstalledFileUpload(fb, 'B'); e.target.value = ''; }} />
+                  <Button type="button" size="sm" disabled={uploadingInstalledA || uploadingInstalledB} onClick={() => document.getElementById('installed-file-both')?.click()}>
+                    {uploadingInstalledA || uploadingInstalledB ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}رفع الوجهين معاً
+                  </Button>
+                  <span className="text-[11px] text-muted-foreground">اختر صورتين أو اسحبهما هنا — الأولى بالاسم للأمامي والثانية للخلفي</span>
+                </div>
                 {renderInstalledFaceInput('A')}
                 {renderInstalledFaceInput('B')}
 

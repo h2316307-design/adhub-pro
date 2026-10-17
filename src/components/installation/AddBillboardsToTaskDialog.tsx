@@ -178,6 +178,7 @@ export function AddBillboardsToTaskDialog({
       toast.success(`أُضيفت ${ids.length} لوحة للمهمة${newContracts.length ? ` — وأُضيف ${newContracts.length === 1 ? 'عقد' : 'عقود'} #${newContracts.join('، #')} للمهمة` : ''}`);
       queryClient.invalidateQueries({ queryKey: ['installation-task-items'] });
       queryClient.invalidateQueries({ queryKey: ['installation-tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['installation-operation-billboards', taskId] });
       setSelectedIds([]);
       onSuccess();
       onOpenChange(false);

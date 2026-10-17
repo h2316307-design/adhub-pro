@@ -358,11 +358,51 @@ export function UnifiedPrintAllDialog({
   const [printMode, setPrintMode] = useState<'cards' | 'table'>('cards');
   // شكل ورقة البطاقات: تصميم نظيف مستقل، أو قالب الخلفية المخصص (القديم)
   const [cardStyle, setCardStyle] = useState<'clean' | 'template'>(() => {
-    try { return localStorage.getItem('unified-print-card-style') === 'template' ? 'template' : 'clean'; } catch { return 'clean'; }
+    try { return localStorage.getItem('unified-print-card-style') === 'clean' ? 'clean' : 'template'; } catch { return 'template'; }
   });
   const changeCardStyle = (v: 'clean' | 'template') => {
     setCardStyle(v);
     try { localStorage.setItem('unified-print-card-style', v); } catch { /* تجاهل */ }
+  };
+  const [cleanLogo, setCleanLogo] = useState(() => {
+    try { return localStorage.getItem('unified-print-clean-logo') || '/logofaresgold.svg'; } catch { return '/logofaresgold.svg'; }
+  });
+  const [savedCleanLogo, setSavedCleanLogo] = useState(() => {
+    try { return localStorage.getItem('unified-print-saved-logo') || localStorage.getItem('unified-print-clean-logo') || ''; } catch { return ''; }
+  });
+  const [availableLogos, setAvailableLogos] = useState<{ name: string; logo_url: string }[]>([]);
+  useEffect(() => {
+    if (!open || cardStyle !== 'clean') return;
+    let active = true;
+    void supabase.from('print_backgrounds').select('name, logo_url').then(({ data }) => {
+      if (active) setAvailableLogos((data || []).filter(row => row.logo_url));
+    });
+    return () => { active = false; };
+  }, [open, cardStyle]);
+  const [showCleanLogo, setShowCleanLogo] = useState(true);
+  const updateCleanLogo = (value: string) => {
+    const selected = value || '/logofaresgold.svg';
+    setCleanLogo(selected);
+    try {
+      localStorage.setItem('unified-print-clean-logo', selected);
+      if (value && value !== '/logofaresgold.svg') {
+        setSavedCleanLogo(value);
+        localStorage.setItem('unified-print-saved-logo', value);
+      }
+    } catch {
+      toast.error('تعذر حفظ الشعار على هذا الجهاز، سيُستخدم للطباعة الحالية');
+    }
+  };
+  const uploadCleanLogo = (file?: File) => {
+    if (!file) return;
+    if (!['image/png', 'image/jpeg', 'image/webp'].includes(file.type) || file.size > 2 * 1024 * 1024) {
+      toast.error('اختر صورة PNG أو JPG أو WebP بحجم لا يتجاوز 2 ميجابايت');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => { updateCleanLogo(String(reader.result)); setShowCleanLogo(true); };
+    reader.onerror = () => toast.error('تعذرت قراءة صورة الشعار');
+    reader.readAsDataURL(file);
   };
   const [loading, setLoading] = useState(false);
   const [selectedTeamIds, setSelectedTeamIds] = useState<Set<string>>(new Set());
@@ -1337,6 +1377,7 @@ export function UnifiedPrintAllDialog({
         <div class="page cp-page" data-print-page>
           <div class="cp-inner">
             <header class="cp-head">
+              ${showCleanLogo && /^(https?:\/\/|data:image\/(png|jpeg|webp);base64,|\/(?!\/))/i.test(cleanLogo) ? `<img class="cp-logo" src="${esc(cleanLogo)}" alt="الشعار" />` : ''}
               <div class="cp-head-r">${teamBadge}${contractInfoText ? `<div class="cp-info">${esc(contractInfoText)}</div>` : ''}</div>
               <div class="cp-seq"><b>${sequentialNumber}</b><span>من ${sortedItems.length}</span></div>
             </header>
@@ -1344,7 +1385,7 @@ export function UnifiedPrintAllDialog({
             <section class="cp-title">
               <div class="cp-title-text">
                 <div class="cp-name">${esc(name)}</div>
-                ${showBillboardStatus ? `<div class="cp-status" style="color:${billboardStatusColor}">${esc(billboardStatusLabel)}</div>` : ''}
+                ${showBillboardStatus ? `<div class="cp-status">${esc(billboardStatusLabel)}</div>` : ''}
               </div>
               <div class="cp-size">
                 <div class="cp-size-val">${generatePrintedSizeHtml(size, false, showSizeDimensionLabels)}</div>
@@ -1667,20 +1708,21 @@ export function UnifiedPrintAllDialog({
           .designs-section { overflow: hidden; }
 
           /* ───── التصميم النظيف ───── */
-          .cp-page { background: #fff; }
+          .cp-page { background: #fff; color: #222; box-sizing: border-box; }
+          .cp-logo { width: 34mm; height: 16mm; object-fit: contain; flex-shrink: 0; filter: grayscale(1); }
           .cp-inner { position: absolute; inset: 0; padding: 10mm 11mm 9mm; display: flex; flex-direction: column; gap: 4mm; }
           .cp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 4mm; min-height: 9mm; }
-          .cp-head-r { display: flex; flex-direction: column; align-items: flex-start; gap: 1.5mm; min-width: 0; }
-          .cp-team { display: inline-block; background: #111; color: #fff; font-weight: 700; font-size: 13px; padding: 1.6mm 4mm; border-radius: 10mm; }
+          .cp-head-r { display: flex; flex: 1; flex-direction: column; align-items: flex-start; gap: 1.5mm; min-width: 0; overflow-wrap: anywhere; }
+          .cp-team { display: inline-block; background: #f5f5f5; color: #222; border: 0.3mm solid #ddd; font-weight: 700; font-size: 13px; padding: 1.6mm 4mm; border-radius: 2mm; }
           .cp-info { font-size: 13px; color: #444; }
           .cp-seq { font-family: 'Manrope', Arial, sans-serif; display: flex; align-items: baseline; gap: 1mm; color: #111; white-space: nowrap; }
           .cp-seq b { font-size: 22px; font-weight: 700; }
           .cp-seq span { font-size: 12px; color: #777; }
-          .cp-title { display: flex; align-items: stretch; justify-content: space-between; gap: 5mm; border-bottom: 0.6mm solid #111; padding-bottom: 3mm; }
+          .cp-title { display: flex; align-items: stretch; justify-content: space-between; gap: 5mm; border-bottom: 0.3mm solid #ccc; padding-bottom: 3mm; }
           .cp-title-text { min-width: 0; display: flex; flex-direction: column; justify-content: center; }
           .cp-name { font-size: 26px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
           .cp-status { font-size: 13px; font-weight: 600; margin-top: 1mm; }
-          .cp-size { flex-shrink: 0; text-align: center; border: 0.5mm solid #111; border-radius: 3mm; padding: 1.5mm 5mm; display: flex; flex-direction: column; justify-content: center; }
+          .cp-size { flex-shrink: 0; text-align: center; background: #fafafa; border: 0.3mm solid #ccc; border-radius: 3mm; padding: 1.5mm 5mm; display: flex; flex-direction: column; justify-content: center; }
           .cp-size-val { font-family: 'Manrope', Arial, sans-serif; font-size: 34px; font-weight: 700; line-height: 1.1; display: flex; justify-content: center; }
           .cp-faces { font-size: 12px; font-weight: 600; color: #444; margin-top: 0.5mm; }
           .cp-photo { flex: 1 1 auto; min-height: 60mm; display: flex; align-items: center; justify-content: center; background: #f4f4f5; border-radius: 3mm; padding: 2mm; overflow: hidden; }
@@ -1697,7 +1739,7 @@ export function UnifiedPrintAllDialog({
           .cp-loc-label { font-size: 11px; color: #777; }
           .cp-loc-main { font-size: 17px; font-weight: 700; line-height: 1.3; }
           .cp-loc-land { font-size: 14px; color: #222; line-height: 1.35; margin-top: 0.5mm; overflow-wrap: anywhere; }
-          .cp-loc-gps { font-family: 'Manrope', Arial, sans-serif; font-size: 10px; color: #888; margin-top: 1mm; text-align: right; }
+          .cp-loc-gps { font-family: 'Manrope', Arial, sans-serif; font-size: 10px; color: #555; margin-top: 1mm; text-align: right; }
           .cp-qr { flex-shrink: 0; width: 24mm; display: flex; flex-direction: column; align-items: center; gap: 1mm; text-decoration: none; color: #555; font-size: 9px; }
           .cp-qr img { width: 24mm; height: 24mm; display: block; }
           .cp-designs { flex: 0 0 62mm; display: flex; gap: 4mm; min-height: 0; }
@@ -2776,7 +2818,7 @@ export function UnifiedPrintAllDialog({
                   <span className="px-1.5 text-[11px] font-semibold text-muted-foreground">شكل الورقة</span>
                   {([['clean', 'تصميم نظيف'], ['template', 'قالب الخلفية']] as const).map(([key, label]) => (
                     <button key={key} type="button" aria-pressed={cardStyle === key} onClick={() => changeCardStyle(key)}
-                      className={`flex-1 rounded-md px-2 py-1 text-xs font-bold transition-colors ${cardStyle === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
+                      className={`cursor-pointer flex-1 rounded-md px-2 py-1 text-xs font-bold transition-all duration-200 ${cardStyle === key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
                       {label}
                     </button>
                   ))}
@@ -2786,6 +2828,33 @@ export function UnifiedPrintAllDialog({
           </div>
 
           {/* 2. شريط ملخص التكوين الحي */}
+          {printMode === 'cards' && cardStyle === 'clean' && (
+            <div className="rounded-xl border border-border bg-card p-3 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="clean-logo-visible" className="font-bold">الشعار في التصميم النظيف</Label>
+                <Switch id="clean-logo-visible" checked={showCleanLogo} onCheckedChange={setShowCleanLogo} className="cursor-pointer" />
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                {cleanLogo && <img src={cleanLogo} alt="معاينة الشعار" className="h-14 w-24 rounded-md border bg-white p-1 object-contain grayscale" />}
+                <div className="flex-1 min-w-48 space-y-2">
+                  <Label htmlFor="clean-logo-file">إضافة أو استبدال الشعار</Label>
+                  <Input id="clean-logo-file" type="file" accept="image/png,image/jpeg,image/webp" className="cursor-pointer" onChange={event => { uploadCleanLogo(event.target.files?.[0]); event.target.value = ''; }} />
+                  <Label htmlFor="clean-logo-url">أو رابط صورة الشعار</Label>
+                  <Input id="clean-logo-url" type="url" dir="ltr" placeholder="https://example.com/logo.png" value={cleanLogo.startsWith('data:') ? '' : cleanLogo} onChange={event => updateCleanLogo(event.target.value.trim())} />
+                </div>
+                <Button type="button" variant="outline" className="cursor-pointer transition-all duration-200" onClick={() => { updateCleanLogo(''); setShowCleanLogo(true); }}>شعار الفارس الافتراضي</Button>
+                {savedCleanLogo && savedCleanLogo !== cleanLogo && savedCleanLogo !== '/logofaresgold.svg' && <Button type="button" variant="outline" className="cursor-pointer transition-all duration-200" onClick={() => { updateCleanLogo(savedCleanLogo); setShowCleanLogo(true); }}>استخدام الشعار المحفوظ</Button>}
+              </div>
+              {availableLogos.length > 0 && <div className="space-y-2">
+                <Label htmlFor="clean-existing-logo">استخدام شعار مرفوع في قوالب الخلفية</Label>
+                <select id="clean-existing-logo" value="" className="w-full rounded-md border border-input bg-background p-2 text-sm cursor-pointer transition-all duration-200" onChange={event => { if (event.target.value) { updateCleanLogo(event.target.value); setShowCleanLogo(true); } }}>
+                  <option value="">اختر شعارًا مرفوعًا</option>
+                  {availableLogos.map((logo, index) => <option key={`${logo.logo_url}-${index}`} value={logo.logo_url}>{logo.name}</option>)}
+                </select>
+              </div>}
+              <p className="text-xs text-muted-foreground">شعار الفارس يظهر افتراضيًا بالأبيض والأسود. يُحفظ الشعار البديل على هذا الجهاز ويمكن إعادة استخدامه حتى بعد الرجوع للشعار الافتراضي. PNG أو JPG أو WebP، حتى 2 ميجابايت.</p>
+            </div>
+          )}
           <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-card border border-border/80 text-xs shadow-xs">
             <div className="flex flex-wrap items-center gap-1.5">
               <span className="font-bold text-muted-foreground flex items-center gap-1 pl-1">

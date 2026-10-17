@@ -2,6 +2,7 @@ import { getAvailableFacesCount, getInstallationFaceIndices } from '@/lib/instal
 import { supabase } from '@/integrations/supabase/client';
 import { parseContractBillboardIds } from '@/lib/compositeTaskContractIdentity';
 import type { OperationRow } from '@/services/compositeOperations';
+import { prepareInstallationOperationTask } from '@/services/installationOperation';
 
 export interface BoardItem {
   id: string;
@@ -133,9 +134,74 @@ export async function moveBoards(items: BoardItem[], targetTaskId: string) {
 /** إزالة لوحات غير مركبة من العملية */
 export async function removeBoards(items: BoardItem[]) {
   if (items.some(i => i.status === 'completed')) throw new Error('لا يمكن إزالة لوحة تم تركيبها؛ ألغِ الإكمال أولاً');
-  const { error } = await supabase.from('installation_task_items').delete().in('id', items.map(i => i.id));
+  await removeTaskItems(items.map(i => i.id));
+}
+
+/**
+ * حذف لوحات من أوامر التركيب. اللوحة غير المركّبة في تركيب جديد لعدة عقود (سُحبت من أمرها
+ * الأصلي عند الإنشاء) تُعاد إلى أمر التركيب الأصلي لعقدها بدل حذفها، ويُنشأ الأمر من جديد
+ * إن كان قد حُذف بعد أن فرغ — حتى لا تخرج اللوحة من دورة التركيب.
+ */
+export async function removeTaskItems(itemIds: string[]): Promise<{ returned: number; deleted: number }> {
+  if (!itemIds.length) return { returned: 0, deleted: 0 };
+  const { data: items, error } = await supabase.from('installation_task_items').select('id, task_id, billboard_id, status').in('id', itemIds);
   if (error) throw error;
-  await syncOperationStatus(items.map(i => i.taskId));
+  const taskIds = [...new Set((items || []).map((i: any) => i.task_id as string))];
+  const { data: tasks, error: tErr } = await supabase.from('installation_tasks').select('id, contract_id, contract_ids, team_id, task_type').in('id', taskIds.length ? taskIds : ['-']);
+  if (tErr) throw tErr;
+  const taskMap = new Map((tasks || []).map((t: any) => [t.id as string, t]));
+  const contractsOf = (t: any) => [...new Set([...(t.contract_ids || []), t.contract_id].map(Number).filter(Boolean))];
+  const isCombined = (t: any) => t?.task_type === 'installation' && contractsOf(t).length > 1;
+
+  const toReturn = (items || []).filter((i: any) => i.status !== 'completed' && isCombined(taskMap.get(i.task_id)));
+  const allContracts = [...new Set(toReturn.flatMap((i: any) => contractsOf(taskMap.get(i.task_id))))];
+  const contractOf = new Map<number, number>();
+  if (allContracts.length) {
+    const { data: cs, error: cErr } = await supabase.from('Contract').select('"Contract_Number", billboard_ids').in('Contract_Number', allContracts);
+    if (cErr) throw cErr;
+    (cs || []).forEach((c: any) => parseContractBillboardIds(c.billboard_ids).forEach(id => { if (!contractOf.has(id)) contractOf.set(id, Number(c.Contract_Number)); }));
+  }
+
+  const deleteIds = new Set<string>((items || []).map((i: any) => i.id));
+  const touched = new Set<string>(taskIds);
+  const originalFor = new Map<string, string>();
+  let returned = 0;
+  for (const i of toReturn as any[]) {
+    const task = taskMap.get(i.task_id);
+    const contract = contractOf.get(Number(i.billboard_id));
+    if (!contract || !contractsOf(task).includes(contract)) continue;
+    const key = `${contract}:${task.team_id}`;
+    let target = originalFor.get(key);
+    if (!target) {
+      const { data: originals, error: oErr } = await supabase.from('installation_tasks').select('id, contract_ids, team_id')
+        .eq('contract_id', contract).eq('task_type', 'installation').neq('id', task.id);
+      if (oErr) throw oErr;
+      const singles = (originals || []).filter((o: any) => contractsOf({ ...o, contract_id: contract }).length <= 1);
+      target = (singles.find((o: any) => o.team_id === task.team_id) || singles[0])?.id;
+      if (!target) {
+        const { data: created, error: nErr } = await supabase.from('installation_tasks').insert({
+          ...(await prepareInstallationOperationTask(crypto.randomUUID())),
+          contract_id: contract, contract_ids: [contract], team_id: task.team_id, status: 'pending', task_type: 'installation',
+        } as any).select('id').single();
+        if (nErr) throw nErr;
+        target = created.id as string;
+      }
+      originalFor.set(key, target);
+    }
+    const { data: dup } = await supabase.from('installation_task_items').select('id').eq('task_id', target).eq('billboard_id', i.billboard_id).neq('status', 'replaced').limit(1);
+    if (dup?.length) continue; // موجودة أصلاً في الأمر الأصلي: تُحذف من المجمعة فقط
+    const { error: mErr } = await supabase.from('installation_task_items').update({ task_id: target } as any).eq('id', i.id);
+    if (mErr) throw mErr;
+    deleteIds.delete(i.id);
+    touched.add(target);
+    returned++;
+  }
+  if (deleteIds.size) {
+    const { error: dErr } = await supabase.from('installation_task_items').delete().in('id', [...deleteIds]);
+    if (dErr) throw dErr;
+  }
+  await syncOperationStatus([...touched]);
+  return { returned, deleted: deleteIds.size };
 }
 
 export async function saveInstalledPhotos(item: BoardItem, a: string | null, b: string | null) {

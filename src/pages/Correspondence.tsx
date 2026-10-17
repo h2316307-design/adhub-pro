@@ -1,5 +1,5 @@
 import { usePersistedState } from '@/hooks/usePersistedState';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
-import { AlertTriangle, Building2, Copy, FilePlus2, Loader2, Mail, Pencil, Printer, Save, Search, Trash2, Upload, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, Archive, Building2, CalendarDays, Copy, FileText, FilePlus2, Loader2, Mail, Pencil, Printer, Save, Search, Trash2, Upload, X } from 'lucide-react';
 import { preparePrintWindow, writePrintWindow } from '@/utils/printWindowHelper';
 import { LetterPreview, MODE_HINT, PrintMenu } from '@/components/correspondence/LetterParts';
 import {
@@ -25,6 +25,17 @@ const emptyLetter = (c?: LetterheadCompany | null, letters: Letter[] = []): Lett
   closing: 'وتفضلوا بقبول فائق الاحترام والتقدير.', signer_name: c?.signer_name || '', signer_title: c?.signer_title || '',
   with_stamp: true, with_signature: true,
 });
+
+function CompanyLogo({ company, compact = false }: { company: LetterheadCompany; compact?: boolean }) {
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const showLogo = company.logo_url && failedUrl !== company.logo_url;
+  return (
+    <span className={cn('flex shrink-0 items-center justify-center overflow-hidden', compact ? 'h-12 w-12 rounded-xl border border-border/60 bg-white p-1.5' : 'h-36 w-full bg-white p-7 sm:h-44 sm:p-9')}>
+      {showLogo ? <img src={company.logo_url!} alt={`شعار ${company.name}`} className="h-full w-full object-contain motion-safe:transition-transform motion-safe:duration-300 motion-safe:group-hover:scale-105" onError={() => setFailedUrl(company.logo_url!)} />
+        : <Building2 aria-hidden="true" className={cn('text-amber-700', compact ? 'h-6 w-6' : 'h-14 w-14')} />}
+    </span>
+  );
+}
 
 /** صورة قابلة للرفع (شعار / ختم / توقيع) */
 function ImageSlot({ label, url, hint, onChange, folder, name }: { label: string; url?: string | null; hint: string; onChange: (u: string | null) => void; folder: string; name: string }) {
@@ -141,12 +152,14 @@ export default function Correspondence() {
   const [mode, setMode] = usePersistedState<LetterPrintMode>('correspondence.mode', 'full');
   const [fit, setFit] = useState<{ scale: number; overflow: boolean }>({ scale: 1, overflow: false });
 
-  useEffect(() => { if (!companyId && companies.length) setCompanyId((companies.find(c => c.is_default) || companies[0]).id); }, [companies, companyId]);
   const company = companies.find(c => c.id === (draft?.company_id || companyId)) || null;
   const list = useMemo(() => {
     const s = q.trim();
     return letters.filter(l => (!companyId || l.company_id === companyId) && (!s || [l.reference_number, l.recipient, l.subject, l.body].some(v => String(v || '').includes(s))));
   }, [letters, companyId, q]);
+
+  const companyLetters = letters.filter(l => !companyId || l.company_id === companyId);
+  const monthLetters = companyLetters.filter(l => l.letter_date?.slice(0, 7) === today().slice(0, 7));
 
   const html = useMemo(() => (company && draft ? renderLetterHtml(company, draft, window.location.origin, { mode }) : ''), [company, draft, mode]);
   const set = (patch: Partial<Letter>) => setDraft(d => (d ? { ...d, ...patch } : d));
@@ -174,23 +187,16 @@ export default function Correspondence() {
   const err = (companiesQ.error || lettersQ.error) as Error | null;
 
   return (
-    <div dir="rtl" className="space-y-4 p-4 text-right md:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+    <div dir="rtl" className="mx-auto max-w-[1800px] space-y-6 p-4 text-right md:p-6 [&_button]:cursor-pointer [&_button]:transition-all [&_button]:duration-200 [&_[role=combobox]]:cursor-pointer">
+      <header className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-primary/20 bg-card p-5 shadow-sm md:p-6">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold"><Mail className="h-6 w-6" />المراسلات الرسمية</h1>
-          <p className="text-sm text-muted-foreground">ترويسة الشركة، الرقم الإشاري، والحفظ والطباعة</p>
+          <h1 className="flex items-center gap-3 text-2xl font-bold"><span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/15 text-primary"><Mail className="h-6 w-6" /></span>المراسلات الرسمية</h1>
+          <p className="mt-3 max-w-xl text-sm leading-6 text-muted-foreground">أنشئ مراسلاتك بهوية شركتك، وراجعها واحفظها واطبعها من مكان واحد.</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {companies.length > 0 && (
-            <Select value={companyId} onValueChange={v => { setCompanyId(v); setDraft(null); }}>
-              <SelectTrigger className="h-10 w-[240px]"><Building2 className="ml-2 h-4 w-4" /><SelectValue /></SelectTrigger>
-              <SelectContent>{companies.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-            </Select>
-          )}
-          <Button variant="outline" disabled={!company} onClick={() => setEditingCompany(company!)}><Pencil className="h-4 w-4" />بيانات الشركة</Button>
-          <Button variant="outline" onClick={() => setEditingCompany({})}><Building2 className="h-4 w-4" />شركة جديدة</Button>
-          <Button variant="outline" disabled={!company} title="طباعة أوراق الترويسة الرسمية فارغة للكتابة عليها لاحقاً" onClick={() => company && print({ ...emptyLetter(company), company_id: company.id }, 'background')}><Printer className="h-4 w-4" />ترويسة فارغة</Button>
-          <Button disabled={!company} onClick={() => setDraft(emptyLetter(company, allLetters))}><FilePlus2 className="h-4 w-4" />مراسلة جديدة</Button>
+        <div className="flex w-full flex-wrap gap-2 lg:w-auto">
+          {company ? <Button variant="outline" onClick={() => { setCompanyId(''); setDraft(null); setEditingCompany(null); setQ(''); }}><ArrowRight className="h-4 w-4" />جميع الشركات</Button>
+            : <Button variant="outline" onClick={() => setEditingCompany({})}><Building2 className="h-4 w-4" />إضافة شركة</Button>}
+          {company && <Button onClick={() => setDraft(emptyLetter(company, allLetters))}><FilePlus2 className="h-4 w-4" />مراسلة جديدة</Button>}
         </div>
       </header>
 
@@ -198,14 +204,66 @@ export default function Correspondence() {
 
       {editingCompany && (
         <CompanyEditor company={editingCompany} onCancel={() => setEditingCompany(null)}
-          onSaved={c => { setEditingCompany(null); qc.invalidateQueries({ queryKey: ['letterhead-companies'] }); setCompanyId(c.id); }} />
+          onSaved={c => { setEditingCompany(null); qc.setQueryData<LetterheadCompany[]>(['letterhead-companies'], previous => [...(previous || []).filter(item => item.id !== c.id), c]); qc.invalidateQueries({ queryKey: ['letterhead-companies'] }); setCompanyId(c.id); setDraft(current => current?.company_id === c.id ? current : null); setQ(''); }} />
       )}
+
+      {!company ? (
+        <section aria-labelledby="company-picker-title" className="mx-auto max-w-5xl py-6 sm:py-10">
+          <div className="mb-8 text-center sm:mb-10">
+            <h2 id="company-picker-title" className="text-xl font-bold sm:text-2xl">اختر الشركة للمتابعة</h2>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">مراسلات كل شركة في مساحة خاصة بها</p>
+          </div>
+          {companiesQ.isLoading ? <div className="flex flex-wrap justify-center gap-5">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-56 w-full rounded-2xl sm:h-64 sm:w-64" />)}</div>
+            : companies.length ? <div className="flex flex-wrap justify-center gap-5 sm:gap-6">
+              {companies.map(c => (
+                <button key={c.id} type="button" aria-label={`الدخول إلى مراسلات ${c.name}`} onClick={() => { setCompanyId(c.id); setQ(''); setEditingCompany(null); }}
+                  className="group flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-primary/20 bg-card text-right shadow-sm hover:border-primary/70 hover:shadow-[0_8px_28px_-12px_rgba(184,134,11,0.35)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-4 focus-visible:ring-offset-background motion-safe:hover:-translate-y-1 sm:w-64">
+                  <CompanyLogo company={c} />
+                  <span className="flex min-h-20 w-full flex-1 items-center gap-3 border-t border-border/60 px-5 py-4 group-hover:bg-primary/5">
+                    <span className="min-w-0 flex-1 break-words text-base font-bold leading-7">{c.name}</span>
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-border text-muted-foreground transition-colors group-hover:border-primary/30 group-hover:bg-primary/15 group-hover:text-foreground"><ArrowLeft aria-hidden="true" className="h-4 w-4" /></span>
+                  </span>
+                </button>
+              ))}
+            </div> : !companiesQ.isError && <div className="rounded-2xl border border-dashed border-primary/30 bg-card p-10 text-center">
+              <Building2 className="mx-auto mb-4 h-10 w-10 text-primary" />
+              <h3 className="font-bold">أضف شركتك الأولى</h3>
+              <p className="mt-2 text-sm text-muted-foreground">أضف اسم الشركة وشعارها لتظهر هنا وتبدأ مراسلاتك.</p>
+              <Button className="mt-5" onClick={() => setEditingCompany({})}>إضافة شركة</Button>
+            </div>}
+        </section>
+      ) : <>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 p-3">
+        <div className="flex min-w-0 items-center gap-2 px-1 text-sm">
+          <CompanyLogo company={company} compact />
+          <span className="break-words font-semibold">{company.name}</span>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" disabled={!company} onClick={() => setEditingCompany(company!)}><Pencil className="h-4 w-4" />بيانات الشركة</Button>
+          <Button variant="outline" onClick={() => setEditingCompany({})}><Building2 className="h-4 w-4" />شركة جديدة</Button>
+          <Button variant="outline" disabled={!company} title="طباعة أوراق الترويسة الرسمية فارغة للكتابة عليها لاحقاً" onClick={() => company && print({ ...emptyLetter(company), company_id: company.id }, 'background')}><Printer className="h-4 w-4" />ترويسة فارغة</Button>
+        </div>
+      </div>
+
+      {!draft && <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {[
+          { label: 'إجمالي المراسلات', value: companyLetters.length, icon: Archive },
+          { label: 'مراسلات هذا الشهر', value: monthLetters.length, icon: CalendarDays },
+          { label: 'الشركات المسجلة', value: companies.length, icon: Building2 },
+        ].map(({ label, value, icon: Icon }) => (
+          <div key={label} className="flex items-center gap-3 rounded-xl border border-border bg-card p-4 last:col-span-2 sm:last:col-span-1">
+            <Icon className="h-5 w-5 shrink-0 text-primary" />
+            <div><p className="text-xs text-muted-foreground">{label}</p><p className="mt-1 text-2xl font-bold tabular-nums">{companiesQ.isLoading || lettersQ.isLoading ? '—' : value}</p></div>
+          </div>
+        ))}
+      </div>}
+
 
       {draft && company ? (
         <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <section className="min-w-0 space-y-3 rounded-xl border border-border bg-card p-4">
+          <section className="min-w-0 space-y-4 rounded-2xl border border-border bg-card p-4 shadow-sm md:p-6">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold">{draft.id ? `تعديل المراسلة ${draft.reference_number}` : 'مراسلة جديدة'}</h2>
+              <h2 className="flex items-center gap-2 font-bold"><FileText className="h-4 w-4 text-primary" />{draft.id ? `تعديل المراسلة ${draft.reference_number}` : 'مراسلة جديدة'}</h2>
               <Button variant="ghost" size="sm" onClick={() => setDraft(null)}><X className="h-4 w-4" />إغلاق</Button>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -219,9 +277,9 @@ export default function Correspondence() {
             </div>
             <label className="block space-y-1 text-sm">الموجَّه إليه<Input value={draft.recipient || ''} onChange={e => set({ recipient: e.target.value })} placeholder="السيد الأستاذ/ ... المحترم" /></label>
             <label className="block space-y-1 text-sm">التحية<Input value={draft.greeting || ''} onChange={e => set({ greeting: e.target.value })} /></label>
-            <label className="block space-y-1 text-sm">الموضوع<Input value={draft.subject || ''} onChange={e => set({ subject: e.target.value })} /></label>
+            <label className="block space-y-1 text-sm">الموضوع<Input placeholder="اكتب عنوانًا واضحًا للمراسلة" value={draft.subject || ''} onChange={e => set({ subject: e.target.value })} /></label>
             <label className="block space-y-1 text-sm">نص المراسلة <span className="text-xs text-muted-foreground">(سطر فارغ بين الفقرات)</span>
-              <Textarea rows={12} value={draft.body} onChange={e => set({ body: e.target.value })} style={{ fontFamily: company.font_family }} className="text-base leading-8" />
+              <Textarea placeholder="اكتب تفاصيل المراسلة هنا…" rows={12} value={draft.body} onChange={e => set({ body: e.target.value })} style={{ fontFamily: company.font_family }} className="text-base leading-8" />
             </label>
             <label className="block space-y-1 text-sm">الختام<Input value={draft.closing || ''} onChange={e => set({ closing: e.target.value })} /></label>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -242,12 +300,12 @@ export default function Correspondence() {
               <PrintMenu label="حفظ وطباعة" onPrint={m => save(m)} />
             </div>
           </section>
-          <section className="min-w-0 space-y-2">
+          <section className="min-w-0 space-y-3 self-start rounded-2xl border border-border bg-muted/30 p-3 md:p-4 xl:sticky xl:top-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-sm font-semibold text-muted-foreground">المعاينة</div>
+              <div className="text-sm font-semibold text-muted-foreground">معاينة الطباعة <span className="ms-2 text-xs font-normal">A4</span></div>
               <div className="inline-flex rounded-lg border border-border bg-muted/40 p-0.5 text-xs">
                 {(Object.keys(PRINT_MODE_LABELS) as LetterPrintMode[]).map(m => (
-                  <button key={m} type="button" onClick={() => setMode(m)} className={cn('rounded-md px-3 py-1.5 font-medium transition-colors', mode === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{PRINT_MODE_LABELS[m]}</button>
+                  <button key={m} type="button" onClick={() => setMode(m)} aria-pressed={mode === m} className={cn('min-h-10 rounded-md px-3 py-1.5 font-medium transition-colors', mode === m ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>{PRINT_MODE_LABELS[m]}</button>
                 ))}
               </div>
             </div>
@@ -263,30 +321,39 @@ export default function Correspondence() {
         </div>
       ) : (
         <section className="space-y-3">
-          <div className="relative max-w-md">
+          <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-border bg-card p-4">
+            <div><h2 className="font-bold">أرشيف المراسلات</h2><p className="mt-1 text-xs text-muted-foreground">{list.length} مراسلة{q.trim() ? ' تطابق البحث' : ' محفوظة للشركة المحددة'}</p></div>
+          <div className="relative w-full sm:max-w-md">
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={q} onChange={e => setQ(e.target.value)} placeholder="بحث بالرقم الإشاري أو الموضوع أو النص" className="h-10 pr-9" />
+            <Input value={q} onChange={e => setQ(e.target.value)} aria-label="البحث في المراسلات" placeholder="ابحث بالرقم أو المستلم أو الموضوع…" className="h-11 pr-9 pl-10" />
+            {q && <Button variant="ghost" size="icon" aria-label="مسح البحث" className="absolute left-1 top-1/2 h-9 w-9 -translate-y-1/2" onClick={() => setQ('')}><X className="h-4 w-4" /></Button>}
+          </div>
           </div>
           {companiesQ.isLoading || lettersQ.isLoading ? <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>
-            : !list.length ? <div className="rounded-xl border border-dashed border-border p-10 text-center text-muted-foreground">لا توجد مراسلات بعد</div>
+            : !list.length ? <div className="flex flex-col items-center rounded-2xl border border-dashed border-primary/30 bg-card px-5 py-14 text-center">
+              <span className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 text-primary"><Mail className="h-8 w-8" /></span>
+              <h3 className="text-lg font-bold">{q.trim() ? 'لا توجد نتائج مطابقة' : company ? 'ابدأ مراسلتك الأولى' : 'أضف شركتك للبدء'}</h3>
+              <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">{q.trim() ? 'جرّب رقمًا إشاريًا أو اسم مستلم أو موضوعًا آخر.' : company ? 'أنشئ خطابًا رسميًا بترويسة شركتك، مع معاينة مباشرة قبل الطباعة.' : 'أدخل بيانات الشركة وشعارها لتجهيز ترويسة مراسلاتك الرسمية.'}</p>
+              <Button className="mt-5" variant={q.trim() ? 'outline' : 'default'} onClick={() => q.trim() ? setQ('') : company ? setDraft(emptyLetter(company, allLetters)) : setEditingCompany({})}>{q.trim() ? <X className="h-4 w-4" /> : <FilePlus2 className="h-4 w-4" />}{q.trim() ? 'مسح البحث' : company ? 'إنشاء مراسلة' : 'إضافة شركة'}</Button>
+            </div>
             : (
               <div className="overflow-x-auto rounded-xl border border-border bg-card">
-                <table className="w-full min-w-[760px] text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr><th className="p-3 text-right">الرقم الإشاري</th><th className="p-3 text-right">التاريخ</th><th className="p-3 text-right">الموجَّه إليه / الموضوع</th><th className="p-3" /></tr>
+                <table className="w-full text-sm">
+                  <thead className="hidden bg-muted/50 text-xs text-muted-foreground md:table-header-group">
+                    <tr><th className="p-3 text-right">الرقم الإشاري</th><th className="p-3 text-right">التاريخ</th><th className="p-3 text-right">الموجَّه إليه / الموضوع</th><th className="p-3 text-left">الإجراءات</th></tr>
                   </thead>
                   <tbody className="divide-y divide-border">
                     {list.map(l => (
-                      <tr key={l.id} className="hover:bg-muted/30">
-                        <td className="p-3 font-bold tabular-nums" dir="ltr" style={{ textAlign: 'right' }}>{l.reference_number}</td>
-                        <td className="p-3 tabular-nums">{String(l.letter_date).split('-').reverse().join('/')}</td>
-                        <td className="p-3"><div className="font-semibold">{l.recipient || '—'}</div><div className="text-xs text-muted-foreground">{l.subject}</div></td>
-                        <td className="p-3">
-                          <div className="flex justify-end gap-1">
+                      <tr key={l.id} className="grid grid-cols-2 p-3 transition-colors hover:bg-primary/5 md:table-row md:p-0">
+                        <td className="p-2 font-bold tabular-nums md:p-3" dir="ltr" style={{ textAlign: 'right' }}>{l.reference_number}</td>
+                        <td className="p-2 text-left tabular-nums md:p-3 md:text-right">{String(l.letter_date).split('-').reverse().join('/')}</td>
+                        <td className="col-span-2 p-2 md:p-3"><div className="font-semibold">{l.recipient || '—'}</div><div className="text-xs text-muted-foreground">{l.subject}</div></td>
+                        <td className="col-span-2 p-2 md:p-3">
+                          <div className="flex flex-wrap items-center justify-end gap-1">
                             <Button size="sm" variant="outline" className="h-8" onClick={() => setDraft(l)}><Pencil className="h-3.5 w-3.5" />تعديل</Button>
                             <PrintMenu size="sm" onPrint={m => print(l, m)} />
-                            <Button size="sm" variant="ghost" className="h-8" title="نسخ كمراسلة جديدة" onClick={() => { const c = companies.find(x => x.id === l.company_id); setDraft({ ...l, id: undefined, created_at: undefined, letter_date: today(), reference_number: nextReference(c?.reference_prefix || '', allLetters.filter(x => x.company_id === l.company_id)) }); }}><Copy className="h-3.5 w-3.5" /></Button>
-                            <Button size="sm" variant="ghost" className={cn('h-8 text-destructive')} onClick={async () => {
+                            <Button size="sm" variant="ghost" className="h-10 w-10" aria-label="نسخ كمراسلة جديدة" title="نسخ كمراسلة جديدة" onClick={() => { const c = companies.find(x => x.id === l.company_id); setDraft({ ...l, id: undefined, created_at: undefined, letter_date: today(), reference_number: nextReference(c?.reference_prefix || '', allLetters.filter(x => x.company_id === l.company_id)) }); }}><Copy className="h-3.5 w-3.5" /></Button>
+                            <Button size="sm" variant="ghost" aria-label={`حذف المراسلة ${l.reference_number}`} title="حذف المراسلة" className="h-10 w-10 text-destructive hover:bg-destructive/10 hover:text-destructive" onClick={async () => {
                               if (!(await confirm({ title: 'حذف المراسلة', message: `حذف المراسلة ${l.reference_number} نهائياً؟`, confirmText: 'حذف', variant: 'destructive' } as any))) return;
                               try { await deleteLetter(l.id!); qc.invalidateQueries({ queryKey: ['letters'] }); toast.success('تم الحذف'); } catch (e: any) { toast.error(e.message); }
                             }}><Trash2 className="h-3.5 w-3.5" /></Button>
@@ -300,6 +367,7 @@ export default function Correspondence() {
             )}
         </section>
       )}
+      </>}
     </div>
   );
 }

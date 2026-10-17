@@ -1,5 +1,5 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
-import { Camera, Check, Loader2, Palette, Plus, X } from 'lucide-react';
+import { Camera, Check, ImagePlus, Loader2, Palette, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { assignBoardDesign, saveBoardPhotos } from '@/services/boardMediaService';
 import { getAvailableFacesCount, getInstallationFaceIndices } from '@/lib/installationFaces';
 import { cn } from '@/lib/utils';
+import { UploadProgressBar, splitFaceFiles, useUploadProgress } from './UploadProgressBar';
 import { toast } from 'sonner';
 
 export function BoardMediaEditor({ mode, item, billboard, taskType, designs, contractId, adType = '', onClose, onRefresh }: {
@@ -25,6 +26,10 @@ export function BoardMediaEditor({ mode, item, billboard, taskType, designs, con
   const [uploadingB, setUploadingB] = useState(false);
   const uploadAChanged = useCallback((value: boolean) => setUploadingA(value), []);
   const uploadBChanged = useCallback((value: boolean) => setUploadingB(value), []);
+  const [bothKey, setBothKey] = useState(0);
+  const bothInput = useRef<HTMLInputElement>(null);
+  const progA = useUploadProgress();
+  const progB = useUploadProgress();
   const busy = saving || uploadingA || uploadingB;
   const available = [...designs, ...extraDesigns.filter(d => !designs.some(existing => existing.id === d.id))];
   const folder = `${mode === 'photos' ? 'installation-photos' : 'designs'}/C${contractId || 'task'}_re${String(item.task_id).slice(0, 6)}`;
@@ -32,6 +37,21 @@ export function BoardMediaEditor({ mode, item, billboard, taskType, designs, con
   const selectedFaces = getInstallationFaceIndices(item, billboard, taskType);
   const showA = mode === 'design' || selectedFaces.includes(1);
   const twoFaces = mode === 'design' ? getAvailableFacesCount(billboard) > 1 : selectedFaces.includes(2);
+  /** رفع صورتي الوجهين دفعة واحدة (بالتوازي) */
+  const uploadBoth = async (list: FileList | null) => {
+    const [fa, fb] = splitFaceFiles(list);
+    if (!fa) { toast.error('اختر صوراً صالحة'); return; }
+    const { uploadImageWithFallback } = await import('@/services/imageUploadService');
+    const one = async (face: 'A' | 'B', file: File) => {
+      const [setBusy, prog, set] = face === 'A' ? [setUploadingA, progA, setFaceA] as const : [setUploadingB, progB, setFaceB] as const;
+      setBusy(true); prog.start(file.size);
+      try { set(await uploadImageWithFallback(file, `${uploadName}_face-${face}.jpg`, folder)); prog.finish(true); return true; }
+      catch (e: any) { prog.finish(false); toast.error(`${face === 'A' ? 'الوجه الأمامي' : 'الوجه الخلفي'}: ${e.message || 'فشل الرفع'}`); return false; }
+      finally { setBusy(false); }
+    };
+    const ok = (await Promise.all([one('A', fa), ...(fb ? [one('B', fb)] : [])])).filter(Boolean).length;
+    if (ok) { toast.success(ok > 1 ? 'تم رفع صورتي الوجهين' : 'تم رفع الصورة'); setBothKey(k => k + 1); }
+  };
 
   const applyDesign = async (design: any | null) => {
     setSaving(true);
@@ -72,8 +92,14 @@ export function BoardMediaEditor({ mode, item, billboard, taskType, designs, con
       {item.selected_design_id && <Button size="sm" variant="ghost" disabled={busy} onClick={() => applyDesign(null)}>إزالة تعيين التصميم</Button>}
     </> : <>
       {mode === 'design' && <Input value={name} onChange={e => setName(e.target.value)} placeholder="اسم التصميم (اختياري)" aria-label="اسم التصميم الجديد" disabled={busy} />}
-      {showA && <ImageUploadZone value={faceA} showPreview={!!faceA} onChange={setFaceA} onUploadingChange={uploadAChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الأمامي' : 'صورة تركيب الوجه الأمامي'} imageName={`${uploadName}_face-A`} folder={folder} disabled={saving} previewHeight="h-28" />}
-      {twoFaces && <ImageUploadZone value={faceB} showPreview={!!faceB} onChange={setFaceB} onUploadingChange={uploadBChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الخلفي (اختياري)' : 'صورة تركيب الوجه الخلفي'} imageName={`${uploadName}_face-B`} folder={folder} disabled={saving} previewHeight="h-28" />}
+      {mode === 'photos' && showA && twoFaces && <div className="space-y-2 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-2" onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); if (!busy) uploadBoth(e.dataTransfer.files); }}>
+        <input ref={bothInput} type="file" accept="image/*" multiple className="hidden" onChange={e => { uploadBoth(e.target.files); e.target.value = ''; }} />
+        <Button type="button" size="sm" variant="outline" className="w-full" disabled={busy} onClick={() => bothInput.current?.click()}>{uploadingA || uploadingB ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImagePlus className="h-4 w-4" />}رفع الوجهين معاً</Button>
+        <p className="text-[11px] text-muted-foreground">اختر صورتين أو اسحبهما هنا — الأولى بالاسم للأمامي والثانية للخلفي</p>
+        <UploadProgressBar value={progA.progress} /><UploadProgressBar value={progB.progress} />
+      </div>}
+      {showA && <ImageUploadZone key={`a${bothKey}`} value={faceA} showPreview={!!faceA} onChange={setFaceA} onUploadingChange={uploadAChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الأمامي' : 'صورة تركيب الوجه الأمامي'} imageName={`${uploadName}_face-A`} folder={folder} disabled={saving} previewHeight="h-28" />}
+      {twoFaces && <ImageUploadZone key={`b${bothKey}`} value={faceB} showPreview={!!faceB} onChange={setFaceB} onUploadingChange={uploadBChanged} showUrlInput={false} label={mode === 'design' ? 'تصميم الوجه الخلفي (اختياري)' : 'صورة تركيب الوجه الخلفي'} imageName={`${uploadName}_face-B`} folder={folder} disabled={saving} previewHeight="h-28" />}
       <Button size="sm" className="w-full" onClick={save} disabled={busy || (mode === 'design' ? !faceA : !faceA && !faceB)}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{mode === 'design' ? 'حفظ وتطبيق التصميم' : 'حفظ صور التركيب'}</Button>
       {mode === 'design' && <Button size="sm" variant="ghost" disabled={busy} onClick={() => setNewDesign(false)}>اختيار تصميم موجود</Button>}
     </>}
