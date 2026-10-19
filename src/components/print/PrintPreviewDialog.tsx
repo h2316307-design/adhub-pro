@@ -86,7 +86,7 @@ export function PrintPreviewDialog() {
     const isReceipt = html.includes('data-payment-receipt');
     let processed = replaceImageUrlsInHtml(html);
     processed = processed
-      .replace(/<script[^>]*>[\s\S]*?window\.print\(\)[\s\S]*?<\/script>/gi, '')
+      .replace(/<script[^>]*>(?:(?!<\/script>)[\s\S])*?window\.print\(\)[\s\S]*?<\/script>/gi, '')
       .replace(/onload\s*=\s*["'][^"']*window\.print\(\)[^"']*["']/gi, '');
     processed = processed.replace('</head>', getDSFallbackScript() + '<style>html, body { overflow-y: visible !important; height: auto !important; }</style></head>');
     if (isReceipt) {

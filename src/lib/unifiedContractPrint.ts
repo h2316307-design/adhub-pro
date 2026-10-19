@@ -262,6 +262,74 @@ async function generateQRDataUrl(url: string, fgColor: string, bgColor: string, 
   }
 }
 
+// Make sure every Doran weight used by the terms is loaded before measuring term heights;
+// otherwise the bold titles are measured with a fallback font and long terms get too little room.
+export async function ensureTermFontsLoaded(): Promise<void> {
+  if (typeof document === 'undefined' || !(document as any).fonts?.load) return;
+  try {
+    await Promise.race([
+      Promise.all(['400', '700', '800'].map((w) => (document as any).fonts.load(`${w} 42px Doran`, 'البند'))),
+      new Promise((res) => setTimeout(res, 3000)),
+    ]);
+  } catch {
+    // ignore
+  }
+}
+
+// Measure the real rendered height of a term block (same HTML/width as the print output).
+// Canvas-based line estimation underestimates justified Arabic text + title badge, which made
+// long terms overflow their fixed-height foreignObject and overlap the next term.
+export function measureTermHtmlHeightPx(html: string, widthPx: number): number {
+  if (typeof document === 'undefined' || !document.body) return 0;
+  try {
+    const host = document.createElement('div');
+    host.style.cssText = `position: fixed; left: -100000px; top: 0; width: ${widthPx}px; visibility: hidden; pointer-events: none;`;
+    host.innerHTML = html;
+    document.body.appendChild(host);
+    const height = host.getBoundingClientRect().height;
+    document.body.removeChild(host);
+    return Math.ceil(height);
+  } catch {
+    return 0;
+  }
+}
+
+// Re-stacks contract terms inside the print document using their real rendered height
+// (after fonts load), so a long term never overflows into the next one.
+export const TERMS_RELAYOUT_SCRIPT = `<script>
+(function () {
+  function relayoutTerms() {
+    try {
+      var fos = document.querySelectorAll('foreignObject.term-fo');
+      if (!fos.length) return;
+      var y = parseFloat(fos[0].getAttribute('y')) || 0;
+      for (var i = 0; i < fos.length; i++) {
+        var fo = fos[i];
+        var div = fo.firstElementChild;
+        if (!div) continue;
+        var h = Math.ceil(div.scrollHeight || div.offsetHeight || 0);
+        var minH = parseFloat(fo.getAttribute('data-min-h')) || 0;
+        if (h < minH) h = minH;
+        var sp = parseFloat(fo.getAttribute('data-spacing'));
+        if (isNaN(sp)) sp = 40;
+        fo.setAttribute('y', String(y));
+        fo.setAttribute('height', String(h + 10));
+        y += h + sp;
+      }
+    } catch (e) {}
+  }
+  relayoutTerms();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(relayoutTerms);
+  window.addEventListener('load', relayoutTerms);
+  window.addEventListener('beforeprint', relayoutTerms);
+  if (window.matchMedia) {
+    var mq = window.matchMedia('print');
+    if (mq.addEventListener) mq.addEventListener('change', relayoutTerms);
+    else if (mq.addListener) mq.addListener(relayoutTerms);
+  }
+})();
+</script>`;
+
 // Wrap text into lines using pixel-based measurement (matches preview in ContractTermsSettings)
 function wrapText(text: string, maxWidthPx: number, fontSize: number = 42): string[] {
   const normalized = (text ?? '').toString().replace(/\r\n/g, '\n');
@@ -463,10 +531,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
     const contentText = replaceVariables(term.term_content, contractData, contractDetails, currencyInfo, billboards.length, paymentsHtml);
     const fullText = `${titleText} ${contentText}`;
     const contentLines = wrapText(fullText, termsWidth, fontSize);
-    const termHeight = contentLines.length * lineHeight;
-    
-    // حساب موقع Y التالي بعد هذا البند مع التباعد - نفس المعاينة
-    currentY = termY + termHeight + (settings.termsSpacing || 40);
+    let termHeight = contentLines.length * lineHeight;
 
     const goldColor = goldLineSettings.color || '#D4AF37';
     const titleWeight = settings.termsTitleWeight || 'bold';
@@ -493,7 +558,13 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
       </div>
     `;
 
-    termsSvg += `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}">
+    // ✅ قياس الارتفاع الفعلي للبند حتى لا يُقص أو يتداخل مع البند التالي
+    termHeight = Math.max(termHeight, measureTermHtmlHeightPx(htmlContent, termsWidth));
+
+    // حساب موقع Y التالي بعد هذا البند مع التباعد - نفس المعاينة
+    currentY = termY + termHeight + (settings.termsSpacing || 40);
+
+    termsSvg += `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}" class="term-fo" data-min-h="${termHeight}" data-spacing="${settings.termsSpacing || 40}" style="overflow: visible;">
       ${htmlContent}
     </foreignObject>`;
   });
@@ -1026,6 +1097,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   const { settings, contractData, billboards, templateBgUrl, noStampBgUrl, tableBgUrl, noStampTableBgUrl, renderTarget = 'preview' } = options;
   const effectiveBgUrl = noStampBgUrl || templateBgUrl;
   const effectiveTableBgUrl = noStampTableBgUrl || tableBgUrl;
+  await ensureTermFontsLoaded();
   const embeddedBgUrl = await rasterizeSvgToDataUrl(effectiveBgUrl);
   const embeddedTableBgUrl = await rasterizeSvgToDataUrl(effectiveTableBgUrl);
   const rowsPerPage = settings.tableSettings.maxRows || 12;
@@ -1443,6 +1515,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
           });
         });
       </script>
+      ${TERMS_RELAYOUT_SCRIPT}
     </body>
     </html>
   `;

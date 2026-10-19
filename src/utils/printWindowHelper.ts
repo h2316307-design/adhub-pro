@@ -1350,7 +1350,7 @@ export function injectPrintActionBar(
 
   // 1. Strip all auto-print calls from incoming raw HTML
   let processedHtml = applyPrintInkSaver(html)
-    .replace(/<script[^>]*>[\s\S]*?window\.print\(\)[\s\S]*?<\/script>/gi, '')
+    .replace(/<script[^>]*>(?:(?!<\/script>)[\s\S])*?window\.print\(\)[\s\S]*?<\/script>/gi, '')
     .replace(/onload\s*=\s*["'][^"']*window\.print\(\)[^"']*["']/gi, '')
     .replace(/setTimeout\s*\([^)]*window\.print\(\)[^)]*\);?/gi, '');
 

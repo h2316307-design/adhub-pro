@@ -21,6 +21,9 @@ import {
 import {
   generateUnifiedPrintHTML,
   openUnifiedPrintWindow,
+  measureTermHtmlHeightPx,
+  TERMS_RELAYOUT_SCRIPT,
+  ensureTermFontsLoaded,
   BillboardPrintData as UnifiedBillboardData,
   ContractTerm as UnifiedContractTerm
 } from '@/lib/unifiedContractPrint';
@@ -1754,6 +1757,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
     setIsGenerating(true);
 
     try {
+      await ensureTermFontsLoaded();
       const contractDetails = calculateContractDetails();
       const paymentInstallments = getPaymentInstallments();
       const year = contract?.['Contract Date'] ? new Date(contract['Contract Date']).getFullYear() : (contract?.start_date ? new Date(contract.start_date).getFullYear() : new Date().getFullYear());
@@ -2489,10 +2493,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
             
             // تقدير الارتفاع بناء على عدد الأسطر
             const contentLines = wrapText(fullText, charsPerLine);
-            const termHeight = contentLines.length * lineHeight;
-
-            // تحديث موقع البند التالي
-            currentY = termY + termHeight + (templateSettings.termsSpacing || 40);
+            let termHeight = contentLines.length * lineHeight;
 
             const goldColor = goldLineSettings.color || '#D4AF37';
             const titleWeight = templateSettings.termsTitleWeight || 'bold';
@@ -2519,7 +2520,13 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
               </div>
             `;
 
-            return `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}">
+            // ✅ قياس الارتفاع الفعلي للبند حتى لا يُقص أو يتداخل مع البند التالي
+            termHeight = Math.max(termHeight, measureTermHtmlHeightPx(htmlContent, termsWidth));
+
+            // تحديث موقع البند التالي
+            currentY = termY + termHeight + (templateSettings.termsSpacing || 40);
+
+            return `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}" class="term-fo" data-min-h="${termHeight}" data-spacing="${templateSettings.termsSpacing || 40}" style="overflow: visible;">
               ${htmlContent}
             </foreignObject>`;
           }).join('');
@@ -2533,6 +2540,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           </div>
 
           ${tablePagesHtml}
+          ${TERMS_RELAYOUT_SCRIPT}
         </body>
         </html>
       `;
