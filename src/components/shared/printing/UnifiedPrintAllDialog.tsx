@@ -100,8 +100,8 @@ export interface UnifiedPrintAllDialogProps {
   taskType?: 'installation' | 'reinstallation' | string | null;
   reinstallationNumber?: number | null;
   taskName?: string | null;
-  /** طباعة بطاقات التركيب برقم العقد ونوع الإعلان فقط (بدون اسم الزبون) */
-  contractNumberOnly?: boolean;
+  /** فتح النافذة على عقد محدد فقط (للمهام المجمعة متعددة العقود) */
+  initialContractFilter?: number | string | null;
 }
 
 // دالة مساعدة لجلب الإعلانات السابقة لجميع اللوحات بدقة
@@ -339,7 +339,7 @@ export function UnifiedPrintAllDialog({
   taskType,
   reinstallationNumber,
   taskName,
-  contractNumberOnly = false,
+  initialContractFilter = null,
 }: UnifiedPrintAllDialogProps) {
   const PDF_PORTRAIT_WIDTH_PX = 2480;
   const PDF_PORTRAIT_HEIGHT_PX = 3508;
@@ -412,10 +412,9 @@ export function UnifiedPrintAllDialog({
   const [respectCityLimits, setRespectCityLimits] = useState(false);
   const [onlyCompleted, setOnlyCompleted] = useState(false);
   const [contractFilter, setContractFilter] = useState<string>('all');
-  const [contractNumberMode, setContractNumberMode] = useState(false);
   useEffect(() => {
-    if (open) setContractNumberMode(!!contractNumberOnly);
-  }, [open, contractNumberOnly]);
+    if (open) setContractFilter(initialContractFilter != null && String(initialContractFilter).trim() !== '' ? String(initialContractFilter).trim() : 'all');
+  }, [open, initialContractFilter]);
   const [fetchedItemStatus, setFetchedItemStatus] = useState<Record<string, string>>({});
   const [showWhatsAppInput, setShowWhatsAppInput] = useState(false);
   const [manualPhone, setManualPhone] = useState('');
@@ -1250,16 +1249,11 @@ export function UnifiedPrintAllDialog({
         ''
       ).trim();
       const cleanAdType = !hideAdType ? rawItemAdType.replace(/^نوع\s*الإعلان\s*:\s*/, '').trim() : '';
-      const customerCompanyText = !hideCustomerName && !contractNumberMode ? [customerName, companyName].filter(Boolean).join(' - ') : '';
+      const customerCompanyText = !hideCustomerName ? [customerName, companyName].filter(Boolean).join(' - ') : '';
 
       let contractInfoText = '';
       if (contextType === 'installation') {
-        if (contractNumberMode) {
-          contractInfoText = [
-            itemContractNumber ? `عقد رقم: ${itemContractNumber}` : '',
-            cleanAdType ? `نوع الإعلان: ${cleanAdType}` : '',
-          ].filter(Boolean).join(' - ');
-        } else if (!hideAdType) {
+        if (!hideAdType) {
           if (cleanAdType) {
             contractInfoText = `نوع الإعلان: ${cleanAdType}`;
           } else if (itemContractNumber) {
@@ -2072,7 +2066,7 @@ export function UnifiedPrintAllDialog({
         return `<th class="header-cell" style="${headerStyle}">${col.label}</th>`;
       });
 
-      const customerCompanyText = !hideCustomerName && !contractNumberMode ? [customerName, companyName].filter(Boolean).join(' - ') : '';
+      const customerCompanyText = !hideCustomerName ? [customerName, companyName].filter(Boolean).join(' - ') : '';
       const primaryTaskId = taskId ? String(taskId) : (taskIds && taskIds.length > 0 ? String(taskIds[0]) : '');
 
       let installInfoBar = '';
@@ -2906,14 +2900,6 @@ export function UnifiedPrintAllDialog({
                 </Label>
                 <Badge variant="secondary" className="text-[11px] h-4 px-1">{completedCount}/{items.length}</Badge>
               </div>
-              {contextType === 'installation' && (
-                <div className="flex items-center gap-2">
-                  <Switch id="contractNumberMode" checked={contractNumberMode} onCheckedChange={(c) => setContractNumberMode(!!c)} />
-                  <Label htmlFor="contractNumberMode" className="cursor-pointer text-xs font-medium">
-                    برقم العقد فقط (رقم العقد + نوع الإعلان)
-                  </Label>
-                </div>
-              )}
               {contractOptions.length > 1 && (
                 <div className="flex items-center gap-2">
                   <Label htmlFor="contractFilter" className="text-xs font-medium">رقم العقد</Label>

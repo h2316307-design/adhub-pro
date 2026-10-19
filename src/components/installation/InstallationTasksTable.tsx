@@ -75,7 +75,7 @@ interface Props {
   onAddTask: () => void;
   onRefresh: () => void;
   onPrintTask: (taskId: string) => void;
-  onPrintAll: (taskId: string | string[], options?: { contractNumberOnly?: boolean }) => void;
+  onPrintAll: (taskId: string | string[], options?: { contractNumber?: number }) => void;
   onSendWhatsApp?: (taskId: string) => void;
   onDistributeDesigns: (taskId: string) => void;
   onManageDesigns: (taskId: string) => void;
@@ -1599,6 +1599,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
                   setSelected(next);
                 };
 
+                const groupContractIds = [...new Set(groupTasks.flatMap(t => (t.effectiveContractIds?.length ? t.effectiveContractIds : [t.contract_id]).map(Number)))].filter(Boolean).sort((a, b) => a - b);
                 const groupColor = groupColors[groupKey] || null;
                 const accentColor = groupColor ? `rgb(${groupColor})` : firstTask.accent;
                 const groupBg = groupColor
@@ -1716,16 +1717,38 @@ export const InstallationTasksTable: React.FC<Props> = ({
                               طباعة التركيب
                             </Button>
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              title="طباعة بطاقات اللوحات برقم العقد ونوع الإعلان فقط (بدون اسم الزبون)"
-                              className="h-8 px-2.5 rounded-xl text-[11px] font-semibold gap-1 bg-muted/30 border-border/30 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/20 transition-all"
-                              onClick={() => onPrintAll(groupTasks.map(t => t.id), { contractNumberOnly: true })}
-                            >
-                              <Hash className="h-3.5 w-3.5" />
-                              طباعة برقم العقد
-                            </Button>
+                            {groupContractIds.length > 1 && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    title="اختر العقد الذي تريد طباعة لوحاته فقط"
+                                    className="h-8 px-2.5 rounded-xl text-[11px] font-semibold gap-1 bg-muted/30 border-border/30 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/20 transition-all"
+                                  >
+                                    <Hash className="h-3.5 w-3.5" />
+                                    طباعة برقم العقد
+                                    <ChevronDown className="h-3 w-3" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="min-w-[220px]">
+                                  {groupContractIds.map(cId => {
+                                    const cAd = contractById[cId]?.['Ad Type'] || (contractById[cId] as any)?.ad_type || '';
+                                    return (
+                                      <DropdownMenuItem
+                                        key={cId}
+                                        className="gap-2 cursor-pointer"
+                                        onClick={() => onPrintAll(groupTasks.map(t => t.id), { contractNumber: cId })}
+                                      >
+                                        <Printer className="h-4 w-4 shrink-0" />
+                                        <span className="font-bold tabular-nums">عقد #{cId}</span>
+                                        {cAd && <span className="text-xs text-muted-foreground truncate">— {cAd}</span>}
+                                      </DropdownMenuItem>
+                                    );
+                                  })}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
 
                             <Button
                               size="sm"

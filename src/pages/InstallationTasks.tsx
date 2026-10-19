@@ -225,7 +225,8 @@ export default function InstallationTasks() {
     taskIds?: string[];
     taskType?: string;
     reinstallationNumber?: number | null;
-    contractNumberOnly?: boolean;
+    /** عقد محدد للطباعة ضمن مهمة مجمعة */
+    onlyContract?: number | null;
   } | null>(null);
   
   // Print settings dialog state
@@ -2779,7 +2780,7 @@ export default function InstallationTasks() {
                 taskIds: taskIds,
                 taskType: t.task_type || 'installation',
                 reinstallationNumber: isReinstall ? (reinstallNum || 1) : null,
-                contractNumberOnly: !!printOptions?.contractNumberOnly,
+                onlyContract: printOptions?.contractNumber ?? null,
               });
               setPrintAllDialogOpen(true);
             }}
@@ -3563,8 +3564,14 @@ export default function InstallationTasks() {
           const matchedDesign = item.selected_design_id ? taskDesigns?.find((d: any) => d.id === item.selected_design_id) : null;
           const designA = item.design_face_a || matchedDesign?.design_face_a_url || matchedDesign?.design_face_a || (taskDesigns && (taskDesigns[0]?.design_face_a_url || taskDesigns[0]?.design_face_a));
           const designB = item.design_face_b || matchedDesign?.design_face_b_url || matchedDesign?.design_face_b || (taskDesigns && (taskDesigns[0]?.design_face_b_url || taskDesigns[0]?.design_face_b));
-          const itemContract = itemTask ? contractById[itemTask.contract_id] : null;
-          const itemDesignName = matchedDesign?.design_name || (taskDesigns && taskDesigns[0]?.design_name) || itemContract?.['Ad Type'] || (itemContract as any)?.ad_type || selectedContractForPrint.adType;
+          // العقد الفعلي للوحة: في المهام المجمعة نبحث عن العقد الذي يملك اللوحة من عقود المهمة
+          const taskContractIds = itemTask ? (derivedContractIdsByTaskId.get(itemTask.id) || [itemTask.contract_id]) : [];
+          const ownerContractId = taskContractIds.length > 1
+            ? (taskContractIds.find(cId => parseContractBillboardIds(contractById[cId]?.billboard_ids).includes(Number(item.billboard_id))) ?? itemTask?.contract_id)
+            : itemTask?.contract_id;
+          const itemContract = ownerContractId ? contractById[ownerContractId] : null;
+          const ownerAdType = taskContractIds.length > 1 ? (itemContract?.['Ad Type'] || (itemContract as any)?.ad_type || '') : '';
+          const itemDesignName = ownerAdType || matchedDesign?.design_name || (taskDesigns && taskDesigns[0]?.design_name) || itemContract?.['Ad Type'] || (itemContract as any)?.ad_type || selectedContractForPrint.adType;
           return {
             id: item.id,
             billboard_id: item.billboard_id,
@@ -3575,7 +3582,7 @@ export default function InstallationTasks() {
             installation_date: item.installation_date,
             team_id: itemTask?.team_id,
             has_cutout: item.has_cutout,
-            contract_number: itemTask?.contract_id,
+            contract_number: ownerContractId,
             ad_type: itemDesignName || selectedContractForPrint.adType || '',
             overlay_config: (item as any).overlay_config || billboardById[item.billboard_id]?.overlay_config,
           };
@@ -3605,7 +3612,7 @@ export default function InstallationTasks() {
             taskIds={selectedContractForPrint.taskIds}
             taskType={selectedContractForPrint.taskType}
             reinstallationNumber={selectedContractForPrint.reinstallationNumber}
-            contractNumberOnly={selectedContractForPrint.contractNumberOnly}
+            initialContractFilter={selectedContractForPrint.onlyContract}
           />
         );
       })()}
