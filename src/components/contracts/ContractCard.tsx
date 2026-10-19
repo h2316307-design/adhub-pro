@@ -1807,7 +1807,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
                 className="flex-1 border-border/60 hover:bg-muted cursor-pointer"
               >
                 <Printer className="h-3.5 w-3.5 ml-1 shrink-0" />
-                طباعة الكل
+                طباعة التركيب
               </Button>
             )}
             <Button

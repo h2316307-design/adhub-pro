@@ -29,7 +29,7 @@ import {
   LayoutList, Layers, FileText, X,
   ChevronLeft, ChevronRight, Building2, CalendarDays,
   Banknote, FolderOpen, MessageCircle, ExternalLink, Download, Search,
-  ArrowUpDown, ArrowUp, ArrowDown, Merge, ListChecks
+  ArrowUpDown, ArrowUp, ArrowDown, Merge, ListChecks, Hash
 } from 'lucide-react';
 import { exportInstallationTaskImagesToZip } from '@/utils/exportInstallationTaskImagesToZip';
 import { toast } from 'sonner';
@@ -75,7 +75,7 @@ interface Props {
   onAddTask: () => void;
   onRefresh: () => void;
   onPrintTask: (taskId: string) => void;
-  onPrintAll: (taskId: string | string[]) => void;
+  onPrintAll: (taskId: string | string[], options?: { contractNumberOnly?: boolean }) => void;
   onSendWhatsApp?: (taskId: string) => void;
   onDistributeDesigns: (taskId: string) => void;
   onManageDesigns: (taskId: string) => void;
@@ -598,7 +598,7 @@ const TaskCardRowInner = ({
                   size="icon"
                   onClick={() => onPrintAll(task.id)}
                   className="h-9 w-9 shrink-0 rounded-xl border-blue-500/20 text-blue-500 hover:bg-blue-500/10 hover:border-blue-500/50 shadow-sm"
-                  title="تحضير وطباعة الكل"
+                  title="تحضير وطباعة التركيب"
                 >
                   <Printer className="h-4.5 w-4.5" />
                 </Button>
@@ -872,7 +872,7 @@ const TaskCardRowInner = ({
               )}
               <ActionBtn icon={ImageIcon} label="تعديل التصاميم" onClick={() => onDistributeDesigns(task.id)} color="text-violet-400" />
               <ActionBtn icon={Palette} label="إدارة التصاميم" onClick={() => onManageDesigns(task.id)} color="text-purple-400" />
-              <ActionBtn icon={Layers} label="طباعة الكل" onClick={() => onPrintAll(task.id)} color="text-blue-400" />
+              <ActionBtn icon={Layers} label="طباعة التركيب" onClick={() => onPrintAll(task.id)} color="text-blue-400" />
               {onSendWhatsApp && (
                 <ActionBtn icon={MessageCircle} label="واتساب" onClick={() => onSendWhatsApp(task.id)} color="text-emerald-400" />
               )}
@@ -1713,7 +1713,18 @@ export const InstallationTasksTable: React.FC<Props> = ({
                               onClick={() => onPrintAll(groupTasks.map(t => t.id))}
                             >
                               <FileText className="h-3.5 w-3.5" />
-                              طباعة الكل
+                              طباعة التركيب
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              title="طباعة بطاقات اللوحات برقم العقد ونوع الإعلان فقط (بدون اسم الزبون)"
+                              className="h-8 px-2.5 rounded-xl text-[11px] font-semibold gap-1 bg-muted/30 border-border/30 text-muted-foreground hover:bg-primary/10 hover:text-primary hover:border-primary/20 transition-all"
+                              onClick={() => onPrintAll(groupTasks.map(t => t.id), { contractNumberOnly: true })}
+                            >
+                              <Hash className="h-3.5 w-3.5" />
+                              طباعة برقم العقد
                             </Button>
 
                             <Button

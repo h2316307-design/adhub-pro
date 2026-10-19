@@ -432,7 +432,7 @@ export function MobileTaskCard({
                   )}
                   <DropdownMenuItem onClick={onPrintAll} className="gap-2">
                     <FileText className="h-4 w-4" />
-                    طباعة الكل
+                    طباعة التركيب
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   {!task.print_tasks && !task.cutout_tasks && (

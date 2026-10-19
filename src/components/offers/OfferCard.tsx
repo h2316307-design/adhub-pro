@@ -210,7 +210,7 @@ export function OfferCard({
           </div>
           <div className="grid grid-cols-4 gap-2">
             <Button size="sm" variant="outline" onClick={onPrintAll} className="h-9 gap-1 rounded-lg border-border/60 text-xs font-bold">
-              <Printer className="h-3.5 w-3.5" />طباعة الكل
+              <Printer className="h-3.5 w-3.5" />طباعة التركيب
             </Button>
             {onExportExcel ? (
               <Button size="sm" variant="outline" onClick={onExportExcel} className="h-9 gap-1 rounded-lg border-border/60 text-xs font-bold">

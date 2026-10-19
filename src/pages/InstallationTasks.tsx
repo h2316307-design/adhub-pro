@@ -225,6 +225,7 @@ export default function InstallationTasks() {
     taskIds?: string[];
     taskType?: string;
     reinstallationNumber?: number | null;
+    contractNumberOnly?: boolean;
   } | null>(null);
   
   // Print settings dialog state
@@ -2749,7 +2750,7 @@ export default function InstallationTasks() {
             }}
             onAddTask={() => setAddTaskDialogOpen(true)}
             onRefresh={handleRefreshAll}
-            onPrintAll={(taskParam) => {
+            onPrintAll={(taskParam, printOptions) => {
               const taskIds = Array.isArray(taskParam) ? taskParam : [taskParam];
               const firstTaskId = taskIds[0];
               const t = tasks.find(x => x.id === firstTaskId);
@@ -2778,6 +2779,7 @@ export default function InstallationTasks() {
                 taskIds: taskIds,
                 taskType: t.task_type || 'installation',
                 reinstallationNumber: isReinstall ? (reinstallNum || 1) : null,
+                contractNumberOnly: !!printOptions?.contractNumberOnly,
               });
               setPrintAllDialogOpen(true);
             }}
@@ -3603,6 +3605,7 @@ export default function InstallationTasks() {
             taskIds={selectedContractForPrint.taskIds}
             taskType={selectedContractForPrint.taskType}
             reinstallationNumber={selectedContractForPrint.reinstallationNumber}
+            contractNumberOnly={selectedContractForPrint.contractNumberOnly}
           />
         );
       })()}

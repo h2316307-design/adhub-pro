@@ -399,7 +399,7 @@ export default function BillboardPrintSettingsNew() {
                 <Settings className="h-5 w-5 text-primary" />
               </div>
               <div>
-                <h1 className="text-lg font-bold">إعدادات طباعة الكل</h1>
+                <h1 className="text-lg font-bold">إعدادات طباعة التركيب</h1>
                 <p className="text-xs text-muted-foreground">
                   تحكم بمواقع العناصر والخطوط والألوان - مطابق للطباعة الفعلية
                 </p>
@@ -407,7 +407,7 @@ export default function BillboardPrintSettingsNew() {
             </div>
             
             <div className="flex flex-wrap items-center gap-2">
-              <Button onClick={handleSave} disabled={isSaving} className="cursor-pointer gap-2 transition-colors duration-200">{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} حفظ إعدادات طباعة الكل</Button>
+              <Button onClick={handleSave} disabled={isSaving} className="cursor-pointer gap-2 transition-colors duration-200">{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />} حفظ إعدادات طباعة التركيب</Button>
               <div className="flex items-center gap-1 bg-muted/50 rounded-lg p-1">
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setPreviewScale(Math.max(0.2, previewScale - 0.1))}>
                   <ZoomOut className="h-3 w-3" />
@@ -434,7 +434,7 @@ export default function BillboardPrintSettingsNew() {
       {/* Main Content */}
       <div className="container mx-auto space-y-4 px-4 py-4">
         <ContractSettingsNav />
-        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed">اختر عقدًا لمعاينة لوحاته، ثم اضبط نسخة العميل أو فريق التركيب. تُطبّق الإعدادات المحفوظة على خيار «طباعة الكل» في العقود والمهام.</div>
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed">اختر عقدًا لمعاينة لوحاته، ثم اضبط نسخة العميل أو فريق التركيب. تُطبّق الإعدادات المحفوظة على خيار «طباعة التركيب» في العقود والمهام.</div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
           {/* Sidebar - الإعدادات */}
           <div className="lg:col-span-1 space-y-4">

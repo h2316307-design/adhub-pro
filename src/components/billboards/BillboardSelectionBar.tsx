@@ -173,13 +173,13 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
             </Button>
           )}
 
-          {/* زر طباعة الكل (نظام أوامر التركيب الموحد) */}
+          {/* زر طباعة التركيب (نظام أوامر التركيب الموحد) */}
           <Button
             onClick={() => setPrintAllDialogOpen(true)}
             className="bg-white text-primary hover:bg-white/90 gap-2 font-bold shadow-lg cursor-pointer"
           >
             <Printer className="h-4 w-4" />
-            طباعة الكل
+            طباعة التركيب
           </Button>
 
           {/* زر طباعة الجداول */}
@@ -250,7 +250,7 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
         </div>
       </div>
 
-      {/* نافذة طباعة الكل الموحدة كما في أوامر التركيب */}
+      {/* نافذة طباعة التركيب الموحدة كما في أوامر التركيب */}
       <UnifiedPrintAllDialog
         open={printAllDialogOpen}
         onOpenChange={setPrintAllDialogOpen}
@@ -260,7 +260,7 @@ export const BillboardSelectionBar: React.FC<BillboardSelectionBarProps> = ({
         adType={selectedBillboards.length === 1 ? (selectedBillboards[0].Ad_Type || selectedBillboards[0].ad_type || '') : ''}
         items={printAllItems}
         billboards={billboardsMap}
-        title={`طباعة الكل (${selectedBillboards.length} لوحة)`}
+        title={`طباعة التركيب (${selectedBillboards.length} لوحة)`}
       />
 
       {/* نافذة إعدادات الطباعة المتقدمة المحدثة */}

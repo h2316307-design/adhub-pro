@@ -47,6 +47,7 @@ export function createPrintGeneratorFixture(overrides: Record<string, any> = {})
     resolvedTaskAdType: '', taskName: '', taskId: null, taskIds: [],
     includeDesigns: true, showDesignName: false, hideCustomerName: true, hideInstallDate: true,
     hideAdType: false, hideInstalledImages: false, showInstalledImages: false,
+    contractNumberMode: false,
     showPreviousAd: false, showSizeDimensionLabels: false, printCityInsteadOfMunicipality: false,
     showTeamInContent: false, showTeamInHeader: false, showBillboardStatusOpt: false,
     showTeamFilter: true, selectedTeamIds: new Set(['team']), teams: { team: { team_name: 'الفريق التجريبي' } },

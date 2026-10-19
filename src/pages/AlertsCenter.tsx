@@ -15,6 +15,8 @@ import {
   syncEventsToGoogleCalendar, type GoogleCalendarEvent,
 } from '@/services/googleCalendarService';
 import { whatsappBrowserRequest } from '@/lib/whatsappBrowser';
+import { supabase } from '@/integrations/supabase/client';
+import { filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
 
 /**
  * مركز تنبيهات الزبائن: الدفعات (الأقساط)، العقود (بداية/نهاية)، الفواتير — في صفحة واحدة.
@@ -43,9 +45,20 @@ export function whatsappNumber(raw?: string | null): string | null {
   return d.length >= 11 ? d : null;
 }
 
-const SIGN = '\nشاكرين تعاونكم 🌹\n*الفارس الذهبي للدعاية والإعلان*';
-const greet = (name?: string) => `السلام عليكم ورحمة الله وبركاته،\nالسادة / *${name || 'عميلنا العزيز'}* المحترمين\n`;
-const overdueText = (e: GoogleCalendarEvent) => e.isOverdue ? ` ⚠️ متأخر ${e.daysRemainingOrOverdue} يوم` : e.daysRemainingOrOverdue === 0 ? ' (اليوم)' : '';
+/* نص الرسائل بدون رموز تعبيرية: بعض أجهزة/إضافات واتساب تعرضها «�» */
+const SIGN = '\n\nمع خالص الشكر والتقدير،\n*الفارس الذهبي للدعاية والإعلان*';
+const greet = (name?: string) => `السلام عليكم ورحمة الله وبركاته،\nالسادة / *${name || 'عميلنا العزيز'}* المحترمين،\nتحية طيبة وبعد،\n`;
+const daysAr = (n: number) => n === 1 ? 'يوم واحد' : n === 2 ? 'يومان' : n <= 10 ? `${n} أيام` : `${n} يوماً`;
+const overdueText = (e: GoogleCalendarEvent) => e.isOverdue ? ` (متأخرة ${daysAr(e.daysRemainingOrOverdue)})` : e.daysRemainingOrOverdue === 0 ? ' (اليوم)' : '';
+const dateCaption = (e: GoogleCalendarEvent) => e.type === 'invoice' ? 'تاريخ الفاتورة' : e.type === 'contract_end' ? 'تاريخ الانتهاء' : e.type === 'contract_start' ? 'تاريخ البدء' : 'تاريخ الاستحقاق';
+/** عنوان البند في رسالة الزبون */
+const messageTitle = (e: GoogleCalendarEvent) => {
+  const ad = e.adType && e.type !== 'invoice' ? ` (${e.adType})` : '';
+  if (e.type === 'installment') return `دفعة مستحقة على العقد رقم ${e.contractNumber}${ad}`;
+  if (e.type === 'invoice') return alertLabel(e);
+  return alertLabel(e).replace(/ — .*$/, '') + ad;
+};
+const PAY_NOTE = 'وفي حال تم السداد مسبقاً نرجو التكرم بتجاهل هذه الرسالة، ويسعدنا تواصلكم معنا لأي استفسار.';
 
 /** وصف مختصر للتنبيه: الفاتورة تظهر بعنوانها إن وُجد */
 export function alertLabel(e: GoogleCalendarEvent): string {
@@ -54,23 +67,77 @@ export function alertLabel(e: GoogleCalendarEvent): string {
     case 'installment': return `دفعة عقد #${e.contractNumber}${ad}`;
     case 'contract_end': return `انتهاء عقد #${e.contractNumber}${ad}`;
     case 'contract_start': return `بدء عقد #${e.contractNumber}${ad}`;
-    default: return e.invoiceName ? `فاتورة «${e.invoiceName}» رقم ${e.invoiceNumber || ''}`.trim() : `فاتورة رقم ${e.invoiceNumber || ''}`.trim();
+    default: {
+      const num = e.invoiceNumber ? ` رقم ${e.invoiceNumber}` : '';
+      const contract = e.contractNumber ? ` — عقد #${e.contractNumber}` : '';
+      if (e.invoiceName?.startsWith('فاتورة')) return `${e.invoiceName}${num}${contract}`;
+      return (e.invoiceName ? `فاتورة «${e.invoiceName}»${num}` : `فاتورة${num}`) + contract;
+    }
   }
 }
 
 function messageFor(e: GoogleCalendarEvent): string {
   const head = greet(e.customerName);
-  const date = `📅 ${e.type === 'contract_end' ? 'تاريخ الانتهاء' : e.type === 'contract_start' ? 'تاريخ البدء' : 'تاريخ الاستحقاق'}: ${dmy(e.startDate)}${overdueText(e)}`;
-  const amount = e.amount ? `\n💰 المبلغ: *${fmt(e.amount)}*` : '';
+  const date = `${dateCaption(e)}: ${dmy(e.startDate)}${overdueText(e)}`;
+  const amount = e.amount ? `\nالمبلغ المستحق: *${fmt(e.amount)}*` : '';
   switch (e.type) {
     case 'installment':
     case 'invoice':
-      return `${head}\nنود تذكيركم بالمستحق التالي:\n\n📄 ${alertLabel(e)}${amount}\n${date}\n\n${e.isOverdue ? 'نرجو التكرم بالسداد في أقرب وقت ممكن.' : 'نرجو التكرم بالسداد في موعده.'}${SIGN}`;
+      return `${head}\nنود تذكيركم بالمستحق التالي على حسابكم لدينا:\n\n*${messageTitle(e)}*${amount}\n${date}\n\n${e.isOverdue ? 'نرجو التكرم بتسوية هذا المبلغ في أقرب وقت ممكن.' : 'نرجو التكرم بالسداد في الموعد المحدد.'}\n${PAY_NOTE}${SIGN}`;
     case 'contract_end':
-      return `${head}\nنحيطكم علماً بقرب انتهاء:\n\n📄 ${alertLabel(e)}\n${date}\n\nيسعدنا تجديد التعاقد أو الإجابة عن أي استفسار.${SIGN}`;
+      return `${head}\nنود إحاطتكم علماً بقرب انتهاء:\n\n*${messageTitle(e)}*\n${date}\n\nيسعدنا تجديد التعاقد معكم أو الإجابة عن أي استفسار.${SIGN}`;
     default:
-      return `${head}\nنؤكد لكم:\n\n📄 ${alertLabel(e)}\n${date}\n\nشكراً لثقتكم بنا.${SIGN}`;
+      return `${head}\nنود إحاطتكم علماً بموعد:\n\n*${messageTitle(e)}*\n${date}\n\nشكراً لثقتكم بنا.${SIGN}`;
   }
+}
+
+/**
+ * الفواتير غير المسددة خارج فواتير المبيعات: فواتير الطباعة وفواتير المهام (طباعة/تركيب/قص).
+ * فاتورة الطباعة المرتبطة بمهمة مجمعة تُستبعد لأن المهمة نفسها تمثلها (تفادي التكرار).
+ */
+async function loadUnpaidTaskInvoices(): Promise<GoogleCalendarEvent[]> {
+  const [printedRes, ctRes, ptRes, cutRes] = await Promise.all([
+    supabase.from('printed_invoices').select('id, invoice_number, customer_id, customer_name, total_amount, paid_amount, created_at, invoice_date, contract_number, invoice_type').eq('paid', false),
+    supabase.from('composite_tasks').select('id, task_number, task_type, customer_id, customer_name, customer_total, paid_amount, created_at, contract_id, combined_invoice_id, print_task_id, cutout_task_id, installation_task_id').neq('status', 'cancelled'),
+    supabase.from('print_tasks').select('id, invoice_id, composite_task_id'),
+    supabase.from('cutout_tasks').select('id, invoice_id'),
+  ]);
+  const err = printedRes.error || ctRes.error || ptRes.error || cutRes.error;
+  if (err) throw err;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const build = (o: { id: string; tag: string; number: string; name: string; date: string; customerId?: string | null; customerName?: string | null; amount: number; contract?: number | null }): GoogleCalendarEvent | null => {
+    if (o.amount <= 0.5 || !o.date || !Number.isFinite(Date.parse(o.date))) return null;
+    const d = new Date(o.date); d.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((today.getTime() - d.getTime()) / 86_400_000);
+    return {
+      id: o.id, tag: o.tag, type: 'invoice', title: `${o.name}: ${o.customerName || ''} - ${fmt(o.amount)}`,
+      description: [`${o.name}${o.number ? ` رقم ${o.number}` : ''}`, `العميل: ${o.customerName || ''}`, o.contract ? `رقم العقد: #${o.contract}` : '', `المبلغ المتبقي: ${fmt(o.amount)}`].filter(Boolean).join('\n'),
+      startDate: o.date.slice(0, 10), allDay: false,
+      invoiceNumber: o.number, invoiceName: o.name, customerId: o.customerId, customerName: o.customerName || 'عميل غير محدد',
+      contractNumber: o.contract ?? undefined, amount: o.amount, daysRemainingOrOverdue: diff, isOverdue: diff > 0, isContractActive: true,
+      statusText: diff > 0 ? `متأخرة ${diff} يوم` : 'حديثة',
+    };
+  };
+  const ctLabel = (t?: string) => {
+    const s = String(t || '');
+    const p = /print/.test(s), i = /install/.test(s), c = /cutout/.test(s);
+    if (s === 'reinstallation') return 'فاتورة إعادة تركيب';
+    return 'فاتورة ' + ([p && 'طباعة', i && 'تركيب', c && 'قص'].filter(Boolean).join(' و') || 'أعمال');
+  };
+  const printed = filterCompositeRelatedPrintedInvoices(printedRes.data || [], ctRes.data || [], ptRes.data || [], cutRes.data || []);
+  const events = [
+    ...printed.map((r: any) => build({
+      id: `pinv-${r.id}`, tag: `[ADHUB:PINV:${r.id}]`, number: String(r.invoice_number || ''), name: 'فاتورة طباعة',
+      date: r.invoice_date || r.created_at, customerId: r.customer_id, customerName: r.customer_name,
+      amount: (Number(r.total_amount) || 0) - (Number(r.paid_amount) || 0), contract: r.contract_number ? Number(r.contract_number) : null,
+    })),
+    ...(ctRes.data || []).map((r: any) => build({
+      id: `ct-${r.id}`, tag: `[ADHUB:CT:${r.id}]`, number: r.task_number ? String(r.task_number) : '', name: ctLabel(r.task_type),
+      date: r.created_at, customerId: r.customer_id, customerName: r.customer_name,
+      amount: (Number(r.customer_total) || 0) - (Number(r.paid_amount) || 0), contract: r.contract_id ? Number(r.contract_id) : null,
+    })),
+  ];
+  return events.filter((e): e is GoogleCalendarEvent => !!e);
 }
 
 /* سجل الإرسال اليدوي على هذا الجهاز (لمعرفة ما أُرسل) */
@@ -99,7 +166,10 @@ export default function AlertsCenter() {
       const config = await getCalendarConfig();
       const r = await loadCalendarRecords();
       const designs = buildContractDesignsMap(r.compositeTasks, r.taskDesigns, r.directInstallationTasks);
-      const events = extractCalendarEvents(r.contracts, r.payments, { ...config, activeAndUpcomingOnly: false }, r.invoices || [], r.installations || [], r.customers || [], designs);
+      // فواتير المبيعات المسددة لا تُعد تنبيهاً
+      const salesEvents = extractCalendarEvents(r.contracts, r.payments, { ...config, activeAndUpcomingOnly: false }, r.invoices || [], r.installations || [], r.customers || [], designs)
+        .filter(e => e.type !== 'invoice' || (Number(e.amount) || 0) > 0.5);
+      const events = [...salesEvents, ...(await loadUnpaidTaskInvoices())];
       const phones = new Map<string, string>((r.customers || []).map((c: any) => [c.id, c.phone]));
       return { config, events, phones };
     },
@@ -165,10 +235,11 @@ export default function AlertsCenter() {
 
   /** رسالة واحدة للزبون تجمع كل تنبيهاته في التبويب الحالي */
   const groupMessage = (items: GoogleCalendarEvent[]) => {
-    const lines = items.map((e, i) => `${i + 1}) ${alertLabel(e)}\n   ${e.amount ? `💰 ${fmt(e.amount)} — ` : ''}📅 ${dmy(e.startDate)}${overdueText(e)}`);
+    const lines = items.map((e, i) => `*${i + 1}- ${messageTitle(e)}*${e.amount ? `\nالمبلغ: ${fmt(e.amount)}` : ''}\n${dateCaption(e)}: ${dmy(e.startDate)}${overdueText(e)}`);
     const total = items.reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
-    const anyOverdue = items.some(e => e.isOverdue);
-    return `${greet(items[0]?.customerName)}\nنود تذكيركم بما يلي:\n\n${lines.join('\n\n')}${total ? `\n\n*الإجمالي: ${fmt(total)}*` : ''}\n\n${anyOverdue ? 'نرجو التكرم بتسوية المستحقات المتأخرة في أقرب وقت ممكن.' : 'نرجو التكرم بالسداد في المواعيد المحددة.'}${SIGN}`;
+    const overdueTotal = items.filter(e => e.isOverdue).reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
+    const totals = total ? `\n\n------------------------------\n*إجمالي المستحق: ${fmt(total)}*${overdueTotal && overdueTotal !== total ? `\nمنها متأخر السداد: *${fmt(overdueTotal)}*` : ''}` : '';
+    return `${greet(items[0]?.customerName)}\nنود تذكيركم بالمستحقات التالية على حسابكم لدينا:\n\n${lines.join('\n\n')}${totals}\n\n${overdueTotal ? 'نرجو التكرم بتسوية المبالغ المتأخرة في أقرب وقت ممكن.' : 'نرجو التكرم بالسداد في المواعيد المحددة.'}\n${PAY_NOTE}${SIGN}`;
   };
   const openWhatsAppGroup = (items: GoogleCalendarEvent[]) => {
     const phone = whatsappNumber(data?.phones.get(String(items[0]?.customerId)));
