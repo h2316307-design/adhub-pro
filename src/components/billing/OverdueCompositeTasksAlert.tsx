@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import { useSendWhatsApp } from '@/hooks/useSendWhatsApp';
+import { getCurrentOperationInstallationCost } from '@/lib/compositeTaskOperation';
 
 interface OverdueCompositeTask {
   id: string;
@@ -42,7 +43,7 @@ export function OverdueCompositeTasksAlert() {
 
       const { data: tasks, error } = await supabase
         .from('composite_tasks')
-        .select('id, task_number, task_type, customer_name, customer_total, paid_amount, created_at, status, contract_id, installation_task_id')
+        .select('id, task_number, task_type, customer_id, customer_name, customer_total, customer_print_cost, customer_cutout_cost, discount_amount, paid_amount, created_at, status, contract_id, installation_task_id')
         .not('status', 'eq', 'cancelled');
 
       if (error) {
@@ -81,14 +82,13 @@ export function OverdueCompositeTasksAlert() {
         const installItems = installItemsRes.data || [];
         const installTasksData = installTasksRes.data || [];
 
-        // حساب تكاليف التركيب الحقيقية لكل مهمة
+        // تكلفة التركيب من البنود (احتياطي عند غياب customer_total) — إعادة التركيب بتكلفتها وحدها
+        const taskTypeByInstallTaskId = new Map<string, string>();
+        (tasks || []).forEach(t => {
+          if (t.installation_task_id) taskTypeByInstallTaskId.set(t.installation_task_id, t.task_type);
+        });
         installItems.forEach((row: any) => {
-          const isReinstalled = (row.reinstall_count || 0) > 0;
-          const origCost = Number(row.customer_original_install_cost) || Number(row.customer_installation_cost) || 0;
-          const reinstallCost = isReinstalled
-            ? (Number(row.customer_reinstall_cost) || Number(row.customer_installation_cost) || 0)
-            : 0;
-          const itemCost = isReinstalled ? (origCost + reinstallCost) : Number(row.customer_installation_cost) || 0;
+          const itemCost = getCurrentOperationInstallationCost(row, taskTypeByInstallTaskId.get(row.task_id));
           realInstallMap.set(row.task_id, (realInstallMap.get(row.task_id) || 0) + itemCost);
         });
 
@@ -149,9 +149,11 @@ export function OverdueCompositeTasksAlert() {
         const realInstallTotal = task.installation_task_id && realInstallMap.has(task.installation_task_id)
           ? realInstallMap.get(task.installation_task_id)!
           : null;
-        const customerTotal = realInstallTotal !== null
-          ? (realInstallTotal + (Number(task.customer_print_cost) || 0) + (Number(task.customer_cutout_cost) || 0) - (Number(task.discount_amount) || 0))
-          : (Number(task.customer_total) || 0);
+        // customer_total هو الإجمالي المعتمد (نفسه في كشف حساب الزبون)
+        const storedTotal = Number(task.customer_total) || 0;
+        const customerTotal = storedTotal > 0 || realInstallTotal === null
+          ? storedTotal
+          : (realInstallTotal + (Number(task.customer_print_cost) || 0) + (Number(task.customer_cutout_cost) || 0) - (Number(task.discount_amount) || 0));
         const paidAmount = Number(task.paid_amount) || 0;
         const remaining = customerTotal - paidAmount;
         

@@ -1,5 +1,5 @@
 export function normalizePhone(input) {
-  let value = String(input || '').replace(/[٠-٩]/g, c => String(c.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, c => String(c.charCodeAt(0) - 1776)).replace(/[\s()+.-]/g, '');
+  let value = String(input || '').replace(/[٠-٩]/g, c => String(c.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, c => String(c.charCodeAt(0) - 1776)).replace(/[\s()+.\-‎‏‪-‮⁦-⁩]/g, '');
   if (value.startsWith('00')) value = value.slice(2);
   if (/^0\d{9}$/.test(value)) value = '218' + value.slice(1);
   else if (/^9\d{8}$/.test(value)) value = '218' + value;

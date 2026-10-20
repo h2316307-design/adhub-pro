@@ -23,6 +23,7 @@ import { useSendWhatsApp } from "@/hooks/useSendWhatsApp";
 import { useSendTextly } from "@/hooks/useSendTextly";
 import { supabase } from "@/integrations/supabase/client";
 import { DEFAULT_CONTRACT_EXPIRY_TEMPLATE, DEFAULT_OVERDUE_SUMMARY_TEMPLATE, DEFAULT_OVERDUE_MINIMAL_TEMPLATE, applyOverdueTemplate } from "@/utils/messageTemplates";
+import { loadCustomerOverdueInvoices, type CustomerAccountOverdue } from "@/services/overdueInvoices";
 import {
   Send,
   Loader2,
@@ -105,12 +106,15 @@ interface OverdueInstallment {
 
 interface UnpaidPrintInvoice {
   invoiceId: string;
-  contractNumber: number;
+  contractNumber: number | string | null;
   customerName: string;
   customerId: string | null;
   amount: number;
   createdAt: string;
   daysOverdue: number;
+  title?: string;
+  invoiceNumber?: string;
+  adType?: string;
 }
 
 interface CustomerOverdue {
@@ -121,7 +125,80 @@ interface CustomerOverdue {
   oldestDaysOverdue: number;
   installments: OverdueInstallment[];
   unpaidInvoices: UnpaidPrintInvoice[];
+  /** ما خُصم من (الدفعات + الفواتير) ليطابق المتبقي في كشف الحساب */
+  creditApplied?: number;
   phone?: string;
+}
+
+const invoiceTitleOf = (inv: CustomerAccountOverdue['invoices'][number]) => {
+  if (inv.type === 'printed') return inv.notes ? `فاتورة طباعة (${inv.notes})` : 'فاتورة طباعة';
+  if (inv.type === 'sales') return inv.invoiceName ? `فاتورة مبيعات - ${inv.invoiceName}` : 'فاتورة مبيعات';
+  return inv.invoiceTitle || 'فاتورة خدمات';
+};
+
+// دمج فواتير الزبائن المتأخرة مع دفعات العقود المتأخرة لكل زبون
+function mergeInvoiceOverdues(
+  base: CustomerOverdue[],
+  invoiceCustomers: CustomerAccountOverdue[],
+  includeInvoiceOnly: boolean,
+): CustomerOverdue[] {
+  if (invoiceCustomers.length === 0) return base;
+  const byKey = new Map(invoiceCustomers.map(c => [c.customerId || c.customerName, c]));
+  const used = new Set<string>();
+
+  const attach = (c: CustomerOverdue, inv: CustomerAccountOverdue): CustomerOverdue => {
+    const unpaidInvoices: UnpaidPrintInvoice[] = inv.invoices.map(i => ({
+      invoiceId: i.invoiceId,
+      contractNumber: i.contractNumber,
+      customerName: i.customerName,
+      customerId: i.customerId,
+      amount: i.amount,
+      createdAt: i.createdAt,
+      daysOverdue: i.daysOverdue,
+      title: invoiceTitleOf(i),
+      invoiceNumber: i.type === 'sales' && i.invoiceNumber ? `رقم ${i.invoiceNumber}` : i.invoiceNumber,
+      adType: i.adType,
+    }));
+    const installmentsTotal = c.installments.reduce((s, i) => s + i.installmentAmount, 0);
+    const invoicesSum = unpaidInvoices.reduce((s, i) => s + i.amount, 0);
+    // الإجمالي لا يتجاوز المتبقي الفعلي في كشف الحساب (رصيد/مقاصات/إيجارات صديقة)
+    const gross = installmentsTotal + invoicesSum;
+    const totalOverdue = inv.accountRemaining != null
+      ? Math.max(0, Math.min(gross, inv.accountRemaining))
+      : installmentsTotal + inv.totalOverdue;
+    return {
+      ...c,
+      unpaidInvoices,
+      creditApplied: Math.max(0, gross - totalOverdue),
+      totalOverdue,
+      overdueCount: c.installments.length + unpaidInvoices.length,
+      oldestDaysOverdue: Math.max(c.oldestDaysOverdue, ...unpaidInvoices.map(i => i.daysOverdue)),
+    };
+  };
+
+  const merged = base.map(c => {
+    const key = c.customerId || c.customerName;
+    const inv = byKey.get(key) || (c.customerId ? undefined : byKey.get(c.customerName));
+    if (!inv) return c;
+    used.add(inv.customerId || inv.customerName);
+    return attach(c, inv);
+  });
+
+  if (includeInvoiceOnly) {
+    for (const inv of invoiceCustomers) {
+      if (used.has(inv.customerId || inv.customerName)) continue;
+      merged.push(attach({
+        customerId: inv.customerId,
+        customerName: inv.customerName,
+        totalOverdue: 0,
+        overdueCount: 0,
+        oldestDaysOverdue: 0,
+        installments: [],
+        unpaidInvoices: [],
+      }, inv));
+    }
+  }
+  return merged.filter(c => c.totalOverdue > 0.5);
 }
 
 interface ManagementPhone {
@@ -219,7 +296,7 @@ function ManualOverdueRow({
               <div className="flex items-center gap-1.5 sm:gap-2 mb-1 flex-wrap">
                 <span className={`font-bold text-xs sm:text-sm truncate ${hasColor ? 'text-white' : ''}`}>{customer.customerName}</span>
                 <Badge variant="secondary" className={`text-[9px] sm:text-[10px] shrink-0 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
-                  {customer.overdueCount} دفعة
+                  {customer.overdueCount} بند
                 </Badge>
                 <Badge variant="outline" className={`text-[9px] sm:text-[10px] shrink-0 gap-1 ${hasColor ? 'bg-white/20 text-white border-white/30' : ''}`}>
                   <Clock className="h-2.5 w-2.5" />
@@ -323,18 +400,39 @@ export function SendOverdueRemindersDialog({
   const open = controlledOpen !== undefined ? controlledOpen : internalOpen;
   const setOpen = setControlledOpen !== undefined ? setControlledOpen : setInternalOpen;
   
-  const customerOverdues = propCustomerOverdues || loadedCustomerOverdues;
+  const [invoiceOverdues, setInvoiceOverdues] = useState<CustomerAccountOverdue[]>([]);
+
+  const baseCustomerOverdues = propCustomerOverdues || loadedCustomerOverdues;
+  // عند فتح الحوار لزبون واحد لا نضيف زبائن آخرين لديهم فواتير فقط
+  const includeInvoiceOnly = !(propCustomerOverdues && propCustomerOverdues.length === 1);
+  const customerOverdues = useMemo(
+    () => mergeInvoiceOverdues(baseCustomerOverdues, invoiceOverdues, includeInvoiceOnly),
+    [baseCustomerOverdues, invoiceOverdues, includeInvoiceOnly],
+  );
+  const customerOverduesSignature = customerOverdues
+    .map(c => `${c.customerId || c.customerName}:${Math.round(c.totalOverdue)}:${c.unpaidInvoices.length}`)
+    .join('|');
 
   useEffect(() => {
     if (open) {
       if (!propCustomerOverdues) {
         loadAllCustomerOverdues();
       }
-      loadCustomerPhones();
       loadManagementPhones();
       loadTemplate();
+      loadCustomerOverdueInvoices()
+        .then(setInvoiceOverdues)
+        .catch((e) => {
+          console.error('Error loading overdue invoices:', e);
+          toast.error('تعذر تحميل الفواتير المتأخرة');
+        });
     }
   }, [open, propCustomerOverdues]);
+
+  // إعادة تحميل الهواتف كلما تغيرت قائمة الزبائن (بعد دمج الفواتير)
+  useEffect(() => {
+    if (open) loadCustomerPhones();
+  }, [open, customerOverduesSignature]);
 
   // Generate messages when data/mode changes
   useEffect(() => {
@@ -384,7 +482,7 @@ export function SendOverdueRemindersDialog({
     if (customerOverdues.length > 0) {
       loadContractDesigns();
     }
-  }, [customerOverdues]);
+  }, [customerOverduesSignature]);
 
   const loadContractDesigns = async () => {
     // جمع كل أرقام العقود من الزبائن المتأخرين
@@ -752,13 +850,25 @@ export function SendOverdueRemindersDialog({
     }
 
     if (customer.unpaidInvoices.length > 0) {
-      details += `\n*فواتير إضافية غير مسددة:*\n`;
+      details += `\n*فواتير غير مسددة:*\n`;
       const sortedUnpaidInvoices = [...customer.unpaidInvoices].sort((a, b) => b.daysOverdue - a.daysOverdue);
       sortedUnpaidInvoices.forEach((inv, idx) => {
-        details += `${idx + 1}. عقد #${inv.contractNumber}\n`;
-        details += `   المبلغ: ${formatAmount(inv.amount)} د.ل\n`;
-        details += `   مدة التأخير: ${inv.daysOverdue} يوم\n`;
+        const refs = [
+          inv.invoiceNumber,
+          inv.contractNumber != null && inv.contractNumber !== '' ? `عقد #${String(inv.contractNumber).split(',').join('، #')}` : '',
+          inv.adType,
+        ].filter(Boolean);
+        details += `\n${idx + 1}. ${inv.title || 'فاتورة'}${refs.length ? ` (${refs.join(' - ')})` : ''}\n`;
+        details += `   - المبلغ: ${formatAmount(inv.amount)} د.ل\n`;
+        details += `     تاريخ الإصدار: ${new Date(inv.createdAt).toLocaleDateString('ar-LY')}\n`;
+        details += `     التأخير: ${inv.daysOverdue} يوم\n`;
       });
+    }
+
+    // مطابقة الإجمالي مع كشف الحساب عند وجود رصيد أو مقاصات لصالح الزبون
+    if ((customer.creditApplied || 0) > 0.5) {
+      const gross = customer.totalOverdue + customer.creditApplied!;
+      details += `\nالمجموع: ${formatAmount(gross)} د.ل، يُخصم رصيد ومقاصات حسابكم ${formatAmount(customer.creditApplied!)} د.ل\n`;
     }
 
     return applyOverdueTemplate(overdueTemplate, {
@@ -1182,7 +1292,7 @@ export function SendOverdueRemindersDialog({
                                   <div className="font-medium text-sm truncate">{customer.customerName}</div>
                                   <div className="text-xs text-muted-foreground flex items-center gap-2">
                                     <span>{customer.phone}</span>
-                                    <span>• {customer.overdueCount} دفعة</span>
+                                    <span>• {customer.overdueCount} بند</span>
                                     <span>• أقدم تأخير: {customer.oldestDaysOverdue} يوم</span>
                                   </div>
                                 </div>
