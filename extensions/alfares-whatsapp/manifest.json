@@ -1,12 +1,58 @@
 {
   "manifest_version": 3,
   "name": "الفارس — إرسال واتساب",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "minimum_chrome_version": "120",
-  "description": "إرسال الرسائل المحددة في نظام الفارس عبر جلسة واتساب ويب المفتوحة.",
-  "permissions": ["activeTab", "scripting", "storage", "alarms"],
-  "host_permissions": ["https://web.whatsapp.com/*"],
-  "action": { "default_popup": "popup.html", "default_title": "الفارس — إرسال واتساب" },
-  "background": { "service_worker": "background.js", "type": "module" },
-  "content_scripts": [{ "matches": ["https://web.whatsapp.com/*"], "js": ["whatsapp.js"], "run_at": "document_idle" }]
+  "description": "إرسال صامت وتلقائي لرسائل نظام الفارس عبر جلسة واتساب ويب المفتوحة، بدون إعادة تحميل.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://web.whatsapp.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "الفارس — إرسال واتساب"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://localhost/*",
+        "http://127.0.0.1/*",
+        "https://billboard-booking.com/*",
+        "https://*.billboard-booking.com/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "whatsapp.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://web.whatsapp.com/*"
+      ],
+      "js": [
+        "vendor/wppconnect-wa.js",
+        "wa-main.js"
+      ],
+      "world": "MAIN",
+      "run_at": "document_end"
+    }
+  ]
 }

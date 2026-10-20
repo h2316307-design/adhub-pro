@@ -16,6 +16,12 @@ export function pricingPrintStyles(theme: 'light' | 'dark') {
     .page::before { content: ''; position: absolute; z-index: -1; left: -15mm; bottom: -10mm; width: 120mm; height: 155mm; background: url('/pricing-knight-watermark.svg') no-repeat center / contain; filter: grayscale(1); opacity: .07; }
     .page::after { content: ''; position: absolute; bottom: 0; right: 0; left: 0; height: 4mm; background: linear-gradient(100deg, #ece260, #d4ad27 55%); }
     .page-content { min-height: 297mm; padding: 4.5mm 6mm 4mm 6mm; display: grid; grid-template-rows: auto auto 1fr auto; gap: 2mm; box-sizing: border-box; }
+    .page-content.rules-top { grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
+    .page-content.rules-bottom { grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+    .pricing-rules-note { color: var(--ink); border: .3mm solid var(--gold); background: var(--paper); padding: 2mm 3mm; font-size: 9pt; line-height: 1.6; break-inside: avoid; }
+    .pricing-rules-note strong { display: block; font-weight: 700; }
+    .pricing-rules-note div { display: flex; flex-direction: column; gap: .5mm; }
+    .pricing-rules-note span { display: inline-block; }
     .header { display: flex; flex-direction: row-reverse; align-items: center; justify-content: space-between; gap: 6mm; padding-bottom: 2mm; border-bottom: .45mm solid var(--gold); }
     .logo-area { width: 44%; min-width: 0; flex-shrink: 1; ${dark ? 'background: #fff; border-radius: 2mm; padding: 2mm;' : ''} }
     .logo { display: block; width: 100%; height: 30mm; object-fit: contain; }

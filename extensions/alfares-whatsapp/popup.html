@@ -1,9 +1,39 @@
-<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><title>الفارس — إرسال واتساب</title><link rel="stylesheet" href="popup.css"></head><body>
-<h1>إرسال واتساب</h1><p>يستخدم جلسة واتساب ويب المفتوحة في هذا المتصفح.</p>
-<button id="connect">ربط صفحة النظام المفتوحة</button><p id="connection"></p>
-<p id="error" role="alert"></p><section id="batch" hidden>
-<h2 id="summary"></h2><p>راجع الأسماء والأرقام والرسائل. اترك تبويب واتساب للإضافة حتى تنتهي الدفعة. فاصل الإرسال 15 ثانية.</p>
-<label for="tabs">تبويب واتساب</label><select id="tabs"></select>
-<div class="actions"><button id="start">بدء الإرسال للمستلمين المعروضين</button><button id="pause">إيقاف مؤقت</button><button id="cancel">إلغاء المتبقي</button><button id="clear">مسح سجل الدفعة</button></div>
-<p>عند الإيقاف قد تكتمل الرسالة الجاري إرسالها. الحالات غير المؤكدة لا تُرسل مرة أخرى تلقائيًا. «أُرسلت» تعني تأكيد واتساب للإرسال، ولا تعني أن المستلم قرأها.</p>
-<div id="recipients"></div></section><script src="popup.js" type="module"></script></body></html>
+<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>الفارس — واتساب</title><link rel="stylesheet" href="popup.css"></head><body>
+<header class="top">
+  <div class="brand"><span class="logo" aria-hidden="true">ف</span><div><h1>الفارس · واتساب</h1><p class="muted">إرسال تلقائي من واتساب ويب</p></div></div>
+</header>
+<section class="status" aria-label="حالة الاتصال">
+  <div class="pill" id="systemPill"><span class="dot"></span><span>النظام</span></div>
+  <div class="pill" id="waPill"><span class="dot"></span><span>واتساب ويب</span></div>
+  <button id="openWa" class="ghost small" hidden>فتح واتساب ويب</button>
+</section>
+<p id="error" class="alert" role="alert" hidden></p>
+<p id="notice" class="notice" hidden></p>
+
+<section id="empty" class="card">
+  <h2>لا توجد دفعة حاليًا</h2>
+  <ol class="steps"><li>افتح واتساب ويب وسجّل الدخول.</li><li>من النظام: اختر المستلمين ثم «إرسال تلقائي».</li><li>تابع التقدم هنا أو في النظام.</li></ol>
+</section>
+
+<section id="batch" class="card" hidden>
+  <div class="row between"><h2 id="stateText"></h2><span id="countText" class="muted"></span></div>
+  <div class="bar"><div id="barFill"></div></div>
+  <div class="stats"><div><strong id="sentN">0</strong><span>أُرسلت</span></div><div><strong id="failN">0</strong><span>تعذرت</span></div><div><strong id="leftN">0</strong><span>متبقية</span></div></div>
+  <label id="tabsWrap" hidden>تبويب واتساب<select id="tabs"></select></label>
+  <div class="actions">
+    <button id="start" class="primary">بدء الإرسال</button>
+    <button id="pause">إيقاف مؤقت</button>
+    <button id="retry" hidden>إعادة الفاشلة</button>
+    <button id="cancel" class="danger">إلغاء المتبقي</button>
+    <button id="clear" class="ghost">مسح السجل</button>
+  </div>
+  <div id="recipients" class="list"></div>
+</section>
+
+<section class="card">
+  <h2>الإعدادات</h2>
+  <label class="row between">الفاصل بين الرسائل<select id="delay"><option value="5">5 ثوانٍ</option><option value="10">10 ثوانٍ</option><option value="15">15 ثانية</option><option value="20">20 ثانية</option><option value="30">30 ثانية</option><option value="60">دقيقة</option></select></label>
+  <p class="muted small">الإرسال صامت من تبويب واتساب ويب المفتوح دون إعادة تحميله، ويمكن تركه في الخلفية. فاصل أطول يقلل احتمال تقييد الحساب.</p>
+  <details><summary>ربط صفحة أخرى يدويًا</summary><p class="muted small">صفحات النظام على localhost و billboard-booking.com مرتبطة تلقائيًا. لغيرها افتح الصفحة ثم اضغط:</p><button id="connect" class="ghost">ربط الصفحة المفتوحة</button><p id="connection" class="muted small"></p></details>
+</section>
+<script src="popup.js" type="module"></script></body></html>

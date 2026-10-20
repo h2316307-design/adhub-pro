@@ -30,9 +30,19 @@ export function expiryMessage(contract:ExpiryContract,template:string):string {
   const start=dateDay(contract.startDate),end=dateDay(contract.endDate);
   return applyContractExpiryAlertTemplate(template,{customerName:contract.name,contractNumber:contract.number,adType:contract.adType,startDate:contract.startDate,endDate:contract.endDate,daysLeft:contract.days,duration:start!==null&&end!==null?`${end-start} يوم`:String(contract.source.Duration||contract.source.duration||'')});
 }
+function arabicDate(value:string){const day=dateDay(value);return day===null?(value||'غير محدد'):new Date(day*86400000).toLocaleDateString('ar-LY',{timeZone:'UTC'});}
+function contractDuration(contract:ExpiryContract){const start=dateDay(contract.startDate),end=dateDay(contract.endDate);return start!==null&&end!==null?`${end-start} يوم`:'';}
+/** One message per customer: greeting and closing once, then a short block per contract (no repeated full letters). */
+export function combinedExpiryMessage(name:string,contracts:ExpiryContract[]):string {
+  const rows=[...contracts].sort((a,b)=>a.days-b.days);
+  const expired=rows.some(row=>row.days<0),upcoming=rows.some(row=>row.days>=0);
+  const intro=expired&&upcoming?'نود تذكيركم بأن لديكم عقودًا انتهت وأخرى قاربت على الانتهاء:':expired?'نود تذكيركم بأن العقود التالية قد انتهت:':'نود تذكيركم بأن العقود التالية قاربت على الانتهاء:';
+  const blocks=rows.map((row,index)=>{const duration=contractDuration(row);return [`${index+1}) عقد رقم ${row.number} — ${row.adType}`,`   من ${arabicDate(row.startDate)} إلى ${arabicDate(row.endDate)}${duration?` (${duration})`:''}`,`   الحالة: ${expiryLabel(row.days)}`].join('\n');});
+  return ['السلام عليكم ورحمة الله وبركاته','',`السيد/ ${name} المحترم،`,'',intro,'━━━━━━━━━━━━━━━━━',blocks.join('\n\n'),'━━━━━━━━━━━━━━━━━',`عدد العقود: ${rows.length}`,'','نأمل التواصل معنا لتجديد العقود.','','نشكر لكم حسن تعاونكم،','مع فائق التقدير والاحترام'].join('\n');
+}
 // Group by customer identity, not phone: never combine unrelated customers' contract data.
 export function expiryRecipients(contracts:ExpiryContract[],template:string,phones:Map<string,string>):BrowserRecipient[] {
-  const groups=new Map<string,{contract:ExpiryContract;messages:string[]}>();
-  for(const contract of contracts){const key=contract.customerId?`customer:${contract.customerId}`:`contract:${contract.number}`;const existing=groups.get(key);if(existing)existing.messages.push(expiryMessage(contract,template));else groups.set(key,{contract,messages:[expiryMessage(contract,template)]});}
-  return [...groups.entries()].map(([id,{contract,messages}])=>({id,name:contract.name,phone:phones.get(contract.customerId)||contract.phone,message:messages.join('\n\n--------------------\n\n')}));
+  const groups=new Map<string,ExpiryContract[]>();
+  for(const contract of contracts){const key=contract.customerId?`customer:${contract.customerId}`:`contract:${contract.number}`;groups.set(key,[...(groups.get(key)||[]),contract]);}
+  return [...groups.entries()].map(([id,rows])=>({id,name:rows[0].name,phone:phones.get(rows[0].customerId)||rows[0].phone,message:rows.length===1?expiryMessage(rows[0],template):combinedExpiryMessage(rows[0].name,rows)}));
 }

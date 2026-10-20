@@ -1,24 +1,49 @@
 const $=id=>document.getElementById(id);
-const labels={pending:'بانتظار الإرسال',loading:'تجهيز المحادثة',clicking:'جارٍ التحقق',sent:'أُرسلت',error:'تعذر الإرسال',unknown:'غير مؤكدة — راجع المحادثة',cancelled:'أُلغيت',review:'مراجعة الدفعة',running:'الإرسال جارٍ',paused:'متوقفة مؤقتًا',complete:'اكتملت الدفعة'};
+const labels={pending:'بالانتظار',loading:'تجهيز المحادثة',clicking:'جارٍ الإرسال',sent:'أُرسلت',error:'تعذرت',unknown:'غير مؤكدة',cancelled:'أُلغيت',review:'جاهزة للبدء',running:'الإرسال جارٍ…',paused:'متوقفة مؤقتًا',complete:'اكتملت الدفعة'};
 const request=async(action,extra={})=>{const result=await chrome.runtime.sendMessage({channel:'alfares',action,...extra});if(!result?.ok)throw new Error(result?.error||'تعذر الاتصال');return result;};
+const showError=message=>{$('error').hidden=!message;$('error').textContent=message||'';};
 let lastRender='';
+function pill(id,ok,text){$(id).className=`pill ${ok?'ok':'bad'}`;$(id).querySelector('span:last-child').textContent=text;}
 async function refresh(){
-  const result=await request('STATUS');$('connection').textContent=result.origin?`الصفحة المرتبطة: ${result.origin}`:'لا توجد صفحة مرتبطة.';
-  const batch=result.batch;$('batch').hidden=!batch;if(!batch)return;
-  $('summary').textContent=`${labels[batch.state]||batch.state} · ${batch.items.filter(i=>i.status==='sent').length} / ${batch.items.length}`;
-  const active=batch.items.some(i=>['loading','clicking'].includes(i.status));
-  $('start').disabled=!['review','paused'].includes(batch.state)||active;
-  $('start').textContent=batch.state==='paused'?'استئناف الرسائل المنتظرة فقط':'بدء الإرسال للمستلمين المعروضين';
-  $('pause').disabled=batch.state!=='running';$('cancel').disabled=!['review','running','paused'].includes(batch.state);$('clear').disabled=['running','review'].includes(batch.state)||active;
-  const fingerprint=JSON.stringify(batch.items);
-  if(fingerprint!==lastRender){lastRender=fingerprint;$('recipients').replaceChildren();for(const row of batch.items){
-    const card=document.createElement('article'),name=document.createElement('strong'),phone=document.createElement('p'),status=document.createElement('p'),details=document.createElement('details'),summary=document.createElement('summary'),message=document.createElement('pre');
-    name.textContent=row.name;phone.className='phone';phone.textContent=row.phone;status.textContent=[labels[row.status],row.error].filter(Boolean).join(' — ');summary.textContent='معاينة الرسالة';message.textContent=row.message;details.append(summary,message);card.append(name,phone,status,details);$('recipients').append(card);
-  }}
+  const result=await request('STATUS');
+  pill('systemPill',true,result.origin?`مرتبط: ${new URL(result.origin).host}`:'النظام: ربط تلقائي');
+  pill('waPill',result.whatsappOpen,result.whatsappOpen?'واتساب ويب مفتوح':'واتساب ويب غير مفتوح');$('openWa').hidden=!!result.whatsappOpen;
+  $('connection').textContent=result.origin?`الصفحة المرتبطة يدويًا: ${result.origin}`:'';
+  if(document.activeElement!==$('delay'))$('delay').value=String(result.settings?.delaySec||10);
+  const batch=result.batch;$('batch').hidden=!batch;$('empty').hidden=!!batch;$('notice').hidden=!batch?.notice;$('notice').textContent=batch?.notice||'';
+  if(!batch)return;
+  const count=list=>batch.items.filter(item=>list.includes(item.status)).length;
+  const sent=count(['sent']),failed=count(['error','unknown']),left=count(['pending','loading','clicking']),total=batch.items.length;
+  $('stateText').textContent=batch.state==='cancelled'?'أُلغيت الدفعة':(labels[batch.state]||batch.state);
+  $('countText').textContent=`${sent+failed} / ${total}`;$('barFill').style.width=`${total?(sent+failed)/total*100:0}%`;
+  $('sentN').textContent=sent;$('failN').textContent=failed;$('leftN').textContent=left;
+  const active=batch.items.some(item=>['loading','clicking'].includes(item.status));
+  $('start').hidden=!['review','paused'].includes(batch.state);$('start').disabled=active;
+  $('start').textContent=batch.state==='paused'?'استئناف الإرسال':`بدء الإرسال (${total})`;
+  $('pause').hidden=batch.state!=='running';
+  $('retry').hidden=!(count(['error'])&&batch.state!=='running');$('retry').disabled=active;
+  $('cancel').hidden=!['review','running','paused'].includes(batch.state);
+  $('clear').hidden=['running','review'].includes(batch.state);$('clear').disabled=active;
+  $('tabsWrap').hidden=$('tabs').options.length<2||!['review','paused'].includes(batch.state);
+  const fingerprint=JSON.stringify(batch.items.map(item=>[item.id,item.status,item.error]));
+  if(fingerprint===lastRender)return;lastRender=fingerprint;
+  $('recipients').replaceChildren(...batch.items.map(row=>{
+    const card=document.createElement('article');card.className='item';
+    const head=document.createElement('div');head.className='head';
+    const who=document.createElement('div'),name=document.createElement('strong'),phone=document.createElement('div');
+    name.textContent=row.name;phone.className='phone';phone.textContent=row.phone;who.append(name,phone);
+    const tag=document.createElement('span');tag.className=`tag ${row.status}`;tag.textContent=labels[row.status]||row.status;head.append(who,tag);card.append(head);
+    if(row.error){const err=document.createElement('p');err.className='err';err.textContent=row.error;card.append(err);}
+    const details=document.createElement('details'),summary=document.createElement('summary'),pre=document.createElement('pre');
+    summary.textContent='الرسالة';pre.textContent=row.message||'';details.append(summary,pre);card.append(details);
+    return card;
+  }));
 }
-async function perform(action,extra){try{$('error').textContent='';await request(action,extra);await refresh();}catch(error){$('error').textContent=error.message;}}
+async function perform(action,extra){try{showError('');await request(action,extra);await refresh();}catch(error){showError(error.message);}}
 $('connect').onclick=async()=>{const [tab]=await chrome.tabs.query({active:true,currentWindow:true});await perform('CONNECT',{tabId:tab?.id});};
-$('start').onclick=()=>perform('START',{tabId:Number($('tabs').value)});
-$('pause').onclick=()=>perform('PAUSE');$('cancel').onclick=()=>perform('CANCEL');$('clear').onclick=()=>perform('CLEAR');
-request('TABS').then(({tabs})=>{for(const tab of tabs){const option=document.createElement('option');option.value=tab.id;option.textContent=`${tab.title} — ${tab.id}`;$('tabs').append(option);}}).catch(error=>{$('error').textContent=error.message;});
-refresh().catch(error=>{$('error').textContent=error.message;});setInterval(()=>refresh().catch(()=>{}),1500);
+$('start').onclick=()=>perform('START',{tabId:Number($('tabs').value)||undefined});
+$('pause').onclick=()=>perform('PAUSE');$('cancel').onclick=()=>perform('CANCEL');$('clear').onclick=()=>perform('CLEAR');$('retry').onclick=()=>perform('RETRY');
+$('openWa').onclick=()=>chrome.tabs.create({url:'https://web.whatsapp.com/'});
+$('delay').onchange=()=>perform('SETTINGS',{settings:{delaySec:Number($('delay').value)}});
+request('TABS').then(({tabs})=>{for(const tab of tabs){const option=document.createElement('option');option.value=tab.id;option.textContent=`${tab.title} — ${tab.id}`;$('tabs').append(option);}}).catch(()=>{});
+refresh().catch(error=>showError(error.message));setInterval(()=>refresh().catch(()=>{}),1500);

@@ -1,3 +1,4 @@
+import { openWhatsAppChat } from "@/components/shared/ManualWhatsAppQueue";
 import { useState, useEffect, useMemo } from "react";
 import { formatAmount } from '@/lib/formatUtils';
 import { InlinePhoneEditor } from '@/components/shared/InlinePhoneEditor';
@@ -174,7 +175,7 @@ function ManualInvoiceRow({
                   <Button
                     size="sm"
                     className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs bg-[hsl(142,70%,35%)] hover:bg-[hsl(142,70%,30%)] text-white"
-                    onClick={() => window.open(generateWhatsAppLink(customer.phone!, message), "_blank")}
+                    onClick={() => openWhatsAppChat(customer.phone!, message)}
                   >
                     <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     واتساب

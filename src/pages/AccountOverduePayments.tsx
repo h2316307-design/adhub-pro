@@ -1,5 +1,6 @@
 import { usePersistedState } from '@/hooks/usePersistedState';
-import { BrowserWhatsAppBatchDialog } from "@/components/billing/BrowserWhatsAppBatch";
+import { WhatsAppSendModesDialog } from "@/components/shared/WhatsAppSendModes";
+import { openWhatsAppChat } from "@/components/shared/ManualWhatsAppQueue";
 import { OverdueWorkspace } from '@/components/billing/OverdueWorkspace';
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
@@ -290,7 +291,7 @@ export default function AccountOverduePayments() {
   return (
     <div dir="rtl">
       <OverdueWorkspace title="الفواتير والحسابات المتأخرة" description="راجع فواتير الطباعة والمبيعات وخدمات التركيب والقص، مع المستحق الفعلي بعد احتساب رصيد الحساب." itemLabel="فواتير غير مسددة" totalAmount={totalAmount} totalItems={totalInvoices}
-        headerAction={<BrowserWhatsAppBatchDialog recipients={sortedAndFiltered.map(customer=>({id:customer.customerId||customer.customerName,name:customer.customerName,phone:getPhone(customer),message:getComprehensiveMessageText(customer)}))}/>}
+        headerAction={<WhatsAppSendModesDialog recipients={sortedAndFiltered.map(customer=>({id:customer.customerId||customer.customerName,name:customer.customerName,phone:getPhone(customer),message:getComprehensiveMessageText(customer)}))}/>}
         search={searchTerm} onSearch={setSearchTerm} minDays={minDays} onMinDays={setMinDays} minAmount={minAmount} onMinAmount={setMinAmount} sort={sortBy} onSort={setSortBy} onRefresh={loadData}
         customers={sortedAndFiltered.map(customer=>({key:customer.customerId || customer.customerName,name:customer.customerName,amount:customer.totalOverdue,count:customer.invoicesCount,days:customer.oldestDaysOverdue,phone:getPhone(customer),
           onAccount:()=>navigate(`/admin/customer-billing?${customer.customerId?`id=${customer.customerId}&`:''}name=${encodeURIComponent(customer.customerName)}`),
@@ -410,7 +411,7 @@ export default function AccountOverduePayments() {
                         href={waLink}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={handleManualClick}
+                        onClick={(event) => { if (phone) { event.preventDefault(); openWhatsAppChat(phone, messageText); } handleManualClick(event); }}
                       >
                         <div className="p-2 bg-emerald-500/10 rounded-lg shrink-0">
                           <MessageCircle className="h-6 w-6 text-emerald-600" />

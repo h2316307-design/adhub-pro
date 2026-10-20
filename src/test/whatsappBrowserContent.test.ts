@@ -29,7 +29,15 @@ describe('WhatsApp page adapter',()=>{
   it('does not count an old identical message as acknowledgement',async()=>{
     document.querySelector('#messages')!.innerHTML='<div data-id="old"><div class="message-out"><span class="selectable-text"></span><span data-icon="msg-check"></span></div></div>';
     document.querySelector<HTMLElement>('.selectable-text')!.innerText=work.item.message;
-    const click=vi.fn();button.addEventListener('click',click);run();await vi.advanceTimersByTimeAsync(16000);
+    const click=vi.fn();button.addEventListener('click',click);run();await vi.advanceTimersByTimeAsync(21000);
     expect(click).toHaveBeenCalledOnce();expect(requests.at(-1)).toMatchObject({action:'RESULT',result:'unknown'});
+  });
+  it('sends formatted messages: *bold* and line breaks render differently in WhatsApp',async()=>{
+    work.item.message='السيد *أحمد*\n\nعقد رقم 12';document.querySelector<HTMLElement>('[contenteditable]')!.innerText='السيد *أحمد*\nعقد رقم 12';
+    button.querySelector('span')!.dataset.icon='wds-ic-send-filled';
+    const click=vi.fn(()=>{const msg=document.createElement('div');msg.dataset.id='true_x';msg.innerHTML='<div class="message-out"><span class="selectable-text"></span><span data-icon="msg-dblcheck"></span></div>';msg.querySelector<HTMLElement>('.selectable-text')!.innerText='السيد أحمد عقد رقم 12';document.querySelector('#messages')!.append(msg);});
+    button.addEventListener('click',click);run();await vi.advanceTimersByTimeAsync(1000);
+    expect(click).toHaveBeenCalledOnce();expect(requests.at(-1)).toMatchObject({action:'RESULT',result:'sent'});
+    work.item.message='رسالة تجريبية';
   });
 });

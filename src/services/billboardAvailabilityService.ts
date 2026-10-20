@@ -807,6 +807,28 @@ export function resolveContractMarketingVisibility(
   };
 }
 
+/**
+ * حالة زر «إظهار في المتاح» في كرت العقد.
+ * مصدر الحقيقة هو علم العقد (Contract.is_visible_in_available) لأن المحرك يُظهر
+ * لوحات العقد بناءً عليه؛ أعلام اللوحات وحدها لا تجعل العقد «مفعلاً».
+ * - ALL_ON: العقد مفعل وكل لوحاته ظاهرة فعلياً.
+ * - MIXED: العقد مفعل مع لوحات مخفية/محجوبة، أو غير مفعل مع أعلام إظهار عالقة على لوحاته.
+ * - ALL_OFF: لا تفعيل.
+ * الضغط على الزر: ALL_OFF ← تفعيل، وغير ذلك ← إلغاء (null).
+ */
+export type ContractAvailableToggleState = 'ALL_ON' | 'MIXED' | 'ALL_OFF';
+
+export function resolveContractAvailableToggleState(
+  isContractActivated: boolean,
+  info: Pick<ContractMarketingVisibilityInfo, 'totalCount' | 'forceHideCount' | 'effectiveForceShowCount'> | null
+): ContractAvailableToggleState {
+  if (isContractActivated) {
+    if (!info || info.totalCount === 0) return 'ALL_ON';
+    return info.forceHideCount > 0 ? 'MIXED' : 'ALL_ON';
+  }
+  return info && info.effectiveForceShowCount > 0 ? 'MIXED' : 'ALL_OFF';
+}
+
 export function checkIsAvailableForAvailableExports(
   billboard: any,
   contracts: any[] = [],

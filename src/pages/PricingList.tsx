@@ -1,3 +1,6 @@
+import { pricingLevelPercentages } from '@/utils/pricingLevelPercentages';
+import { PricingRulesEditor } from '@/components/pricing/PricingRulesEditor';
+import { applyPricingRules, defaultPricingRules, type PricingRules } from '@/utils/pricingRules';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { useDefaultPricingCategory } from '@/hooks/useDefaultPricingCategory';
 import { CompanyPriceEditor } from '@/components/pricing/CompanyPriceEditor';
@@ -198,6 +201,10 @@ export default function PricingList() {
   const [pricingData, setPricingData] = useState<PricingData[]>([]);
   const [sizesData, setSizesData] = useState<SizeData[]>([]);
   const [durations, setDurations] = useState<PricingDuration[]>([]);
+  const [rules, setRules] = useState<PricingRules>(defaultPricingRules);
+  const [savedRules, setSavedRules] = useState<PricingRules>(defaultPricingRules);
+  const [savingRules, setSavingRules] = useState(false);
+  const [workspaceView, setWorkspaceView] = useState<'prices' | 'rules'>('prices');
   const [loading, setLoading] = useState(true);
   const [connectionError, setConnectionError] = useState<string | null>(null);
 
@@ -553,6 +560,14 @@ export default function PricingList() {
         setCategories(categoriesData || []);
       }
 
+      const { data: rulesSetting, error: rulesError } = await supabase.from('system_settings').select('setting_value').eq('setting_key', 'pricing_level_size_rules').maybeSingle();
+      if (rulesError) toast.error('تعذر تحميل قواعد التسعير');
+      if (rulesSetting?.setting_value) {
+        try {
+          const parsed = { ...defaultPricingRules, ...JSON.parse(rulesSetting.setting_value) };
+          setRules(parsed); setSavedRules(parsed);
+        } catch { toast.error('تعذر قراءة قواعد التسعير'); }
+      }
       // تحميل ترتيب الفئات المخصص من system_settings
       try {
         const { data: catOrderData } = await supabase
@@ -1652,6 +1667,40 @@ export default function PricingList() {
     return v == null ? '—' : `${v.toLocaleString()} د.ل`;
   };
 
+  const saveRulesDisplay = async () => {
+    setSavingRules(true);
+    try {
+      const next = { ...savedRules, hiddenPrintLevels: rules.hiddenPrintLevels || [], position: rules.position };
+      const { error } = await supabase.from('system_settings').upsert({ setting_key: 'pricing_level_size_rules', setting_value: JSON.stringify(next) }, { onConflict: 'setting_key' });
+      if (error) throw error;
+      setSavedRules(next);
+      toast.success('تم حفظ ظهور المستويات وموضع النسب في الطباعة');
+    } catch { toast.error('تعذر حفظ إعدادات ظهور المستويات'); }
+    finally { setSavingRules(false); }
+  };
+
+  const saveRules = async () => {
+    if (Object.values(rules.rates).some(rate => !Number.isFinite(rate) || rate < -100) || Object.entries(rules.sizeAliases).some(([size, source]) => size === source || rules.sizeAliases[source])) {
+      toast.error('راجع النسب وروابط المقاسات؛ لا يمكن ربط المقاسات بشكل دائري أو متسلسل'); return;
+    }
+    setSavingRules(true);
+    try {
+      const updated = applyPricingRules(pricingData, rules, [...new Set([...MONTH_OPTIONS.map(option => option.dbColumn), 'one_day'])]);
+      const changed = updated.filter((row, index) => JSON.stringify(row) !== JSON.stringify(pricingData[index]));
+      if (changed.length) {
+        const { error } = await supabase.from('pricing').upsert(changed, { onConflict: 'size,billboard_level,customer_category' });
+        if (error) throw error;
+      }
+      const { error } = await supabase.from('system_settings').upsert({ setting_key: 'pricing_level_size_rules', setting_value: JSON.stringify(rules) }, { onConflict: 'setting_key' });
+      if (error) throw error;
+      setSavedRules(rules);
+      await loadData();
+      queryClient.invalidateQueries({ queryKey: ['pricing'] });
+      toast.success('تم حفظ القواعد وتطبيق الأسعار');
+    } catch (error) { toast.error(`تعذر حفظ القواعد: ${error instanceof Error ? error.message : 'راجع الاتصال'}`); }
+    finally { setSavingRules(false); }
+  };
+
   const buildPrintHtml = (
     cat: string,
     logoSrc: string,
@@ -1675,12 +1724,25 @@ export default function PricingList() {
     });
 
     // تحديد المستويات المطلوب طباعتها
-    const levelsToShow = resolvePrintLevels(levelFilter, allLevels);
+    const levelsToShow = resolvePrintLevels(levelFilter, allLevels).filter(level => !savedRules.enabled || !savedRules.baseOnly || level === savedRules.baseLevel);
+    const referenceLevel = allLevels.includes(savedRules.baseLevel) ? savedRules.baseLevel : allLevels[0];
+    const actualRates = pricingLevelPercentages(pricingData, cat, referenceLevel, allLevels, printMonthOptions.map(option => option.dbColumn));
+    const percentageText = (rate: number) => rate === 0 ? 'بنفس السعر (0%)' : `${rate < 0 ? 'تخفيض' : 'زيادة'} ${Math.abs(rate)}%`;
+    const levelNotes = allLevels.filter(level => level !== referenceLevel && !savedRules.hiddenPrintLevels?.includes(level)).flatMap(level => {
+      const configured = savedRules.enabled ? savedRules.rates[level] : undefined;
+      const rates = configured !== undefined ? [configured] : actualRates[level] || [];
+      if (!rates.length) return [];
+      const description = rates.length === 1 ? percentageText(rates[0]) : `${percentageText(rates[0])} إلى ${percentageText(rates[rates.length - 1])} حسب المقاس والمدة`;
+      return [`المستوى ${level}: ${description}`];
+    });
+    const aliasNotes = savedRules.enabled ? Object.entries(savedRules.sizeAliases).map(([size, source]) => `${size} بنفس أسعار ${source}`) : [];
+    const rulesNote = levelNotes.length || aliasNotes.length ? `<aside class="pricing-rules-note"><strong>${escapePrintText(`فروق المستويات بالنسبة للمستوى ${referenceLevel}`)}</strong><div>${[...levelNotes, ...aliasNotes].map(note => `<span>${escapePrintText(note)}</span>`).join('')}</div></aside>` : '';
+
 
     // جمع جميع المقاسات من المستويات المحددة
     const allUniqueSizes = Array.from(new Set(
       pricingData
-        .filter(p => p.size && p.size.trim() !== '' && levelsToShow.includes(p.billboard_level))
+        .filter(p => (!savedRules.enabled || !savedRules.sizeAliases[p.size]) && p.size && p.size.trim() !== '' && levelsToShow.includes(p.billboard_level))
         .map(p => p.size)
     )).sort((a, b) => {
       const orderA = sizeOrderMap.get(a) ?? 999;
@@ -1724,7 +1786,7 @@ export default function PricingList() {
       const sheets: string[] = [];
       // Keep every duration together; paginate only between sizes.
       const sheetDurations = printDurations;
-      const totalPages = Math.ceil(sizesForThisLevel.length / 7);
+      const totalPages = Math.ceil(sizesForThisLevel.length / (rulesNote ? 6 : 7));
       const perPage = totalPages > 0 ? Math.ceil(sizesForThisLevel.length / totalPages) : 7;
       for (let rowOffset = 0; rowOffset < sizesForThisLevel.length; rowOffset += perPage) {
         const sheetSizes = sizesForThisLevel.slice(rowOffset, rowOffset + perPage);
@@ -1743,7 +1805,7 @@ export default function PricingList() {
 
       sheets.push(`
         <div class="page">
-          <div class="page-content">
+          <div class="page-content${rulesNote ? ` has-pricing-rules rules-${savedRules.position}` : ''}">
             <div class="header">
               ${logoSrc ? `<div class="logo-area">
                 <img src="${logoSrc}" class="logo" alt="شعار" onerror="this.style.display='none'" />
@@ -1758,8 +1820,10 @@ export default function PricingList() {
               <span class="meta-level-title">${escapePrintText(levelTitle)}</span>
               <span class="meta-currency">الأسعار بالدينار الليبي</span>
             </div>
+            ${savedRules.position === 'top' ? rulesNote : ''}
             <div class="price-cards" data-count="${sheetSizes.length}" style="--size-count: ${sheetSizes.length};">${rows}</div>
 
+            ${savedRules.position === 'bottom' ? rulesNote : ''}
             <div class="footer">
               <div class="footer-left">تاريخ الإصدار: ${today} (${escapePrintText(monthYearDisplay)})</div>
               <div class="footer-center">الأسعار قابلة للتغيير · ورقة ${sheets.length + 1} من ${totalPages || 1}</div>
@@ -1789,6 +1853,7 @@ export default function PricingList() {
   };
 
   const handlePrint = () => {
+    if (savedRules.enabled && savedRules.baseOnly && !selectedPrintLevels.includes(savedRules.baseLevel)) { toast.info('اختر المستوى المرجعي للطباعة أو ألغِ طباعة المستوى المرجعي فقط'); return; }
     if (!selectedPrintLevels.length) { toast.info('اختر مستوى واحدًا على الأقل للطباعة'); return; }
     if (!printMonthOptions.length) { toast.info('اختر مدة واحدة على الأقل للطباعة'); return; }
     const hasPrices = pricingData.some(row => row.customer_category === printCategory && selectedPrintLevels.includes(row.billboard_level) && printMonthOptions.some(option => (readDurationPrice(row, option.dbColumn) ?? 0) > 0));
@@ -1996,6 +2061,15 @@ export default function PricingList() {
 
   return (
     <div dir="rtl" className="pricing-workspace mx-auto max-w-[1600px] space-y-6 p-3 sm:p-6 [&_button]:cursor-pointer [&_button]:transition-all [&_button]:duration-200">
+      <header className="pricing-workspace-heading flex flex-wrap items-center justify-between gap-4">
+        <div><p className="text-xs font-bold text-primary mb-1">إدارة التسعير</p><h1 className="text-2xl sm:text-3xl font-bold">قائمة الأسعار</h1><p className="text-sm text-muted-foreground mt-2">أسعار المساحات الإعلانية وقواعد المستويات في مكان واحد.</p></div>
+        <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-card p-1.5" role="group" aria-label="عرض قائمة الأسعار">
+          <Button aria-pressed={workspaceView === 'prices'} variant={workspaceView === 'prices' ? 'default' : 'ghost'} className="h-11" onClick={() => setWorkspaceView('prices')}><Tag className="h-4 w-4 ml-2" />جدول الأسعار</Button>
+          <Button aria-pressed={workspaceView === 'rules'} variant={workspaceView === 'rules' ? 'default' : 'ghost'} className="h-11" onClick={() => setWorkspaceView('rules')}><Percent className="h-4 w-4 ml-2" />قواعد التسعير والطباعة</Button>
+        </div>
+      </header>
+      {workspaceView === 'rules' && <PricingRulesEditor value={rules} savedValue={savedRules} onChange={setRules} levels={allLevels} sizes={sizesData.map(size => size.name)} onSave={saveRules} onSaveDisplay={saveRulesDisplay} busy={savingRules} />}
+      <div hidden={workspaceView !== 'prices'}>
       <Card className="rounded-2xl border border-border bg-card shadow-sm overflow-hidden">
         <CardHeader className="pricing-page-header p-5 sm:p-6 space-y-5">
           <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -2003,7 +2077,7 @@ export default function PricingList() {
             {(sizeFilter.length > 0 || categorySearchTerm) && <Button variant="ghost" size="sm" onClick={() => { setSizeFilter([]); setCategorySearchTerm(''); }}><X className="h-4 w-4 ml-2" />مسح فلاتر البحث والمقاسات</Button>}
           </div>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <div><CardTitle className="text-2xl font-bold">قائمة الأسعار</CardTitle><p className="mt-1 text-sm text-muted-foreground">اختر الفئة والمستوى والمدة، ثم اضغط على السعر لتعديله.</p></div>
+            <div><CardTitle className="text-xl font-bold">جدول الأسعار</CardTitle><p className="mt-1 text-sm text-muted-foreground">اختر الفئة والمستوى والمدة، ثم اضغط على السعر لتعديله.</p></div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <Button
                 variant="outline"
@@ -2341,6 +2415,7 @@ export default function PricingList() {
           </details>
         </CardContent>
       </Card>
+      </div>
 
       {relativeTarget && (
         <CompanyPriceEditor

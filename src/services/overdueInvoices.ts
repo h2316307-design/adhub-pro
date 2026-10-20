@@ -672,6 +672,15 @@ export async function loadCustomerOverdueInvoices(): Promise<CustomerAccountOver
 
       remainingMap.set(cid, remaining);
     }
+
+    // الاسم الحالي من جدول الزبائن؛ الأسماء المخزنة في الفواتير قد تكون قديمة بعد تغيير اسم الزبون
+    const currentNames = new Map<string, string>(customersList.map((c: any) => [c.id, c.name]));
+    for (const r of result) {
+      const name = r.customerId ? currentNames.get(r.customerId) : undefined;
+      if (!name) continue;
+      r.customerName = name;
+      r.invoices.forEach(inv => { inv.customerName = name; });
+    }
   }
 
   const filteredResult = result.filter((r) => {

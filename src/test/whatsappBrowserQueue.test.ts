@@ -14,7 +14,7 @@ describe('browser WhatsApp queue validation',()=>{
   it('rejects empty and oversized batches and invalid messages',()=>{
     expect(()=>validateRecipients([])).toThrow();expect(()=>validateRecipients(new Array(201).fill({}))).toThrow();
     expect(()=>validateRecipients([{phone:'0912345678',message:' '}])).toThrow();
-    expect(()=>validateRecipients([{phone:'0912345678',message:'a'.repeat(4001)}])).toThrow();
+    expect(()=>validateRecipients([{phone:'0912345678',message:'a'.repeat(20001)}])).toThrow();
   });
   it('takes an immutable snapshot with pending status regardless of provided state',()=>{
     const source={phone:'0912345678',name:'أ',message:' النص ',status:'sent'};

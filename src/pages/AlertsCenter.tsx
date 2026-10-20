@@ -16,7 +16,7 @@ import {
 } from '@/services/googleCalendarService';
 import { whatsappBrowserRequest } from '@/lib/whatsappBrowser';
 import { supabase } from '@/integrations/supabase/client';
-import { filterCompositeRelatedPrintedInvoices } from '@/components/billing/BillingUtils';
+import { loadCustomerOverdueInvoices, type CustomerAccountOverdue } from '@/services/overdueInvoices';
 
 /**
  * مركز تنبيهات الزبائن: الدفعات (الأقساط)، العقود (بداية/نهاية)، الفواتير — في صفحة واحدة.
@@ -25,7 +25,7 @@ import { filterCompositeRelatedPrintedInvoices } from '@/components/billing/Bill
 type Kind = 'payments' | 'contracts' | 'invoices';
 const KIND_OF = (e: GoogleCalendarEvent): Kind => e.type === 'installment' ? 'payments' : e.type === 'invoice' ? 'invoices' : 'contracts';
 const KINDS: { key: Kind; label: string; icon: any }[] = [
-  { key: 'payments', label: 'الدفعات المستحقة', icon: Wallet },
+  { key: 'payments', label: 'الدفعات والفواتير المستحقة', icon: Wallet },
   { key: 'contracts', label: 'العقود', icon: FileText },
   { key: 'invoices', label: 'الفواتير', icon: Receipt },
 ];
@@ -93,17 +93,10 @@ function messageFor(e: GoogleCalendarEvent): string {
 
 /**
  * الفواتير غير المسددة خارج فواتير المبيعات: فواتير الطباعة وفواتير المهام (طباعة/تركيب/قص).
- * فاتورة الطباعة المرتبطة بمهمة مجمعة تُستبعد لأن المهمة نفسها تمثلها (تفادي التكرار).
+ * المبالغ من نفس مصدر صفحة «متأخرات الحسابات والفواتير» وكشف الحساب (loadCustomerOverdueInvoices)
+ * حتى تتطابق الأرقام في كل مكان. الوسوم (tag) ثابتة كما هي لمزامنة التقويم.
  */
-async function loadUnpaidTaskInvoices(): Promise<GoogleCalendarEvent[]> {
-  const [printedRes, ctRes, ptRes, cutRes] = await Promise.all([
-    supabase.from('printed_invoices').select('id, invoice_number, customer_id, customer_name, total_amount, paid_amount, created_at, invoice_date, contract_number, invoice_type').eq('paid', false),
-    supabase.from('composite_tasks').select('id, task_number, task_type, customer_id, customer_name, customer_total, paid_amount, created_at, contract_id, combined_invoice_id, print_task_id, cutout_task_id, installation_task_id').neq('status', 'cancelled'),
-    supabase.from('print_tasks').select('id, invoice_id, composite_task_id'),
-    supabase.from('cutout_tasks').select('id, invoice_id'),
-  ]);
-  const err = printedRes.error || ctRes.error || ptRes.error || cutRes.error;
-  if (err) throw err;
+function buildTaskInvoiceEvents(customers: CustomerAccountOverdue[]): GoogleCalendarEvent[] {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const build = (o: { id: string; tag: string; number: string; name: string; date: string; customerId?: string | null; customerName?: string | null; amount: number; contract?: number | null }): GoogleCalendarEvent | null => {
     if (o.amount <= 0.5 || !o.date || !Number.isFinite(Date.parse(o.date))) return null;
@@ -118,27 +111,31 @@ async function loadUnpaidTaskInvoices(): Promise<GoogleCalendarEvent[]> {
       statusText: diff > 0 ? `متأخرة ${diff} يوم` : 'حديثة',
     };
   };
-  const ctLabel = (t?: string) => {
-    const s = String(t || '');
-    const p = /print/.test(s), i = /install/.test(s), c = /cutout/.test(s);
-    if (s === 'reinstallation') return 'فاتورة إعادة تركيب';
-    return 'فاتورة ' + ([p && 'طباعة', i && 'تركيب', c && 'قص'].filter(Boolean).join(' و') || 'أعمال');
+  const firstContract = (s: string | null) => {
+    const n = Number(String(s || '').split(',')[0]);
+    return Number.isFinite(n) && n > 0 ? n : null;
   };
-  const printed = filterCompositeRelatedPrintedInvoices(printedRes.data || [], ctRes.data || [], ptRes.data || [], cutRes.data || []);
-  const events = [
-    ...printed.map((r: any) => build({
-      id: `pinv-${r.id}`, tag: `[ADHUB:PINV:${r.id}]`, number: String(r.invoice_number || ''), name: 'فاتورة طباعة',
-      date: r.invoice_date || r.created_at, customerId: r.customer_id, customerName: r.customer_name,
-      amount: (Number(r.total_amount) || 0) - (Number(r.paid_amount) || 0), contract: r.contract_number ? Number(r.contract_number) : null,
-    })),
-    ...(ctRes.data || []).map((r: any) => build({
-      id: `ct-${r.id}`, tag: `[ADHUB:CT:${r.id}]`, number: r.task_number ? String(r.task_number) : '', name: ctLabel(r.task_type),
-      date: r.created_at, customerId: r.customer_id, customerName: r.customer_name,
-      amount: (Number(r.customer_total) || 0) - (Number(r.paid_amount) || 0), contract: r.contract_id ? Number(r.contract_id) : null,
-    })),
-  ];
+  const events = customers.flatMap(c => c.invoices).map(inv => {
+    if (inv.type === 'printed') {
+      return build({
+        id: `pinv-${inv.invoiceId}`, tag: `[ADHUB:PINV:${inv.invoiceId}]`, number: inv.invoiceNumber || '', name: 'فاتورة طباعة',
+        date: inv.createdAt, customerId: inv.customerId, customerName: inv.customerName,
+        amount: inv.amount, contract: firstContract(inv.contractNumber),
+      });
+    }
+    if (inv.type === 'composite') {
+      return build({
+        id: `ct-${inv.invoiceId}`, tag: `[ADHUB:CT:${inv.invoiceId}]`, number: (inv.invoiceNumber || '').replace(/^أمر عمل #/, ''), name: inv.invoiceTitle || 'فاتورة أعمال',
+        date: inv.createdAt, customerId: inv.customerId, customerName: inv.customerName,
+        amount: inv.amount, contract: firstContract(inv.contractNumber),
+      });
+    }
+    return null; // فواتير المبيعات تأتي من أحداث التقويم (وسومها INV)
+  });
   return events.filter((e): e is GoogleCalendarEvent => !!e);
 }
+
+const customerKeyOf = (e: { customerId?: string | null; customerName?: string | null }) => String(e.customerId || e.customerName || '—');
 
 /* سجل الإرسال اليدوي على هذا الجهاز (لمعرفة ما أُرسل) */
 const SENT_KEY = 'alerts-center-sent';
@@ -163,15 +160,28 @@ export default function AlertsCenter() {
     queryKey: ['alerts-center'],
     staleTime: 60_000,
     queryFn: async () => {
-      const config = await getCalendarConfig();
-      const r = await loadCalendarRecords();
+      const [config, r, invoiceCustomers] = await Promise.all([getCalendarConfig(), loadCalendarRecords(), loadCustomerOverdueInvoices()]);
       const designs = buildContractDesignsMap(r.compositeTasks, r.taskDesigns, r.directInstallationTasks);
-      // فواتير المبيعات المسددة لا تُعد تنبيهاً
-      const salesEvents = extractCalendarEvents(r.contracts, r.payments, { ...config, activeAndUpcomingOnly: false }, r.invoices || [], r.installations || [], r.customers || [], designs)
-        .filter(e => e.type !== 'invoice' || (Number(e.amount) || 0) > 0.5);
-      const events = [...salesEvents, ...(await loadUnpaidTaskInvoices())];
+      // مبلغ كل فاتورة مبيعات غير مسددة كما في كشف الحساب؛ غير الموجودة مسددة أو مغطاة برصيد الحساب
+      const salesDue = new Map<string, number>();
+      invoiceCustomers.forEach(c => c.invoices.forEach(i => { if (i.type === 'sales') salesDue.set(i.invoiceId, i.amount); }));
+      const calendarEvents = extractCalendarEvents(r.contracts, r.payments, { ...config, activeAndUpcomingOnly: false }, r.invoices || [], r.installations || [], r.customers || [], designs)
+        .flatMap(e => {
+          if (e.type !== 'invoice') return [e];
+          const due = e.invoiceId ? salesDue.get(e.invoiceId) : undefined;
+          return due != null && due > 0.5 ? [{ ...e, amount: due }] : [];
+        });
+      // الاسم الحالي من جدول الزبائن (الاسم المخزن في الفاتورة/العقد قد يكون قديماً)
+      const currentNames = new Map<string, string>((r.customers || []).filter((c: any) => c.name).map((c: any) => [c.id, c.name]));
+      const events = [...calendarEvents, ...buildTaskInvoiceEvents(invoiceCustomers)].map(e => {
+        const name = e.customerId ? currentNames.get(e.customerId) : undefined;
+        return name && name !== e.customerName ? { ...e, customerName: name } : e;
+      });
       const phones = new Map<string, string>((r.customers || []).map((c: any) => [c.id, c.phone]));
-      return { config, events, phones };
+      // المتبقي الفعلي على حساب الزبون (لتطابق الإجمالي مع كشف الحساب)
+      const accountRemaining = new Map<string, number>();
+      invoiceCustomers.forEach(c => { if (c.accountRemaining != null) accountRemaining.set(customerKeyOf(c), c.accountRemaining); });
+      return { config, events, phones, accountRemaining };
     },
   });
 
@@ -190,7 +200,12 @@ export default function AlertsCenter() {
   }, [all, q, range, customerIdFilter]);
   const byKind = useMemo(() => {
     const m: Record<Kind, GoogleCalendarEvent[]> = { payments: [], contracts: [], invoices: [] };
-    scoped.forEach(e => m[KIND_OF(e)].push(e));
+    scoped.forEach(e => {
+      const k = KIND_OF(e);
+      m[k].push(e);
+      // تبويب المستحقات يجمع الأقساط والفواتير معاً لكل زبون
+      if (k === 'invoices') m.payments.push(e);
+    });
     return m;
   }, [scoped]);
   const list = byKind[kind];
@@ -233,18 +248,30 @@ export default function AlertsCenter() {
     markSent([e.tag || e.id]); setSentMap(readSent());
   };
 
-  /** رسالة واحدة للزبون تجمع كل تنبيهاته في التبويب الحالي */
+  /** إجماليات الزبون مقيدة بالمتبقي الفعلي في كشف الحساب (رصيد، مقاصات، إيجارات صديقة) */
+  const groupTotals = (items: GoogleCalendarEvent[]) => {
+    const gross = items.reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
+    const overdueGross = items.filter(e => e.isOverdue).reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
+    const rem = items[0] ? data?.accountRemaining.get(customerKeyOf(items[0])) : undefined;
+    const total = rem != null ? Math.max(0, Math.min(gross, rem)) : gross;
+    return { gross, total, overdueTotal: Math.min(overdueGross, total), credit: gross - total };
+  };
+
+  /** رسالة واحدة للزبون تجمع كل تنبيهاته في التبويب الحالي (الدفعات والفواتير معاً) */
   const groupMessage = (items: GoogleCalendarEvent[]) => {
     const lines = items.map((e, i) => `*${i + 1}- ${messageTitle(e)}*${e.amount ? `\nالمبلغ: ${fmt(e.amount)}` : ''}\n${dateCaption(e)}: ${dmy(e.startDate)}${overdueText(e)}`);
-    const total = items.reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
-    const overdueTotal = items.filter(e => e.isOverdue).reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
-    const totals = total ? `\n\n------------------------------\n*إجمالي المستحق: ${fmt(total)}*${overdueTotal && overdueTotal !== total ? `\nمنها متأخر السداد: *${fmt(overdueTotal)}*` : ''}` : '';
+    const { gross, total, overdueTotal, credit } = groupTotals(items);
+    const creditLine = credit > 0.5 ? `\nالمجموع: ${fmt(gross)}\nيُخصم رصيد ومقاصات حسابكم: ${fmt(credit)}` : '';
+    const totals = total ? `\n\n------------------------------${creditLine}\n*إجمالي المستحق: ${fmt(total)}*${overdueTotal && overdueTotal !== total ? `\nمنها متأخر السداد: *${fmt(overdueTotal)}*` : ''}` : '';
     return `${greet(items[0]?.customerName)}\nنود تذكيركم بالمستحقات التالية على حسابكم لدينا:\n\n${lines.join('\n\n')}${totals}\n\n${overdueTotal ? 'نرجو التكرم بتسوية المبالغ المتأخرة في أقرب وقت ممكن.' : 'نرجو التكرم بالسداد في المواعيد المحددة.'}\n${PAY_NOTE}${SIGN}`;
   };
+  /** بند واحد بلا رصيد للخصم: رسالته المفصلة؛ غير ذلك رسالة مجمعة */
+  const customerMessage = (items: GoogleCalendarEvent[]) =>
+    items.length === 1 && groupTotals(items).credit <= 0.5 ? messageFor(items[0]) : groupMessage(items);
   const openWhatsAppGroup = (items: GoogleCalendarEvent[]) => {
     const phone = whatsappNumber(data?.phones.get(String(items[0]?.customerId)));
     if (!phone) { toast.error('لا يوجد رقم صالح لهذا الزبون'); return; }
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(items.length === 1 ? messageFor(items[0]) : groupMessage(items))}`, '_blank', 'noopener');
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(customerMessage(items))}`, '_blank', 'noopener');
     markSent(items.map(e => e.tag || e.id)); setSentMap(readSent());
   };
 
@@ -254,7 +281,7 @@ export default function AlertsCenter() {
     const recipients = [...byCustomer.values()].map(items => ({
       id: items.map(e => e.tag || e.id).join(','), name: items[0].customerName,
       phone: whatsappNumber(data?.phones.get(String(items[0].customerId))) || undefined,
-      message: items.length === 1 ? messageFor(items[0]) : groupMessage(items),
+      message: customerMessage(items),
     })).filter(r => r.phone);
     if (!recipients.length) { toast.error('لا توجد أرقام صالحة ضمن التحديد'); return; }
     setBusy('whatsapp');
@@ -346,8 +373,7 @@ export default function AlertsCenter() {
               const keys = g.items.map(e => e.tag || e.id);
               const allSel = keys.every(k => selected.has(k));
               const phone = whatsappNumber(data?.phones.get(String(g.customerId)));
-              const overdueAmt = g.items.filter(e => e.isOverdue).reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
-              const totalAmt = g.items.reduce((s2, e) => s2 + (Number(e.amount) || 0), 0);
+              const { total: totalAmt, overdueTotal: overdueAmt, credit } = groupTotals(g.items);
               return (
                 <article key={g.key} className="overflow-hidden rounded-xl border border-border bg-card">
                   <header className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-3">
@@ -360,6 +386,7 @@ export default function AlertsCenter() {
                       <div className="flex flex-wrap gap-x-3 text-xs text-muted-foreground">
                         <span>{g.items.length} تنبيه</span>
                         {kind !== 'contracts' && <span className="tabular-nums">الإجمالي {fmt(totalAmt)}</span>}
+                        {kind !== 'contracts' && credit > 0.5 && <span className="tabular-nums">مخصوم رصيد الحساب {fmt(credit)}</span>}
                         {overdueAmt > 0 && <span className="tabular-nums text-destructive">متأخر {fmt(overdueAmt)}</span>}
                         {!phone && <span>بدون رقم هاتف</span>}
                       </div>

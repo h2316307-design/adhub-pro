@@ -46,3 +46,19 @@
   .pricing-print-dialog > :first-child { max-height: 30dvh; overflow-y: auto; padding: 14px 16px 14px 42px; }
   .pricing-print-dialog { height: calc(100dvh - 24px); }
 }
+
+.pricing-workspace-heading { padding: 8px 2px; }
+.pricing-workspace-heading h1, .pricing-rules-panel { font-family: Tajawal, sans-serif; }
+.pricing-rules-panel input[type='number'] { font-family: Manrope, Tajawal, sans-serif; }
+.pricing-rules-panel input:focus-visible, .pricing-rules-panel select:focus-visible { outline: 2px solid hsl(var(--primary)); outline-offset: 3px; }
+.pricing-workspace [role='region'] { border-radius: 12px; }
+.pricing-workspace [role='region'] table tbody tr { border-bottom: 1px solid hsl(var(--border) / .65); }
+.pricing-workspace [role='region'] table tbody tr:nth-child(even) { background: hsl(var(--muted) / .35); }
+.pricing-workspace [role='region'] table tbody tr:hover { background: hsl(var(--primary) / .045); }
+.pricing-workspace [role='region'] table th { color: hsl(var(--muted-foreground)); font-size: 12px; }
+@media (max-width: 640px) {
+  .pricing-workspace-heading > div { width: 100%; }
+  .pricing-workspace-heading [role='group'] { display: grid; grid-template-columns: 1fr 1fr; }
+  .pricing-workspace-heading [role='group'] button { padding-inline: 8px; font-size: 12px; }
+  .pricing-rules-panel nav button { font-size: 12px; padding-inline: 12px; }
+}

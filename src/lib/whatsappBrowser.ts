@@ -1,8 +1,8 @@
 export interface BrowserRecipient { id: string; name: string; phone?: string; message: string }
 export interface BrowserBatch { id: string; state: string; items: {id: string; name: string; status: string; error?: string}[] }
-export interface BrowserReply { ok: boolean; connected?: boolean; error?: string; batch?: BrowserBatch | null }
+export interface BrowserReply { ok: boolean; connected?: boolean; whatsappOpen?: boolean; error?: string; batch?: BrowserBatch | null }
 
-export function whatsappBrowserRequest(action: 'STATUS'|'PREPARE'|'PAUSE'|'CANCEL'|'REVIEW', payload?: BrowserRecipient[]): Promise<BrowserReply> {
+export function whatsappBrowserRequest(action: 'STATUS'|'PREPARE'|'PAUSE'|'CANCEL'|'REVIEW'|'OPEN_CHAT', payload?: BrowserRecipient[]|{phone:string;message:string}, options: {autoStart?: boolean; timeoutMs?: number} = {}): Promise<BrowserReply> {
   return new Promise((resolve, reject) => {
     const requestId = crypto.randomUUID();
     const cleanup = () => { window.removeEventListener('message', listener); window.clearTimeout(timeout); };
@@ -12,8 +12,8 @@ export function whatsappBrowserRequest(action: 'STATUS'|'PREPARE'|'PAUSE'|'CANCE
       if (!event.data.ok) reject(new Error(event.data.error || 'تعذر الاتصال بالإضافة.'));
       else resolve(event.data);
     };
-    const timeout = window.setTimeout(() => {cleanup();reject(new Error('الإضافة غير مرتبطة. افتح أيقونتها واضغط «ربط صفحة النظام المفتوحة».'));}, 5000);
+    const timeout = window.setTimeout(() => {cleanup();reject(new Error('الإضافة غير متصلة. ثبّت إضافة الفارس (الإصدار 1.2) ثم حدّث هذه الصفحة.'));}, options.timeoutMs ?? 5000);
     window.addEventListener('message', listener);
-    window.postMessage({source:'alfares-app',requestId,action,payload},window.location.origin);
+    window.postMessage({source:'alfares-app',requestId,action,payload,autoStart:options.autoStart===true},window.location.origin);
   });
 }

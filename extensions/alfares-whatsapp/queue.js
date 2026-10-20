@@ -14,7 +14,7 @@ export function validateRecipients(input) {
     if (!phone) throw new Error(`رقم غير صالح: ${item.name || index + 1}`);
     if (phones.has(phone)) throw new Error(`الرقم مكرر لأكثر من مستلم: ${phone}. اختر مستلمًا واحدًا لهذا الرقم.`);
     phones.add(phone);
-    if (typeof item.message !== 'string' || !item.message.trim() || item.message.length > 4000) throw new Error('الرسالة مطلوبة، وبحد أقصى 4000 حرف.');
+    if (typeof item.message !== 'string' || !item.message.trim() || item.message.length > 20000) throw new Error(`رسالة ${item.name || index + 1} فارغة أو أطول من 20000 حرف.`);
     return { id: String(index), name: String(item.name || phone).slice(0, 160), phone, message: item.message.trim(), status: 'pending' };
   });
 }

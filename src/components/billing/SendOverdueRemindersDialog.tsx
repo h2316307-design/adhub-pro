@@ -1,4 +1,5 @@
-import { BrowserWhatsAppBatch } from "./BrowserWhatsAppBatch";
+import { WhatsAppSendModes } from "@/components/shared/WhatsAppSendModes";
+import { openWhatsAppChat } from "@/components/shared/ManualWhatsAppQueue";
 import { useState, useEffect, useMemo } from "react";
 import { formatAmount } from '@/lib/formatUtils';
 import { InlinePhoneEditor } from '@/components/shared/InlinePhoneEditor';
@@ -334,7 +335,7 @@ function ManualOverdueRow({
                   <Button
                     size="sm"
                     className="h-7 sm:h-8 gap-1 sm:gap-1.5 text-xs bg-[hsl(142,70%,35%)] hover:bg-[hsl(142,70%,30%)] text-white"
-                    onClick={() => window.open(generateWhatsAppLink(customer.phone!, message), "_blank")}
+                    onClick={() => openWhatsAppChat(customer.phone!, message)}
                   >
                     <ExternalLink className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
                     واتساب
@@ -1115,7 +1116,7 @@ export function SendOverdueRemindersDialog({
               </div>
 
               {/* Manual Tab */}
-              <TabsContent value="browser" className="px-3 py-4 sm:px-6 mt-0 flex-1 overflow-auto"><BrowserWhatsAppBatch recipients={customersWithPhone.map(customer => { const id = customer.customerId || customer.customerName; return {id, name:customer.customerName, phone:customer.phone, message:manualMessages.get(id) ?? generateCustomerMessage(customer)}; })}/></TabsContent>
+              <TabsContent value="browser" className="px-3 py-4 sm:px-6 mt-0 flex-1 overflow-auto"><WhatsAppSendModes recipients={customersWithPhone.map(customer => { const id = customer.customerId || customer.customerName; return {id, name:customer.customerName, phone:customer.phone, message:manualMessages.get(id) ?? generateCustomerMessage(customer)}; })}/></TabsContent>
               <TabsContent value="manual" className="px-3 sm:px-6 py-3 sm:py-4 mt-0 flex-1 overflow-auto">
                 {/* خيار نوع الرسالة */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-3 sm:mb-4">

@@ -13,7 +13,9 @@ describe('contract expiry dates and recipients',()=>{
   it('groups contracts of the same customer and prefers the registered customer phone',()=>{
     const rows=expiryContracts([raw(1,'2026-10-10'),raw(2,'2026-10-20')],'2026-10-11');
     const recipients=expiryRecipients(rows,'عقد {رقم_العقد}: {حالة_العقد}',new Map([['a','0922345678']]));
-    expect(recipients).toHaveLength(1);expect(recipients[0].phone).toBe('0922345678');expect(recipients[0].message).toContain('عقد 1');expect(recipients[0].message).toContain('عقد 2');
+    expect(recipients).toHaveLength(1);expect(recipients[0].phone).toBe('0922345678');
+    const message=recipients[0].message;expect(message).toContain('عقد رقم 1');expect(message).toContain('عقد رقم 2');
+    expect(message.match(/السلام عليكم/g)).toHaveLength(1);expect(message.match(/مع فائق التقدير/g)).toHaveLength(1);expect(message).toContain('عدد العقود: 2');
   });
   it('does not combine unrelated customer data just because they share a phone or name',()=>{
     const rows=expiryContracts([raw(1,'2026-10-10',''),raw(2,'2026-10-20','')],'2026-10-11');

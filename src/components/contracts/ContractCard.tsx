@@ -33,7 +33,7 @@ import { DesignZoomViewer } from './DesignZoomViewer';
 import { EnhancedDistributePaymentDialog } from '@/components/billing/EnhancedDistributePaymentDialog';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { resolveContractMarketingVisibility } from '@/services/billboardAvailabilityService';
+import { resolveContractMarketingVisibility, resolveContractAvailableToggleState } from '@/services/billboardAvailabilityService';
 import { fetchContractDesignUrls, contractDesignCache } from '@/lib/contractDesignUtils';
 
 const designPaletteCache = new Map<string, string[]>();
@@ -90,7 +90,7 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
   const [customerData, setCustomerData] = useState<{ phone: string | null; company: string | null } | null>(null);
   const [approachingDeadlineCount, setApproachingDeadlineCount] = useState(0);
   const [detectedPreviousContract, setDetectedPreviousContract] = useState<number | null>(null);
-  const [showInAvailable, setShowInAvailable] = useState(false);
+  const [showInAvailable, setShowInAvailable] = useState((contract as any).is_visible_in_available === true);
   const [togglingAvailable, setTogglingAvailable] = useState(false);
   const [installationTasks, setInstallationTasks] = useState<{
     total: number;
@@ -218,15 +218,20 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
     }
   }, [contract, detailsOpen, isVisible]);
 
-  const [visibilityState, setVisibilityState] = useState<'ALL_ON' | 'ALL_OFF' | 'MIXED'>('ALL_OFF');
+  const [visibilityState, setVisibilityState] = useState<'ALL_ON' | 'ALL_OFF' | 'MIXED'>((contract as any).is_visible_in_available === true ? 'ALL_ON' : 'ALL_OFF');
   const [forceVisibleCount, setForceVisibleCount] = useState<number>(0);
   const [forceHiddenCount, setForceHiddenCount] = useState<number>(0);
   const [totalContractBoards, setTotalContractBoards] = useState<number>(0);
 
   // فحص حالة إظهار لوحات العقد في المتاح باستخدام المحرك الموحد ومصدر الحقيقة على مستوى العقد
   useEffect(() => {
-    if (!isVisible || !detailsOpen) return;
     const isContractActivated = (contract as any).is_visible_in_available === true;
+    if (!isVisible || !detailsOpen) {
+      // بدون تفاصيل اللوحات: نعتمد علم العقد مباشرة حتى لا يبقى الزر على حالة قديمة
+      setVisibilityState(isContractActivated ? 'ALL_ON' : 'ALL_OFF');
+      setShowInAvailable(isContractActivated);
+      return;
+    }
     const billboardIdsStr = (contract as any).billboard_ids;
     if (!billboardIdsStr) {
       setVisibilityState('ALL_OFF');
@@ -253,19 +258,10 @@ const ContractCardComponent: React.FC<ContractCardProps> = ({
           setForceVisibleCount(visInfo.effectiveForceShowCount);
           setForceHiddenCount(visInfo.forceHideCount);
 
-          if (!isContractActivated && visInfo.effectiveForceShowCount === 0) {
-            setVisibilityState('ALL_OFF');
-            setShowInAvailable(false);
-          } else if (visInfo.state === 'ON' && isContractActivated) {
-            setVisibilityState('ALL_ON');
-            setShowInAvailable(true);
-          } else if (visInfo.effectiveForceShowCount > 0) {
-            setVisibilityState('MIXED');
-            setShowInAvailable(true);
-          } else {
-            setVisibilityState('ALL_OFF');
-            setShowInAvailable(false);
-          }
+          // علم العقد هو مصدر الحقيقة (كان يُتجاهل إذا كانت أعلام اللوحات null فيظهر الزر «غير مفعل» والعقد ظاهر فعلياً)
+          const toggleState = resolveContractAvailableToggleState(isContractActivated, visInfo);
+          setVisibilityState(toggleState);
+          setShowInAvailable(isContractActivated);
         }
       });
   }, [detailsOpen, isVisible, contract]);
