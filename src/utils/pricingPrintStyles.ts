@@ -479,6 +479,19 @@ export function pricingPrintStyles(theme: 'light' | 'dark') {
         display: none !important;
       }
     }
+    .consolidated-page { width: 210mm; height: 297mm; max-width: none; }
+    .consolidated-frame { width: 210mm; height: 297mm; padding: 7mm 7mm 8mm; }
+    #single-sheet-content { width: 196mm; display: flex; flex-direction: column; }
+    #single-sheet-content > * { flex-shrink: 0; }
+    .consolidated-page .header { margin-bottom: 3mm; }
+    .consolidated-page .sheet-meta { margin: 2mm 0 3mm; }
+    .consolidated-page .price-cards { height: auto; padding: 0; gap: 3mm; justify-content: space-between; }
+    .consolidated-page .price-cards[data-count="1"] .size-card { flex: 1; justify-content: space-evenly; }
+    .consolidated-page .size-card { flex-shrink: 0; }
+    .consolidated-page .pricing-rules-note { display: flex; align-items: center; gap: 3mm; margin: 3mm 0; padding: 2.5mm; border-radius: 1.5mm; white-space: nowrap; width: max-content; min-width: 100%; font-size: 8pt; background: #d4ad2712; }
+    .consolidated-page .pricing-rules-note strong { display: inline; font-size: 8pt; }
+    .consolidated-page .pricing-rules-note div { display: block; }
+    .consolidated-page .footer { margin-top: 4mm; font-size: 8pt; }
     @media (prefers-reduced-motion: reduce) { .print-btn { transition: none; } }
   `;
 }
