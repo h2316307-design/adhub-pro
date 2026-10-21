@@ -3747,7 +3747,7 @@ export default function ContractEdit() {
             </div>
  {/* اختيار اللوحات مع الخريطة */}
             {createPortal(
-            <div className={workspaceSection === 'catalog' ? 'fixed inset-0 z-[10000] space-y-3 overflow-y-auto bg-background p-3 md:p-6' : 'hidden'} role="region" aria-label="اختيار لوحات للعقد">
+            <div className={workspaceSection === 'catalog' ? 'fixed inset-0 z-[9990] space-y-3 overflow-y-auto bg-background p-3 md:p-6' : 'hidden'} role="region" aria-label="اختيار لوحات للعقد">
               <Tabs defaultValue="list" className="flex w-full flex-col">
               <div className="relative z-10 -mx-3 -mt-3 space-y-3 border-b md:sticky md:top-0 border-border bg-background/95 px-3 py-3 backdrop-blur md:-mx-6 md:-mt-6 md:px-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
