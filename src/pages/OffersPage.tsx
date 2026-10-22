@@ -39,6 +39,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
+import { Checkbox } from '@/components/ui/checkbox';
 import { calculateInstallationCostFromIds } from '@/services/installationService';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
@@ -92,6 +93,7 @@ interface Offer {
   include_installation_in_price?: boolean;
   installation_details?: any;
   print_details?: any;
+  source_contract_numbers?: number[] | null;
 }
 
 export default function OffersPage() {
@@ -202,6 +204,10 @@ export default function OffersPage() {
   const [loadingContracts, setLoadingContracts] = useState(false);
   const [contractSearchQuery, setContractSearchQuery] = useState('');
   const [contractAdTypeFilter, setContractAdTypeFilter] = useState<string>('all');
+  // اختيار أكثر من عقد لإنشاء عرض مدموج منها
+  const [pickedContractNumbers, setPickedContractNumbers] = useState<number[]>([]);
+  // أرقام العقود المدموجة في العرض الحالي (تُحفظ فقط عند الإنشاء من عقدين فأكثر)
+  const [sourceContractNumbers, setSourceContractNumbers] = useState<number[]>([]);
   const [includePrintInBillboardPrice, setIncludePrintInBillboardPrice] = useState<boolean>(false);
   
   // Print dialog state
@@ -659,6 +665,7 @@ export default function OffersPage() {
 
   // Create offer from existing contract
   const handleCreateFromContract = (contract: any) => {
+    setSourceContractNumbers([]);
     setCustomerName(contract['Customer Name'] || '');
     setCustomerId(contract.customer_id || null);
     setAdType(contract['Ad Type'] || '');
@@ -683,6 +690,38 @@ export default function OffersPage() {
     setShowContractDialog(false);
     setActiveTab('create');
     toast.success('تم تحميل بيانات العقد');
+  };
+
+  const togglePickedContract = (num: number) => {
+    setPickedContractNumbers((prev) => (prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]));
+  };
+
+  // Create offer from two or more contracts: merge their billboards (no duplicates) and keep their numbers
+  const handleCreateFromContracts = (picked: any[]) => {
+    const first = picked[0];
+    const billboardIds = Array.from(new Set(picked.flatMap((c) =>
+      typeof c.billboard_ids === 'string'
+        ? c.billboard_ids.split(',').map((id: string) => id.trim()).filter(Boolean)
+        : []
+    )));
+    const starts = picked.map((c) => c['Contract Date']).filter(Boolean).sort();
+    const ends = picked.map((c) => c['End Date']).filter(Boolean).sort();
+
+    setCustomerName(first['Customer Name'] || '');
+    setCustomerId(first.customer_id || null);
+    setAdType(first['Ad Type'] || '');
+    setPricingCategory(first.customer_category || 'عادي');
+    setSelected(billboardIds);
+    if (starts.length > 0) setStartDate(starts[0]);
+    if (ends.length > 0) setEndDate(ends[ends.length - 1]);
+    setSourceContractNumbers(picked.map((c) => Number(c.Contract_Number)));
+    setPickedContractNumbers([]);
+    setShowContractDialog(false);
+    setActiveTab('create');
+
+    const customersCount = new Set(picked.map((c) => c.customer_id || c['Customer Name'] || '')).size;
+    if (customersCount > 1) toast.warning('العقود المختارة لزبائن مختلفين، تم أخذ الزبون من أول عقد');
+    toast.success(`تم دمج ${billboardIds.length} لوحة من ${picked.length} عقود`);
   };
 
   // Save offer
@@ -795,6 +834,8 @@ export default function OffersPage() {
         installation_details: installationDetails.length > 0 ? JSON.stringify(installationDetails) : null,
         print_details: printDetails.length > 0 ? JSON.stringify(printDetails) : null,
         single_face_billboards: singleFaceBillboards.size > 0 ? JSON.stringify(Array.from(singleFaceBillboards)) : null,
+        // مرجع العقود المدموجة يُكتب عند الإنشاء فقط (حتى لا يُمسح عند التعديل)
+        ...(!editingOffer && sourceContractNumbers.length > 1 ? { source_contract_numbers: sourceContractNumbers } : {}),
       };
 
       if (editingOffer) {
@@ -855,6 +896,7 @@ export default function OffersPage() {
     setOperatingFeeRate(3);
     setInstallments([]);
     setRemovedBillboards([]);
+    setSourceContractNumbers([]);
   };
 
   // Check and update available billboards in offer
@@ -1506,6 +1548,12 @@ export default function OffersPage() {
       setShowConvertDialog(false);
       setConvertingOffer(null);
       
+      // العرض المدموج من عدة عقود: المرجع لا يُنقل للعقد، فيظهر تنبيه فقط
+      const mergedFrom = Array.isArray(convertingOffer.source_contract_numbers) ? convertingOffer.source_contract_numbers : [];
+      if (mergedFrom.length > 1) {
+        toast.warning(`تنبيه: هذا العرض مدموج من العقود ${mergedFrom.map((n) => `#${n}`).join('، ')} — تم تجاهل الدمج ولم يُنقل إلى العقد الجديد`, { duration: 10000 });
+      }
+
       // Navigate to contract edit page
       if (newContract?.Contract_Number) {
         toast.success(`تم إنشاء العقد رقم ${newContract.Contract_Number}`);
@@ -1679,7 +1727,7 @@ export default function OffersPage() {
                   <DialogTrigger asChild>
                     <Button 
                       variant="outline" 
-                      onClick={() => { loadContracts(); setShowContractDialog(true); }}
+                      onClick={() => { loadContracts(); setPickedContractNumbers([]); setShowContractDialog(true); }}
                       className="gap-2 border-primary/30 hover:bg-primary/10"
                     >
                       <Copy className="h-4 w-4" />
@@ -1725,6 +1773,7 @@ export default function OffersPage() {
                           <Table>
                             <TableHeader>
                               <TableRow>
+                                <TableHead className="w-10"></TableHead>
                                 <TableHead>رقم العقد</TableHead>
                                 <TableHead>الزبون</TableHead>
                                 <TableHead>نوع الإعلان</TableHead>
@@ -1735,6 +1784,12 @@ export default function OffersPage() {
                             <TableBody>
                               {filteredContracts.map((c) => (
                                 <TableRow key={c.Contract_Number} className="hover:bg-muted/50">
+                                  <TableCell>
+                                    <Checkbox
+                                      checked={pickedContractNumbers.includes(Number(c.Contract_Number))}
+                                      onCheckedChange={() => togglePickedContract(Number(c.Contract_Number))}
+                                    />
+                                  </TableCell>
                                   <TableCell className="font-medium">#{c.Contract_Number}</TableCell>
                                   <TableCell>{c['Customer Name']}</TableCell>
                                   <TableCell>
@@ -1752,10 +1807,24 @@ export default function OffersPage() {
                           </Table>
                         )}
                       </ScrollArea>
+                      {pickedContractNumbers.length >= 2 && (
+                        <div className="flex items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                          <span className="text-sm text-muted-foreground">
+                            تم اختيار {pickedContractNumbers.length} عقود — سيتم دمج لوحاتها في عرض واحد
+                          </span>
+                          <Button
+                            onClick={() => handleCreateFromContracts(contracts.filter((c) => pickedContractNumbers.includes(Number(c.Contract_Number))))}
+                            className="gap-2"
+                          >
+                            <Copy className="h-4 w-4" />
+                            إنشاء عرض من {pickedContractNumbers.length} عقود
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   </DialogContent>
                 </Dialog>
-                <Button 
+                <Button
                   onClick={() => navigate('/admin/offers/create')}
                   className="gap-2 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
                 >

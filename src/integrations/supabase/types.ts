@@ -5811,6 +5811,7 @@ export type Database = {
           print_price_per_meter: number | null
           selected_boards: Json | null
           single_face_billboards: string | null
+          source_contract_numbers: Json | null
           start_date: string
           status: string | null
           total: number | null
@@ -5860,6 +5861,7 @@ export type Database = {
           print_price_per_meter?: number | null
           selected_boards?: Json | null
           single_face_billboards?: string | null
+          source_contract_numbers?: Json | null
           start_date: string
           status?: string | null
           total?: number | null
@@ -5909,6 +5911,7 @@ export type Database = {
           print_price_per_meter?: number | null
           selected_boards?: Json | null
           single_face_billboards?: string | null
+          source_contract_numbers?: Json | null
           start_date?: string
           status?: string | null
           total?: number | null
