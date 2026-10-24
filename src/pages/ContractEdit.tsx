@@ -375,7 +375,19 @@ export default function ContractEdit() {
       savedPrices: currentContract?.billboard_prices,
     });
   }, [isExpiredContract, billboards, selected, startDate, endDate, contractNumber, currentContract]);
-  
+
+  // لوحات مختارة في هذا العقد ومؤجرة حالياً لعقد نشط آخر (تبقى مرتبطة بعقدها، ويُعرض تنبيه فقط)
+  const rentedElsewhereSelected = useMemo(() => {
+    if (isExpiredContract) return [];
+    return billboards
+      .filter(b => selected.includes(String(b.ID)) && occupiedBillboardIds.has(Number(b.ID)))
+      .map(b => ({
+        id: String(b.ID),
+        name: b.Billboard_Name || String(b.ID),
+        endDate: occupiedBillboardIds.get(Number(b.ID)) || '',
+      }));
+  }, [isExpiredContract, billboards, selected, occupiedBillboardIds]);
+
   // Auto-calculate end date for a custom start date based on contract duration
   const calculateEndDateForCustomStart = (
     customStartStr: string,
@@ -3523,6 +3535,18 @@ export default function ContractEdit() {
                 >
                   فتح نافذة التعويض
                 </Button>
+              </div>
+            )}
+            {/* تنبيه صغير: لوحات مؤجرة حالياً لعقد آخر (المدة قاربت الانتهاء أو حجز مبكر) */}
+            {rentedElsewhereSelected.length > 0 && (
+              <div role="note" dir="rtl" className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-300/60 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/30 dark:text-amber-200">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span className="font-medium">
+                  {rentedElsewhereSelected.length} لوحة مؤجرة حالياً لعقد آخر:
+                </span>
+                <span>
+                  {rentedElsewhereSelected.map(r => `${r.name}${r.endDate ? ` (حتى ${r.endDate})` : ''}`).join('، ')}
+                </span>
               </div>
             )}
             {/* خريطة لوحات العقد الموسعة عند اختيار نمط الخريطة أو النمط المدمج */}

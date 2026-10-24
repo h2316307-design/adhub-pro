@@ -1,3 +1,5 @@
+import { fetchInvoiceExtras } from '@/utils/invoiceExtras';
+import { renderContractBankAccount } from '@/lib/contractBankAccount';
 import { contractTemplateQueryOptions } from '@/lib/contractTemplateQuery';
 import { ContractSettingsNav } from '@/components/contracts/ContractSettingsNav';
 import { useState, useEffect, useMemo, useCallback, useRef } from "react";
@@ -615,6 +617,14 @@ export default function ContractTermsSettings() {
   
   // إعدادات مواقع أجزاء الصفحة
   const [sectionSettings, setSectionSettings] = useState<PageSectionSettings>(DEFAULT_SECTION_SETTINGS);
+  const [contractBankHtml, setContractBankHtml] = useState('');
+  useEffect(() => {
+    let active = true;
+    fetchInvoiceExtras().then(({ bankAccounts }) => {
+      if (active) setContractBankHtml(renderContractBankAccount(bankAccounts));
+    });
+    return () => { active = false; };
+  }, []);
   const [backgroundUrl, setBackgroundUrl] = useState('/bgc1.svg');
   const [tableBackgroundUrl, setTableBackgroundUrl] = useState('/bgc2.svg');
   const [noStampBgUrl, setNoStampBgUrl] = useState('/bgc1not.svg');
@@ -1653,6 +1663,7 @@ export default function ContractTermsSettings() {
                       className="absolute inset-0 w-full h-full object-cover z-0"
                     />
                     
+                    <div dangerouslySetInnerHTML={{ __html: contractBankHtml }} />
                     {/* SVG Overlay */}
                     <svg 
                       ref={svgRef}

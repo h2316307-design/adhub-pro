@@ -132,12 +132,14 @@ export async function loadCustomerOverdueInvoices(): Promise<CustomerAccountOver
   const compositeTaskToContracts = new Map<string, number[]>();
   
   const realInstallMap = new Map<string, number>();
+  /** آخر تاريخ تركيب فعلي لكل مهمة تركيب (يُعتمد تاريخاً لفاتورة أمر العمل إن وُجد) */
+  const latestInstallDateMap = new Map<string, string>();
 
   if (ctInstallTaskIds.length > 0) {
     const [installItemsRes, installTasksRes] = await Promise.all([
       supabase
         .from('installation_task_items')
-        .select('task_id, customer_installation_cost, reinstall_count, customer_original_install_cost, customer_reinstall_cost, billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
+        .select('task_id, customer_installation_cost, reinstall_count, customer_original_install_cost, customer_reinstall_cost, installation_date, completed_at, billboard:billboards!installation_task_items_billboard_id_fkey(Contract_Number)')
         .in('task_id', ctInstallTaskIds),
       supabase
         .from('installation_tasks')
@@ -155,6 +157,9 @@ export async function loadCustomerOverdueInvoices(): Promise<CustomerAccountOver
       if (ct.installation_task_id) taskTypeByInstallTaskId.set(ct.installation_task_id, ct.task_type);
     });
     installItems.forEach((row: any) => {
+      const installed = String(row.installation_date || row.completed_at || '');
+      const prevInstalled = latestInstallDateMap.get(row.task_id);
+      if (installed && (!prevInstalled || installed > prevInstalled)) latestInstallDateMap.set(row.task_id, installed);
       const itemCost = getCurrentOperationInstallationCost(row, taskTypeByInstallTaskId.get(row.task_id));
       realInstallMap.set(row.task_id, (realInstallMap.get(row.task_id) || 0) + itemCost);
     });
@@ -359,7 +364,8 @@ export async function loadCustomerOverdueInvoices(): Promise<CustomerAccountOver
 
   // 3. إضافة أوامر العمل غير المسددة بالكامل
   for (const ct of initialCompositeRes.data || []) {
-    const createdAt = ct.created_at as string;
+    // تاريخ الفاتورة = آخر تركيب فعلي إن وُجد، وإلا تاريخ إنشاء أمر العمل
+    const createdAt = (ct.installation_task_id && latestInstallDateMap.get(ct.installation_task_id)) || (ct.created_at as string);
     const diffDays = Math.ceil((today.getTime() - new Date(createdAt).getTime()) / (1000 * 60 * 60 * 24));
     const realInstallTotal = ct.installation_task_id && realInstallMap.has(ct.installation_task_id)
       ? realInstallMap.get(ct.installation_task_id)!
@@ -393,7 +399,8 @@ export async function loadCustomerOverdueInvoices(): Promise<CustomerAccountOver
 
     // مصفوفة التسمية الدقيقة بحسب التكاليف ونوع العمليات
     const hasPrint = printCost > 0 || !!ct.print_task_id || ct.task_type === 'print' || ct.task_type === 'installation_print' || ct.task_type === 'installation_print_cutout' || ct.task_type === 'print_cutout';
-    const hasInstall = installCost > 0 || !!ct.installation_task_id || ct.task_type === 'installation' || ct.task_type === 'new_installation' || ct.task_type === 'reinstallation' || ct.task_type === 'installation_print' || ct.task_type === 'installation_print_cutout' || ct.task_type === 'installation_cutout';
+    // التركيب يُذكر في العنوان فقط إذا كان مفوتراً للزبون (تكلفة الزبون المخزنة)؛ التركيب المشمول في العقد يظهر 0 ولا يغيّر العنوان
+    const hasInstall = (Number(ct.customer_installation_cost) || 0) > 0;
     const hasCutout = cutoutCost > 0 || !!ct.cutout_task_id || ct.task_type === 'cutout' || ct.task_type === 'installation_print_cutout' || ct.task_type === 'installation_cutout' || ct.task_type === 'print_cutout';
     const isReinstall = ct.task_type === 'reinstallation' || (Number((ct as any).reinstallation_number || 0) > 0);
 

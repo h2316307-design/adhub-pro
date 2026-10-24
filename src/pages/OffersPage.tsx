@@ -96,6 +96,35 @@ interface Offer {
   source_contract_numbers?: number[] | null;
 }
 
+// صف لوحة في نافذة تحويل العرض إلى عقد (مع زر استبعاد/إضافة)
+function ConvertBillboardRow({ b, excluded, onToggle, tone }: { b: any; excluded: boolean; onToggle: () => void; tone: 'green' | 'amber' }) {
+  return (
+    <div className={`flex items-center gap-3 rounded-lg border bg-card p-2.5 transition-opacity ${tone === 'amber' ? 'border-amber-200 dark:border-amber-900' : 'border-green-200 dark:border-green-900'} ${excluded ? 'opacity-50' : ''}`}>
+      {b.Image_URL ? (
+        <img src={b.Image_URL} alt={b.Billboard_Name} className="h-12 w-16 shrink-0 rounded-md object-cover" />
+      ) : (
+        <div className="h-12 w-16 shrink-0 rounded-md bg-muted" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-semibold">{b.Billboard_Name}</p>
+        <p className="truncate text-xs text-muted-foreground">{b.City} • {b.Size}</p>
+        {tone === 'amber' && (
+          <p className="truncate text-xs text-amber-600">
+            مؤجرة حتى {b.rentEndDate}{b.currentCustomer ? ` • ${b.currentCustomer}` : ''}
+          </p>
+        )}
+      </div>
+      <p className={`shrink-0 text-sm font-semibold ${tone === 'amber' ? 'text-amber-600' : 'text-green-600'}`}>
+        {b.offerPrice?.toLocaleString('ar-LY')} د.ل
+      </p>
+      <Button type="button" size="sm" variant={excluded ? 'default' : 'outline'} onClick={onToggle} className="h-8 shrink-0 gap-1 text-xs">
+        {excluded ? <CheckCircle2 className="h-3.5 w-3.5" /> : <XCircle className="h-3.5 w-3.5" />}
+        {excluded ? 'إضافة للعقد' : 'استبعاد'}
+      </Button>
+    </div>
+  );
+}
+
 export default function OffersPage() {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'list' | 'create' | 'edit'>('list');
@@ -235,6 +264,8 @@ export default function OffersPage() {
     available: any[];
     unavailable: any[];
   }>({ available: [], unavailable: [] });
+  // لوحات مستبعدة يدوياً من التحويل إلى العقد
+  const [excludedConvertIds, setExcludedConvertIds] = useState<Set<string>>(new Set());
   const [loadingBillboardStatus, setLoadingBillboardStatus] = useState(false);
 
   // Pricing hook
@@ -1438,21 +1469,32 @@ export default function OffersPage() {
   // Convert offer to contract - enhanced version
   const handleOpenConvertDialog = async (offer: Offer) => {
     setConvertingOffer(offer);
+    setExcludedConvertIds(new Set());
     setShowConvertDialog(true);
     await checkBillboardsAvailability(offer);
   };
 
-  const handleConvertToContract = async (useOnlyAvailable: boolean = false) => {
+  // لوحات العرض التي ستُضاف للعقد (بدون المستبعدة يدوياً)
+  const convertibleBillboards = [...offerBillboardsStatus.available, ...offerBillboardsStatus.unavailable]
+    .filter((b: any) => !excludedConvertIds.has(String(b.ID)));
+
+  const toggleConvertExclusion = (id: any) => {
+    const key = String(id);
+    setExcludedConvertIds(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const handleConvertToContract = async () => {
     if (!convertingOffer) return;
-    
+
     try {
-      let billboardsToUse = offerBillboardsStatus.available;
-      
-      if (!useOnlyAvailable && offerBillboardsStatus.unavailable.length > 0) {
-        // Include all billboards
-        billboardsToUse = [...offerBillboardsStatus.available, ...offerBillboardsStatus.unavailable];
-      }
-      
+      // كل لوحات العرض تُضاف للعقد — المؤجرة منها تبقى مرتبطة بعقدها الحالي (تنبيه في صفحة تعديل العقد)
+      const billboardsToUse = convertibleBillboards;
+
       if (billboardsToUse.length === 0) {
         toast.error('لا توجد لوحات متاحة للتحويل');
         return;
@@ -1523,9 +1565,11 @@ export default function OffersPage() {
       
       if (error) throw error;
 
-      // ربط اللوحات المتاحة بالعقد في جدول اللوحات (اللوحات المؤجرة لعقد آخر لا تُسحب منه)
+      // ربط اللوحات المتاحة فقط بالعقد في جدول اللوحات (المؤجرة لعقد آخر لا تُسحب منه)
       if (newContract?.Contract_Number) {
-        const linkableIds = offerBillboardsStatus.available.map((b: any) => String(b.ID));
+        const linkableIds = offerBillboardsStatus.available
+        .filter((b: any) => !excludedConvertIds.has(String(b.ID)))
+        .map((b: any) => String(b.ID));
         try {
           await syncContractBillboardsReconciliation(newContract.Contract_Number, [], linkableIds, {
             startDate: convertingOffer.start_date,
@@ -2779,148 +2823,81 @@ export default function OffersPage() {
                 <span className="mr-3 text-muted-foreground">جاري التحقق من توفر اللوحات...</span>
               </div>
             ) : (
-              <ScrollArea className="flex-1 px-1">
-                <div className="space-y-6">
-                  {/* All Available - Success Message */}
-                  {offerBillboardsStatus.available.length > 0 && offerBillboardsStatus.unavailable.length === 0 && (
-                    <div className="p-4 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30">
-                      <div className="flex items-center gap-3">
-                        <div className="h-12 w-12 rounded-full bg-green-500/20 flex items-center justify-center">
-                          <CheckCircle2 className="h-6 w-6 text-green-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-green-700 dark:text-green-400 text-lg">جميع اللوحات متاحة!</h4>
-                          <p className="text-green-600/80 dark:text-green-400/80">
-                            يمكنك تحويل العرض إلى عقد مع جميع اللوحات ({offerBillboardsStatus.available.length} لوحة)
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Some Unavailable - Warning Message */}
-                  {offerBillboardsStatus.unavailable.length > 0 && offerBillboardsStatus.available.length > 0 && (
-                    <div className="p-4 rounded-lg bg-gradient-to-r from-amber-500/10 to-orange-500/10 border border-amber-500/30">
-                      <div className="flex items-start gap-3">
-                        <div className="h-12 w-12 rounded-full bg-amber-500/20 flex items-center justify-center shrink-0">
-                          <AlertTriangle className="h-6 w-6 text-amber-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-amber-700 dark:text-amber-400 text-lg">بعض اللوحات غير متاحة</h4>
-                          <p className="text-amber-600/80 dark:text-amber-400/80">
-                            <strong>{offerBillboardsStatus.unavailable.length}</strong> لوحة غير متاحة حالياً وسيتم استبعادها من العقد.
-                            <br />
-                            سيتم إنشاء العقد بـ <strong>{offerBillboardsStatus.available.length}</strong> لوحة متاحة فقط.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* All Unavailable - Error Message */}
-                  {offerBillboardsStatus.available.length === 0 && offerBillboardsStatus.unavailable.length > 0 && (
-                    <div className="p-4 rounded-lg bg-gradient-to-r from-red-500/10 to-rose-500/10 border border-red-500/30">
-                      <div className="flex items-start gap-3">
-                        <div className="h-12 w-12 rounded-full bg-red-500/20 flex items-center justify-center shrink-0">
-                          <XCircle className="h-6 w-6 text-red-600" />
-                        </div>
-                        <div>
-                          <h4 className="font-bold text-red-700 dark:text-red-400 text-lg">لا توجد لوحات متاحة!</h4>
-                          <p className="text-red-600/80 dark:text-red-400/80">
-                            جميع اللوحات في هذا العرض ({offerBillboardsStatus.unavailable.length} لوحة) تم تأجيرها ولا يمكن تحويل العرض إلى عقد.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Summary Cards */}
-                  <div className="grid grid-cols-3 gap-4">
-                    <Card className="bg-gradient-to-br from-green-500/10 to-green-500/5 border-green-500/20">
-                      <CardContent className="p-4 text-center">
-                        <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-green-600">{offerBillboardsStatus.available.length}</p>
-                        <p className="text-sm text-green-600/80">لوحات متاحة</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-red-500/10 to-red-500/5 border-red-500/20">
-                      <CardContent className="p-4 text-center">
-                        <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-red-600">{offerBillboardsStatus.unavailable.length}</p>
-                        <p className="text-sm text-red-600/80">ستُحذف من العقد</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20">
-                      <CardContent className="p-4 text-center">
-                        <Building2 className="h-8 w-8 text-primary mx-auto mb-2" />
-                        <p className="text-2xl font-bold text-primary">{offerBillboardsStatus.available.length + offerBillboardsStatus.unavailable.length}</p>
-                        <p className="text-sm text-primary/80">إجمالي العرض</p>
-                      </CardContent>
-                    </Card>
+              <div className="flex-1 min-h-0 overflow-y-auto space-y-5 pe-1">
+                {/* All Available - Success Message */}
+                {offerBillboardsStatus.available.length > 0 && offerBillboardsStatus.unavailable.length === 0 && (
+                  <div className="flex items-center gap-3 rounded-lg border border-green-500/30 bg-green-500/10 p-3">
+                    <CheckCircle2 className="h-6 w-6 shrink-0 text-green-600" />
+                    <p className="text-sm text-green-700 dark:text-green-400">
+                      جميع اللوحات متاحة ({offerBillboardsStatus.available.length} لوحة)
+                    </p>
                   </div>
+                )}
 
-                  {/* Unavailable Billboards - Show First When Present */}
-                  {offerBillboardsStatus.unavailable.length > 0 && (
-                    <div className="border-2 border-red-300 dark:border-red-800 rounded-lg p-4 bg-red-50/50 dark:bg-red-950/20">
-                      <h4 className="font-bold text-red-600 flex items-center gap-2 mb-3 text-base">
-                        <XCircle className="h-5 w-5" />
-                        اللوحات التي ستُحذف من العقد ({offerBillboardsStatus.unavailable.length})
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {offerBillboardsStatus.unavailable.map((b: any) => (
-                          <Card key={b.ID} className="overflow-hidden border-red-200 bg-white/50 dark:bg-card/50">
-                            <CardContent className="p-3 flex items-center gap-3">
-                              {b.Image_URL && (
-                                <img src={b.Image_URL} alt={b.Billboard_Name} className="w-16 h-16 rounded-lg object-cover opacity-50 grayscale" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate text-muted-foreground line-through">{b.Billboard_Name}</p>
-                                <p className="text-xs text-muted-foreground">{b.City} • {b.Size}</p>
-                                <div className="flex items-center gap-1 text-xs text-red-600 mt-1 font-medium">
-                                  <AlertTriangle className="h-3 w-3" />
-                                  <span>مؤجرة حتى {b.rentEndDate}</span>
-                                </div>
-                                {b.currentCustomer && (
-                                  <p className="text-xs text-muted-foreground">العميل الحالي: {b.currentCustomer}</p>
-                                )}
-                                <p className="text-sm text-red-500 line-through mt-1">{b.offerPrice?.toLocaleString('ar-LY')} د.ل</p>
-                              </div>
-                              <XCircle className="h-6 w-6 text-red-500 shrink-0" />
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                {/* Some Unavailable - Info Message */}
+                {offerBillboardsStatus.unavailable.length > 0 && (
+                  <div className="flex items-start gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                    <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                    <p className="text-sm text-amber-700 dark:text-amber-400">
+                      <strong>{offerBillboardsStatus.unavailable.length}</strong> لوحة مؤجرة حالياً. تُضاف للعقد أيضاً ما لم تستبعدها، وتظهر في صفحة تعديل العقد بتنبيه أنها مؤجرة.
+                    </p>
+                  </div>
+                )}
 
-                  {/* Available Billboards */}
-                  {offerBillboardsStatus.available.length > 0 && (
-                    <div className="border-2 border-green-300 dark:border-green-800 rounded-lg p-4 bg-green-50/50 dark:bg-green-950/20">
-                      <h4 className="font-bold text-green-600 flex items-center gap-2 mb-3 text-base">
-                        <CheckCircle2 className="h-5 w-5" />
-                        اللوحات المتاحة للعقد ({offerBillboardsStatus.available.length})
-                      </h4>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                        {offerBillboardsStatus.available.map((b: any) => (
-                          <Card key={b.ID} className="overflow-hidden border-green-200 bg-white/50 dark:bg-card/50">
-                            <CardContent className="p-3 flex items-center gap-3">
-                              {b.Image_URL && (
-                                <img src={b.Image_URL} alt={b.Billboard_Name} className="w-16 h-16 rounded-lg object-cover" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate">{b.Billboard_Name}</p>
-                                <p className="text-xs text-muted-foreground">{b.City} • {b.Size}</p>
-                                <p className="text-sm font-semibold text-green-600 mt-1">{b.offerPrice?.toLocaleString('ar-LY')} د.ل</p>
-                              </div>
-                              <CheckCircle2 className="h-5 w-5 text-green-500 shrink-0" />
-                            </CardContent>
-                          </Card>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                {/* Summary */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-lg border border-green-500/20 bg-green-500/5 p-3 text-center">
+                    <p className="text-xl font-bold text-green-600">{offerBillboardsStatus.available.length}</p>
+                    <p className="text-xs text-green-600/80">لوحات متاحة</p>
+                  </div>
+                  <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 text-center">
+                    <p className="text-xl font-bold text-amber-600">{offerBillboardsStatus.unavailable.length}</p>
+                    <p className="text-xs text-amber-600/80">مؤجرة حالياً</p>
+                  </div>
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 text-center">
+                    <p className="text-xl font-bold text-primary">{offerBillboardsStatus.available.length + offerBillboardsStatus.unavailable.length}</p>
+                    <p className="text-xs text-primary/80">إجمالي العرض</p>
+                  </div>
                 </div>
-              </ScrollArea>
+
+                {/* Rented Billboards */}
+                {offerBillboardsStatus.unavailable.length > 0 && (
+                  <section className="space-y-2">
+                    <h4 className="flex items-center gap-2 text-sm font-bold text-amber-600">
+                      <AlertTriangle className="h-4 w-4" />
+                      لوحات مؤجرة ({offerBillboardsStatus.unavailable.length})
+                    </h4>
+                    {offerBillboardsStatus.unavailable.map((b: any) => (
+                      <ConvertBillboardRow
+                        key={b.ID}
+                        b={b}
+                        tone="amber"
+                        excluded={excludedConvertIds.has(String(b.ID))}
+                        onToggle={() => toggleConvertExclusion(b.ID)}
+                      />
+                    ))}
+                  </section>
+                )}
+
+                {/* Available Billboards */}
+                {offerBillboardsStatus.available.length > 0 && (
+                  <section className="space-y-2">
+                    <h4 className="flex items-center gap-2 text-sm font-bold text-green-600">
+                      <CheckCircle2 className="h-4 w-4" />
+                      لوحات متاحة ({offerBillboardsStatus.available.length})
+                    </h4>
+                    {offerBillboardsStatus.available.map((b: any) => (
+                      <ConvertBillboardRow
+                        key={b.ID}
+                        b={b}
+                        tone="green"
+                        excluded={excludedConvertIds.has(String(b.ID))}
+                        onToggle={() => toggleConvertExclusion(b.ID)}
+                      />
+                    ))}
+                  </section>
+                )}
+              </div>
             )}
             
             <DialogFooter className="gap-2 pt-4 border-t">
@@ -2928,17 +2905,14 @@ export default function OffersPage() {
                 إلغاء
               </Button>
               
-              {/* Only show conversion button if there are available billboards */}
-              {offerBillboardsStatus.available.length > 0 && (
+              {/* Show conversion button if the offer has any billboards */}
+              {convertibleBillboards.length > 0 && (
                 <Button
-                  onClick={() => handleConvertToContract(true)}
+                  onClick={() => handleConvertToContract()}
                   className="gap-2 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white"
                 >
                   <CheckCircle2 className="h-4 w-4" />
-                  {offerBillboardsStatus.unavailable.length > 0 
-                    ? `موافق - تحويل العرض (${offerBillboardsStatus.available.length} لوحة فقط)`
-                    : `موافق - تحويل العرض إلى عقد (${offerBillboardsStatus.available.length} لوحة)`
-                  }
+                  موافق - تحويل العرض إلى عقد ({convertibleBillboards.length} لوحة)
                 </Button>
               )}
           </DialogFooter>

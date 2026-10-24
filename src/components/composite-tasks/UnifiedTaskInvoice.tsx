@@ -30,6 +30,7 @@ import { unifiedHeaderHtml, unifiedHeaderFooterCss, unifiedFooterHtml, formatDat
 import { getCurrentOperationInstallationCost } from '@/lib/compositeTaskOperation';
 import { calculateInstallationArea, resolveInstallationFacesCount } from '@/lib/installationFaces';
 import { matchContractIdsForTaskBillboards, resolveBillboardContractNumber } from '@/lib/compositeTaskContractIdentity';
+import { fetchInvoiceExtras, renderBankAccountsHTML, type BankAccount } from '@/utils/invoiceExtras';
 
 export type InvoiceType = 'customer' | 'print_vendor' | 'cutout_vendor' | 'installation_team';
 
@@ -286,6 +287,11 @@ export function UnifiedTaskInvoice({
     return [...new Set(arr.map(Number).filter(Boolean))];
   });
   const [showSignatureSection, setShowSignatureSection] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+
+  useEffect(() => {
+    fetchInvoiceExtras().then(extras => setBankAccounts(extras.bankAccounts)).catch(() => {});
+  }, []);
   const [showInstalledImages, setShowInstalledImages] = useState(false);
   const [showBackFaceImages, setShowBackFaceImages] = useState(false);
   const [showTasksBreakdown, setShowTasksBreakdown] = useState(false);
@@ -4264,6 +4270,15 @@ export function UnifiedTaskInvoice({
                   </div>
                 </div>
               )}
+
+                      {/* أرقام الحسابات البنكية في نهاية الفاتورة (LYPay ثم عادي) */}
+                      {bankAccounts.length > 0 && (
+                        <div
+                          className="u-bank-accounts"
+                          style={{ marginTop: '24px', paddingTop: '12px', borderTop: '1px dashed #ccc', breakInside: 'avoid' }}
+                          dangerouslySetInnerHTML={{ __html: renderBankAccountsHTML(bankAccounts, primaryColor) }}
+                        />
+                      )}
 
                       {/* رسالة الختام مرة واحدة في نهاية المحتوى (وليست مع الفوتر المكرر) */}
                       {unifiedStyles?.footerText ? (

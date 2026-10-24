@@ -10,6 +10,8 @@ import { buildTableTermHtml } from '@/lib/contractTableTerm';
 import { formatLongArabicDate } from '@/lib/utils';
 import { replaceDurationVariable } from '@/utils/pricingDuration';
 import QRCode from 'qrcode';
+import { fetchInvoiceExtras } from '@/utils/invoiceExtras';
+import { renderContractBankAccount } from '@/lib/contractBankAccount';
 
 // ===== DESIGN DIMENSIONS (same as preview) =====
 const DESIGN_W = 2480;
@@ -1119,6 +1121,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   
   // Build first page
   const { svg: firstPageSVG } = buildFirstPageSVG(options);
+  const { bankAccounts } = await fetchInvoiceExtras();
   const firstPageHTML = `
     <div class="contract-preview-container" style="
       position: relative;
@@ -1137,6 +1140,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
         display: block;
       " />
       ${firstPageSVG}
+      ${renderContractBankAccount(bankAccounts)}
     </div>
   `;
   

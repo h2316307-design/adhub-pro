@@ -10,6 +10,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { Loader2, Save, Link as LinkIcon, ImageIcon, Eye, EyeOff, ArrowLeftRight, Camera, Circle, Bot, Calendar, ExternalLink } from 'lucide-react';
 import { clearImageUploadCache, type ImageUploadProvider } from '@/services/imageUploadService';
 import MessageTemplatesCard from '@/components/settings/MessageTemplatesCard';
+import InvoiceBankAccountsCard from '@/components/settings/InvoiceBankAccountsCard';
 import { DEFAULT_DEBT_TEMPLATE, DEFAULT_CONTRACT_EXPIRY_TEMPLATE, DEFAULT_CONTRACT_EXPIRY_ALERT_TEMPLATE } from '@/utils/messageTemplates';
 
 export default function SystemSettings() {
@@ -537,6 +538,7 @@ export default function SystemSettings() {
         </CardContent>
       </Card>
 
+      <InvoiceBankAccountsCard />
 
       <Card>
         <CardHeader>

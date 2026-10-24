@@ -15,7 +15,7 @@ export interface BuiltTableTermResult {
   height: number;
 }
 
-export function buildTableTermHtml({ tableTerm, title, content, renderTarget = 'preview' }: BuildTableTermOptions): BuiltTableTermResult {
+export function buildTableTermHtml({ tableTerm, title, content }: BuildTableTermOptions): BuiltTableTermResult {
   const fontSize = tableTerm.fontSize || 14;
   const titleWeight = tableTerm.titleFontWeight || 'bold';
   const contentWeight = tableTerm.contentFontWeight || 'normal';
@@ -28,10 +28,8 @@ export function buildTableTermHtml({ tableTerm, title, content, renderTarget = '
   const goldHeightPx = Math.max(2, Math.round(fontSize * (goldHeightPct / 100)));
   // ارتفاع وسطر صريحان للـ span حتى يتعامل browserCanvas مع الإحداثيات بدقة.
   const lineBoxPx = Math.round(fontSize * 1.2);
-   // إنزال إضافي يُطبّق فقط في تصدير PDF لأن browserCanvas يرفع الخط قليلًا مقارنة بالمعاينة/طباعة المتصفح.
-   const opticalOffsetMultiplier = renderTarget === 'pdf' ? 0.58 : 0.32;
-   const opticalOffsetPx = Math.round(fontSize * opticalOffsetMultiplier);
-  const goldTopPx = Math.round(lineBoxPx / 2 - goldHeightPx / 2 + opticalOffsetPx);
+  // توسيط الشريط خلف العنوان مثل بقية البنود ومعاينة الإعدادات.
+  const goldTopPx = Math.round((lineBoxPx - goldHeightPx) / 2);
 
   const goldLineHtml = showGold
     ? `<span style="
