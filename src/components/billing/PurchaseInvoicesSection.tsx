@@ -3,8 +3,10 @@ import { formatAmount } from '@/lib/formatUtils';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import { Printer, DollarSign, Trash2, Edit, ArrowRightLeft, Coins, Wallet } from 'lucide-react';
+import { Printer, DollarSign, Trash2, Edit, ArrowRightLeft, Coins, Wallet, Undo2 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import { useSystemDialog } from '@/contexts/SystemDialogContext';
+import { deleteDistributedPayment, deletePayment } from '@/services/customerPaymentOps';
 import { PurchaseInvoicePaymentDialog } from './PurchaseInvoicePaymentDialog';
 import { PurchaseInvoiceEditDialog } from './PurchaseInvoiceEditDialog';
 import { EnhancedDistributePaymentDialog } from './EnhancedDistributePaymentDialog';
@@ -54,6 +56,41 @@ export function PurchaseInvoicesSection({
   const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<PurchaseInvoice | null>(null);
+  const { confirm: systemConfirm } = useSystemDialog();
+
+  /** التراجع عن استخدام فاتورة المشتريات كدفعة: يلغي كل الدفعات المربوطة بها ويعيد قيمتها إلى الرصيد المتاح */
+  const handleUndoUse = async (invoice: PurchaseInvoice) => {
+    const { data: rows, error } = await supabase
+      .from('customer_payments')
+      .select('id, distributed_payment_id')
+      .eq('purchase_invoice_id', invoice.id);
+    if (error) { toast.error('تعذّر قراءة الدفعات المربوطة بالفاتورة'); return; }
+    const list = rows || [];
+    if (!list.length) { toast.error('لا توجد دفعات مربوطة بهذه الفاتورة'); return; }
+    const groups = [...new Set(list.map(r => r.distributed_payment_id).filter(Boolean))] as string[];
+    const singles = list.filter(r => !r.distributed_payment_id);
+    const groupNote = groups.length
+      ? ' التوزيع يُلغى كاملاً، بما فيه أجزاؤه المربوطة بعقود أو فواتير أخرى، مع العهد والسلف والسحوبات المرتبطة به.'
+      : '';
+    const ok = await systemConfirm({
+      title: 'التراجع عن استخدام الفاتورة كدفعة',
+      message: `ستُلغى دفعات الفاتورة #${invoice.invoice_number} وتعود قيمتها إلى الرصيد المتاح.${groupNote} متابعة؟`,
+      variant: 'destructive',
+      confirmText: 'تراجع',
+    });
+    if (!ok) return;
+    try {
+      const { data: cust } = await supabase.from('customers').select('linked_friend_company_id').eq('id', customerId).maybeSingle();
+      const friendId = (cust as any)?.linked_friend_company_id || null;
+      for (const g of groups) await deleteDistributedPayment(g, friendId);
+      for (const s of singles) await deletePayment(s.id, friendId);
+      toast.success('تم التراجع عن استخدام الفاتورة كدفعة');
+    } catch (e: any) {
+      toast.error(e?.message || 'فشل التراجع');
+    } finally {
+      onRefresh();
+    }
+  };
 
   const handleAddPayment = (invoice: PurchaseInvoice) => {
     if (invoice.locked) {
@@ -290,6 +327,11 @@ export function PurchaseInvoicesSection({
                 {!invoice.locked && remaining > 0 && (
                   <Button size="sm" onClick={() => handleAddPayment(invoice)} className="bg-green-600 text-white hover:bg-green-700 cursor-pointer transition-all duration-200">
                     <DollarSign className="h-4 w-4 ml-2" />سداد
+                  </Button>
+                )}
+                {usedAsPayment > 0 && (
+                  <Button size="sm" variant="outline" onClick={() => handleUndoUse(invoice)} className="border-rose-500/30 text-rose-400 hover:bg-rose-500/10 cursor-pointer transition-all duration-200">
+                    <Undo2 className="h-4 w-4 ml-2" />تراجع عن الاستخدام
                   </Button>
                 )}
                 {!invoice.locked && (

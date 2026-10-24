@@ -12,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useQuery } from '@tanstack/react-query';
 import { isBillboardAvailable, getDaysUntilExpiry } from '@/utils/contractUtils';
+import { checkMaintenanceOrRemoval } from '@/services/billboardAvailabilityService';
 import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import { cn } from '@/lib/utils';
 import { BillboardImage } from '@/components/BillboardImage';
@@ -306,7 +307,14 @@ export function AvailableBillboardsGrid({
                 maintStatus === 'قيد الصيانة' || 
                 maintStatus === 'متضررة اللوحة';
 
-              const statusStyle = isUnderMaint 
+              // لوحة مُزالة أو مخفية إدارياً ليست «مؤجرة» — نعرض سببها الحقيقي
+              const removal = checkMaintenanceOrRemoval(b);
+              const isRemovedOrHidden = !isUnderMaint && !isAvailable && (removal.isRemoved || (b as any).is_visible_in_available === false);
+              const blockedLabel = isRemovedOrHidden
+                ? (removal.isRemoved ? removal.label : 'مخفية إدارياً')
+                : 'مؤجرة';
+
+              const statusStyle = isUnderMaint
                 ? {
                     bg: 'bg-[#2e1d08] text-[#fbbf24]',
                     text: 'text-[#fbbf24] font-black tracking-wide',
@@ -314,7 +322,9 @@ export function AvailableBillboardsGrid({
                     glow: 'shadow-[0_4px_14px_rgba(0,0,0,0.6)]',
                     label: 'صيانة'
                   }
-                : getStatusStyle(isAvailable, isNearExpiring, daysUntilExpiry);
+                : isRemovedOrHidden
+                  ? { ...getStatusStyle(isAvailable, isNearExpiring, daysUntilExpiry), label: blockedLabel }
+                  : getStatusStyle(isAvailable, isNearExpiring, daysUntilExpiry);
 
               const handleCardClick = () => {
                 if (canSelect) {
@@ -359,7 +369,7 @@ export function AvailableBillboardsGrid({
                         <CardStatusBadge
                           kind="locked"
                           icon={Lock}
-                          label="مؤجرة — فك القفل"
+                          label={`${blockedLabel} — فك القفل`}
                           title="انقر لفك القفل وإظهار تفاصيل العقد المرتبط"
                           onClick={(e) => { e.stopPropagation(); setPendingUnlockBillboard(b as any); setUnlockDialogOpen(true); }}
                         />
@@ -397,7 +407,7 @@ export function AvailableBillboardsGrid({
                           !canSelect && 'text-rose-400',
                         )}
                       >
-                        {isSelected ? <><Check className="h-4 w-4" />مضافة للعقد — إزالة</> : canSelect ? <><Plus className="h-4 w-4" />إضافة للعقد</> : <><Lock className="h-4 w-4" />مؤجرة — فك القفل</>}
+                        {isSelected ? <><Check className="h-4 w-4" />مضافة للعقد — إزالة</> : canSelect ? <><Plus className="h-4 w-4" />إضافة للعقد</> : <><Lock className="h-4 w-4" />{blockedLabel} — فك القفل</>}
                       </button>
                     </div>
                   }

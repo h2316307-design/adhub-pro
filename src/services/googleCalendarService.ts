@@ -32,6 +32,8 @@ export interface GoogleCalendarEvent {
   invoiceNumber?: string;
   /** عنوان الفاتورة إن وُجد (invoice_name) */
   invoiceName?: string;
+  /** الخدمة الفعلية من بنود الفاتورة (طباعة / تركيب / قص)، مثل «طباعة وتركيب» */
+  serviceLabel?: string;
   invoiceId?: string;
   customerName: string;
   customerId?: string | null;
@@ -107,7 +109,7 @@ export async function loadCalendarRecords() {
   let invoices: any[] = [];
   try {
     invoices = await readPages((from, to) => supabase.from('sales_invoices')
-      .select('id, invoice_number, invoice_name, invoice_date, customer_id, customer_name, total_amount, paid_amount, remaining_amount, paid, notes')
+      .select('id, invoice_number, invoice_name, invoice_date, customer_id, customer_name, total_amount, paid_amount, remaining_amount, paid, notes, items')
       .order('invoice_date', { ascending: false }).range(from, to));
   } catch (e) {
     console.warn('Could not read sales_invoices:', e);
@@ -422,6 +424,26 @@ export function formatAlertTimeArabic(timeStr: string = '12:00'): string {
 /**
  * Extract calendar events from contracts, payment records, invoices, installation tasks, and composite tasks
  */
+/**
+ * الخدمة الفعلية لفاتورة مبيعات من بنودها (نص حر، لأن الفاتورة لا تحمل نوع خدمة):
+ * «طباعة وتركيب» إذا ورد الاثنان في البنود. تُرجع undefined إن لم تُعرف الخدمة من البنود.
+ */
+export function serviceLabelFromItems(items: unknown): string | undefined {
+  let list: any[] = [];
+  try {
+    list = typeof items === 'string' ? JSON.parse(items) : Array.isArray(items) ? items : [];
+  } catch {
+    return undefined;
+  }
+  const text = list.map(item => Object.values(item || {}).map(v => String(v ?? '')).join(' ')).join(' ');
+  const parts = [
+    /طباعة/.test(text) && 'طباعة',
+    /تركيب/.test(text) && 'تركيب',
+    /(^|\s)قص(\s|$)/.test(text) && 'قص',
+  ].filter(Boolean) as string[];
+  return parts.length ? parts.join(' و') : undefined;
+}
+
 export function extractCalendarEvents(
   contracts: any[],
   payments: any[],
@@ -924,6 +946,7 @@ export function extractCalendarEvents(
         alertTime,
         invoiceNumber: invNum,
         invoiceName: inv.invoice_name || undefined,
+        serviceLabel: serviceLabelFromItems(inv.items),
         invoiceId: inv.id,
         customerName,
         customerId: inv.customer_id,

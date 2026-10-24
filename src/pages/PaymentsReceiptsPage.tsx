@@ -688,6 +688,7 @@ export default function PaymentsReceiptsPage() {
   const [toDate, setToDate] = useState('');
   const [methodFilter, setMethodFilter] = usePersistedState('paymentsReceiptsPage.methodFilter', 'all');
   const [kindFilter, setKindFilter] = usePersistedState<'all' | 'in' | 'out' | 'barter'>('paymentsReceiptsPage.kindFilter', 'all');
+  const [distFilter, setDistFilter] = usePersistedState<'all' | 'open' | 'undistributed' | 'partial'>('paymentsReceiptsPage.distFilter', 'all');
   const [viaOnly, setViaOnly] = useState(false);
   const [visibleCount, setVisibleCount] = useState(60);
 
@@ -710,6 +711,14 @@ export default function PaymentsReceiptsPage() {
   const DEBIT = ['debt', 'general_debit'];
   const num = (v: unknown) => Number(v) || 0;
   const fmt = (v: number) => Math.round(v).toLocaleString('en-US');
+  const LINK_FIELDS = ['contract_number', 'sales_invoice_id', 'printed_invoice_id', 'purchase_invoice_id', 'composite_task_id'] as const;
+  /** حالة توزيع مقبوضة: الأجزاء المربوطة بعقد أو فاتورة أو مهمة هي الموزَّعة، والباقي غير موزع */
+  const distributionOf = (rows: any[], total: number) => {
+    const allocated = rows.reduce((s, p) => s + (LINK_FIELDS.some(f => p[f]) ? num(p.amount) : 0), 0);
+    const remaining = Math.max(0, Math.round((total - allocated) * 100) / 100);
+    const status: 'undistributed' | 'partial' | 'distributed' = allocated <= 0.01 ? 'undistributed' : remaining > 0.01 ? 'partial' : 'distributed';
+    return { status, remaining };
+  };
   const methods = useMemo(() => [...new Set(payments.map(p => p.method).filter(Boolean))].sort(), [payments]);
 
   type Row = { key: string; date: string; customerId: string; customer: string; company?: string | null; rows: Payment[]; total: number; isGroup: boolean };
@@ -726,8 +735,13 @@ export default function PaymentsReceiptsPage() {
     if (kindFilter === 'out' && !DEBIT.includes(first.entry_type)) return false;
     if (kindFilter === 'barter' && first.method !== 'مقايضة') return false;
     if (viaOnly && !r.rows.some((p: any) => p.collected_via_intermediary)) return false;
+    if (distFilter !== 'all') {
+      if (!CREDIT.includes(first.entry_type)) return false;
+      const { status } = distributionOf(r.rows, r.total);
+      if (distFilter === 'open' ? status === 'distributed' : status !== distFilter) return false;
+    }
     return true;
-  }), [allRows, range, methodFilter, kindFilter, viaOnly]); // eslint-disable-line react-hooks/exhaustive-deps
+  }), [allRows, range, methodFilter, kindFilter, viaOnly, distFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const kpi = useMemo(() => {
     let collected = 0, debits = 0, viaAmount = 0, commission = 0, fees = 0, viaCount = 0, receipts = 0;
@@ -858,6 +872,15 @@ export default function PaymentsReceiptsPage() {
             <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">كل الأنواع</SelectItem><SelectItem value="in">مقبوضات</SelectItem><SelectItem value="out">ديون وصادرات</SelectItem><SelectItem value="barter">مقايضة</SelectItem></SelectContent>
           </Select>
+          <Select value={distFilter} onValueChange={v => setDistFilter(v as any)}>
+            <SelectTrigger className="h-9 w-[170px]"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل حالات التوزيع</SelectItem>
+              <SelectItem value="open">غير موزعة أو جزئياً</SelectItem>
+              <SelectItem value="undistributed">غير موزعة</SelectItem>
+              <SelectItem value="partial">موزعة جزئياً</SelectItem>
+            </SelectContent>
+          </Select>
           <Select value={methodFilter} onValueChange={setMethodFilter}>
             <SelectTrigger className="h-9 w-[140px]"><SelectValue /></SelectTrigger>
             <SelectContent><SelectItem value="all">كل الطرق</SelectItem>{methods.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
@@ -897,6 +920,7 @@ export default function PaymentsReceiptsPage() {
             const custody = r.isGroup ? custodyDataMap[r.key] : null;
             const expanded = expandedGroups.has(r.key);
             const targets = [...new Set(r.rows.map(targetLabel))];
+            const dist = CREDIT.includes(first.entry_type) ? distributionOf(r.rows, r.total) : null;
             return (
               <div key={r.key} className="border-b border-border last:border-b-0">
                 <div className="grid grid-cols-2 items-center gap-x-3 gap-y-1 px-4 py-3 lg:grid-cols-[92px_minmax(0,1.4fr)_minmax(0,1.6fr)_120px_110px_110px_88px]">
@@ -906,10 +930,15 @@ export default function PaymentsReceiptsPage() {
                     {r.company && <span className="block truncate text-[11px] text-muted-foreground">{r.company}</span>}
                   </button>
                   <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-1 lg:col-span-1">
-                    {r.isGroup && <button type="button" onClick={() => toggleGroupExpansion(r.key)} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">{expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}موزعة ({r.rows.length})</button>}
+                    {r.isGroup && <button type="button" onClick={() => toggleGroupExpansion(r.key)} className="flex items-center gap-0.5 rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary">{expanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}{dist?.status === 'partial' ? 'موزعة جزئياً' : 'موزعة'} ({r.rows.length})</button>}
                     {!r.isGroup && <span className={`rounded-md px-1.5 py-0.5 text-[11px] ${getEntryTypeStyle(first.entry_type)}`}>{getEntryTypeText(first.entry_type)}</span>}
                     {targets.slice(0, 3).map(t => <span key={t} className="truncate rounded-md border border-border px-1.5 py-0.5 text-[11px]">{t}</span>)}
                     {targets.length > 3 && <span className="text-[11px] text-muted-foreground">+{targets.length - 3}</span>}
+                    {dist && dist.status !== 'distributed' && (
+                      <span className={`rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${dist.status === 'undistributed' ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400' : 'bg-amber-500/10 text-amber-700 dark:text-amber-300'}`}>
+                        {dist.status === 'undistributed' ? `غير موزعة · ${fmt(r.total)} د.ل` : `متبقٍ غير موزع ${fmt(dist.remaining)} د.ل`}
+                      </span>
+                    )}
                     {barter && <span className="rounded-md bg-purple-500/10 px-1.5 py-0.5 text-[11px] text-purple-700 dark:text-purple-300">{barter}</span>}
                     {via && <span className="rounded-md bg-sky-500/10 px-1.5 py-0.5 text-[11px] text-sky-700 dark:text-sky-300">وسيط: {first.collector_name || '—'}</span>}
                     {custody && <span className="rounded-md bg-amber-500/10 px-1.5 py-0.5 text-[11px] text-amber-700 dark:text-amber-300">عهدة: {custody.employee_name}</span>}

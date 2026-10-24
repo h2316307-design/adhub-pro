@@ -55,8 +55,16 @@ const dateCaption = (e: GoogleCalendarEvent) => e.type === 'invoice' ? 'تاري
 const messageTitle = (e: GoogleCalendarEvent) => {
   const ad = e.adType && e.type !== 'invoice' ? ` (${e.adType})` : '';
   if (e.type === 'installment') return `دفعة مستحقة على العقد رقم ${e.contractNumber}${ad}`;
-  if (e.type === 'invoice') return alertLabel(e);
+  if (e.type === 'invoice') return invoiceMessageTitle(e);
   return alertLabel(e).replace(/ — .*$/, '') + ad;
+};
+/** عنوان الفاتورة في رسالة الزبون بدون رقمها: الخدمة الفعلية من البنود إن عُرفت، ثم عنوان الفاتورة */
+const invoiceMessageTitle = (e: GoogleCalendarEvent) => {
+  const contract = e.contractNumber ? ` — عقد #${e.contractNumber}` : '';
+  const base = e.invoiceName ? (e.invoiceName.startsWith('فاتورة') ? e.invoiceName : `فاتورة «${e.invoiceName}»`)
+    : e.serviceLabel ? `فاتورة ${e.serviceLabel}`
+    : 'فاتورة';
+  return base + contract;
 };
 const PAY_NOTE = 'وفي حال تم السداد مسبقاً نرجو التكرم بتجاهل هذه الرسالة، ويسعدنا تواصلكم معنا لأي استفسار.';
 

@@ -190,6 +190,7 @@ export default function CustomerAccount() {
   const [salesOpen, setSalesOpen] = useState(false);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
   const [printPayment, setPrintPayment] = useState<any | null>(null);
+  const [printedOpenOnly, setPrintedOpenOnly] = usePersistedState<boolean>('customerAccount.printedOpenOnly', false);
 
   // ── الحسابات: مصدر واحد هو دفتر الأستاذ الموحد ──
   const ledger = useMemo(() => data ? buildCanonicalCustomerLedger(data.ledgerSources, { hidePaymentDistribution: true }) : null, [data]);
@@ -246,6 +247,21 @@ export default function CustomerAccount() {
     return items.sort((a, b) => b.remaining - a.remaining);
   }, [data, contractRows, printedRows]);
   const [showAllDebts, setShowAllDebts] = useState(false);
+
+  // ── ملخص الفواتير: المستحق على الطباعة والمبيعات، والمحصَّل، ورصيد المشتريات المتاح للاستخدام كدفعة ──
+  const invoiceSummary = useMemo(() => {
+    const salesRows = (data?.salesInvoices || []).map((i: any) => {
+      const total = Number(i.total_amount) || 0;
+      const paid = Number(i.paid_amount) || 0;
+      return { total, paid, remaining: Math.max(0, round2(total - paid)) };
+    });
+    const debtRows = [...printedRows, ...salesRows];
+    const open = debtRows.filter(r => r.remaining > 0.01).length;
+    const due = debtRows.reduce((s, r) => s + r.remaining, 0);
+    const collected = debtRows.reduce((s, r) => s + r.paid, 0);
+    const purchaseCredit = (data?.purchaseInvoices || []).reduce((s: number, i: any) => s + Math.max(0, round2((Number(i.total_amount) || 0) - (Number(i.used_as_payment) || 0))), 0);
+    return { open, due: round2(due), collected: round2(collected), purchaseCredit: round2(purchaseCredit) };
+  }, [data, printedRows]);
 
   // ── عمليات ──
   const runOp = async (fn: () => Promise<void>, ok: string) => {
@@ -496,11 +512,25 @@ export default function CustomerAccount() {
 
         {tab === 'invoices' && (
           <section className="space-y-3">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Stat label="المستحق على الفواتير" value={fmt(invoiceSummary.due)} tone={invoiceSummary.due > 0.01 ? 'debt' : 'muted'}
+                hint={invoiceSummary.open ? `${invoiceSummary.open} فاتورة غير مسددة بالكامل` : 'كل الفواتير مسددة'} />
+              <Stat label="المحصَّل على الفواتير" value={fmt(invoiceSummary.collected)} tone="credit" hint="طباعة ومبيعات" />
+              <Stat label="رصيد مشتريات متاح" value={fmt(invoiceSummary.purchaseCredit)} tone={invoiceSummary.purchaseCredit > 0.01 ? 'credit' : 'muted'}
+                hint={invoiceSummary.purchaseCredit > 0.01 ? 'يمكن استخدامه كدفعة من تبويب المشتريات' : 'لا يوجد'} />
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
             <div role="radiogroup" className="flex w-fit gap-1 rounded-lg border border-border bg-muted/30 p-1">
               {([['printed', `الطباعة (${data.printedInvoices.length})`], ['sales', `المبيعات (${data.salesInvoices.length})`], ['purchase', `المشتريات (${data.purchaseInvoices.length})`]] as const).map(([k, l]) => (
                 <button key={k} role="radio" aria-checked={invoiceTab === k} onClick={() => setInvoiceTab(k)}
                   className={cn('h-8 rounded-md px-3 text-xs font-semibold', invoiceTab === k ? 'bg-card shadow-sm ring-1 ring-primary/40' : 'text-muted-foreground hover:text-foreground')}>{l}</button>
               ))}
+            </div>
+            {invoiceTab === 'printed' && (
+              <label className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs">
+                <input type="checkbox" checked={printedOpenOnly} onChange={e => setPrintedOpenOnly(e.target.checked)} className="accent-primary" />غير المسددة فقط
+              </label>
+            )}
             </div>
             {invoiceTab === 'printed' && (
               <div className="overflow-x-auto rounded-xl border border-border">
@@ -516,7 +546,7 @@ export default function CustomerAccount() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {printedRows.map(({ inv, total, paid, remaining, contracts }) => (
+                    {printedRows.filter(r => !printedOpenOnly || r.remaining > 0.01).map(({ inv, total, paid, remaining, contracts }) => (
                       <tr key={inv.id} className="hover:bg-muted/20">
                         <td className="px-3 py-2">
                           <div className="font-semibold">{inv.invoice_number || '—'}</div>
