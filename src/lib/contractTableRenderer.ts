@@ -168,7 +168,7 @@ function getCellContent(
         height: ${imgHeightPx}px;
         max-height: ${imgHeightPx}px;
         width: auto;
-        object-fit: contain;
+        object-fit: contain; max-width: 100%;
         display: block;
         margin: 0 auto;
       " />`;
@@ -286,6 +286,7 @@ function renderDataCell(
       background-color: ${cellBg};
       color: ${cellTextColor};
       font-size: ${col.fontSize || tblSettings.fontSize}px;
+      font-family: 'ContractDoran', 'Doran', sans-serif; font-variant-numeric: tabular-nums;
       font-weight: ${tblSettings.fontWeight || 'normal'};
       text-align: ${col.textAlign || tblSettings.cellTextAlign || 'center'};
       padding: ${noPadding ? '0' : (cellPadding + 'px')};
@@ -293,7 +294,7 @@ function renderDataCell(
       vertical-align: middle;
       line-height: ${lineHeight};
       white-space: normal;
-      word-break: break-word;
+      word-break: normal; overflow-wrap: anywhere;
       overflow: hidden;
       position: relative;
     ">
@@ -339,7 +340,7 @@ export function renderBillboardsTablePage(options: RenderTableOptions): string {
         top: calc(${(tblSettings.topPosition - (tableTerm.marginBottom || 8) - 12)}mm + ${tableTerm.positionY ?? 0}px);
         left: calc(50% + ${tableTerm.positionX ?? 0}px);
         transform: translateX(-50%);
-        font-family: 'Doran', 'Noto Sans Arabic', sans-serif;
+        font-family: 'ContractDoran', 'Doran', 'Noto Sans Arabic', sans-serif;
         font-size: ${termFontSize}px;
         color: ${tableTerm.color || '#1a1a2e'};
         direction: rtl;
@@ -362,7 +363,7 @@ export function renderBillboardsTablePage(options: RenderTableOptions): string {
       renderDataCell(col, row, globalIndex, rowIndex, tblSettings, borderWidthPx)
     ).join('');
     
-    return `<tr style="min-height: ${tblSettings.rowHeight}mm; height: auto;">${cells}</tr>`;
+    return `<tr style="break-inside:avoid;page-break-inside:avoid;min-height: ${tblSettings.rowHeight}mm; height: auto;">${cells}</tr>`;
   }).join('');
   
   const tableLeftMargin = (100 - (tblSettings.tableWidth || 90)) / 2;
@@ -398,15 +399,15 @@ export function renderBillboardsTablePage(options: RenderTableOptions): string {
           border-collapse: collapse;
           border-spacing: 0;
           font-size: ${tblSettings.fontSize}px;
-          font-family: 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
+          font-family: 'ContractDoran', 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
           table-layout: fixed;
           border: ${borderWidthPx} solid ${tblSettings.borderColor};
         ">
           <colgroup>
             ${visibleColumns.map(col => `<col style="width: ${col.width}%;" />`).join('')}
           </colgroup>
-          <thead>
-            <tr style="height: ${tblSettings.headerRowHeight}mm;">
+          <thead style="display:table-header-group;">
+            <tr style="break-inside:avoid;page-break-inside:avoid;height: ${tblSettings.headerRowHeight}mm;">
               ${headerRow}
             </tr>
           </thead>
@@ -481,7 +482,7 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
       <div style="
         text-align: center;
         margin-bottom: ${(tableTerm.marginBottom || 8)}px;
-        font-family: 'Doran', 'Noto Sans Arabic', sans-serif;
+        font-family: 'ContractDoran', 'Doran', 'Noto Sans Arabic', sans-serif;
         direction: rtl;
         position: relative;
         left: ${(tableTerm.positionX ?? 0)}px;
@@ -559,6 +560,7 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
           background-color: ${cellBg};
           color: ${cellTextColor};
           font-size: ${(col.fontSize || tblSettings.fontSize || 10)}px;
+          font-family: 'ContractDoran', 'Doran', sans-serif; font-variant-numeric: tabular-nums;
           font-weight: ${(tblSettings.fontWeight || 'normal')};
           text-align: ${(col.textAlign || tblSettings.cellTextAlign || 'center')};
           padding: ${noPadding ? '0' : `${cellPadding}px`};
@@ -566,7 +568,7 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
           vertical-align: middle;
           line-height: ${lineHeight};
           white-space: normal;
-          word-break: break-word;
+          word-break: normal; overflow-wrap: anywhere;
           overflow: hidden;
           position: relative;
           height: ${rowHeightPx}px;
@@ -585,7 +587,7 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
       `;
     }).join('');
 
-    return `<tr style="height: ${rowHeightPx}px;">${cells}</tr>`;
+    return `<tr style="break-inside:avoid;page-break-inside:avoid;height: ${rowHeightPx}px;">${cells}</tr>`;
   }).join('');
 
   const tableLeftMargin = (100 - (tblSettings.tableWidth || 90)) / 2;
@@ -604,7 +606,7 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
         ${tableTermHtml}
         <table class="border-collapse w-full" dir="rtl" style="
           font-size: ${(tblSettings.fontSize || 8)}px;
-          font-family: 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
+          font-family: 'ContractDoran', 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
           direction: rtl;
           table-layout: fixed;
           border-collapse: collapse;
@@ -615,8 +617,8 @@ function renderBillboardsTablePagePreviewLike(options: RenderTableOptions): stri
           <colgroup>
             ${visibleColumns.map((col) => `<col style="width: ${col.width}%;" />`).join('')}
           </colgroup>
-          <thead>
-            <tr style="height: ${((tblSettings.headerRowHeight || 14) * MM_TO_PX)}px;">${headerRow}</tr>
+          <thead style="display:table-header-group;">
+            <tr style="break-inside:avoid;page-break-inside:avoid;height: ${((tblSettings.headerRowHeight || 14) * MM_TO_PX)}px;">${headerRow}</tr>
           </thead>
           <tbody>${dataRows}</tbody>
         </table>
@@ -740,7 +742,7 @@ export function injectReportTitleOnFirstPage(pages: string[], customTitle?: stri
       z-index: 25;
       text-align: center;
       direction: rtl;
-      font-family: 'Doran', 'Noto Sans Arabic', sans-serif;
+      font-family: 'ContractDoran', 'Doran', 'Noto Sans Arabic', sans-serif;
       font-size: 56px;
       font-weight: 900;
       color: #1a1a2e;

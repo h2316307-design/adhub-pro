@@ -5,6 +5,18 @@
 /* نظام التصميم - ذهبي احترافي */
 
 /* قيمة افتراضية لمتغير الخط حتى لا يصبح font-sans غير صالح قبل تحميل إعدادات المظهر (كان يسبب تبدّل الخطوط) */
+
+/* Contract text uses Doran; digits use Manrope, including mixed Arabic text. */
+@font-face { font-family: 'ContractDoran'; src: url('/Doran-Regular.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('/Manrope-Regular.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('/Doran-Medium.otf') format('opentype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('/Manrope-Medium.otf') format('opentype'); font-weight: 500; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('/Doran-Bold.otf') format('opentype'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('/Manrope-Bold.otf') format('opentype'); font-weight: 600; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('/Doran-Bold.otf') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('/Manrope-Bold.otf') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('/Doran-ExtraBold.otf') format('opentype'); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('/Manrope-ExtraBold.otf') format('opentype'); font-weight: 800; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
 :root { --app-font-family: 'Doran', 'Cairo', 'Tajawal', sans-serif; }
 
 /* ✅ خط النظام Doran — تعريف عام ثابت (كان يُحمَّل فقط عند فتح صفحات طباعة معينة فيتغير خط الواجهة) */

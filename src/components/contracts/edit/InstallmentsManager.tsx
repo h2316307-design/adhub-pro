@@ -80,6 +80,10 @@ interface InstallmentsManagerProps {
    * when the total changes (e.g., when installments are loaded from DB).
    */
   disableAutoRedistribute?: boolean;
+  autoCalculate?: boolean;
+  savedPeriodTemplate?: string;
+  onPeriodTemplateChange?: (value: string) => void;
+  onAutoCalculateChange?: (value: boolean) => void;
   onDistributeEvenly: (count: number) => void;
   onDistributeWithInterval?: (config: {
     firstPayment: number;
@@ -121,6 +125,10 @@ export function InstallmentsManager({
   startDate,
   endDate,
   disableAutoRedistribute,
+  autoCalculate = false,
+  savedPeriodTemplate,
+  onPeriodTemplateChange,
+  onAutoCalculateChange,
   onDistributeEvenly,
   onDistributeWithInterval,
   onCreateManualInstallments,
@@ -153,7 +161,7 @@ export function InstallmentsManager({
   const [useCustomFirstDate, setUseCustomFirstDate] = React.useState(false);
 
   const [paymentMode, setPaymentMode] = React.useState<'single' | 'multiple' | 'periods'>(savedDistributionType ?? 'multiple');
-  const [periodsCount, setPeriodsCount] = React.useState<string>('3');
+  const [periodsCount, setPeriodsCount] = React.useState<string>(String(savedCount || 3));
   const [interval, setInterval] = React.useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>(savedInterval ?? 'month');
   const [numPayments, setNumPayments] = React.useState<number>(savedCount ?? 2);
   const [useCustomLastDate, setUseCustomLastDate] = React.useState(false);
@@ -174,8 +182,6 @@ export function InstallmentsManager({
     return [...new Set(combined)];
   }, [installments, customPaymentTypes]);
 
-  const prevFinalTotalRef = React.useRef<number>(finalTotal);
-  const isInitialMount = React.useRef(true);
 
   // Sync state with parent
   React.useEffect(() => {
@@ -199,38 +205,27 @@ export function InstallmentsManager({
   }, [savedInterval]);
   
   React.useEffect(() => {
-    if (savedCount !== undefined) setNumPayments(savedCount);
+    if (savedCount !== undefined) { setNumPayments(savedCount); setPeriodsCount(String(savedCount)); }
   }, [savedCount]);
 
-  // Auto-redistribute when finalTotal changes
   React.useEffect(() => {
-    if (disableAutoRedistribute) {
-      prevFinalTotalRef.current = finalTotal;
-      return;
-    }
+    if (savedFirstAtSigning !== undefined) setFirstAtSigning(savedFirstAtSigning);
+  }, [savedFirstAtSigning]);
+  const previousScheduleInputs = React.useRef({ total: finalTotal, start: startDate, end: endDate });
+  React.useEffect(() => {
+    const previous = previousScheduleInputs.current;
+    previousScheduleInputs.current = { total: finalTotal, start: startDate, end: endDate };
+    if (!autoCalculate || finalTotal <= 0 || !startDate || !installments.length) return;
+    // Loading a saved contract is not a request to replace its saved schedule.
+    if (!previous.start || previous.total <= 0) return;
+    if (Math.abs(previous.total - finalTotal) < 0.01 && previous.start === startDate && previous.end === endDate) return;
+    if (paymentMode === 'periods') handleApplyPeriods();
+    else handleDistribute();
+  }, [finalTotal, startDate, endDate, autoCalculate]);
 
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      prevFinalTotalRef.current = finalTotal;
-      return;
-    }
-
-    const prevTotal = prevFinalTotalRef.current;
-    const difference = Math.abs(finalTotal - prevTotal);
-    
-    if (difference > 1 && installments.length > 0 && startDate && onDistributeWithInterval) {
-      onDistributeWithInterval({
-        firstPayment: hasDifferentFirstPayment ? firstPayment : 0,
-        firstPaymentType,
-        interval,
-        numPayments: useCustomLastDate ? undefined : numPayments,
-        lastPaymentDate: useCustomLastDate && lastPaymentDate ? lastPaymentDate : undefined,
-        firstPaymentDate: useCustomFirstDate && firstPaymentDate ? firstPaymentDate : undefined
-      });
-    }
-    
-    prevFinalTotalRef.current = finalTotal;
-  }, [finalTotal, disableAutoRedistribute]);
+  React.useEffect(() => {
+    if (savedPeriodTemplate) setPeriodsCount(savedPeriodTemplate);
+  }, [savedPeriodTemplate, savedCount]);
 
   // Handlers
   const handleHasDifferentFirstPaymentChange = (value: boolean) => {
@@ -341,6 +336,7 @@ export function InstallmentsManager({
   }, [interval]);
 
   const handleDistribute = () => {
+    onAutoCalculateChange?.(true);
     if (!onDistributeWithInterval || !startDate) return;
 
     if (paymentMode === 'single') {
@@ -400,8 +396,12 @@ export function InstallmentsManager({
       return;
     }
 
-    const start = startDate ? new Date(startDate) : new Date();
-    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 60 * 24 * 60 * 60 * 1000);
+    if (!startDate || !endDate || !Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate)) || Date.parse(endDate) < Date.parse(startDate)) {
+      toast.error('حدد تاريخ بداية ونهاية صحيحين لتوزيع الدفعات على مدة العقد');
+      return;
+    }
+    const start = new Date(startDate);
+    const end = new Date(endDate);
     const totalDuration = end.getTime() - start.getTime();
 
     // ✅ 40% - 30% - 30% بأرقام مغلقة مع ترحيل الفرق للأمام (تقريب للأعلى)
@@ -413,8 +413,8 @@ export function InstallmentsManager({
     const p3Amount = Math.round(remaining * 100) / 100; // المتبقي بالضبط
 
     const p1DateStr = start.toISOString().split('T')[0];
-    const p2DateStr = new Date(start.getTime() + totalDuration * 0.40).toISOString().split('T')[0];
-    const p3DateStr = new Date(start.getTime() + totalDuration * 0.70).toISOString().split('T')[0];
+    const p2DateStr = new Date(start.getTime() + totalDuration / 3).toISOString().split('T')[0];
+    const p3DateStr = new Date(start.getTime() + totalDuration * 2 / 3).toISOString().split('T')[0];
 
     const payments = [
       {
@@ -425,13 +425,67 @@ export function InstallmentsManager({
       },
       {
         amount: p2Amount,
-        paymentType: 'شهري',
+        paymentType: 'بعد ثلث مدة العقد',
         description: 'دفعة ثانية (30%)',
         dueDate: p2DateStr
       },
       {
         amount: p3Amount,
-        paymentType: 'شهري',
+        paymentType: 'بعد ثلثي مدة العقد',
+        description: 'دفعة ثالثة (30%)',
+        dueDate: p3DateStr
+      }
+    ];
+
+    if (onApplyUnequalDistribution) {
+      onApplyUnequalDistribution(payments);
+    } else {
+      toast.error('ميزة التوزيع غير متوفرة في هذه الصفحة حالياً');
+    }
+  };
+
+  const applyTemplate304030 = () => {
+    if (finalTotal <= 0) {
+      toast.info('لا يمكن توزيع الدفعات بدون إجمالي صحيح');
+      return;
+    }
+
+    if (!startDate || !endDate || !Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate)) || Date.parse(endDate) < Date.parse(startDate)) {
+      toast.error('حدد تاريخ بداية ونهاية صحيحين لتوزيع الدفعات على مدة العقد');
+      return;
+    }
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDuration = end.getTime() - start.getTime();
+
+    // ✅ 30% - 40% - 30% بأرقام مغلقة مع ترحيل الفرق للأمام (تقريب للأعلى)
+    let remaining = finalTotal;
+    const p1Amount = Math.min(remaining, roundUpToCleanValue(finalTotal * 0.30));
+    remaining -= p1Amount;
+    const p2Amount = Math.min(remaining, roundUpToCleanValue(finalTotal * 0.40));
+    remaining -= p2Amount;
+    const p3Amount = Math.round(remaining * 100) / 100; // المتبقي بالضبط
+
+    const p1DateStr = start.toISOString().split('T')[0];
+    const p2DateStr = new Date(start.getTime() + totalDuration / 3).toISOString().split('T')[0];
+    const p3DateStr = new Date(start.getTime() + totalDuration * 2 / 3).toISOString().split('T')[0];
+
+    const payments = [
+      {
+        amount: p1Amount,
+        paymentType: 'عند التوقيع',
+        description: 'دفعة أولى عند التوقيع (30%)',
+        dueDate: p1DateStr
+      },
+      {
+        amount: p2Amount,
+        paymentType: 'بعد ثلث مدة العقد',
+        description: 'دفعة ثانية (40%)',
+        dueDate: p2DateStr
+      },
+      {
+        amount: p3Amount,
+        paymentType: 'بعد ثلثي مدة العقد',
         description: 'دفعة ثالثة (30%)',
         dueDate: p3DateStr
       }
@@ -450,8 +504,12 @@ export function InstallmentsManager({
       return;
     }
 
-    const start = startDate ? new Date(startDate) : new Date();
-    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 30 * 24 * 60 * 60 * 1000);
+    if (!startDate || !endDate || !Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate)) || Date.parse(endDate) < Date.parse(startDate)) {
+      toast.error('حدد تاريخ بداية ونهاية صحيحين لتوزيع الدفعات على مدة العقد');
+      return;
+    }
+    const start = new Date(startDate);
+    const end = new Date(endDate);
     const totalDuration = end.getTime() - start.getTime();
     
     // ✅ 50% - 50% بأرقام مغلقة مع ترحيل الفرق للدفعة الثانية (تقريب للأعلى)
@@ -470,7 +528,7 @@ export function InstallmentsManager({
       },
       {
         amount: p2Amount,
-        paymentType: 'نهاية العقد',
+        paymentType: 'منتصف مدة العقد',
         description: 'دفعة ثانية (50%)',
         dueDate: p2DateStr
       }
@@ -489,8 +547,12 @@ export function InstallmentsManager({
       return;
     }
 
-    const start = startDate ? new Date(startDate) : new Date();
-    const end = endDate ? new Date(endDate) : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+    if (!startDate || !endDate || !Number.isFinite(Date.parse(startDate)) || !Number.isFinite(Date.parse(endDate)) || Date.parse(endDate) < Date.parse(startDate)) {
+      toast.error('حدد تاريخ بداية ونهاية صحيحين لتوزيع الدفعات على مدة العقد');
+      return;
+    }
+    const start = new Date(startDate);
+    const end = new Date(endDate);
     const totalDuration = end.getTime() - start.getTime();
 
     // ✅ 33.33% لكل فترة بأرقام مغلقة مع ترحيل الفرق للأمام (تقريب للأعلى)
@@ -502,8 +564,8 @@ export function InstallmentsManager({
     const p3Amount = Math.round(remaining * 100) / 100; // المتبقي بالضبط
 
     const p1DateStr = start.toISOString().split('T')[0];
-    const p2DateStr = new Date(start.getTime() + totalDuration * 0.3333).toISOString().split('T')[0];
-    const p3DateStr = new Date(start.getTime() + totalDuration * 0.6666).toISOString().split('T')[0];
+    const p2DateStr = new Date(start.getTime() + totalDuration / 3).toISOString().split('T')[0];
+    const p3DateStr = new Date(start.getTime() + totalDuration * 2 / 3).toISOString().split('T')[0];
 
     const payments = [
       {
@@ -514,13 +576,13 @@ export function InstallmentsManager({
       },
       {
         amount: p2Amount,
-        paymentType: 'شهري',
+        paymentType: 'بعد ثلث مدة العقد',
         description: 'دفعة ثانية (33.33%)',
         dueDate: p2DateStr
       },
       {
         amount: p3Amount,
-        paymentType: 'شهري',
+        paymentType: 'بعد ثلثي مدة العقد',
         description: 'دفعة ثالثة (33.34%)',
         dueDate: p3DateStr
       }
@@ -533,8 +595,21 @@ export function InstallmentsManager({
     }
   };
 
+  const applyQuickTemplate = (template: string, apply: () => void) => {
+    if (finalTotal <= 0 || !startDate || !endDate || !onApplyUnequalDistribution) return;
+    handlePaymentModeChange('periods');
+    setPeriodsCount(template);
+    onPeriodTemplateChange?.(template);
+    onCountChange?.(template === '50-50' ? 2 : 3);
+    onAutoCalculateChange?.(true);
+    apply();
+  };
+
   const handleApplyPeriods = () => {
-    if (periodsCount === '40-30-30') {
+    onAutoCalculateChange?.(true);
+    if (periodsCount === '30-40-30') {
+      applyTemplate304030();
+    } else if (periodsCount === '40-30-30') {
       applyTemplate403030();
     } else if (periodsCount === '50-50') {
       applyTemplate5050();
@@ -557,6 +632,10 @@ export function InstallmentsManager({
         </CardTitle>
       </CardHeader>
       <CardContent className="p-4 space-y-4">
+        {onAutoCalculateChange && <label className="flex items-center justify-between gap-3 rounded-lg border border-border p-3 cursor-pointer">
+          <span className="text-sm">تحديث الدفعات تلقائيًا عند تغيير الإجمالي أو المدة</span>
+          <Switch checked={autoCalculate} onCheckedChange={onAutoCalculateChange} />
+        </label>}
         
         {/* التوزيع الذكي */}
         {onDistributeWithInterval && (
@@ -619,9 +698,9 @@ export function InstallmentsManager({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={applyTemplate403030}
+                  onClick={() => applyQuickTemplate('40-30-30', applyTemplate403030)}
                   className="text-xs font-bold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer h-9 bg-background/50"
-                  disabled={!startDate}
+                  disabled={!startDate || !endDate}
                 >
                   40% / 30% / 30% (3 أقساط)
                 </Button>
@@ -629,15 +708,25 @@ export function InstallmentsManager({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={applyTemplate5050}
+                  onClick={() => applyQuickTemplate('30-40-30', applyTemplate304030)}
                   className="text-xs font-bold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer h-9 bg-background/50"
-                  disabled={!startDate}
+                  disabled={!startDate || !endDate}
+                >
+                  30% / 40% / 30% (3 أقساط)
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => applyQuickTemplate('50-50', applyTemplate5050)}
+                  className="text-xs font-bold border-amber-500/30 hover:bg-amber-500/10 hover:text-amber-800 dark:hover:text-amber-200 cursor-pointer h-9 bg-background/50"
+                  disabled={!startDate || !endDate}
                 >
                   50% / 50% (قسطين)
                 </Button>
               </div>
               <p className="text-[10px] text-amber-600/80 leading-normal text-right">
-                * يتم توزيع النسب على قيمة العقد، وتقسيم فترات الدفعات بالتساوي على مدار مدة العقد.
+                النسب تخص المبالغ فقط: ثلاث دفعات عند البداية وبعد ثلث المدة وبعد ثلثيها؛ ودفعتان عند البداية ومنتصف المدة.
               </p>
             </div>
 
@@ -848,12 +937,13 @@ export function InstallmentsManager({
                   <Label className="text-xs text-muted-foreground">عدد فترات التقسيم</Label>
                   <Select 
                     value={periodsCount} 
-                    onValueChange={(v) => setPeriodsCount(v)}
+                    onValueChange={(v) => { setPeriodsCount(v); onPeriodTemplateChange?.(v); if (/^\d+$/.test(v)) onCountChange?.(Number(v)); }}
                   >
                     <SelectTrigger className="h-10">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="z-[10000]">
+                      <SelectItem value="30-40-30">نظام 30% - 40% - 30% (3 أقساط)</SelectItem>
                       <SelectItem value="40-30-30">نظام 40% - 30% - 30% (3 أقساط)</SelectItem>
                       <SelectItem value="50-50">نظام 50% - 50% (قسطين)</SelectItem>
                       <SelectItem value="33-33-33">نظام 33.33% لكل الفترات (3 أقساط)</SelectItem>

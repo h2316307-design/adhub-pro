@@ -125,19 +125,19 @@ export interface PageSectionSettings {
 }
 
 export const DEFAULT_TABLE_COLUMNS: TableColumnSettings[] = [
-  { key: 'index', label: '#', visible: true, width: 5, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
-  { key: 'image', label: 'الصورة', visible: true, width: 10, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'index', label: '#', visible: true, width: 4, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'image', label: 'الصورة', visible: true, width: 11, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'code', label: 'الكود', visible: true, width: 8, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
-  { key: 'billboardName', label: 'اسم اللوحة', visible: true, width: 12, fontSize: 26, headerFontSize: 28, padding: 4, lineHeight: 1.3 },
-  { key: 'municipality', label: 'البلدية', visible: true, width: 9, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
-  { key: 'district', label: 'المنطقة', visible: true, width: 10, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
-  { key: 'name', label: 'الموقع', visible: true, width: 14, fontSize: 26, headerFontSize: 28, padding: 4, lineHeight: 1.3 },
-  { key: 'size', label: 'المقاس', visible: true, width: 7, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
-  { key: 'faces', label: 'الأوجه', visible: true, width: 7, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'billboardName', label: 'اسم اللوحة', visible: true, width: 10, fontSize: 26, headerFontSize: 28, padding: 4, lineHeight: 1.3 },
+  { key: 'municipality', label: 'البلدية', visible: true, width: 8, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'district', label: 'المنطقة', visible: true, width: 8, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'name', label: 'الموقع', visible: true, width: 16, fontSize: 26, headerFontSize: 28, padding: 4, lineHeight: 1.3 },
+  { key: 'size', label: 'المقاس', visible: true, width: 6, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'faces', label: 'الأوجه', visible: true, width: 4, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'price', label: 'السعر', visible: true, width: 9, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'endDate', label: 'تاريخ الانتهاء', visible: true, width: 9, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
   { key: 'durationDays', label: 'المدة (أيام)', visible: false, width: 8, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
-  { key: 'location', label: 'GPS', visible: true, width: 9, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
+  { key: 'location', label: 'GPS', visible: true, width: 8, fontSize: 26, headerFontSize: 28, padding: 2, lineHeight: 1.3 },
 ];
 
 export const DEFAULT_TABLE_SETTINGS: TableSettings = {

@@ -54,7 +54,7 @@ export function buildTableTermHtml({ tableTerm, title, content }: BuildTableTerm
     html: `
       <div style="
         text-align: center;
-        font-family: 'Doran', sans-serif;
+        font-family: 'ContractDoran', 'Doran', sans-serif;
         direction: rtl;
         margin: 0; padding: 0;
         line-height: 1;
@@ -71,6 +71,7 @@ export function buildTableTermHtml({ tableTerm, title, content }: BuildTableTerm
             font-weight: ${titleWeight};
             position: relative;
             display: inline-block;
+            white-space: nowrap;
             height: ${lineBoxPx}px;
             line-height: ${lineBoxPx}px;
             vertical-align: middle;

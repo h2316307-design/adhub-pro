@@ -52,7 +52,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 export default function OfferEdit() {
   const navigate = useNavigate();
   // ✅ نفس تخطيط صفحة تعديل العقد
-  const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing'>('boards');
+  const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing' | 'payments'>('boards');
+  const [paymentsNavTick, setPaymentsNavTick] = useState(0);
+  useEffect(() => {
+    if (workspaceSection === 'payments') {
+      document.getElementById('offer-payments')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [workspaceSection, paymentsNavTick]);
   const [boardsViewMode, setBoardsViewMode] = useState<'cards' | 'map' | 'split'>('cards');
   const [catalogFiltersCollapsed, setCatalogFiltersCollapsed] = useState(false);
   // ⚠️ لوحات أضيفت/أزيلت بعد تحميل العرض: يُمنع الحفظ حتى «معالجة التعديلات»
@@ -145,6 +151,7 @@ export default function OfferEdit() {
   const [installmentFirstPaymentType, setInstallmentFirstPaymentType] = useState<'amount' | 'percent'>('amount');
   const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>('month');
   const [installmentCount, setInstallmentCount] = useState<number>(2);
+  const [installmentPeriodTemplate, setInstallmentPeriodTemplate] = useState('3');
   const [installmentAutoCalculate, setInstallmentAutoCalculate] = useState<boolean>(false);
   const [installmentFirstAtSigning, setInstallmentFirstAtSigning] = useState<boolean>(true);
   const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = useState<boolean>(false);
@@ -395,6 +402,10 @@ export default function OfferEdit() {
         }
 
         // Load installment distribution settings from DB
+        try {
+          const rows = typeof offer.installments_data === 'string' ? JSON.parse(offer.installments_data) : offer.installments_data;
+          setInstallmentPeriodTemplate(rows?.[0]?.distributionPlan?.periodTemplate || String(offer.installment_count || 3));
+        } catch { setInstallmentPeriodTemplate('3'); }
         const savedDistributionType = offer.installment_distribution_type || 'multiple';
         const savedFirstPaymentAmount = Number(offer.installment_first_payment_amount || 0);
         const savedFirstPaymentType = offer.installment_first_payment_type || 'amount';
@@ -1514,6 +1525,7 @@ export default function OfferEdit() {
         const defaultPaymentType = idx === 0 ? 'عند التوقيع' : (idx === 1 ? 'عند التركيب' : 'شهري');
         const paymentType = String(inst?.paymentType || '').trim() || defaultPaymentType;
         return {
+          distributionPlan: { periodTemplate: installmentPeriodTemplate },
           amount: Number(inst?.amount ?? 0) || 0,
           paymentType,
           description: String(inst?.description || '').trim() || `الدفعة ${idx + 1}`,
@@ -1629,27 +1641,8 @@ export default function OfferEdit() {
     });
 
   // تعديل اللوحات أو الأسعار يُطبَّق فوراً: الدفعات المتطابقة مع الإجمالي تتبعه تلقائياً (المعدّلة يدوياً لا تُلمس)
-  const syncedTotalRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!billboardBaseline || finalTotal <= 0) return;
-    const prevTotal = syncedTotalRef.current ?? billboardBaseline.total;
-    syncedTotalRef.current = finalTotal;
-    if (Math.abs(prevTotal - finalTotal) < 0.01) return;
-    setInstallments((cur: any[]) => {
-      if (!cur.length) return cur;
-      const sum = cur.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-      // تمت مزامنتها مسبقاً (مثلاً وضع الدفعة الواحدة يعيد توليدها) — لا تُطبَّق الفروقات مرة ثانية
-      if (Math.abs(sum - finalTotal) <= 1) return cur;
-      // الدفعات المطابقة للإجمالي السابق تتبع الإجمالي الجديد بالتناسب
-      if (Math.abs(sum - prevTotal) <= 1) return rescaleInstallmentsToTotal(cur, finalTotal);
-      // دفعات معدّلة يدوياً: يُضاف فرق الإجمالي على آخر دفعة (أو تُعاد بالتناسب إن صارت سالبة) حتى يبقى المجموع صحيحاً
-      const delta = Math.round((finalTotal - prevTotal) * 100) / 100;
-      const last = Number(cur[cur.length - 1].amount || 0) + delta;
-      if (last >= 0) return cur.map((r: any, i: number) => i === cur.length - 1 ? { ...r, amount: Math.round(last * 100) / 100 } : r);
-      return rescaleInstallmentsToTotal(cur, finalTotal);
-    });
-    if (pendingBillboardChanges) setInstallmentsLoaded(true);
-  }, [finalTotal, pendingBillboardChanges, billboardBaseline]);
+  // InstallmentsManager owns automatic redistribution; manual schedules remain untouched.
+
 
 
   const handlePrintOffer = () => {
@@ -1714,6 +1707,7 @@ export default function OfferEdit() {
     { key: 'boards', label: 'لوحات العرض', hint: `${selected.length} لوحة`, icon: OfIconBoards },
     { key: 'catalog', label: 'إضافة لوحات', hint: 'بحث وخريطة', icon: OfIconAdd },
     { key: 'pricing', label: 'الأسعار والدفعات', hint: `${Number(finalTotal || 0).toLocaleString('ar-LY')} د.ل`, icon: OfIconMoney },
+    { key: 'payments', label: 'توزيع الدفعات', hint: `${installments.length} دفعات`, icon: OfIconMoney },
   ] as const;
   const ofStatus = !isEditing
     ? { label: 'عرض جديد', tone: 'info' as const }
@@ -1742,7 +1736,7 @@ export default function OfferEdit() {
       }
       sections={ofSections}
       active={workspaceSection}
-      onSectionChange={k => setWorkspaceSection(k as typeof workspaceSection)}
+      onSectionChange={k => { setWorkspaceSection(k as typeof workspaceSection); if (k === 'payments') setPaymentsNavTick(t => t + 1); }}
       navLabel="أقسام تعديل العرض"
       mobileSummary={
         <EditMobileSummary items={[
@@ -2121,7 +2115,7 @@ export default function OfferEdit() {
             </div>
           </div>
 
-          <div className={`${workspaceSection === 'pricing' ? 'grid' : 'hidden'} scroll-mt-40 min-w-0 items-start gap-5 lg:grid-cols-2`}>
+          <div className={`${['pricing', 'payments'].includes(workspaceSection) ? 'grid' : 'hidden'} scroll-mt-40 min-w-0 items-start gap-5 lg:grid-cols-2`}>
             {isEditing && <PricingSnapshotCard snapshot={(currentOffer as any)?.pricing_snapshot} currentPricing={pricing.pricingData || []} entityLabel="العرض" />}
             <div className="lg:col-span-2 flex flex-wrap items-center justify-between gap-3">
               <div><h2 className="text-lg font-bold">الأسعار والخدمات والدفعات</h2><p className="text-sm text-muted-foreground">اضبط التكاليف والخصومات والدفعات ثم راجع الملخص</p></div>
@@ -2377,6 +2371,10 @@ export default function OfferEdit() {
             <div id="offer-payments" className="scroll-mt-40 lg:col-span-2">
             {/* الأقساط */}
             <InstallmentsManager
+              savedPeriodTemplate={installmentPeriodTemplate}
+              onPeriodTemplateChange={setInstallmentPeriodTemplate}
+              autoCalculate={installmentAutoCalculate}
+              onAutoCalculateChange={setInstallmentAutoCalculate}
               installments={installments}
               finalTotal={finalTotal}
               startDate={startDate}
@@ -2388,9 +2386,9 @@ export default function OfferEdit() {
               onCreateManualInstallments={createManualInstallments}
               onApplyUnequalDistribution={handleApplyUnequalDistribution}
               onAddInstallment={addInstallment}
-              onRemoveInstallment={removeInstallment}
-              onUpdateInstallment={updateInstallment}
-              onClearAll={clearAllInstallments}
+              onRemoveInstallment={(index) => { setInstallmentAutoCalculate(false); removeInstallment(index); }}
+              onUpdateInstallment={(index, field, value) => { setInstallmentAutoCalculate(false); updateInstallment(index, field, value); }}
+              onClearAll={() => { setInstallmentAutoCalculate(false); clearAllInstallments(); }}
               installmentSummary={installmentSummary}
               // ✅ Pass saved settings
               savedDistributionType={installmentDistributionType}

@@ -270,7 +270,7 @@ export async function ensureTermFontsLoaded(): Promise<void> {
   if (typeof document === 'undefined' || !(document as any).fonts?.load) return;
   try {
     await Promise.race([
-      Promise.all(['400', '700', '800'].map((w) => (document as any).fonts.load(`${w} 42px Doran`, 'البند'))),
+      Promise.all(['400', '700', '800'].map((w) => (document as any).fonts.load(`${w} 42px ContractDoran`, 'البند 0123456789'))),
       new Promise((res) => setTimeout(res, 3000)),
     ]);
   } catch {
@@ -337,7 +337,7 @@ function wrapText(text: string, maxWidthPx: number, fontSize: number = 42): stri
   const normalized = (text ?? '').toString().replace(/\r\n/g, '\n');
   const blocks = normalized.split('\n');
   const out: string[] = [];
-  const fontFamily = 'Doran, sans-serif';
+  const fontFamily = 'ContractDoran, Doran, sans-serif';
 
   blocks.forEach((block) => {
     const safeBlock = block.replace(/\s+/g, ' ').trim();
@@ -445,7 +445,7 @@ function buildOriginalPriceInlineSvg(originalPrice: string, discountSettings: Di
   const textColor = discountSettings.originalPriceColor || '#888888';
 
   // Use measureTextWidthPx for accurate width
-  const measuredW = Math.ceil(measureTextWidthPx(text, fontSize, 'Doran, sans-serif', 400));
+  const measuredW = Math.ceil(measureTextWidthPx(text, fontSize, 'ContractDoran, Doran, sans-serif', 400));
   const padX = 8;
   const textW = measuredW + padX * 2;
   const svgH = Math.ceil(fontSize * 1.4);
@@ -453,7 +453,7 @@ function buildOriginalPriceInlineSvg(originalPrice: string, discountSettings: Di
   const strikeY = Math.round(svgH / 2);
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${textW}" height="${svgH}" viewBox="0 0 ${textW} ${svgH}" style="display: inline-block; vertical-align: middle; overflow: visible;">
-    <text x="${textW / 2}" y="${textY}" text-anchor="middle" font-family="Doran, sans-serif" font-size="${fontSize}" fill="${textColor}">${text}</text>
+    <text x="${textW / 2}" y="${textY}" text-anchor="middle" font-family="ContractDoran, Doran, sans-serif" font-size="${fontSize}" fill="${textColor}">${text}</text>
     <line x1="${padX - 2}" y1="${strikeY}" x2="${textW - padX + 2}" y2="${strikeY}" stroke="${strikeColor}" stroke-width="${strikeWidth}" />
   </svg>`;
 }
@@ -548,14 +548,14 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
       ? `<span style="position: absolute; inset: ${insetPercent}% 0 ${insetPercent}% 0; background-color: ${goldColor}; background-image: url('${solidFillDataUri(goldColor)}'); background-size: 100% 100%; background-repeat: no-repeat; z-index: -1; border-radius: 2px; width: 100%; -webkit-print-color-adjust: exact; print-color-adjust: exact;"></span>`
       : '';
 
-    const titleSpan = `<span style="position: relative; display: inline-block; z-index: 1; margin-left: 6px;">
+    const titleSpan = `<span style="position: relative; display: inline-block; z-index: 1; margin-left: 6px; white-space: nowrap;">
       ${goldHighlight}
-      <span style="position: relative; z-index: 2; font-weight: ${titleWeight === 'bold' || titleWeight === '800' ? 800 : 700}; padding: 0 4px;">${escapeHtmlText(titleText)}</span>
+      <span style="position: relative; z-index: 2; font-weight: 700; padding: 0 4px;">${escapeHtmlText(titleText)}</span>
     </span>`;
 
     // استخدام text-align: justify لضبط نهايات الأسطر وعلاج قفز علامات التنصيص والفواصل في الاتجاه الصحيح
     const htmlContent = `
-      <div xmlns="http://www.w3.org/1999/xhtml" style="direction: rtl; text-align: justify; text-justify: inter-word; font-family: Doran, 'Noto Sans Arabic', sans-serif; font-size: ${fontSize}px; line-height: ${lineHeight}px; color: #000; font-weight: ${contentWeight === 'bold' ? 'bold' : 'normal'};">
+      <div xmlns="http://www.w3.org/1999/xhtml" class="contract-term-paragraph" lang="ar" style="direction: rtl; width:100%; margin:0; padding:0; text-align: justify; text-align-last: right; text-justify: inter-word; letter-spacing:0; word-spacing:0; overflow-wrap: break-word; orphans: 2; widows: 2; font-family: ContractDoran, Doran, 'Noto Sans Arabic', sans-serif; font-size: ${fontSize}px; line-height: ${lineHeight}px; color: #000; font-weight: 400;">
         ${titleSpan}${escapeHtmlText(contentText)}
       </div>
     `;
@@ -564,9 +564,9 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
     termHeight = Math.max(termHeight, measureTermHtmlHeightPx(htmlContent, termsWidth));
 
     // حساب موقع Y التالي بعد هذا البند مع التباعد - نفس المعاينة
-    currentY = termY + termHeight + (settings.termsSpacing || 40);
+    currentY = termY + termHeight + (settings.termsSpacing ?? 40);
 
-    termsSvg += `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}" class="term-fo" data-min-h="${termHeight}" data-spacing="${settings.termsSpacing || 40}" style="overflow: visible;">
+    termsSvg += `<foreignObject x="${foX}" y="${termY}" width="${termsWidth}" height="${termHeight + 10}" class="term-fo" data-min-h="${termHeight}" data-spacing="${settings.termsSpacing ?? 40}" style="overflow: visible;">
       ${htmlContent}
     </foreignObject>`;
   });
@@ -586,11 +586,11 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
     >
       <!-- العنوان الرئيسي - نفس المعاينة -->
       ${settings.header.visible ? `
-        <text 
+        <text class="contract-header-doran" 
           x="${settings.header.x}" 
           y="${settings.header.y}" 
-          font-family="Doran, sans-serif" 
-          font-weight="bold" 
+          font-family="Doran, sans-serif"
+          font-weight="500" 
           font-size="${settings.header.fontSize}" 
           fill="#000" 
           text-anchor="${settings.header.textAlign || 'middle'}"
@@ -604,21 +604,21 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
       
       <!-- التاريخ - نفس المعاينة -->
       ${settings.date.visible ? `
-        <text 
+        <text class="contract-header-doran" 
           x="${settings.date.x}" 
           y="${settings.date.y}" 
-          font-family="Doran, sans-serif" 
-          font-weight="bold" 
+          font-family="Doran, sans-serif"
+          font-weight="500" 
           font-size="${settings.date.fontSize}" 
           fill="#000" 
           text-anchor="middle"
           dominant-baseline="middle"
         >التاريخ: ${escapeSvgText(contractData.startDate)}</text>
-        <text 
+        <text class="contract-header-doran" 
           x="${settings.date.x}" 
           y="${settings.date.y + (settings.date.fontSize || 42) * 1.3}" 
-          font-family="Doran, sans-serif" 
-          font-weight="bold" 
+          font-family="Doran, sans-serif"
+          font-weight="500" 
           font-size="${settings.date.fontSize}" 
           fill="#000" 
           text-anchor="middle"
@@ -631,7 +631,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
          <text 
            x="${settings.adType.x}" 
            y="${settings.adType.y}" 
-           font-family="Doran, sans-serif" 
+           font-family="ContractDoran, Doran, sans-serif"
            font-weight="bold" 
            font-size="${settings.adType.fontSize}" 
            fill="#1a1a2e" 
@@ -648,7 +648,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
            <text 
              x="${settings.firstParty.x}" 
              y="${settings.firstParty.y}" 
-             font-family="Doran, sans-serif" 
+             font-family="ContractDoran, Doran, sans-serif"
              font-weight="bold" 
              font-size="${settings.firstParty.fontSize + 4}" 
              fill="#000" 
@@ -658,7 +658,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
            <text 
              x="${settings.firstParty.x}" 
              y="${settings.firstParty.y + (settings.firstParty.lineSpacing || 50)}" 
-             font-family="Doran, sans-serif" 
+             font-family="ContractDoran, Doran, sans-serif"
              font-size="${settings.firstParty.fontSize}" 
              fill="#000" 
              text-anchor="${settings.firstParty.textAlign || 'end'}"
@@ -673,7 +673,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
              <text 
                x="${settings.secondParty.x}" 
                y="${settings.secondParty.y}" 
-               font-family="Doran, sans-serif" 
+               font-family="ContractDoran, Doran, sans-serif"
                font-weight="bold" 
                font-size="${settings.secondParty.fontSize}" 
                fill="#000" 
@@ -691,7 +691,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
             <text 
               x="${settings.secondPartyCustomer.x}" 
               y="${settings.secondPartyCustomer.y}" 
-              font-family="Doran, sans-serif" 
+              font-family="ContractDoran, Doran, sans-serif"
               font-size="${settings.secondPartyCustomer.fontSize}" 
               fill="#000" 
               text-anchor="start"
@@ -743,7 +743,7 @@ function buildTablePageHTML(
         text-align: center;
         margin: 0 0 ${tableTerm?.marginBottom ?? 8}px 0;
         padding: 0;
-        font-family: 'Doran', sans-serif;
+        font-family: 'ContractDoran', 'Doran', sans-serif;
         direction: rtl;
         position: relative;
         left: ${tableTerm?.positionX ?? 0}px;
@@ -854,7 +854,8 @@ function buildTablePageHTML(
               height: ${imgHeightPx}px;
               max-height: ${imgHeightPx}px;
               width: auto;
-              object-fit: contain;
+              max-width: 100%;
+              object-fit: contain; max-width: 100%;
               display: block;
               margin: 0 auto;
             " />`;
@@ -967,7 +968,7 @@ function buildTablePageHTML(
                   display: inline-block;
                   margin-top: 4px;
                   font-weight: bold;
-                  font-family: 'Doran', 'Tajawal', sans-serif;
+                  font-family: 'ContractDoran', 'Doran', 'Tajawal', sans-serif;
                   line-height: 1;
                   white-space: nowrap;
                 ">
@@ -1021,23 +1022,24 @@ function buildTablePageHTML(
           padding: ${noPadding ? 0 : colPadding}px;
           text-align: ${col.textAlign || tblSettings.cellTextAlign || 'center'};
           font-size: ${(col.fontSize || tblSettings.fontSize || 10)}px;
+          font-family: 'ContractDoran', 'Doran', sans-serif; font-variant-numeric: tabular-nums;
           font-weight: ${tblSettings.fontWeight || 'normal'};
           background-color: ${cellBg || rowBgColor};
           color: ${cellTextColor};
           vertical-align: middle;
           line-height: ${lineHeight};
           white-space: normal;
-          word-break: break-word;
+          word-break: normal; overflow-wrap: anywhere;
           overflow: hidden;
           ${cellBg ? 'position: relative;' : ''}
         ">
           ${bgImageHtml}
-          <div style="position: relative; z-index: 1; line-height: ${lineHeight}; white-space: normal; word-break: break-word;">${cellContent}</div>
+          <div style="position: relative; z-index: 1; line-height: ${lineHeight}; white-space: normal; word-break: normal; overflow-wrap: anywhere;">${cellContent}</div>
         </td>
       `;
     }).join('');
     
-    return `<tr style="min-height: ${rowHeightPx}px; height: auto; background-color: ${rowBgColor};">${cells}</tr>`;
+    return `<tr style="break-inside:avoid;page-break-inside:avoid;min-height: ${rowHeightPx}px; height: auto; background-color: ${rowBgColor};">${cells}</tr>`;
   }).join('');
   
   const tableLeftMargin = (100 - (tblSettings.tableWidth || 90)) / 2;
@@ -1074,14 +1076,14 @@ function buildTablePageHTML(
           border-collapse: collapse;
           border-spacing: 0;
           font-size: ${tblSettings.fontSize}px;
-          font-family: 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
+          font-family: 'ContractDoran', 'Doran', 'Noto Sans Arabic', Arial, sans-serif;
           table-layout: fixed;
         ">
           <colgroup>
             ${visibleColumns.map(col => `<col style="width: ${col.width}%;" />`).join('')}
           </colgroup>
-          <thead>
-            <tr style="height: ${headerRowHeightPx}px;">
+          <thead style="display:table-header-group;">
+            <tr style="break-inside:avoid;page-break-inside:avoid;height: ${headerRowHeightPx}px;">
               ${headerCells}
             </tr>
           </thead>
@@ -1257,7 +1259,55 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
           font-display: swap;
         }
 
-        body { font-family: 'Doran', 'Tajawal', sans-serif; direction: ltr; }
+        @font-face {
+          font-family: 'Doran';
+          src: url('${origin}/Doran-ExtraBold.otf') format('opentype');
+          font-weight: 800;
+          font-style: normal;
+          font-display: swap;
+        }
+
+        body { font-family: 'ContractDoran', 'Doran', 'Tajawal', sans-serif; direction: ltr; }
+
+/* Contract text uses Doran; digits use Manrope, including mixed Arabic text. */
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Doran-Regular.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Manrope-Regular.otf') format('opentype'); font-weight: 400; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Doran-Medium.otf') format('opentype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Manrope-Medium.otf') format('opentype'); font-weight: 500; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Doran-Bold.otf') format('opentype'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Manrope-Bold.otf') format('opentype'); font-weight: 600; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Doran-Bold.otf') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Manrope-Bold.otf') format('opentype'); font-weight: 700; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Doran-ExtraBold.otf') format('opentype'); font-weight: 800; font-style: normal; font-display: swap; }
+@font-face { font-family: 'ContractDoran'; src: url('${origin}/Manrope-ExtraBold.otf') format('opentype'); font-weight: 800; font-style: normal; font-display: swap; unicode-range: U+0030-0039; }
+
+        .contract-term-paragraph {
+          text-align: justify !important;
+          text-align-last: right !important;
+          font-weight: 400 !important;
+          letter-spacing: 0 !important;
+          word-spacing: 0 !important;
+        }
+        /* Keep imported application styles from changing contract typography. */
+        .contract-preview-container,
+        .contract-preview-container :is(div, span, h2, table, th, td, text) {
+          font-family: 'ContractDoran', 'Doran', sans-serif !important;
+        }
+        @font-face {
+          font-family: 'Doran';
+          src: url('${origin}/Doran-Medium.otf') format('opentype');
+          font-weight: 500;
+          font-style: normal;
+          font-display: swap;
+        }
+        .contract-preview-container .contract-header-doran {
+          font-family: 'Doran', sans-serif !important;
+          font-weight: 500;
+        }
+        .contract-preview-container .contract-account-number {
+          font-family: 'Manrope', sans-serif !important;
+        }
+
 
         /* صفحة طباعة A4 فعلية، لتفادي تجزئة العنصر إلى أكثر من صفحة */
         .print-page {

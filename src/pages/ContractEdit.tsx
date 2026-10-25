@@ -94,7 +94,7 @@ const CONTRACT_EDIT_BILLBOARDS_STALE_TIME = 5 * 60 * 1000;
 export default function ContractEdit() {
   const { category: defaultPricingCategory } = useDefaultPricingCategory();
   const [compensationChoices, setCompensationChoices] = useState<CompensationChoices>({});
-  const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing' | 'friends' | 'designs'>('basics');
+  const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing' | 'payments' | 'friends' | 'designs'>('basics');
   // صفحة واحدة: الأقسام كلها ظاهرة، والتنقل يمرّر إلى القسم؛ اختيار اللوحات طبقة كاملة فوق الصفحة
   const [sectionNavTick, setSectionNavTick] = useState(0);
   const sectionNavMounted = useRef(false);
@@ -102,7 +102,7 @@ export default function ContractEdit() {
     if (!sectionNavMounted.current) { sectionNavMounted.current = true; return; }
     if (workspaceSection === 'catalog') return;
     const anchors: Record<string, string> = {
-      basics: 'contract-basics-head', boards: 'contract-boards-list', pricing: 'contract-pricing',
+      basics: 'contract-basics-head', boards: 'contract-boards-list', pricing: 'contract-pricing', payments: 'contract-payments',
       friends: 'contract-friends', designs: 'contract-designs',
     };
     document.getElementById(anchors[workspaceSection])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -545,6 +545,7 @@ export default function ContractEdit() {
   const [installmentFirstPaymentType, setInstallmentFirstPaymentType] = useState<'amount' | 'percent'>('amount');
   const [installmentInterval, setInstallmentInterval] = useState<'month' | '2months' | '3months' | '4months' | '5months' | '6months' | '7months'>('month');
   const [installmentCount, setInstallmentCount] = useState<number>(2);
+  const [installmentPeriodTemplate, setInstallmentPeriodTemplate] = useState('3');
   const [installmentAutoCalculate, setInstallmentAutoCalculate] = useState<boolean>(false);
   const [installmentFirstAtSigning, setInstallmentFirstAtSigning] = useState<boolean>(true);
   const [hasDifferentFirstPayment, setHasDifferentFirstPayment] = useState<boolean>(false);
@@ -1173,6 +1174,10 @@ export default function ContractEdit() {
         }
 
         // ✅ NEW: Load installment distribution settings from DB
+        try {
+          const rows = typeof c.installments_data === 'string' ? JSON.parse(c.installments_data) : c.installments_data;
+          setInstallmentPeriodTemplate(rows?.[0]?.distributionPlan?.periodTemplate || String(c.installment_count || 3));
+        } catch { setInstallmentPeriodTemplate('3'); }
         const savedDistributionType = c.installment_distribution_type || 'multiple';
         const savedFirstPaymentAmount = Number(c.installment_first_payment_amount || 0);
         const savedFirstPaymentType = c.installment_first_payment_type || 'amount';
@@ -3041,6 +3046,7 @@ export default function ContractEdit() {
         const defaultPaymentType = idx === 0 ? 'عند التوقيع' : (idx === 1 ? 'عند التركيب' : 'شهري');
         const paymentType = String(inst?.paymentType || '').trim() || defaultPaymentType;
         return {
+          distributionPlan: { periodTemplate: installmentPeriodTemplate },
           amount: Number(inst?.amount ?? 0) || 0,
           paymentType,
           description: String(inst?.description || '').trim() || `الدفعة ${idx + 1}`,
@@ -3274,26 +3280,8 @@ export default function ContractEdit() {
     });
 
   // تعديل اللوحات أو الأسعار يُطبَّق فوراً: الدفعات المتطابقة مع الإجمالي تتبعه تلقائياً (المعدّلة يدوياً لا تُلمس)
-  const syncedTotalRef = useRef<number | null>(null);
-  useEffect(() => {
-    if (!billboardBaseline || finalTotal <= 0) return;
-    const prevTotal = syncedTotalRef.current ?? billboardBaseline.total;
-    syncedTotalRef.current = finalTotal;
-    if (Math.abs(prevTotal - finalTotal) < 0.01) return;
-    setInstallments((cur: any[]) => {
-      if (!cur.length) return cur;
-      const sum = cur.reduce((s: number, r: any) => s + Number(r.amount || 0), 0);
-      // تمت مزامنتها مسبقاً (مثلاً وضع الدفعة الواحدة يعيد توليدها) — لا تُطبَّق الفروقات مرة ثانية
-      if (Math.abs(sum - finalTotal) <= 1) return cur;
-      // الدفعات المطابقة للإجمالي السابق تتبع الإجمالي الجديد بالتناسب
-      if (Math.abs(sum - prevTotal) <= 1) return rescaleInstallmentsToTotal(cur, finalTotal);
-      // دفعات معدّلة يدوياً: يُضاف فرق الإجمالي على آخر دفعة (أو تُعاد بالتناسب إن صارت سالبة) حتى يبقى المجموع صحيحاً
-      const delta = Math.round((finalTotal - prevTotal) * 100) / 100;
-      const last = Number(cur[cur.length - 1].amount || 0) + delta;
-      if (last >= 0) return cur.map((r: any, i: number) => i === cur.length - 1 ? { ...r, amount: Math.round(last * 100) / 100 } : r);
-      return rescaleInstallmentsToTotal(cur, finalTotal);
-    });
-  }, [finalTotal, pendingBillboardChanges, billboardBaseline]);
+  // InstallmentsManager owns automatic redistribution; manual schedules remain untouched.
+
 
   const hasDraftChanges = draftBaseline !== null && draftFingerprint !== draftBaseline;
   useEffect(() => {
@@ -3322,6 +3310,7 @@ export default function ContractEdit() {
     { key: 'boards', label: 'لوحات العقد', hint: `${selected.length} لوحة`, icon: CeIconBoards },
     { key: 'catalog', label: 'إضافة لوحات', hint: 'بحث وخريطة', icon: CeIconAdd },
     { key: 'pricing', label: 'الأسعار والدفعات', hint: `${finalTotal.toLocaleString('ar-LY')} ${ceCurrency}`, icon: CeIconMoney },
+    { key: 'payments', label: 'توزيع الدفعات', hint: `${installments.length} دفعات`, icon: CeIconMoney },
     { key: 'friends', label: 'إيجارات الشركات', hint: 'لوحات صديقة', icon: CeIconFriends },
     { key: 'designs', label: 'التصاميم والخريطة', hint: 'تصاميم اللوحات', icon: CeIconDesign },
   ] as const;
@@ -3997,6 +3986,47 @@ export default function ContractEdit() {
               />
             </EditGroup>
 
+            <EditGroup id="contract-payments" title="الدفعات" description="جدول السداد يجب أن يطابق إجمالي العقد">
+            <InstallmentsManager
+              savedPeriodTemplate={installmentPeriodTemplate}
+              onPeriodTemplateChange={setInstallmentPeriodTemplate}
+              autoCalculate={installmentAutoCalculate}
+              onAutoCalculateChange={setInstallmentAutoCalculate}
+              installments={installments}
+              finalTotal={finalTotal}
+              startDate={startDate}
+              endDate={endDate}
+              // ✅ Prevent auto-redistribution when installments are loaded from DB
+              disableAutoRedistribute={installmentsLoaded}
+              onDistributeEvenly={distributeEvenly}
+              onDistributeWithInterval={distributeWithInterval}
+              onDistributeByDurationPeriods={distributeByDurationPeriods}
+              onCreateManualInstallments={createManualInstallments}
+              onApplyUnequalDistribution={handleApplyUnequalDistribution}
+              onAddInstallment={addInstallment}
+              onRemoveInstallment={(index) => { setInstallmentAutoCalculate(false); removeInstallment(index); }}
+              onUpdateInstallment={(index, field, value) => { setInstallmentAutoCalculate(false); updateInstallment(index, field, value); }}
+              onClearAll={() => { setInstallmentAutoCalculate(false); clearAllInstallments(); }}
+              installmentSummary={getInstallmentSummary()}
+              // ✅ NEW: Pass saved settings
+              savedDistributionType={installmentDistributionType}
+              savedFirstPaymentAmount={installmentFirstPaymentAmount}
+              savedFirstPaymentType={installmentFirstPaymentType}
+              savedInterval={installmentInterval}
+              savedCount={installmentCount}
+              savedHasDifferentFirstPayment={hasDifferentFirstPayment}
+              savedFirstAtSigning={installmentFirstAtSigning}
+              // ✅ NEW: Sync callbacks
+              onDistributionTypeChange={setInstallmentDistributionType}
+              onFirstPaymentAmountChange={setInstallmentFirstPaymentAmount}
+              onFirstPaymentTypeChange={setInstallmentFirstPaymentType}
+              onIntervalChange={setInstallmentInterval}
+              onCountChange={setInstallmentCount}
+              onHasDifferentFirstPaymentChange={setHasDifferentFirstPayment}
+              onFirstAtSigningChange={setInstallmentFirstAtSigning}
+            />
+            </EditGroup>
+
             <EditGroup id="contract-summary" title="الخصومات والإجمالي" description="تخفيضات المستوى، خصم العقد، وما يشمله السعر">
               {selected.length > 0 && (
                 <LevelDiscountsCard
@@ -4079,42 +4109,7 @@ export default function ContractEdit() {
             />
             </EditGroup>
 
-            <EditGroup id="contract-payments" title="الدفعات" description="جدول السداد يجب أن يطابق إجمالي العقد">
-            <InstallmentsManager
-              installments={installments}
-              finalTotal={finalTotal}
-              startDate={startDate}
-              endDate={endDate}
-              // ✅ Prevent auto-redistribution when installments are loaded from DB
-              disableAutoRedistribute={installmentsLoaded}
-              onDistributeEvenly={distributeEvenly}
-              onDistributeWithInterval={distributeWithInterval}
-              onDistributeByDurationPeriods={distributeByDurationPeriods}
-              onCreateManualInstallments={createManualInstallments}
-              onApplyUnequalDistribution={handleApplyUnequalDistribution}
-              onAddInstallment={addInstallment}
-              onRemoveInstallment={removeInstallment}
-              onUpdateInstallment={updateInstallment}
-              onClearAll={clearAllInstallments}
-              installmentSummary={getInstallmentSummary()}
-              // ✅ NEW: Pass saved settings
-              savedDistributionType={installmentDistributionType}
-              savedFirstPaymentAmount={installmentFirstPaymentAmount}
-              savedFirstPaymentType={installmentFirstPaymentType}
-              savedInterval={installmentInterval}
-              savedCount={installmentCount}
-              savedHasDifferentFirstPayment={hasDifferentFirstPayment}
-              savedFirstAtSigning={installmentFirstAtSigning}
-              // ✅ NEW: Sync callbacks
-              onDistributionTypeChange={setInstallmentDistributionType}
-              onFirstPaymentAmountChange={setInstallmentFirstPaymentAmount}
-              onFirstPaymentTypeChange={setInstallmentFirstPaymentType}
-              onIntervalChange={setInstallmentInterval}
-              onCountChange={setInstallmentCount}
-              onHasDifferentFirstPaymentChange={setHasDifferentFirstPayment}
-              onFirstAtSigningChange={setInstallmentFirstAtSigning}
-            />
-            </EditGroup>
+
 
             {contractNumber && (
               <EditGroup id="contract-expenses" title="المصاريف والخسائر" description="مصاريف مرتبطة بهذا العقد">

@@ -1873,12 +1873,18 @@ export default function ContractTermsSettings() {
                                 <div xmlns="http://www.w3.org/1999/xhtml" style={{
                                   direction: 'rtl',
                                   textAlign: 'justify',
+                                  textAlignLast: 'right',
+                                  width: '100%',
+                                  margin: 0,
+                                  padding: 0,
+                                  letterSpacing: 0,
+                                  wordSpacing: 0,
                                   textJustify: 'inter-word',
                                   fontFamily: "Doran, 'Noto Sans Arabic', sans-serif",
                                   fontSize: `${term.font_size || 42}px`,
                                   lineHeight: `${lineHeight}px`,
                                   color: '#000',
-                                  fontWeight: contentWeight === 'bold' ? 'bold' : 'normal'
+                                  fontWeight: 400
                                 }}>
                                   <span style={{ position: 'relative', display: 'inline-block', zIndex: 1, marginLeft: '6px' }}>
                                     {sectionSettings.termsGoldLine?.visible !== false && (
@@ -1895,7 +1901,7 @@ export default function ContractTermsSettings() {
                                         printColorAdjust: 'exact',
                                       }}></span>
                                     )}
-                                    <span style={{ position: 'relative', zIndex: 2, fontWeight: titleWeight === 'bold' || titleWeight === '800' ? 800 : 700, padding: '0 4px' }}>
+                                    <span style={{ position: 'relative', zIndex: 2, fontWeight: 700, padding: '0 4px' }}>
                                       {titleText}
                                     </span>
                                   </span>
