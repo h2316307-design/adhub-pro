@@ -14,6 +14,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { smartArabicMatch } from '@/lib/arabicSearch';
 import { uploadToImgbb } from '@/services/imgbbService';
+import { uploadImageWithFallback } from '@/services/imageUploadService';
+import { createUploadProgressTracker } from '@/hooks/useUploadProgress';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -3176,7 +3178,6 @@ export default function InstallationTasks() {
               }
               const setUploading = face === 'A' ? setUploadingInstalledA : setUploadingInstalledB;
               setUploading(true);
-              const { createUploadProgressTracker } = await import('@/hooks/useUploadProgress');
               const progress = createUploadProgressTracker();
               const fileSizeKB = Math.round(file.size / 1024);
               const { imageName, folderPath } = getUploadContext(face);
@@ -3191,7 +3192,6 @@ export default function InstallationTasks() {
               }, 250);
 
               try {
-                const { uploadImageWithFallback } = await import('@/services/imageUploadService');
                 const imageUrl = await uploadImageWithFallback(file, imageName, folderPath);
                 clearInterval(interval);
                 progress.update(100);

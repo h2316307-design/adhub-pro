@@ -7,6 +7,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useState, useEffect } from 'react';
 import { useSystemDialog } from '@/contexts/SystemDialogContext';
 import { loadPrintLogo } from '@/lib/printLogo';
+import { buildInstallationInvoiceHTML } from '@/lib/installationInvoiceLayout';
 import { getMergedInvoiceStylesAsync } from '@/hooks/useInvoiceSettingsSync';
 import { unifiedHeaderFooterCss, unifiedHeaderHtml, unifiedFooterHtml, formatDateForPrint } from '@/lib/unifiedInvoiceBase';
 import { preparePrintWindow, writePrintWindow } from '@/utils/printWindowHelper';
@@ -384,7 +385,7 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
         if (billboardIds.length > 0) {
           const { data: billboardsData } = await supabase
             .from('billboards')
-            .select('ID, Size, Billboard_Name, design_face_a, design_face_b, Image_URL, Nearest_Landmark, GPS_Coordinates')
+            .select('ID, Size, Billboard_Name, design_face_a, design_face_b, Image_URL, Nearest_Landmark, GPS_Coordinates, City, Municipality, Faces_Count')
             .in('ID', billboardIds);
           
           if (billboardsData) {
@@ -420,7 +421,10 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
                 // ✅ إضافة البيانات الجديدة
                 billboard_image: b.Image_URL,
                 nearest_landmark: b.Nearest_Landmark,
-                gps_coordinates: b.GPS_Coordinates
+                gps_coordinates: b.GPS_Coordinates,
+                city: b.City,
+                municipality: b.Municipality,
+                faces_count: b.Faces_Count,
               };
             });
           }
@@ -456,7 +460,10 @@ export function CompositeTaskInvoicePrint({ task }: CompositeTaskInvoicePrintPro
             // ✅ إضافة البيانات الجديدة
             billboard_image: billboard.billboard_image,
             nearest_landmark: billboard.nearest_landmark,
-            gps_coordinates: billboard.gps_coordinates
+            gps_coordinates: billboard.gps_coordinates,
+            city: billboard.city,
+            municipality: billboard.municipality,
+            faces_count: billboard.faces_count,
           };
         });
       }
@@ -1064,6 +1071,9 @@ export function generateInvoiceHTML(task: CompositeTaskWithDetails, details: any
   // سعر المجسم الواحد للزبون (من cutout_tasks.customer_total_amount / total_quantity)
   const cutoutPricePerUnit = details.customerCutoutUnitPrice || 0;
   const effectiveCustomerTotal = getEffectiveCustomerTotal(task, details);
+  if (isInstallationOnly && !useVirtualItems) {
+    return buildInstallationInvoiceHTML(task, details, { ...styles, ...mergedStyles }, logoDataUri, effectiveCustomerTotal);
+  }
   
   // حساب تكلفة التركيب لكل لوحة
   const installationCostPerItem = installationItems.length > 0 

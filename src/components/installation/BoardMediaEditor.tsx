@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { ImageUploadZone } from '@/components/ui/image-upload-zone';
 import { supabase } from '@/integrations/supabase/client';
 import { assignBoardDesign, saveBoardPhotos } from '@/services/boardMediaService';
+import { uploadImageWithFallback } from '@/services/imageUploadService';
 import { getAvailableFacesCount, getInstallationFaceIndices } from '@/lib/installationFaces';
 import { cn } from '@/lib/utils';
 import { UploadProgressBar, splitFaceFiles, useUploadProgress } from './UploadProgressBar';
@@ -41,7 +42,6 @@ export function BoardMediaEditor({ mode, item, billboard, taskType, designs, con
   const uploadBoth = async (list: FileList | null) => {
     const [fa, fb] = splitFaceFiles(list);
     if (!fa) { toast.error('اختر صوراً صالحة'); return; }
-    const { uploadImageWithFallback } = await import('@/services/imageUploadService');
     const one = async (face: 'A' | 'B', file: File) => {
       const [setBusy, prog, set] = face === 'A' ? [setUploadingA, progA, setFaceA] as const : [setUploadingB, progB, setFaceB] as const;
       setBusy(true); prog.start(file.size);

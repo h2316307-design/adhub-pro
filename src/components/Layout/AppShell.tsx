@@ -6,7 +6,6 @@ import { FloatingAiChat } from '@/components/AiAssistant/FloatingAiChat';
 import AppHeader from './AppHeader';
 import { cn } from '@/lib/utils';
 import { ScrollTopButton } from '@/components/shared/ScrollTopButton';
-import { GlobalImagePaste } from '@/components/shared/GlobalImagePaste';
 
 interface AppShellProps {
   children: ReactNode;
@@ -65,7 +64,6 @@ export function AppShell({ children }: AppShellProps) {
         <main ref={mainContentRef} className="flex-1 overflow-y-auto pb-20 lg:pb-0">
           {children}
           <ScrollTopButton />
-          <GlobalImagePaste />
         </main>
       </div>
 

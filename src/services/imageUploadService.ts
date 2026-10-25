@@ -1,5 +1,6 @@
 import { supabase } from '@/integrations/supabase/client';
 import { createRequestId } from '@/lib/requestId';
+import { normalizeGoogleImageUrl } from '@/utils/imageUtils';
 
 export type ImageUploadProvider = 'supabase_storage' | 'imgbb' | 'freeimage' | 'postimg' | 'cloudinary' | 'google_drive';
 
@@ -297,7 +298,6 @@ const uploadToGoogleDriveDirect = async (base64: string, name?: string, mimeType
       if (response.ok && result?.url) {
         console.log('Google Drive upload success:', result.url);
         // Normalize the URL to direct image URL
-        const { normalizeGoogleImageUrl } = await import('@/utils/imageUtils');
         return normalizeGoogleImageUrl(result.url);
       }
 

@@ -249,7 +249,7 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
   onEditCosts: () => void;
   onDesigns: () => void;
   onDistribute: () => void;
-  onPrint: () => void;
+  onPrint: (itemIds?: string[]) => void;
 }) {
   const { confirm } = useSystemDialog();
   const [items, setItems] = useState<BoardItem[] | null>(null);
@@ -375,7 +375,7 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
               <Button size="sm" onClick={() => setAddOpen(true)} disabled={!teams.length}><Plus className="h-4 w-4" />إضافة لوحات</Button>
               <Button size="sm" variant="outline" onClick={onDesigns}><ImagePlus className="h-4 w-4" />التصاميم</Button>
               <Button size="sm" variant="outline" onClick={onDistribute}><Palette className="h-4 w-4" />توزيع التصاميم</Button>
-              <Button size="sm" variant="outline" onClick={onPrint}><Printer className="h-4 w-4" />طباعة التركيب</Button>
+              <Button size="sm" variant="outline" onClick={() => onPrint()}><Printer className="h-4 w-4" />طباعة التركيب</Button>
               <Button size="sm" variant="outline" onClick={onEditCosts}><Calculator className="h-4 w-4" />التكاليف</Button>
             </div>
           </div>
@@ -460,6 +460,7 @@ export function OperationBoardsWorkspace({ op, onClose, onChanged, onEditCosts, 
           {sel.length > 0 ? (
             <>
               <span className="text-sm font-semibold">{sel.length} محددة</span>
+              <Button size="sm" variant="outline" className="min-h-10 cursor-pointer transition-all duration-200" disabled={busy} onClick={() => onPrint(sel.map(i => i.id))}><Printer className="h-4 w-4" />طباعة التركيب للمحددة</Button>
               <Button size="sm" disabled={busy} onClick={() => run(() => completeBoards(sel.filter(i => i.status !== 'completed'), date), 'تم تسجيل التركيب')}><CheckCircle2 className="h-4 w-4" />تم التركيب</Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => setBoardsDate(sel, date), 'تم تحديث التاريخ')}><CalendarDays className="h-4 w-4" />تعيين التاريخ</Button>
               <Button size="sm" variant="outline" disabled={busy} onClick={() => run(() => uncompleteBoards(sel.filter(i => i.status === 'completed')), 'تم إلغاء الإكمال')}><RotateCcw className="h-4 w-4" />إلغاء الإكمال</Button>

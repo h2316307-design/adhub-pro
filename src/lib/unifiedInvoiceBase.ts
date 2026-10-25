@@ -1,4 +1,5 @@
 import { unifiedInvoiceBodyCss } from './unifiedInvoiceBody';
+import { invoiceBrandCss } from './invoiceBrandLayout';
 import { readablePrintColor } from './printColorContrast';
 /**
  * Unified Invoice Base - القاعدة الموحدة لجميع الفواتير
@@ -551,8 +552,10 @@ export function generateCustomerHTML(t: ResolvedPrintStyles, opts: {
   phone?: string;
   extraInfo?: string;
   statsCards?: string;
+  brandLayout?: boolean;
 }): string {
   if (!t.showCustomerSection) return '';
+  if (opts.brandLayout) return `<div class="customer-section"><div class="invoice-customer-heading"><span class="customer-label">${opts.label === 'المورد' ? 'المورد' : 'بيانات العميل'}:</span><strong class="customer-name-text">${opts.name}</strong></div><div class="invoice-customer-details">${opts.company ? `<span>${opts.company}</span>` : ''}${opts.phone ? `<span>هاتف: <bdi dir="ltr">${opts.phone}</bdi></span>` : ''}${opts.extraInfo || ''}${opts.statsCards ? `<div class="stats-cards">${opts.statsCards}</div>` : ''}</div></div>`;
 
   return `
   <div class="customer-section">
@@ -560,7 +563,7 @@ export function generateCustomerHTML(t: ResolvedPrintStyles, opts: {
       <div class="customer-label">${opts.label || 'العميل'}</div>
       <div class="customer-name-text">${opts.name}</div>
       ${opts.company ? `<div class="customer-detail">${opts.company}</div>` : ''}
-      ${opts.phone ? `<div class="customer-detail">هاتف: ${opts.phone}</div>` : ''}
+      ${opts.phone ? `<div class="customer-detail">هاتف: <bdi dir="ltr">${opts.phone}</bdi></div>` : ''}
       ${opts.extraInfo || ''}
     </div>
     ${opts.statsCards ? `<div class="stats-cards">${opts.statsCards}</div>` : ''}
@@ -607,6 +610,7 @@ export function wrapInDocument(t: ResolvedPrintStyles, opts: {
   extraCSS?: string;
   autoPrint?: boolean;
   showSignature?: boolean;
+  brandLayout?: boolean;
 }): string {
   return `<!DOCTYPE html>
 <html dir="rtl" lang="ar">
@@ -617,14 +621,15 @@ export function wrapInDocument(t: ResolvedPrintStyles, opts: {
   <style>
     ${generateBaseCSS(t)}
     ${opts.extraCSS || ''}
+    ${opts.brandLayout ? invoiceBrandCss : ''}
   </style>
 </head>
-<body>
+<body${opts.brandLayout ? ' class="invoice-brand" data-keep-print-colors' : ''}>
   <div class="paper">
     ${t.bgImageUrl ? '<div class="bg-layer"></div>' : ''}
     <div class="content">
       <div class="main-content">
-        ${generateHeaderHTML(t, opts.headerMetaHtml)}
+        ${opts.brandLayout ? `${generateHeaderHTML({ ...t, headerSwap: false, headerStyle: 'classic', headerAlignment: 'split' }, '')}<div class="u-invoice-details invoice-meta">${opts.headerMetaHtml.split(/<br\s*\/?\s*>/i).filter(line => line.trim()).map(line => `<div>${line}</div>`).join('')}</div>` : generateHeaderHTML(t, opts.headerMetaHtml)}
         ${opts.customerHtml}
         ${opts.bodyContent}
         ${generateSignatureHTML(opts.showSignature === true)}
@@ -1008,10 +1013,10 @@ export function unifiedFooterHtml(styles: UnifiedPrintStyles, pageText = 'صفح
     { label: 'الموقع الإلكتروني', value: settings.companyWebsite || settings.company_website },
   ].filter(item => String(item.value || '').trim());
   return `
-  ${styles.footerText ? `<div class="u-closing-message" style="text-align:center;font-size:12px;line-height:1.8;padding:12px 0;color:#555;break-inside:avoid;">${escape(styles.footerText)}</div>` : ''}
-  <div class="u-footer" style="display:flex;justify-content:space-between;align-items:center;gap:12px;direction:rtl;padding:8px 12px 0;box-sizing:border-box;border-top:1px solid ${escape(styles.primaryColor || '#262626')};line-height:1.8;font-size:11px;">
-    <div class="u-footer-contacts" style="display:flex;flex-wrap:wrap;justify-content:flex-start;gap:8px;text-align:right;">${contacts.map(item => `<span class="u-footer-contact" style="display:inline-block;">${icon(item.label)}<bdi>${escape(item.value)}</bdi></span>`).join('<span aria-hidden="true" style="color:#aaa;"> | </span>')}</div>
-    ${styles.showPageNumber !== false ? `<span class="u-page-number" style="display:inline-block;margin:0;white-space:nowrap;">${icon('صفحة')}<span class="u-page-number-text">${escape(pageText)}</span></span>` : ''}
+  ${styles.footerText ? `<div class="u-closing-message" style="text-align:center;font-size:10px;line-height:1.8;padding:6px 0;color:#666;break-inside:avoid;">${escape(styles.footerText)}</div>` : ''}
+  <div class="u-footer" style="display:flex;justify-content:space-between;align-items:center;gap:12px;direction:rtl;margin-bottom:0;padding:9px 4px 4px;box-sizing:border-box;border-top:1px solid #dedede;line-height:1.8;font-size:10px;">
+    <div class="u-footer-contacts" style="display:flex;flex:1;flex-wrap:wrap;justify-content:center;align-items:center;gap:6px 18px;text-align:right;">${contacts.map(item => `<span class="u-footer-contact" style="display:inline-flex;align-items:center;gap:5px;max-width:100%;overflow-wrap:anywhere;">${icon(item.label)}<bdi>${escape(item.value)}</bdi></span>`).join('')}</div>
+    ${styles.showPageNumber !== false && pageText.trim() ? `<span class="u-page-number" style="display:inline-block;margin:0;white-space:nowrap;">${icon('صفحة')}<span class="u-page-number-text">${escape(pageText)}</span></span>` : ''}
   </div>
   `;
 }

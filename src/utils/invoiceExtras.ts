@@ -97,33 +97,40 @@ async function upsertSetting(key: string, value: string, type: string, desc: str
 export function renderBankAccountsHTML(accounts: BankAccount[], primaryColor: string = '#D4AF37'): string {
   if (accounts.length === 0) return '';
 
-  // لكل مصرف جدول: عمود الأيقونات على اليمين (الأيقونة مع الاسم، وشعار LYPay مع رقمه)، والأرقام تحتها
-  const bankGroups = new Map<string, { bank: BankAccount; normal: string[]; lypay: string[] }>();
-  for (const b of accounts) {
-    let group = bankGroups.get(b.bankName);
-    if (!group) {
-      group = { bank: b, normal: [], lypay: [] };
-      bankGroups.set(b.bankName, group);
-    }
-    if (b.accountNumber?.trim()) group.normal.push(b.accountNumber.trim());
-    if (b.lypayNumber?.trim()) group.lypay.push(b.lypayNumber.trim());
+  const escape = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]!));
+  const groups = new Map<string, { name: string; icon?: string; normal: Set<string>; lypay: Set<string> }>();
+  for (const bank of accounts) {
+    if (!bank.accountNumber?.trim() && !bank.lypayNumber?.trim()) continue;
+    const name = bank.bankName?.trim() || 'حساب مصرفي';
+    const group = groups.get(name) || { name, icon: bank.iconUrl, normal: new Set<string>(), lypay: new Set<string>() };
+    if (!group.icon && bank.iconUrl) group.icon = bank.iconUrl;
+    if (bank.accountNumber?.trim()) group.normal.add(bank.accountNumber.trim());
+    if (bank.lypayNumber?.trim()) group.lypay.add(bank.lypayNumber.trim());
+    groups.set(name, group);
   }
-  const iconCell = (src: string | undefined, alt: string) =>
-    `<td style="width:90px;text-align:right;vertical-align:middle;padding:0 0 4px 0;">${src ? `<img src="${src}" alt="${alt}" style="display:inline-block;height:22px;max-width:90px;width:auto;object-fit:contain;vertical-align:middle;" />` : ''}</td>`;
-  const numberCell = (value: string) =>
-    `<td dir="ltr" style="text-align:right;font-family:Manrope,monospace;letter-spacing:0.5px;font-size:11px;line-height:1.7;padding:0 0 4px 0;">${value}</td>`;
-  const lypayLogo = LYPAY_LOGO_URL;
+  if (!groups.size) return '';
+  const accountRow = (label: string, value: string, lypay = false) => `<div class="invoice-bank-number" style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:2px 0;min-width:0;">
+    <span style="display:inline-flex;align-items:center;gap:5px;flex-shrink:0;font-size:10px;color:#666;">${lypay ? `<img src="${LYPAY_LOGO_URL}" alt="LYPay" style="width:38px;height:16px;object-fit:contain;" />` : escape(label)}</span>
+    <bdi dir="ltr" style="min-width:0;max-width:100%;text-align:right;overflow-wrap:anywhere;font-family:Manrope,Doran,sans-serif;font-size:11px;font-weight:600;letter-spacing:.2px;">${escape(value)}</bdi>
+  </div>`;
+  return `<section class="invoice-bank-details" dir="rtl" style="width:100%;font-family:Doran,sans-serif;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:11px;font-weight:700;color:#444;">
+      <svg aria-hidden="true" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="m3 10 9-7 9 7M3 10h18M5 10v9m5-9v9m4-9v9m5-9v9M3 21h18"/></svg>بيانات التحويل المصرفي
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;">
+      ${[...groups.values()].map(bank => `<div class="invoice-bank-card" style="min-width:0;border:1px solid #dedede;border-radius:6px;padding:10px 12px;break-inside:avoid;background:#fff;">
+        <div style="display:flex;align-items:center;gap:8px;padding-bottom:7px;margin-bottom:3px;border-bottom:1px solid #eee;">
+          ${bank.icon ? `<img src="${escape(bank.icon)}" alt="" style="width:28px;height:24px;object-fit:contain;flex-shrink:0;" />` : ''}
+          <strong style="font-size:11px;color:#333;">${escape(bank.name)}</strong>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 20px;padding-top:3px;">
+          ${[...bank.normal].map(value => accountRow('رقم الحساب', value)).join('')}
+          ${[...bank.lypay].map(value => accountRow('LYPay', value, true)).join('')}
+        </div>
+      </div>`).join('')}
+    </div>
+  </section>`;
 
-  const blocks = [...bankGroups.values()].map(({ bank, normal, lypay }) => {
-    const rows = [
-      `<tr>${iconCell(bank.iconUrl, bank.bankName)}<td style="text-align:right;font-weight:600;font-size:11px;line-height:1.7;padding:0 0 4px 0;">${bank.bankName}</td></tr>`,
-      ...normal.map(n => `<tr>${iconCell(undefined, '')}${numberCell(n)}</tr>`),
-      ...lypay.map(n => `<tr>${iconCell(lypayLogo, 'LYPay')}${numberCell(n)}</tr>`),
-    ].join('');
-    return `<table style="width:100%;border-collapse:collapse;margin-bottom:10px;"><tbody>${rows}</tbody></table>`;
-  }).join('');
-
-  return blocks;
 }
 
 export function generateBankAndStampHTML(extras: InvoiceExtras, primaryColor: string = '#D4AF37'): string {
@@ -133,9 +140,6 @@ export function generateBankAndStampHTML(extras: InvoiceExtras, primaryColor: st
 
   const bankHtml = hasBanks ? `
     <div style="flex:1;">
-      <div style="font-weight:bold;font-size:13px;margin-bottom:8px;color:${primaryColor};">
-        معلومات التحويلات البنكية
-      </div>
       ${renderBankAccountsHTML(extras.bankAccounts, primaryColor)}
     </div>
   ` : '<div style="flex:1;"></div>';
@@ -147,7 +151,7 @@ export function generateBankAndStampHTML(extras: InvoiceExtras, primaryColor: st
   ` : '';
 
   return `
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:30px;margin-top:20px;padding-top:15px;border-top:1px dashed #ccc;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-top:14px;padding-top:12px;border-top:1px solid #e5e5e5;">
       ${bankHtml}
       ${stampHtml}
     </div>

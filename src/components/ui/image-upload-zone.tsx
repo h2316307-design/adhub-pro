@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
-import { uploadToImgbb } from '@/services/imgbbService';
+import { uploadImageWithFallback } from '@/services/imageUploadService';
 import { ImageViewer } from '@/components/shared/ImageViewer';
 
 interface ImageUploadZoneProps {
@@ -118,7 +118,6 @@ export function ImageUploadZone({
     startSimulatedProgress();
     const finalName = imageName.toLowerCase().endsWith('.jpg') ? imageName : `${imageName}.jpg`;
     try {
-      const { uploadImageWithFallback } = await import('@/services/imageUploadService');
       const imageUrl = await uploadImageWithFallback(file, finalName, folder);
       onChange(imageUrl);
       stopSimulatedProgress(true);

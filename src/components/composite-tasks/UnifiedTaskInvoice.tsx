@@ -2292,9 +2292,9 @@ export function UnifiedTaskInvoice({
     }
     [data-task-invoice-footer] {
       border-top: 1px solid ${tableBorder} !important;
-      padding: 10px 14px 8px !important;
-      margin: 12px 0 0 !important;
-      font-size: 11.5px !important;
+      padding: 9px 4px 6px !important;
+      margin: 6px 0 0 !important;
+      font-size: 10px !important;
       line-height: 1.8 !important;
       color: ${footerTextColor};
       background: #fff !important;
@@ -2304,11 +2304,11 @@ export function UnifiedTaskInvoice({
     }
     [data-task-invoice-footer] .u-footer-contacts {
       width: 100%;
-      display: grid !important;
-      grid-template-columns: auto minmax(0, 1fr);
-      justify-content: space-between !important;
+      display: flex !important;
+      flex-wrap: wrap;
+      justify-content: center !important;
       align-items: center;
-      column-gap: 28px !important;
+      column-gap: 18px !important;
       row-gap: 6px !important;
     }
     [data-task-invoice-footer] .u-footer-contacts > span[aria-hidden] { display: none; }
@@ -2319,15 +2319,12 @@ export function UnifiedTaskInvoice({
       max-width: 100%;
       overflow-wrap: anywhere;
     }
-    [data-task-invoice-footer] .u-footer-contact:nth-of-type(4n + 3) {
-      justify-self: end;
-      text-align: left;
-    }
     [data-task-invoice-footer] .u-footer-contact:first-child bdi { font-weight: 700; }
     [data-task-invoice-footer] .u-footer-contact svg { flex-shrink: 0; align-self: center; }
     [data-invoice-print] .u-closing-message {
       font-size: 10px !important;
-      padding: 8px 0 !important;
+      padding: 6px 0 2px !important;
+      margin: 0 !important;
     }
     /* Financial totals belong at the end, not in the repeating page footer. */
     [data-invoice-print] table:not(.print-pagination-shell) > tfoot {
@@ -4275,7 +4272,7 @@ export function UnifiedTaskInvoice({
                       {bankAccounts.length > 0 && (
                         <div
                           className="u-bank-accounts"
-                          style={{ marginTop: '24px', paddingTop: '12px', borderTop: '1px dashed #ccc', breakInside: 'avoid' }}
+                          style={{ marginTop: '12px', paddingTop: '4px' }}
                           dangerouslySetInnerHTML={{ __html: renderBankAccountsHTML(bankAccounts, primaryColor) }}
                         />
                       )}

@@ -1,3 +1,4 @@
+import { invoiceSummaryHtml, invoiceNotesHtml } from './invoiceBrandLayout';
 import type { ResolvedPrintStyles } from './unifiedInvoiceBase';
 /**
  * Unified Sales Invoice HTML Generator
@@ -5,7 +6,6 @@ import type { ResolvedPrintStyles } from './unifiedInvoiceBase';
  */
 
 import { resolveInvoiceStyles, formatNum, formatDateForPrint, wrapInDocument, generateCustomerHTML } from './unifiedInvoiceBase';
-import { hexToRgba } from '@/hooks/useInvoiceSettingsSync';
 import { numberToArabicWords } from '@/lib/printUtils';
 import { fetchInvoiceExtras, generateBankAndStampHTML } from '@/utils/invoiceExtras';
 
@@ -58,7 +58,6 @@ export async function generateSalesInvoiceHTML(data: SalesInvoiceData, previewSt
     const dimHtml = dimParts.length >= 2 ? `<div style="font-size:11px;color:#666;margin-top:3px;direction:rtl;">الأبعاد: ${dimParts.join(' × ')} سم</div>` : '';
     return `
     <tr class="${idx % 2 === 0 ? 'even-row' : 'odd-row'}">
-      <td>${idx + 1}</td>
       <td style="text-align:right;font-weight:600;direction:rtl;">${item.description}${dimHtml}</td>
       ${hasAnyImage ? `<td style="text-align:center;">${imgUrl ? `<img src="${imgUrl}" alt="" style="width:70px;height:50px;object-fit:cover;border-radius:6px;border:1px solid #ddd;" />` : ''}</td>` : ''}
       <td style="direction:rtl;"><span class="num">${item.quantity}</span> ${item.unit || ''}</td>
@@ -68,14 +67,12 @@ export async function generateSalesInvoiceHTML(data: SalesInvoiceData, previewSt
   `;
   }).join('');
   
-  const colSpanForTotals = hasAnyImage ? 5 : 4;
 
   const bodyContent = `
     <table class="items-table">
       <thead>
         <tr>
-          <th style="width:8%">#</th>
-          <th style="${hasAnyImage ? 'width:32%' : 'width:40%'}">البند</th>
+          <th style="${hasAnyImage ? 'width:40%' : 'width:48%'}">البيان</th>
           ${hasAnyImage ? '<th style="width:10%">الصورة</th>' : ''}
           <th style="width:13%">الكمية</th>
           <th style="width:18%">سعر الوحدة</th>
@@ -84,32 +81,17 @@ export async function generateSalesInvoiceHTML(data: SalesInvoiceData, previewSt
       </thead>
       <tbody>
         ${rowsHtml}
-        <tr class="subtotal-row">
-          <td colspan="${colSpanForTotals}" style="text-align:right;">المجموع الفرعي</td>
-          <td><span class="num">${formatNum(subtotal)}</span> د.ل</td>
-        </tr>
-        ${discount > 0 ? `
-        <tr class="subtotal-row" style="color:#28a745;">
-          <td colspan="${colSpanForTotals}" style="text-align:right;">الخصم</td>
-          <td style="color:#28a745;">- <span class="num">${formatNum(discount)}</span> د.ل</td>
-        </tr>
-        ` : ''}
-        <tr class="grand-total-row">
-          <td colspan="${colSpanForTotals}" class="totals-label">الإجمالي النهائي</td>
-          <td class="totals-value"><span class="num">${formatNum(data.totalAmount)}</span> د.ل</td>
-        </tr>
       </tbody>
     </table>
 
-    <div class="notes-section">
-      المبلغ بالكلمات: ${numberToArabicWords(data.totalAmount)} دينار ليبي فقط لا غير
-      ${data.notes ? `<br><br><strong>ملاحظات:</strong> ${data.notes}` : ''}
-    </div>
+    ${invoiceSummaryHtml(discount > 0 ? [{ label: 'المجموع الفرعي', value: `${formatNum(subtotal)} د.ل` }, { label: 'الخصم', value: `− ${formatNum(discount)} د.ل` }] : [], `${formatNum(data.totalAmount)} د.ل`)}
+    ${invoiceNotesHtml(`${numberToArabicWords(data.totalAmount)} دينار ليبي فقط لا غير`, data.notes)}
 
     ${generateBankAndStampHTML(extras, t.primaryColor)}
   `;
 
   const customerHtml = generateCustomerHTML(t, {
+    brandLayout: true,
     label: 'العميل',
     name: data.customerName,
     company: data.customerCompany,
@@ -124,6 +106,7 @@ export async function generateSalesInvoiceHTML(data: SalesInvoiceData, previewSt
   });
 
   return wrapInDocument(t, {
+    brandLayout: true,
     title: `فاتورة مبيعات - ${data.customerName}`,
     headerMetaHtml: `
       رقم الفاتورة: <span class="num">${data.invoiceNumber}</span><br/>

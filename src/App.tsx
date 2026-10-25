@@ -17,6 +17,7 @@ import { NetworkStatusNotifier } from "@/components/NetworkStatusNotifier";
 import { PwaUpdatePrompt } from "@/components/PwaUpdatePrompt";
 import { DesktopBackupNotifier } from "@/components/DesktopBackupNotifier";
 import { LocalStackNotifier } from "@/components/LocalStackNotifier";
+import { GlobalImagePaste } from "@/components/shared/GlobalImagePaste";
 
 // Use HashRouter in desktop / file:// environments to ensure robust client-side routing
 const isDesktopEnv = typeof window !== 'undefined' && (window.location.protocol === 'file:' || !!window.desktopAPI);
@@ -283,6 +284,7 @@ const App = () => (
               <RouterComponent future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
                 <AuthProvider>
                   <SessionTimeoutGuard />
+                  <GlobalImagePaste />
                   <Suspense fallback={<PageLoader />}>
                     <Routes>
                       {/* Public routes */}

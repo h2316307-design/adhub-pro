@@ -1,3 +1,4 @@
+import { invoiceSummaryHtml, invoiceNotesHtml } from './invoiceBrandLayout';
 /**
  * Unified Print Invoice HTML Generator (فاتورة الطباعة)
  * يستخدم القاعدة الموحدة (unifiedInvoiceBase) + fetchPrintSettingsForInvoice
@@ -94,28 +95,13 @@ function generateTableWithPrices(t: ResolvedPrintStyles, data: PrintInvoiceData)
       </thead>
       <tbody>
         ${rowsHtml}
-        <tr class="subtotal-row">
-          <td colspan="8" style="text-align:left;">المجموع الفرعي</td>
-          <td><span class="num">${formatNumber(data.subtotal)} ${data.currency.symbol}</span></td>
-        </tr>
-        ${data.discountAmount && data.discountAmount > 0 ? `
-        <tr class="subtotal-row" style="color:#e74c3c;">
-          <td colspan="8" style="text-align:left;">الخصم ${data.discountType === 'percentage' ? `(${data.discount}%)` : ''}</td>
-          <td style="color:#e74c3c;">- <span class="num">${formatNumber(data.discountAmount)} ${data.currency.symbol}</span></td>
-        </tr>
-        ` : ''}
-        ${data.accountDeduction && data.accountDeduction > 0 ? `
-        <tr class="subtotal-row" style="color:#0369a1;">
-          <td colspan="8" style="text-align:left;">خصم من رصيد الحساب</td>
-          <td style="color:#0369a1;">- <span class="num">${formatNumber(data.accountDeduction)} ${data.currency.symbol}</span></td>
-        </tr>
-        ` : ''}
-        <tr class="grand-total-row">
-          <td colspan="8" class="totals-label">الإجمالي النهائي</td>
-          <td class="totals-value"><span class="num">${formatNumber(data.totalAmount)} ${data.currency.symbol}</span></td>
-        </tr>
       </tbody>
     </table>
+    ${invoiceSummaryHtml([
+      ...(data.discountAmount || data.accountDeduction ? [{ label: 'المجموع الفرعي', value: `${formatNumber(data.subtotal)} ${data.currency.symbol}` }] : []),
+      ...(data.discountAmount ? [{ label: 'الخصم', value: `− ${formatNumber(data.discountAmount)} ${data.currency.symbol}` }] : []),
+      ...(data.accountDeduction ? [{ label: 'خصم من رصيد الحساب', value: `− ${formatNumber(data.accountDeduction)} ${data.currency.symbol}` }] : []),
+    ], `${formatNumber(data.totalAmount)} ${data.currency.symbol}`)}
   `;
 }
 
@@ -209,17 +195,13 @@ export async function generatePrintInvoiceHTML(data: PrintInvoiceData, previewSt
   ` : '';
 
   // Amount in words (only for priced mode)
-  const amountWords = showPrices ? `
-    <div class="notes-section" style="margin-top:10px;">
-      المبلغ بالكلمات: ${numberToArabicWords(data.totalAmount)} ${data.currency.name} فقط لا غير
-    </div>
-  ` : '';
+  const amountWords = showPrices ? invoiceNotesHtml(`${numberToArabicWords(data.totalAmount)} ${data.currency.name} فقط لا غير`, data.notes) : '';
 
   const bodyContent = `
     ${reinstallBadge}
     ${tableHtml}
     ${amountWords}
-    ${notesHtml}
+    ${showPrices ? '' : notesHtml}
     ${paymentHtml}
   `;
 
@@ -232,6 +214,7 @@ export async function generatePrintInvoiceHTML(data: PrintInvoiceData, previewSt
   }
 
   const customerHtml = generateCustomerHTML(t, {
+    brandLayout: true,
     label: 'العميل',
     name: data.customerName,
     phone: data.customerPhone,
@@ -249,6 +232,7 @@ export async function generatePrintInvoiceHTML(data: PrintInvoiceData, previewSt
   });
 
   return wrapInDocument(t, {
+    brandLayout: true,
     title: `فاتورة طباعة - ${data.customerName}`,
     headerMetaHtml: metaLines.join('<br/>'),
     customerHtml,

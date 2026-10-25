@@ -91,12 +91,16 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
   const selectedOps = useMemo(() => (data || []).filter(r => selected.has(r.key)), [data, selected]);
   const toggleSel = (key: string) => setSelected(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  const openWorkflow = async (op: OperationRow, mode: 'designs' | 'distribution' | 'print') => {
+  const openWorkflow = async (op: OperationRow, mode: 'designs' | 'distribution' | 'print', selectedItemIds?: string[]) => {
     const ids = op.tasks.map(t => t.installation_task_id).filter(Boolean);
     if (!ids.length) { toast.error('لا توجد أمر تركيب مرتبط'); return; }
     setBusyKey(op.key);
     try {
       const wf = await fetchInstallationWorkflowData(ids[0], ids, op.contractIds.length === 1 ? op.contractIds[0] : null);
+      if (mode === 'print' && selectedItemIds) {
+        const selectedIds = new Set(selectedItemIds);
+        wf.items = wf.items.filter(item => selectedIds.has(item.id));
+      }
       if (mode === 'distribution' && !wf.designs.length) { toast.info('أضف تصميماً أولاً ثم وزّعه على اللوحات'); mode = 'designs'; }
       if (mode === 'print' && !wf.items.length) { toast.info('لا توجد لوحات في هذه العملية'); return; }
       setWorkflow({ op, data: wf, mode });
@@ -335,7 +339,7 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
           onEditCosts={() => setEditing(boardsOp)}
           onDesigns={() => openWorkflow(boardsOp, 'designs')}
           onDistribute={() => openWorkflow(boardsOp, 'distribution')}
-          onPrint={() => openWorkflow(boardsOp, 'print')}
+          onPrint={itemIds => openWorkflow(boardsOp, 'print', itemIds)}
         />
       )}
 

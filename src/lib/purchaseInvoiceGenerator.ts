@@ -1,3 +1,4 @@
+import { invoiceSummaryHtml, invoiceNotesHtml } from './invoiceBrandLayout';
 import type { ResolvedPrintStyles } from './unifiedInvoiceBase';
 /**
  * Unified Purchase Invoice HTML Generator
@@ -132,33 +133,11 @@ export async function generatePurchaseInvoiceHTML(data: PurchaseInvoiceData, pre
         </thead>
         <tbody>
           ${rowsHtml}
-          <tr class="subtotal-row">
-            <td colspan="4" style="text-align:right;">المجموع الفرعي</td>
-            <td><span class="num">${totalFaces}</span> وجه</td>
-            <td colspan="2"></td>
-            <td><span class="num">${formatNum(subtotal)}</span> د.ل</td>
-          </tr>
-          ${discount > 0 ? `
-          <tr class="subtotal-row" style="color:#28a745;">
-            <td colspan="7" style="text-align:right;">الخصم</td>
-            <td style="color:#28a745;">- <span class="num">${formatNum(discount)}</span> د.ل</td>
-          </tr>
-          ` : ''}
-          <tr class="total-meters-row" style="display:none;">
-            <td colspan="7" style="text-align:right;">إجمالي الأمتار المربعة</td>
-            <td><span class="num">${formatNum(totalMeters)}</span> م²</td>
-          </tr>
-          <tr class="grand-total-row">
-            <td colspan="7" class="totals-label">الإجمالي النهائي</td>
-            <td class="totals-value"><span class="num">${formatNum(data.totalAmount)}</span> د.ل</td>
-          </tr>
         </tbody>
       </table>
 
-      <div class="notes-section invoice-notes-section">
-        المبلغ بالكلمات: ${numberToArabicWords(data.totalAmount)} دينار ليبي فقط لا غير
-        ${data.notes ? `<br><br><strong class="invoice-rental-notes">ملاحظات:</strong> <span class="invoice-rental-notes">${data.notes}</span>` : ''}
-      </div>
+      ${invoiceSummaryHtml([{ label: 'عدد الأوجه', value: String(totalFaces) }, ...(discount > 0 ? [{ label: 'المجموع الفرعي', value: `${formatNum(subtotal)} د.ل` }, { label: 'الخصم', value: `− ${formatNum(discount)} د.ل` }] : [])], `${formatNum(data.totalAmount)} د.ل`)}
+      ${invoiceNotesHtml(`${numberToArabicWords(data.totalAmount)} دينار ليبي فقط لا غير`, data.notes)}
 
       ${generateBankAndStampHTML(extras, t.primaryColor)}
     `;
@@ -206,33 +185,18 @@ export async function generatePurchaseInvoiceHTML(data: PurchaseInvoiceData, pre
         </thead>
         <tbody>
           ${rowsHtml}
-          <tr class="subtotal-row">
-            <td colspan="${colCount - 1}" style="text-align:right;">المجموع الفرعي</td>
-            <td><span class="num">${formatNum(subtotal)}</span> د.ل</td>
-          </tr>
-          ${discount > 0 ? `
-          <tr class="subtotal-row" style="color:#28a745;">
-            <td colspan="${colCount - 1}" style="text-align:right;">الخصم</td>
-            <td style="color:#28a745;">- <span class="num">${formatNum(discount)}</span> د.ل</td>
-          </tr>
-          ` : ''}
-          <tr class="grand-total-row">
-            <td colspan="${colCount - 1}" class="totals-label">الإجمالي النهائي</td>
-            <td class="totals-value"><span class="num">${formatNum(data.totalAmount)}</span> د.ل</td>
-          </tr>
         </tbody>
       </table>
 
-      <div class="notes-section">
-        المبلغ بالكلمات: ${numberToArabicWords(data.totalAmount)} دينار ليبي فقط لا غير
-        ${data.notes ? `<br><br><strong>ملاحظات:</strong> ${data.notes}` : ''}
-      </div>
+      ${invoiceSummaryHtml(discount > 0 ? [{ label: 'المجموع الفرعي', value: `${formatNum(subtotal)} د.ل` }, { label: 'الخصم', value: `− ${formatNum(discount)} د.ل` }] : [], `${formatNum(data.totalAmount)} د.ل`)}
+      ${invoiceNotesHtml(`${numberToArabicWords(data.totalAmount)} دينار ليبي فقط لا غير`, data.notes)}
 
       ${generateBankAndStampHTML(extras, t.primaryColor)}
     `;
   }
 
   const customerHtml = generateCustomerHTML(t, {
+    brandLayout: true,
     label: 'المورد',
     name: data.supplierName || 'غير محدد',
     company: data.supplierCompany,
@@ -247,6 +211,7 @@ export async function generatePurchaseInvoiceHTML(data: PurchaseInvoiceData, pre
   });
 
   return wrapInDocument(t, {
+    brandLayout: true,
     title: `فاتورة مشتريات - ${data.supplierName}`,
     headerMetaHtml: `
       رقم الفاتورة: <span class="num">${data.invoiceNumber}</span><br/>

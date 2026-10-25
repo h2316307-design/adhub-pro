@@ -50,6 +50,7 @@ import { DOCUMENT_TYPES, DOCUMENT_TYPE_INFO, DOCUMENT_CATEGORIES, DocumentType, 
 import { DEFAULT_PRINT_SETTINGS, PrintSettings, HEADER_STYLES, HeaderStyleType, LOGO_SIZES, LogoSizeType, AlignmentType, HeaderAlignmentType, HeaderDirectionType } from "@/types/print-settings";
 import { usePrintSettings, usePrintSettingsByType } from "@/store";
 import { PrintEnginePreview } from "@/components/print-design/PrintEnginePreview";
+import { ContractSettingsNav } from "@/components/contracts/ContractSettingsNav";
 import { supabase } from "@/integrations/supabase/client";
 import { uploadImage } from "@/services/imageUploadService";
 
@@ -276,7 +277,7 @@ const AlignmentSelector = ({ value, onChange, label }: { value: AlignmentType; o
         <button
           key={option.value}
           onClick={() => onChange(option.value)}
-          className={`flex-1 p-1.5 rounded-md flex items-center justify-center transition-all ${
+          className={`flex-1 cursor-pointer p-1.5 rounded-md flex items-center justify-center transition-all duration-200 ${
             value === option.value ? "bg-primary text-primary-foreground shadow" : "hover:bg-background/80"
           }`}
           title={option.label}
@@ -289,7 +290,7 @@ const AlignmentSelector = ({ value, onChange, label }: { value: AlignmentType; o
 );
 
 const SectionResetButton = ({ onClick, label = "إعادة تعيين" }: { onClick: () => void; label?: string }) => (
-  <Button variant="ghost" size="sm" className="h-6 text-xs text-muted-foreground hover:text-destructive px-2" onClick={onClick}>
+  <Button variant="ghost" size="sm" className="h-8 cursor-pointer px-2 text-xs text-muted-foreground transition-all duration-200 hover:text-destructive" onClick={onClick}>
     <RotateCcw className="h-3 w-3 ml-1" />
     {label}
   </Button>
@@ -572,24 +573,29 @@ const PrintSettingsPage = () => {
 
   return (
     <div className="min-h-screen bg-background" dir="rtl">
-      <div className="mx-auto max-w-[1600px] space-y-5 p-4 md:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="container mx-auto space-y-4 p-4">
+        <ContractSettingsNav />
+        <div className="sticky top-0 z-20 flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-background/95 p-4 shadow-sm backdrop-blur print:static">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary"><Layout className="h-6 w-6" /></div>
-            <div><h1 className="text-xl font-bold tracking-tight md:text-2xl">قوالب الطباعة</h1><p className="mt-1 text-sm text-muted-foreground">تحكم في التصميم الموحد وراجع التغييرات قبل الحفظ.</p></div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><FileText className="h-5 w-5" /></div>
+            <div><h1 className="text-xl font-bold text-primary md:text-2xl">إعدادات تصميم الفواتير</h1><p className="mt-1 text-sm text-muted-foreground">نسّق هوية الفواتير والإيصالات وراجع النتيجة قبل الطباعة.</p></div>
           </div>
-          <div className="flex items-center gap-3 rounded-xl border bg-card px-4 py-2.5">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 rounded-lg border bg-card px-3 py-2.5">
             <span className={cn("h-2 w-2 rounded-full", hasUnsavedChanges ? "bg-amber-500" : "bg-emerald-500")} />
             <span className="text-xs font-medium" role="status" aria-live="polite">{hasUnsavedChanges ? 'تعديلات لم تُحفظ' : 'لا توجد تعديلات معلّقة'}</span>
+            </div>
+            <Button className="cursor-pointer gap-2 transition-all duration-200 motion-safe:active:scale-95" onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{isSaving ? 'جارٍ الحفظ' : 'حفظ تصميم الفواتير'}</Button>
           </div>
         </div>
-        <div className="sticky top-0 z-30 grid grid-cols-2 gap-1 rounded-xl border bg-background p-1 lg:hidden">
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm leading-relaxed">اضبط التصميم المشترك لجميع الفواتير، أو اختر نوع مستند لتعديل بياناته. تعرض المعاينة التغييرات مباشرة، وتُطبّق على الطباعة عند الحفظ.</div>
+        <div className="grid grid-cols-2 gap-1 rounded-xl border bg-background p-1 lg:hidden">
           <Button variant={mobilePanel === 'settings' ? 'default' : 'ghost'} className="cursor-pointer gap-2 transition-all duration-200" onClick={() => setMobilePanel('settings')}><Layout className="h-4 w-4" />الإعدادات</Button>
           <Button variant={mobilePanel === 'preview' ? 'default' : 'ghost'} className="cursor-pointer gap-2 transition-all duration-200" onClick={() => setMobilePanel('preview')}><Eye className="h-4 w-4" />معاينة التغييرات</Button>
         </div>
-        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-[360px_minmax(0,1fr)] 2xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="grid min-w-0 grid-cols-1 items-start gap-4 lg:grid-cols-3">
         {/* Left Panel - Settings */}
-        <div className={cn("min-w-0 space-y-3 lg:block", mobilePanel !== 'settings' && "hidden")}>
+        <div className={cn("min-w-0 space-y-4 lg:col-span-1 lg:block", mobilePanel !== 'settings' && "hidden")}>
           {/* Header Card */}
           <Card>
             <CardHeader className="space-y-2 border-b bg-muted/20 p-3">
@@ -719,12 +725,12 @@ const PrintSettingsPage = () => {
 
           {/* Settings Tabs */}
           <Card className="overflow-hidden">
-            <ScrollArea className="h-[50vh] lg:h-[calc(100vh-430px)] min-h-[260px]">
+            <ScrollArea className="h-[65vh] min-h-[360px]">
               <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="p-4">
                 <TabsList className="sticky top-0 z-10 grid h-auto sm:h-auto w-full grid-cols-3 auto-rows-[44px] gap-1 rounded-lg border bg-muted p-1 mb-4">
                   <TabsTrigger value="header" className="min-h-10 cursor-pointer gap-1.5 px-2 text-xs transition-all duration-200">
                     <Layout className="h-3.5 w-3.5" />
-                    <span className="inline">الهيدر</span>
+                    <span className="inline">الترويسة</span>
                   </TabsTrigger>
                   <TabsTrigger value="table" className="min-h-10 cursor-pointer gap-1.5 px-2 text-xs transition-all duration-200">
                     <Table className="h-3.5 w-3.5" />
@@ -732,7 +738,7 @@ const PrintSettingsPage = () => {
                   </TabsTrigger>
                   <TabsTrigger value="layout" className="min-h-10 cursor-pointer gap-1.5 px-2 text-xs transition-all duration-200">
                     <Type className="h-3.5 w-3.5" />
-                    <span className="inline">التخطيط</span>
+                    <span className="inline">الخط والصفحة</span>
                   </TabsTrigger>
                   <TabsTrigger value="colors" className="min-h-10 cursor-pointer gap-1.5 px-2 text-xs transition-all duration-200">
                     <Palette className="h-3.5 w-3.5" />
@@ -1535,20 +1541,16 @@ const PrintSettingsPage = () => {
               </Tabs>
             </ScrollArea>
           </Card>
-          <div className="sticky bottom-3 z-20 flex items-center justify-between gap-3 rounded-xl border bg-card/95 p-3 shadow-lg backdrop-blur">
-            <div className="min-w-0"><p className="text-xs font-semibold">{editMode === 'global' ? 'التصميم المشترك لجميع المستندات' : docTypeInfo.nameAr}</p><p className="mt-1 text-[11px] text-muted-foreground">{hasUnsavedChanges ? 'المعاينة التجريبية تعرض تعديلاتك الحالية' : 'غيّر الإعدادات لمعاينة التصميم'}</p></div>
-            <Button className="shrink-0 cursor-pointer gap-2 transition-all duration-200 motion-safe:active:scale-95" onClick={handleSave} disabled={isSaving || !hasUnsavedChanges}>{isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}{isSaving ? 'جارٍ الحفظ' : 'حفظ التغييرات'}</Button>
-          </div>
         </div>
 
         {/* Right Panel - Preview */}
-        <div className={cn("min-w-0 lg:sticky lg:top-4 lg:block", mobilePanel !== 'preview' && "hidden")}>
+        <div className={cn("min-w-0 lg:col-span-2 lg:sticky lg:top-28 lg:block", mobilePanel !== 'preview' && "hidden")}>
           <Card className="overflow-hidden">
-            <CardHeader className="pb-2 pt-3">
+            <CardHeader className="border-b bg-muted/20 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <CardTitle className="text-base flex items-center gap-2">
-                  <Eye className="h-4 w-4" />
-                  {realPreviewHtml ? 'كشف حساب محفوظ' : editMode === 'global' ? 'معاينة إيصال الاستلام الفعلي' : 'معاينة المستند الفعلي'}
+                  <Eye className="h-4 w-4 text-primary" />
+                  {realPreviewHtml ? 'كشف حساب محفوظ' : editMode === 'global' ? 'معاينة تصميم الفواتير' : docTypeInfo.nameAr}
                 </CardTitle>
                 <div className="flex flex-wrap items-center gap-2">
                   {realPreviewHtml && (
@@ -1594,27 +1596,24 @@ const PrintSettingsPage = () => {
                 </div>
               </div>
             </CardHeader>
-            <CardContent className="relative pb-20">
+            <CardContent className="space-y-3 p-4">
               <div className="mb-3 flex items-start gap-2 rounded-lg border bg-muted/30 p-3 text-xs leading-relaxed text-muted-foreground"><Eye className="mt-0.5 h-4 w-4 shrink-0" /><span>{realPreviewHtml ? 'هذا الكشف يستخدم الإعدادات المحفوظة. ارجع إلى المعاينة التجريبية لرؤية تعديلاتك قبل الحفظ.' : 'قالب المستند ببيانات تجريبية. تظهر التعديلات قبل الحفظ، واحفظ لتطبيقها على الطباعة.'}</span></div>
               {realPreviewHtml ? (
                 <div className="relative overflow-auto" style={{ maxHeight: 'calc(100vh - 250px)' }}>
-                  <div className="bg-muted rounded-lg p-4" style={{ minHeight: '400px' }}>
+                  <div className="rounded-lg bg-muted p-4" style={{ minHeight: '400px' }}>
                     <div
-                      className="mx-auto shadow-xl"
+                      className="relative mx-auto shadow-lg"
                       style={{
-                        width: '210mm',
-                        height: '297mm',
-                        transform: `scale(${previewZoom})`,
-                        transformOrigin: 'top center',
-                        marginBottom: previewZoom < 1 ? `calc(297mm * ${1 - previewZoom})` : '0',
+                        width: `calc(210mm * ${previewZoom})`,
+                        height: `calc(297mm * ${previewZoom})`,
                       }}
                     >
                       <iframe
                         ref={realPreviewIframeRef}
-                        className="w-full h-full border-0 bg-background"
+                        className="absolute left-0 top-0 border-0 bg-white"
                         title="معاينة بيانات حقيقية"
                         sandbox="allow-same-origin"
-                        style={{ pointerEvents: 'none' }}
+                        style={{ width: '210mm', height: '297mm', transform: `scale(${previewZoom})`, transformOrigin: 'top left', pointerEvents: 'none' }}
                       />
                     </div>
                   </div>
@@ -1623,21 +1622,23 @@ const PrintSettingsPage = () => {
                 <PrintEnginePreview settings={settings} documentType={selectedDocType} zoom={previewZoom} />
               )}
 
-              {/* Floating Zoom Control */}
-              <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-background/95 backdrop-blur border shadow-lg rounded-full px-3 py-1.5 flex items-center gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/20 p-2">
+                <span className="px-2 text-xs text-muted-foreground">حجم المعاينة · A4</span>
+                <div className="flex items-center gap-2" dir="ltr">
                 <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer transition-all duration-200" aria-label="تصغير المعاينة" onClick={() => setPreviewZoom(Math.max(0.3, previewZoom - 0.1))} disabled={previewZoom <= 0.3}>
                   <ZoomOut className="h-3.5 w-3.5" />
                 </Button>
-                <div className="w-28">
-                  <Slider value={[previewZoom]} onValueChange={([v]) => setPreviewZoom(v)} min={0.3} max={1.2} step={0.05} className="cursor-pointer" />
+                <div className="w-20 sm:w-28">
+                  <Slider aria-label="حجم معاينة الفاتورة" value={[previewZoom]} onValueChange={([v]) => setPreviewZoom(v)} min={0.3} max={1.2} step={0.05} className="cursor-pointer" />
                 </div>
                 <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer transition-all duration-200" aria-label="تكبير المعاينة" onClick={() => setPreviewZoom(Math.min(1.2, previewZoom + 0.1))} disabled={previewZoom >= 1.2}>
                   <ZoomIn className="h-3.5 w-3.5" />
                 </Button>
                 <span className="text-[10px] text-muted-foreground min-w-[32px] text-center">{Math.round(previewZoom * 100)}%</span>
-                <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer transition-all duration-200" onClick={() => setPreviewZoom(0.45)} title="إعادة التعيين">
+                <Button variant="ghost" size="icon" className="h-8 w-8 cursor-pointer transition-all duration-200" onClick={() => setPreviewZoom(0.45)} title="إعادة حجم المعاينة" aria-label="إعادة حجم المعاينة">
                   <Maximize2 className="h-3.5 w-3.5" />
                 </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

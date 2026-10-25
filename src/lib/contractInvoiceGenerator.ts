@@ -1,3 +1,4 @@
+import { invoiceSummaryHtml, invoiceNotesHtml } from './invoiceBrandLayout';
 import type { ResolvedPrintStyles } from './unifiedInvoiceBase';
 /**
  * Unified Contract Invoice HTML Generator
@@ -83,28 +84,15 @@ export async function generateContractInvoiceHTML(data: ContractInvoiceData, pre
           </tr>`;
         }).join('')}
 
-        ${data.discountInfo ? `
-          <tr class="subtotal-row" style="color:#28a745;">
-            <td colspan="5" style="text-align:left;">الخصم (${data.discountInfo.display})</td>
-            <td style="font-family:'Manrope',sans-serif;color:#28a745;">- <span class="num">${formatNum(data.discountAmount || 0)}</span> ${data.currencySymbol}</td>
-          </tr>
-        ` : ''}
-
-
-        <tr class="grand-total-row">
-          <td colspan="5" class="totals-label">الإجمالي للعميل (${data.totalBillboards} لوحة)</td>
-          <td class="totals-value"><span class="num">${formatNum(data.grandTotal)}</span> ${data.currencySymbol}</td>
-        </tr>
       </tbody>
     </table>
 
-    <div class="notes-section">
-      المبلغ بالكلمات: ${numberToArabicWords(data.grandTotal)} ${data.currencyWrittenName}
-      ${data.printCostEnabled ? '<br><small style="color:#28a745;">* الأسعار شاملة تكلفة الطباعة</small>' : '<br><small style="color:#6c757d;">* الأسعار غير شاملة تكلفة الطباعة</small>'}
-    </div>
+    ${invoiceSummaryHtml(data.discountInfo ? [{ label: `الخصم (${data.discountInfo.display})`, value: `− ${formatNum(data.discountAmount || 0)} ${data.currencySymbol}` }] : [], `${formatNum(data.grandTotal)} ${data.currencySymbol}`)}
+    ${invoiceNotesHtml(`${numberToArabicWords(data.grandTotal)} ${data.currencyWrittenName}`, data.printCostEnabled ? 'الأسعار شاملة تكلفة الطباعة' : 'الأسعار غير شاملة تكلفة الطباعة')}
   `;
 
   const customerHtml = generateCustomerHTML(t, {
+    brandLayout: true,
     label: 'العميل',
     name: data.customerName,
     company: data.customerCompany,
@@ -121,6 +109,7 @@ export async function generateContractInvoiceHTML(data: ContractInvoiceData, pre
   });
 
   return wrapInDocument(t, {
+    brandLayout: true,
     title: `فاتورة العقد ${data.contractId}`,
     headerMetaHtml: `
       رقم الفاتورة: <span class="num">${data.invoiceNumber}</span><br/>
