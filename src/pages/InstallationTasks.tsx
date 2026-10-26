@@ -1,3 +1,5 @@
+import { createCampaignInstallation } from '@/services/campaignInstallation';
+import { installationGroupKey, installationTeamGroupKey } from '@/lib/installationAmendment';
 import { loadInstallationOperationIds, prepareInstallationOperationTask } from '@/services/installationOperation';
 import { pullFromOriginalTasks } from '@/services/installationOperationCreate';
 import { removeTaskItems } from '@/services/operationBoards';
@@ -1718,7 +1720,8 @@ export default function InstallationTasks() {
     const byContractAndBillboard: Record<string, any[]> = {};
     eligible.forEach(item => {
       const contractId = taskContractMap[item.task_id] || 'no_contract';
-      const key = `${contractId}_${item.billboard_id}`;
+      const taskObj = tasks.find(t => t.id === item.task_id);
+      const key = `${contractId}_${item.billboard_id}_${taskObj?.amendment_number ?? "original"}`;
       if (!byContractAndBillboard[key]) byContractAndBillboard[key] = [];
       byContractAndBillboard[key].push(item);
     });
@@ -1853,7 +1856,7 @@ export default function InstallationTasks() {
       pendingItems.forEach(item => {
         const taskObj = taskDataMap[item.task_id];
         const contractId = taskObj?.contract_id || 'no_contract';
-        const key = `${contractId}_${item.billboard_id}`;
+        const key = `${contractId}_${item.billboard_id}_${taskObj?.amendment_number ?? "original"}`;
         if (!byContractAndBillboard[key]) byContractAndBillboard[key] = [];
         byContractAndBillboard[key].push(item);
       });
@@ -1888,16 +1891,16 @@ export default function InstallationTasks() {
         if (currentTeamId !== correctTeam.id) {
           const contractId = currentTask?.contract_id;
           if (contractId) {
-            const mapKey = `${correctTeam.id}_${contractId}`;
+            const mapKey = installationTeamGroupKey({ ...currentTask, team_id: correctTeam.id });
             
             // ✅ البحث أولاً في الخريطة المحلية، ثم في المهام الموجودة
             let targetTask = createdTasksMap[mapKey] 
-              || tasks.find((t: any) => t.team_id === correctTeam.id && t.contract_id === contractId && t.task_type === 'installation');
+              || tasks.find((t: any) => t.team_id === correctTeam.id && t.contract_id === contractId && t.task_type === 'installation' && (t.amendment_number ?? null) === (currentTask?.amendment_number ?? null));
             
             if (!targetTask) {
               const { data: newTask } = await supabase
                 .from('installation_tasks')
-                .insert({ contract_id: contractId, team_id: correctTeam.id, status: 'pending', task_type: 'installation' })
+                .insert({ contract_id: contractId, team_id: correctTeam.id, status: 'pending', task_type: 'installation', amendment_number: currentTask?.amendment_number ?? null })
                 .select()
                 .single();
               if (newTask) {
@@ -1928,14 +1931,14 @@ export default function InstallationTasks() {
       // ✅ دمج المهام المكررة لنفس team_id + contract_id + task_type=installation
       const { data: allInstallTasks } = await supabase
         .from('installation_tasks')
-        .select('id, team_id, contract_id, task_type, status')
+        .select('id, team_id, contract_id, task_type, status, amendment_number')
         .eq('task_type', 'installation');
       
       if (allInstallTasks) {
         // تجميع حسب team_id + contract_id
         const taskGroups: Record<string, any[]> = {};
         allInstallTasks.forEach(t => {
-          const key = `${t.team_id}_${t.contract_id}`;
+          const key = installationTeamGroupKey(t);
           if (!taskGroups[key]) taskGroups[key] = [];
           taskGroups[key].push(t);
         });
@@ -2073,7 +2076,9 @@ export default function InstallationTasks() {
           .select('billboard_id, contract_number')
           .in('contract_number', contractNums);
         const pausedKey = new Set<string>((pausedRows || []).map((p: any) => `${Number(p.contract_number)}_${Number(p.billboard_id)}`));
-        const selectedBillboards = inputBillboards.filter((b) => !pausedKey.has(`${Number(b.contractId || contractId)}_${Number(b.ID)}`));
+        const otherScopeTaskIds = new Set(tasks.filter(t => (t.task_type || 'installation') === groupType && (t.amendment_number ?? null) !== (refTask?.amendment_number ?? null)).map(t => t.id));
+        const otherScopeBoards = new Set(allTaskItems.filter(i => otherScopeTaskIds.has(i.task_id)).map(i => `${tasks.find(t => t.id === i.task_id)?.contract_id}_${Number(i.billboard_id)}`));
+        const selectedBillboards = inputBillboards.filter((b) => !pausedKey.has(`${Number(b.contractId || contractId)}_${Number(b.ID)}`) && !otherScopeBoards.has(`${Number(b.contractId || contractId)}_${Number(b.ID)}`));
 
         const { data: teamsData } = await supabase
           .from('installation_teams')
@@ -2103,7 +2108,7 @@ export default function InstallationTasks() {
           } else if (createdTasksMap.has(mapKey)) {
             targetTaskId = createdTasksMap.get(mapKey)!;
           } else {
-            const insertPayload: any = { contract_id: bbContract, team_id: team.id, status: 'pending', task_type: groupType };
+            const insertPayload: any = { contract_id: bbContract, team_id: team.id, status: 'pending', task_type: groupType, amendment_number: refTask?.amendment_number ?? null };
             if (groupType === 'reinstallation') insertPayload.reinstallation_number = refTask?.reinstallation_number || 1;
             const { data: newTask, error } = await supabase
               .from('installation_tasks')
@@ -2147,9 +2152,11 @@ export default function InstallationTasks() {
   const openContractSyncForTask = (taskId: string) => {
     const t: any = tasks.find((x: any) => x.id === taskId);
     if (!t) return;
+    if (t.amendment_number) { toast.info('لوحات الملحق تُضاف تلقائياً عند حفظ العقد؛ مطابقة العقد الكامل مخصصة للمهام الأصلية'); return; }
     const type = t.task_type || 'installation';
     const sameKind = (x: any) =>
       (x.task_type || 'installation') === type &&
+      (x.amendment_number ?? null) === (t.amendment_number ?? null) &&
       (type !== 'reinstallation' || (x.reinstallation_number || 1) === (t.reinstallation_number || 1));
 
     const contractSet = new Set<number>(derivedContractIdsByTaskId.get(taskId) || [t.contract_id]);
@@ -2178,7 +2185,7 @@ export default function InstallationTasks() {
   const mergeTasksMutation = useMutation({
     mutationFn: async () => {
       // تجميع المهام حسب team_id + contract_id
-      const groupKey = (t: any) => `${t.team_id}_${t.contract_id}`;
+      const groupKey = (t: any) => installationTeamGroupKey(t);
       const groups: Record<string, any[]> = {};
       tasks.forEach((t: any) => {
         const key = groupKey(t);
@@ -2264,10 +2271,10 @@ export default function InstallationTasks() {
   // بمشاركة التصاميم بين فرق متعددة لنفس المجموعة (وهو السلوك الذي تعرضه شريط الفريق).
   const selectedTaskDesigns = useMemo(() => {
     if (!selectedTaskId || !selectedTaskObj) return [];
-    const key = `${selectedTaskObj.contract_id}-${selectedTaskObj.task_type || 'installation'}-${(selectedTaskObj as any).reinstallation_number ?? 'new'}`;
+    const key = installationGroupKey(selectedTaskObj);
     const siblingIds = tasks
       .filter(t => {
-        const isSameKey = `${t.contract_id}-${t.task_type || 'installation'}-${(t as any).reinstallation_number ?? 'new'}` === key;
+        const isSameKey = installationGroupKey(t) === key;
         if (!isSameKey) return false;
 
         // التحقق من أن المهمة الشقيقة تم إنشاؤها في نفس الفترة الزمنية (خلال 24 ساعة)
@@ -2430,7 +2437,7 @@ export default function InstallationTasks() {
                   await supabase.from('installation_task_items').delete().eq('task_id', selectedTaskId);
                   await supabase.from('installation_tasks').delete().eq('id', selectedTaskId);
                   for (const [cId, cItems] of Object.entries(itemsByContract)) {
-                    const { data: newTask } = await supabase.from('installation_tasks').insert({ contract_id: Number(cId), team_id: selectedTaskObj.team_id, status: 'pending', task_type: selectedTaskObj.task_type }).select().single();
+                    const { data: newTask } = await supabase.from('installation_tasks').insert({ contract_id: Number(cId), team_id: selectedTaskObj.team_id, status: 'pending', task_type: selectedTaskObj.task_type, amendment_number: selectedTaskObj.amendment_number ?? null }).select().single();
                     if (newTask) await supabase.from('installation_task_items').insert(cItems.map(({ id, created_at, ...rest }) => ({ ...rest, task_id: newTask.id })));
                   }
                   toast.success('تم التراجع عن الدمج'); setSelectedTaskId(null); handleRefreshAll();
@@ -2884,8 +2891,13 @@ export default function InstallationTasks() {
         onTaskTypeChange={setTaskType}
         teams={teams as any}
         isSubmitting={createTaskMutation.isPending}
-        onSubmit={async ({ contractIds, customerId, billboardIds, teamAssignments, task_name, acceptedInactiveContractIds }) => {
+        onSubmit={async ({ campaign, contractIds, customerId, billboardIds, teamAssignments, task_name, acceptedInactiveContractIds }) => {
           try {
+            if (campaign) {
+              await createCampaignInstallation({ contractIds, billboardIds, teamAssignments, taskName: task_name, taskType, acceptedInactiveContractIds });
+              toast.success('تم إنشاء أقسام الحملة حسب الأوجه وتغطية العقد');
+              setAddTaskDialogOpen(false); handleRefreshAll(); return;
+            }
             const operationId = crypto.randomUUID();
             let operationNumber: number | undefined;
             if (taskType === 'reinstallation') {
@@ -2999,7 +3011,7 @@ export default function InstallationTasks() {
                     if (i.billboard_id !== b.ID || i.task_id === printTaskId) return false;
                     const t = tasks.find(x => x.id === i.task_id);
                     if (!t) return false;
-                    if (t.contract_id !== currentTask.contract_id) return false;
+                    if (t.contract_id !== currentTask.contract_id || (t.amendment_number ?? null) !== (currentTask.amendment_number ?? null)) return false;
                     if ((t.task_type || 'installation') !== currentType) return false;
                     if (currentType === 'reinstallation') {
                       if ((t.reinstallation_number ?? null) !== currentReinstallNum) return false;
@@ -3026,7 +3038,7 @@ export default function InstallationTasks() {
               if (item) {
                 const currentTask = tasks.find(t => t.id === item.task_id);
                 const siblingTasks = currentTask ? tasks.filter(t => {
-                  if (t.contract_id !== currentTask.contract_id) return false;
+                  if (t.contract_id !== currentTask.contract_id || (t.amendment_number ?? null) !== (currentTask.amendment_number ?? null)) return false;
                   const tType = t.task_type || 'installation';
                   const itemType = currentTask.task_type || 'installation';
                   if (tType !== itemType) return false;

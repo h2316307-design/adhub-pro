@@ -1,3 +1,6 @@
+import { executedInstallationFaces } from '@/lib/campaignInstallationFaces';
+import { getAvailableFacesCount } from '@/lib/installationFaces';
+import { loadCampaignFacePlan } from '@/services/campaignInstallation';
 import { sortTeamsByPriority, installationTeamCoversBillboard } from '@/utils/teamAssignment';
 import { pickInstallationTeam, loadPreviousTeams } from '@/utils/smartTeamAssignment';
 import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
@@ -40,6 +43,7 @@ interface EnhancedAddInstallationTaskDialogProps {
   taskType: 'installation' | 'reinstallation';
   onTaskTypeChange: (type: 'installation' | 'reinstallation') => void;
   onSubmit: (data: {
+    campaign?: boolean;
     contractIds: number[];
     customerId: string | null;
     billboardIds: number[];
@@ -85,11 +89,12 @@ export function EnhancedAddInstallationTaskDialog({
   const [assignments, setAssignments] = useState<TeamAssignment[]>([]);
   const [taskName, setTaskName] = useState('');
   const [starting, setStarting] = useState(false);
+  const [campaign, setCampaign] = useState(false);
 
   useEffect(() => {
     if (!open) {
       setCustomerSearch(''); setCustomerId(null); setShowExpired(false); setAcceptInactive(false); setSelectAllActive(false); setContractIds([]); setSelectedIds([]);
-      setBoardSearch(''); setCityFilter('all'); setSizeFilter('all'); setAssignments([]); setTaskName('');
+      setBoardSearch(''); setCityFilter('all'); setSizeFilter('all'); setAssignments([]); setTaskName(''); setCampaign(false);
     }
   }, [open]);
 
@@ -151,22 +156,23 @@ export function EnhancedAddInstallationTaskDialog({
       const ids = (tasks || []).map((t: any) => t.id);
       const items: any[] = [];
       for (let i = 0; i < ids.length; i += 150) {
-        const { data, error: e2 } = await supabase.from('installation_task_items').select('task_id, billboard_id, status, installed_image_url, installed_image_face_a_url, installed_image_face_b_url').in('task_id', ids.slice(i, i + 150)).neq('status', 'replaced');
+        const { data, error: e2 } = await supabase.from('installation_task_items').select('*, billboard:billboards!installation_task_items_billboard_id_fkey(Faces_Count)').in('task_id', ids.slice(i, i + 150)).neq('status', 'replaced');
         if (e2) throw e2;
         items.push(...(data || []));
       }
-      const m: Record<number, { hasFirst: boolean; total: number; done: number; photos: number; reinstalls: number; board: Record<number, { done: boolean; photo: boolean }> }> = {};
+      const m: Record<number, { hasFirst: boolean; total: number; done: number; photos: number; reinstalls: number; board: Record<number, { done: boolean; photo: boolean; faces: number[] }> }> = {};
       allContracts.forEach(c => {
         const cn = c.Contract_Number;
         const own = new Set(parseContractBillboardIds(c.billboard_ids));
         const mine = (tasks || []).filter((t: any) => Number(t.contract_id) === cn || (t.contract_ids || []).map(Number).includes(cn));
         const first = new Set(mine.filter((t: any) => t.task_type !== 'reinstallation').map((t: any) => t.id));
-        const board: Record<number, { done: boolean; photo: boolean }> = {};
+        const board: Record<number, { done: boolean; photo: boolean; faces: number[] }> = {};
         items.filter(i => first.has(i.task_id) && (!own.size || own.has(Number(i.billboard_id)))).forEach(i => {
-          const prev = board[Number(i.billboard_id)] || { done: false, photo: false };
-          const done = i.status === 'completed';
+          const prev = board[Number(i.billboard_id)] || { done: false, photo: false, faces: [] };
+          const faces = [...new Set([...prev.faces, ...executedInstallationFaces(i, i.billboard)])];
+          const done = faces.length >= getAvailableFacesCount(i.billboard);
           board[Number(i.billboard_id)] = {
-            done: prev.done || done,
+            faces, done: prev.done || done,
             photo: prev.photo || (done && !!(i.installed_image_url || i.installed_image_face_a_url || i.installed_image_face_b_url)),
           };
         });
@@ -272,12 +278,12 @@ export function EnhancedAddInstallationTaskDialog({
     // تركيب جديد: اللوحات غير المركّبة فقط؛ إعادة التركيب: المركّبة فقط (حين تكون حالة التركيب معروفة)
     const fitsType = (id: number) => {
       const st = installState[contractOf.get(id) as number]?.board?.[id];
-      if (!st) return true;
+      if (campaign || !st) return true;
       return taskType === 'installation' ? !st.done : st.done;
     };
     const pick = fresh.filter(id => eligible(id) && fitsType(id) && installationContractIsActive(selectedContracts.find(contract => contract.Contract_Number === contractOf.get(id)) || {}, today()) && (selectAllActive || !preferTorn || tornIds.includes(id)));
     setSelectedIds(prev => [...new Set([...prev, ...pick])]);
-  }, [boards, taskType, tornIds, pausedSet, conflicts, currentLoaded, pausedLoaded, loadingPaused, selectAllActive, contractOf, installLoaded]);
+  }, [boards, taskType, tornIds, pausedSet, conflicts, currentLoaded, pausedLoaded, loadingPaused, selectAllActive, contractOf, installLoaded, campaign]);
   useEffect(() => { if (!open) seenBoards.current = new Set(); }, [open]);
 
   const cities = useMemo(() => [...new Set(boards.map(b => b.City).filter(Boolean))].sort(), [boards]);
@@ -381,10 +387,16 @@ export function EnhancedAddInstallationTaskDialog({
       const missing = selectedBoards.filter(board => !pickInstallationTeam(teams, board));
       if (missing.length) { toast.error(`لوحات بلا فرقة مناسبة: ${missing.map(board => `${board.Billboard_Name || board.ID} (${board.City || 'مدينة غير محددة'}، ${board.Size || 'مقاس غير محدد'})`).join('، ')}`); return; }
     }
+    if (campaign && (!campaignPlan.isSuccess || campaignPlan.isFetching)) { toast.error('انتظر اكتمال مراجعة أوجه الحملة'); return; }
     setStarting(true);
-    try { await onSubmit({ contractIds: usedContractIds, customerId, billboardIds: selectedIds, teamAssignments: assignments, task_name: taskName.trim() || autoName, acceptedInactiveContractIds: inactiveIds }); } finally { setStarting(false); }
+    try { await onSubmit({ campaign, contractIds: usedContractIds, customerId, billboardIds: selectedIds, teamAssignments: assignments, task_name: taskName.trim() || autoName, acceptedInactiveContractIds: inactiveIds }); } finally { setStarting(false); }
   };
 
+  const campaignPlan = useQuery({
+    queryKey: ['campaign-face-plan', contractIds.join(','), selectedIds.join(',')],
+    enabled: open && campaign && selectedIds.length > 0,
+    queryFn: () => loadCampaignFacePlan(contractIds, selectedIds),
+  });
   const loadingBoardsView = contractIds.length > 0 && (loadingBoards || (allBoardIds.length > 0 && boards.length === 0));
 
   return (
@@ -451,6 +463,15 @@ export function EnhancedAddInstallationTaskDialog({
                   <p className="rounded-lg bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">لا توجد عقود سارية — فعّل «المنتهية» لعرضها</p>
                 ) : (
                   <>
+                  <Button variant="outline" className="mb-3 w-full min-h-10 cursor-pointer transition-all duration-200 hover:bg-primary/10" onClick={() => { setCampaign(true); setSelectAllActive(true); setContractIds(allContracts.filter(c => !isExpired(c)).map(c => c.Contract_Number)); setSelectedIds([]); setAssignments([]); seenBoards.current = new Set(); }}>جلب جميع لوحات العقود لحملة وتقسيمها حسب الأوجه</Button>
+                  {campaign && <div className="mb-3 rounded-lg border border-primary/30 bg-primary/5 p-3 text-sm">
+                    <p>حملة واحدة من العقود المحددة؛ يُفصل الوجه الذي سبق تنفيذه عن الوجه غير المنفّذ. تكلفة الشركة تبقى محفوظة حتى عندما لا توجد تكلفة إضافية على الزبون.</p>
+                    <Button variant="ghost" size="sm" className="cursor-pointer" onClick={() => setCampaign(false)}>العودة للإنشاء العادي</Button>
+                    {campaignPlan.isFetching ? <p role="status">جارٍ مراجعة سجل الأوجه…</p> : campaignPlan.isError ? <p role="alert">{(campaignPlan.error as Error).message}</p> : ['included', 'extra'].map(section => <div key={section} className="mt-3 border-t pt-2">
+                      <h4 className="font-bold">{section === 'included' ? 'بدون تكلفة إضافية — مشمول بالعقد' : 'بتكلفة إضافية'}</h4>
+                      {(campaignPlan.data || []).flatMap(row => (['first','repeat'] as const).filter(phase => row[phase].length && ((phase === 'first' && row.includedInstallation && row.includedPrint) === (section === 'included'))).map(phase => <p key={`${row.board.ID}-${phase}`} className="mt-1">عقد {row.contractNumber} · {row.board.Billboard_Name || row.board.ID} · الأوجه {row[phase].join('، ')} · {phase === 'repeat' ? 'سبق تركيبها' : `لم تُركّب — التركيب ${row.includedInstallation ? 'مشمول' : 'إضافي'}، الطباعة ${row.includedPrint ? 'مشمولة' : 'إضافية'}`}</p>))}
+                    </div>)}
+                  </div>}
                   <Button variant="outline" className="mb-3 w-full cursor-pointer text-xs" onClick={() => { setSelectAllActive(true); setContractIds(allContracts.filter(contract => !isExpired(contract)).map(contract => contract.Contract_Number)); setAssignments([]); setSelectedIds([]); seenBoards.current = new Set(); }}>اختيار جميع لوحات عقود الزبون النشطة</Button>
                   {(() => {
                     // كل عقد ساري فيه لوحات لم تُركّب بعد (غير مركّب كلياً أو جزئياً)؛ تُحدَّد لوحاته غير المركّبة فقط

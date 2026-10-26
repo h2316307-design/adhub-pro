@@ -381,7 +381,7 @@ export function RemovalMobileTaskCard({
             <div className="flex flex-wrap items-center gap-2 text-xs">
               {task.contract_id && (
                 <span className="inline-flex items-center gap-1 rounded-lg border border-primary/20 bg-primary/10 px-2 py-1 font-mono font-extrabold text-primary">
-                  #{task.contract_id}
+                  {task.amendment_number ? `إزالة ملحق ${task.amendment_number} · عقد #${task.contract_id}` : `#${task.contract_id}`}
                 </span>
               )}
               {task.adType && task.adType !== '—' && (

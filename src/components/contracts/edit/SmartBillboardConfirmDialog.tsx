@@ -95,7 +95,7 @@ export function SmartBillboardConfirmDialog({
         <div className="space-y-3 py-2">
           {existingTypes.size > 0 ? (
             <p className="text-sm text-muted-foreground">
-              اللوحات التالية مرتبطة بمهام. اختر المهام قيد الانتظار/التنفيذ التي تريد حذف اللوحات منها:
+              تُحذف اللوحات غير المركبة من مهام التركيب تلقائياً. اختر المهام الأخرى التي تريد حذفها منها؛ تبقى الأعمال المكتملة محفوظة:
             </p>
           ) : (
             <p className="text-sm text-muted-foreground">
@@ -120,7 +120,8 @@ export function SmartBillboardConfirmDialog({
                     }`}
                   >
                     <Checkbox
-                      checked={selectedTypes[type]}
+                      checked={type === 'installation' || selectedTypes[type]}
+                      disabled={type === 'installation'}
                       onCheckedChange={(checked) =>
                         setSelectedTypes(prev => ({ ...prev, [type]: !!checked }))
                       }
@@ -189,7 +190,7 @@ export function SmartBillboardConfirmDialog({
             variant={existingTypes.size > 0 ? "destructive" : "default"}
             onClick={() => {
               const finalTypes = {
-                installation: existingTypes.has('installation') ? selectedTypes.installation : false,
+                installation: true,
                 print: existingTypes.has('print') ? selectedTypes.print : false,
                 cutout: existingTypes.has('cutout') ? selectedTypes.cutout : false,
                 removal: existingTypes.has('removal') ? selectedTypes.removal : false,

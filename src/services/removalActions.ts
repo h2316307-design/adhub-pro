@@ -62,8 +62,8 @@ export async function cleanupDuplicateRemovals(allItems: RemovalTaskItem[], task
   if (!pending.length) throw new Error('لا توجد عناصر معلقة');
   const teamOf: Record<string, string> = {}; tasks.forEach(t => { teamOf[t.id] = t.team_id; });
   const prio: Record<string, number> = {}; teams.forEach(t => { prio[t.id] = t.priority || 0; });
-  const byBoard: Record<number, RemovalTaskItem[]> = {};
-  pending.forEach(i => { (byBoard[i.billboard_id] ||= []).push(i); });
+  const byBoard: Record<string, RemovalTaskItem[]> = {};
+  pending.forEach(i => { const task = tasks.find(t => t.id === i.task_id); const key = `${task?.contract_id}_${task?.amendment_number ?? 'original'}_${i.billboard_id}`; (byBoard[key] ||= []).push(i); });
   const del: string[] = [];
   Object.values(byBoard).forEach(list => {
     if (list.length <= 1) return;
@@ -80,7 +80,7 @@ export async function cleanupDuplicateRemovals(allItems: RemovalTaskItem[], task
 /** دمج أوامر نفس الفرقة ونفس العقد في أمر واحد */
 export async function mergeRemovalTasks(tasks: RemovalTask[]) {
   const groups: Record<string, RemovalTask[]> = {};
-  tasks.forEach(t => { (groups[`${t.team_id}_${t.contract_id}`] ||= []).push(t); });
+  tasks.forEach(t => { (groups[`${t.team_id}_${t.contract_id}_${t.amendment_number ?? "original"}`] ||= []).push(t); });
   let merged = 0;
   for (const list of Object.values(groups)) {
     if (list.length <= 1) continue;
@@ -106,10 +106,10 @@ export async function redistributeRemovals(allItems: RemovalTaskItem[], tasks: R
     const best = findOptimalTeamForRemoval(teamsData, bb.Size, bb.City, bb.friend_company_id);
     const parent = local.find(t => t.id === item.task_id);
     if (!best || !parent?.contract_id || parent.team_id === best.id) continue;
-    let target = local.find(t => t.team_id === best.id && t.contract_id === parent.contract_id);
+    let target = local.find(t => t.team_id === best.id && t.contract_id === parent.contract_id && (t.amendment_number ?? null) === (parent.amendment_number ?? null) && ['pending', 'in_progress'].includes(t.status));
     if (!target) {
       const { data } = await supabase.from('removal_tasks')
-        .insert({ contract_id: parent.contract_id, contract_ids: [parent.contract_id], team_id: best.id, status: 'pending' }).select().single();
+        .insert({ contract_id: parent.contract_id, contract_ids: [parent.contract_id], team_id: best.id, status: 'pending', amendment_number: parent.amendment_number ?? null }).select().single();
       if (data) { target = data as any; local.push(target!); }
     }
     if (target) { await supabase.from('removal_task_items').update({ task_id: target.id }).eq('id', item.id); moved++; }

@@ -1,3 +1,4 @@
+import { installationAmendmentLabel } from '@/lib/installationAmendment';
 import { getAvailableFacesCount } from '@/lib/installationFaces';
 import { saveInstallationFaceSelections } from '@/services/installationFaceSelection';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -170,7 +171,7 @@ export const InstallationTaskDetail: React.FC<Props> = ({
     reinstallationNumber: task.reinstallation_number,
     contractIds: contracts.map(c => c.contractId),
   });
-  const displayName = task.task_name || autoName || `مهمة #${String(task.id).slice(0, 8)}`;
+  const displayName = installationAmendmentLabel(task) || task.task_name || autoName || `مهمة #${String(task.id).slice(0, 8)}`;
   const [editingName, setEditingName] = useState(false);
   const [tempName, setTempName] = useState(task.task_name || '');
   useEffect(() => { setTempName(task.task_name || ''); }, [task.task_name]);

@@ -32,6 +32,12 @@ describe('historical replacement budget accounting', () => {
     expect(purePauseContribution(6500, 0)).toBe(0);
     expect(purePauseContribution(6500, 2500)).toBe(4000);
   });
+  it('retains installed board services even with no rental refund', () => {
+    const row = { price_snapshot: { retainExecutedServices: true }, consumed_amount: 500 };
+    expect(historicalPauseContribution(row, 500, 0)).toBe(500);
+    expect(historicalPauseContribution(row, 3500, 3000)).toBe(500);
+    expect(historicalPauseContribution(row, 3500, 3000, 3000)).toBe(500);
+  });
   it('excludes deleted pauses while retaining legacy and resumed history', () => {
     expect([{ lifecycle_state: 'cancelled' }, { lifecycle_state: 'paused' }, { lifecycle_state: 'resumed' }, {}].filter(isRetainedPause)).toHaveLength(3);
   });

@@ -11,6 +11,7 @@ import { excludePreviouslyCompletedRemovals } from '@/services/removalTaskHistor
 import { findOptimalTeamForRemoval } from '@/utils/teamAssignment';
 
 export interface RemovalTask {
+  amendment_number?: number | null;
   id: string;
   contract_id: number;
   contract_ids?: number[];
@@ -392,6 +393,7 @@ export function useRemovalData() {
     return new Set(
       tasks
         .filter((t) => t.status !== 'cancelled')
+        .filter(t => !t.amendment_number)
         .flatMap((t) => t.contract_ids || [t.contract_id])
     );
   }, [tasks]);

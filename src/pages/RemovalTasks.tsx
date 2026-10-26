@@ -101,7 +101,7 @@ export default function RemovalTasks() {
       number: one ? one.contractId : (teamName || 'متعدد'),
       customer: one ? one.customerName : (teamName || 'عدة زبائن'),
       adType: one?.adType,
-      title: one ? `طباعة الإزالة - ${one.customerName} - عقد #${one.contractId} (${items.length} لوحة)` : `طباعة لوحات الإزالة - ${teamName || `${list.length} أمر`} (${items.length} لوحة)`,
+      title: one ? `طباعة الإزالة - ${one.customerName} - ${one.amendmentNumber ? `ملحق ${one.amendmentNumber} - ` : ''}عقد #${one.contractId} (${items.length} لوحة)` : `طباعة لوحات الإزالة - ${teamName || `${list.length} أمر`} (${items.length} لوحة)`,
     });
   };
 

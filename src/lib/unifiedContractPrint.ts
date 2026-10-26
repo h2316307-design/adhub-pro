@@ -1,3 +1,4 @@
+import { contractDocumentHeading, buildFormalAmendmentPages, buildAmendmentHistoryPages, type ContractAmendment } from '@/utils/contractAmendments';
 /**
  * Unified Contract Print - يستخدم نفس بنية المعاينة من ContractTermsSettings
  * الأبعاد: 2480x3508 (نفس viewBox) ثم يتم تصغيرها لـ A4
@@ -169,6 +170,7 @@ function measureTextWidthPx(
 
 export interface ContractData {
   contractNumber: string;
+  amendmentNumber?: number;
   yearlyCode?: string;
   year: string;
   startDate: string;
@@ -247,6 +249,8 @@ export interface UnifiedPrintOptions {
   };
   paymentsHtml: string;
   renderTarget?: 'preview' | 'pdf';
+  amendmentHistory?: ContractAmendment[];
+  printAllAmendments?: boolean;
 }
 
 // Generate QR code data URL
@@ -598,7 +602,7 @@ function buildFirstPageSVG(options: UnifiedPrintOptions): { svg: string; svgHeig
         >${escapeSvgText(
           contractData.isOffer
             ? `عرض سعر رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} - صالح لمدة 24 ساعة`
-            : `عقد إيجار مواقع إعلانية رقم: ${contractData.contractNumber}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} سنة ${contractData.year}`
+            : `${contractDocumentHeading(contractData.contractNumber, contractData.amendmentNumber)}${contractData.yearlyCode ? ` (${contractData.yearlyCode})` : ''} سنة ${contractData.year}`
         )}</text>
       ` : ''}
       
@@ -1190,7 +1194,8 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
   
   // ✅ بناء العنوان مع الكود السنوي وتفاصيل المقاسات
   const yearlyCodePart = contractData.yearlyCode ? ` ${LRI}(${contractData.yearlyCode})${PDI}` : '';
-  const titleText = `${contractData.isOffer ? 'عرض سعر' : 'عقد'} ${LRI}#${contractData.contractNumber}${PDI}${yearlyCodePart} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${sizesSummary || `${contractData.billboardsCount || 1} لوحة`} • ${contractData.currencyName || ''}`;
+  const documentTitle = contractData.amendmentNumber ? contractDocumentHeading(contractData.contractNumber, contractData.amendmentNumber) : `${contractData.isOffer ? 'عرض سعر' : 'عقد'} ${LRI}#${contractData.contractNumber}${PDI}`;
+  const titleText = `${documentTitle}${yearlyCodePart} • ${contractData.adType || 'غير محدد'} • ${contractData.customerName} • ${sizesSummary || `${contractData.billboardsCount || 1} لوحة`} • ${contractData.currencyName || ''}`;
   
   return `
     <!DOCTYPE html>
@@ -1199,7 +1204,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
       <meta charset="utf-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1" />
       <base href="${origin}/" />
-      <title>${titleText}</title>
+      <title>${escapeSvgText(titleText)}</title>
       ${stylesHtml}
       <style>
         :root { --print-scale: ${printScale}; }
@@ -1513,6 +1518,7 @@ export async function generateUnifiedPrintHTML(options: UnifiedPrintOptions): Pr
         ${firstPageHTML}
       </div>
       ${tablePages.length > 0 ? tablePages.map((page, idx) => `<div class="print-page${idx === tablePages.length - 1 ? ' last-table-page' : ''}">${page}</div>`).join('') : ''}
+      ${options.printAllAmendments ? buildFormalAmendmentPages(options.amendmentHistory || [], embeddedTableBgUrl, contractData.contractNumber, options.currencyInfo.symbol) : buildAmendmentHistoryPages(options.amendmentHistory || [], embeddedTableBgUrl, contractData.contractNumber)}
       <script>
         function setDynamicPrintScale() {
           try {

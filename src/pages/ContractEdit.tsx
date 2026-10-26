@@ -59,6 +59,12 @@ import { PendingChangesBanner } from '@/components/contracts/edit/PendingChanges
 import { PricingSnapshotCard } from '@/components/contracts/edit/PricingSnapshotCard';
 import { buildPricingSnapshot, parsePricingSnapshot, shouldRefreshSnapshot } from '@/utils/pricingSnapshot';
 import { rescaleInstallmentsToTotal, installmentsMatchTotal } from '@/utils/rescaleInstallments';
+import { useContractAmendments } from '@/hooks/useContractAmendments';
+import { getContractAmendmentStatus, loadContractAmendmentDocument } from '@/services/contractAmendmentService';
+import type { ContractAmendment } from '@/utils/contractAmendments';
+import { ContractAddenda } from '@/components/contracts/edit/ContractAddenda';
+import { QuickPauseBillboardDialog } from '@/components/contracts/edit/QuickPauseBillboardDialog';
+import { isContractBoardInstalled } from '@/services/contractEditService';
 import { SelectedBillboardsCard } from '@/components/contracts/edit/SelectedBillboardsCard';
 import { BillboardFilters } from '@/components/contracts/edit/BillboardFilters';
 import { AvailableBillboardsGrid } from '@/components/contracts/edit/AvailableBillboardsGrid';
@@ -94,8 +100,9 @@ const CONTRACT_EDIT_BILLBOARDS_STALE_TIME = 5 * 60 * 1000;
 export default function ContractEdit() {
   const { category: defaultPricingCategory } = useDefaultPricingCategory();
   const [compensationChoices, setCompensationChoices] = useState<CompensationChoices>({});
-  const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing' | 'payments' | 'friends' | 'designs'>('basics');
+  const [workspaceSection, setWorkspaceSection] = useState<'basics' | 'boards' | 'catalog' | 'pricing' | 'payments' | 'friends' | 'designs' | 'addenda'>('basics');
   // صفحة واحدة: الأقسام كلها ظاهرة، والتنقل يمرّر إلى القسم؛ اختيار اللوحات طبقة كاملة فوق الصفحة
+  const [removalPauseBoard, setRemovalPauseBoard] = useState<Billboard | null>(null);
   const [sectionNavTick, setSectionNavTick] = useState(0);
   const sectionNavMounted = useRef(false);
   useEffect(() => {
@@ -103,7 +110,7 @@ export default function ContractEdit() {
     if (workspaceSection === 'catalog') return;
     const anchors: Record<string, string> = {
       basics: 'contract-basics-head', boards: 'contract-boards-list', pricing: 'contract-pricing', payments: 'contract-payments',
-      friends: 'contract-friends', designs: 'contract-designs',
+      friends: 'contract-friends', designs: 'contract-designs', addenda: 'contract-addenda',
     };
     document.getElementById(anchors[workspaceSection])?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [workspaceSection, sectionNavTick]);
@@ -153,6 +160,9 @@ export default function ContractEdit() {
   const [contractNumber, setContractNumber] = useState<string>('');
   const [currentContract, setCurrentContract] = useState<any>(null);
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [versionPrintDocument, setVersionPrintDocument] = useState<Record<string, unknown> | null>(null);
+  const amendmentQuery = useContractAmendments(Number(contractNumber), reloadKey);
+  const amendmentStatus = amendmentQuery.data?.status;
   const [selected, setSelected] = useState<string[]>([]);
   const selectedBillboardsSet = useMemo(() => new Set(selected), [selected]);
   
@@ -798,6 +808,7 @@ export default function ContractEdit() {
       try {
         setContractHydrated(false);
         setDraftBaseline(null);
+        setBillboardBaseline(null);
         const c = await getContractWithBillboards(contractNumber);
         
         setCurrentContract(c);
@@ -2458,6 +2469,7 @@ export default function ContractEdit() {
     const id = String((b as any).ID);
     const isSelected = selected.includes(id);
 
+    if (isSelected) { await removeSelected(id); return; }
     if (!isSelected) {
       const statusValue = String((b as any).Status || '').trim().toLowerCase();
       const maintStatus = String((b as any).maintenance_status || '').trim().toLowerCase();
@@ -2513,14 +2525,31 @@ export default function ContractEdit() {
     setMaintenanceConfirmOpen(false);
   };
 
-  // الإزالة تعديل في المسودة فقط: تُحرَّر اللوحات وتُعالج مهامها عند حفظ العقد (مع سؤال المهام المرتبطة)
-  const removeSelected = (id: string) => {
-    updateSelectedAndRecalculate((prev) => prev.filter((x) => x !== id));
+  // Installed boards settle immediately through the existing pause dialog.
+  const removeSelected = async (id: string) => {
+    try {
+      const isSaved = parsePriceSnapshot(currentContract?.billboard_prices).some(p => priceId(p) === id);
+      if (isSaved && await isContractBoardInstalled(Number(contractNumber), Number(id))) {
+        if (hasDraftChanges) { toast.error('احفظ تعديلات العقد أو تراجع عنها قبل إيقاف اللوحة المركبة'); return; }
+        const board = billboards.find(b => String(b.ID) === id);
+        if (board) { setWorkspaceSection('boards'); setRemovalPauseBoard(board); }
+        return;
+      }
+      updateSelectedAndRecalculate(prev => prev.filter(x => x !== id));
+    } catch { toast.error('تعذر التحقق من حالة التركيب؛ لم تُحذف اللوحة'); }
   };
 
-  const removeMultipleSelected = (ids: string[]) => {
-    if (ids.length === 0) return;
-    updateSelectedAndRecalculate((prev) => prev.filter((x) => !ids.includes(x)));
+  const removeMultipleSelected = async (ids: string[]) => {
+    if (!ids.length) return;
+    try {
+      const savedIds = new Set(parsePriceSnapshot(currentContract?.billboard_prices).map(priceId));
+      const installed = await Promise.all(ids.map(async id => savedIds.has(id) && await isContractBoardInstalled(Number(contractNumber), Number(id))));
+      if (installed.some(Boolean)) {
+        toast.error('تتضمن المجموعة لوحات مركبة؛ أوقفها من زر الإزالة لكل لوحة لتسوية تكاليفها أولاً');
+        return;
+      }
+      updateSelectedAndRecalculate(prev => prev.filter(x => !ids.includes(x)));
+    } catch { toast.error('تعذر التحقق من حالة التركيب؛ لم تُحذف اللوحات'); }
   };
 
   const handleAddCustomer = async (name: string) => {
@@ -2965,6 +2994,7 @@ export default function ContractEdit() {
   const executeSave = async (skipTaskCheck = false, taskTypes?: TaskTypeSelection) => {
     try {
       if (!contractNumber || saving) return;
+      if (amendmentQuery.isPending || amendmentQuery.isError) { toast.error('انتظر التحقق من سجل الملاحق أو أعد تحميله قبل الحفظ'); return; }
       if (!contractHydrated || loading || pausedPricingFirst.loading || pausedPricingFirst.error) { toast.error(pausedPricingFirst.error || "انتظر اكتمال تحميل العقد والإيقافات"); return; }
       if (!customerName.trim() || !startDate || !endDate || endDate < startDate) { toast.error('راجع اسم العميل وتواريخ العقد'); return; }
       if (zeroPricedAddedNames.length > 0) {
@@ -3202,8 +3232,18 @@ export default function ContractEdit() {
         setCurrentContract(saveResult);
       }
 
-      toast.success(`تم حفظ التعديلات مع العملة ${getCurrencySymbol(contractCurrency)} بنجاح`);
-      navigate('/admin/contracts');
+      let savedAsAmendment = amendmentStatus?.enabled;
+      let savedNumber = (amendmentStatus?.latestNumber || 0) + 1;
+      try {
+        const latestStatus = await getContractAmendmentStatus(Number(contractNumber));
+        savedAsAmendment = latestStatus.originalSaved;
+        savedNumber = latestStatus.latestNumber;
+      } catch { /* The save already committed; a failed status refresh must not report a failed save. */ }
+      toast.success(savedAsAmendment ? `تم حفظ ملحق العقد رقم ${savedNumber} مع الاحتفاظ بالعقد الأصلي` : 'تم حفظ تعديلات العقد بنجاح');
+      if (savedAsAmendment) {
+        setReloadKey(key => key + 1);
+        setWorkspaceSection('addenda');
+      } else navigate('/admin/contracts');
     } catch (e: any) {
       console.error(e);
       try {
@@ -3229,11 +3269,21 @@ export default function ContractEdit() {
   };
 
   const handlePrintContract = () => {
+    if (hasDraftChanges) { toast.error('احفظ التعديلات قبل الطباعة ليظهر رقم الملحق الصحيح'); return; }
+    setVersionPrintDocument(null);
     if (currentContract) {
       setPdfOpen(true);
     } else {
       toast.error('يجب حفظ العقد أولاً');
     }
+  };
+
+  const handlePrintAmendment = async (document: ContractAmendment, history: ContractAmendment[]) => {
+    try {
+      const snapshot = await loadContractAmendmentDocument(document.id, history);
+      setVersionPrintDocument(snapshot);
+      setPdfOpen(true);
+    } catch { toast.error('تعذر تحميل النسخة المحفوظة للطباعة؛ أعد المحاولة'); }
   };
 
   // ✅ NEW: Cleanup orphaned billboards
@@ -3313,6 +3363,7 @@ export default function ContractEdit() {
     { key: 'payments', label: 'توزيع الدفعات', hint: `${installments.length} دفعات`, icon: CeIconMoney },
     { key: 'friends', label: 'إيجارات الشركات', hint: 'لوحات صديقة', icon: CeIconFriends },
     { key: 'designs', label: 'التصاميم والخريطة', hint: 'تصاميم اللوحات', icon: CeIconDesign },
+    { key: 'addenda', label: 'ملاحق العقد', hint: 'الإضافات بعد التركيب', icon: FileText },
   ] as const;
   const ceStatus = !contractHydrated
     ? { label: 'جارٍ التحميل', tone: 'bg-muted text-muted-foreground' }
@@ -3322,19 +3373,27 @@ export default function ContractEdit() {
 
   return (
     <>
+    {removalPauseBoard && <QuickPauseBillboardDialog
+      open={!!removalPauseBoard} onOpenChange={open => { if (!open) setRemovalPauseBoard(null); }}
+      billboard={removalPauseBoard} contractNumber={Number(contractNumber)} contractStartDate={startDate} contractEndDate={endDate}
+      onPaused={() => { setRemovalPauseBoard(null); refreshContractData(); }}
+    />}
     <EditWorkspaceShell
       onClickCapture={guardOperationalAction}
       title={`عقد #${contractNumber}`}
       subtitle={`${customerName || 'بدون زبون'}${adType ? ` · ${adType}` : ''}${startDate ? ` · ${startDate} ← ${endDate || '—'}` : ''}`}
       status={!contractHydrated ? { label: 'جارٍ التحميل', tone: 'loading' } : hasDraftChanges ? { label: 'تغييرات غير محفوظة', tone: 'dirty' } : { label: 'محفوظ', tone: 'saved' }}
-      badges={isExpiredContract ? <span className="rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-500">منتهي</span> : undefined}
+      badges={<>
+        {(amendmentStatus?.latestNumber || 0) > 0 && <span className="rounded-md bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">آخر ملحق رقم {amendmentStatus?.latestNumber} · الأصل محفوظ</span>}
+        {isExpiredContract && <span className="rounded-md bg-rose-500/15 px-2 py-0.5 text-xs font-semibold text-rose-500">منتهي</span>}
+      </>}
       onBack={() => navigate('/admin/contracts')}
       onPrint={handlePrintContract}
-      printLabel="طباعة"
+      printLabel={(amendmentStatus?.latestNumber || 0) > 0 ? 'طباعة آخر ملحق' : 'طباعة العقد'}
       onSave={save}
-      saveLabel="حفظ العقد"
+      saveLabel={amendmentStatus?.enabled ? `حفظ كملحق رقم ${amendmentStatus.latestNumber + 1}` : 'حفظ العقد'}
       saving={saving}
-      saveDisabled={!contractHydrated}
+      saveDisabled={!contractHydrated || amendmentQuery.isPending || amendmentQuery.isError || (amendmentStatus?.enabled && !hasDraftChanges)}
       onUndo={hasDraftChanges ? () => setReloadKey(key => key + 1) : undefined}
       extraActions={!useFactorsPricing ? (useStoredPrices ? (
         <Button type="button" variant="outline" size="sm" className="h-9 gap-1.5 border-primary/40 text-primary hover:bg-primary/10" onClick={refreshPricesFromSystem} disabled={refreshingPrices}
@@ -3757,6 +3816,7 @@ export default function ContractEdit() {
             )}
 
             </div>
+            <ContractAddenda contractNumber={Number(contractNumber)} refreshKey={reloadKey} onPrint={handlePrintAmendment} onAdd={() => setWorkspaceSection('catalog')} />
             </div>
  {/* اختيار اللوحات مع الخريطة */}
             {createPortal(
@@ -4123,17 +4183,7 @@ export default function ContractEdit() {
         <ContractPDFDialog
           open={pdfOpen}
           onOpenChange={setPdfOpen}
-          contract={{
-            ...(currentContract || {}),
-            Discount: discountAmount,
-            discount: discountAmount,
-            Total: finalTotal,
-            total_cost: finalTotal,
-            rent_cost: rentalCostOnly,
-            'Total Rent': rentalCostOnly,
-            billboard_prices: JSON.stringify(withCompensation(selectedBillboardPricingSnapshot, compensationChoices, currentContract?.billboard_prices)),
-          }}
-          liveBillboardPrices={selectedBillboardPricingSnapshot as any[]}
+          contract={versionPrintDocument || currentContract}
         />
 
         <SmartBillboardConfirmDialog

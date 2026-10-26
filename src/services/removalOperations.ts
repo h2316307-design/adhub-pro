@@ -11,6 +11,7 @@ export interface RemovalTeamPart { taskId: string; teamId: string; teamName: str
 export interface RemovalOperation {
   key: string;
   contractId: number;
+  amendmentNumber?: number | null;
   customerName: string;
   adType: string;
   contractStart: string | null;
@@ -33,15 +34,17 @@ export function buildRemovalOperations(
   tasks: RemovalTask[], itemsByTask: Record<string, RemovalTaskItem[]>,
   contractByNumber: Record<string | number, any>, teamById: Record<string, any>, billboardById: Record<string | number, any>,
 ): RemovalOperation[] {
-  const byContract = new Map<number, RemovalTask[]>();
+  const byContract = new Map<string, RemovalTask[]>();
   tasks.filter(t => t.status !== 'cancelled').forEach(t => {
     const cn = Number(t.contract_id) || 0;
-    if (!byContract.has(cn)) byContract.set(cn, []);
-    byContract.get(cn)!.push(t);
+    const key = `${cn}:${t.amendment_number ?? 'original'}`;
+    if (!byContract.has(key)) byContract.set(key, []);
+    byContract.get(key)!.push(t);
   });
 
   const ops: RemovalOperation[] = [];
-  byContract.forEach((list, contractId) => {
+  byContract.forEach((list, scope) => {
+    const contractId = Number(list[0].contract_id) || 0;
     const parts: RemovalTeamPart[] = list.map(t => {
       const items = itemsByTask[t.id] || [];
       const team = teamById[t.team_id] || teamById[String(t.team_id)];
@@ -57,7 +60,8 @@ export function buildRemovalOperations(
     const designs = [...new Set(items.flatMap(i => [i.design_face_a, i.design_face_b]).filter(Boolean) as string[])];
     const cover = designs[0] || null;
     ops.push({
-      key: `c:${contractId}`,
+      key: list[0].amendment_number ? `c:${scope}` : `c:${contractId}`,
+      amendmentNumber: list[0].amendment_number,
       contractId,
       customerName: c['Customer Name'] || firstBb.Customer_Name || 'زبون غير محدد',
       adType: c['Ad Type'] || firstBb.Ad_Type || '',

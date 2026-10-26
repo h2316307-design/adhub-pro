@@ -82,7 +82,7 @@ export function RemovalOperationCard({ r, selected, onToggle, a, horizontal = fa
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <h2 className="text-xl font-bold leading-tight">{r.customerName}</h2>
-            <div className="mt-1 text-base font-semibold" style={{ color: accent }}>إزالة · عقد #{r.contractId}</div>
+            <div className="mt-1 text-base font-semibold" style={{ color: accent }}>{r.amendmentNumber ? `إزالة ملحق ${r.amendmentNumber} · عقد #${r.contractId}` : `إزالة · عقد #${r.contractId}`}</div>
           </div>
           <RemovalOperationMenu r={r} a={a} />
         </div>
@@ -138,7 +138,7 @@ export function RemovalOperationsTable({ rows, selected, onToggle, onToggleAll, 
               <td className="p-3"><Checkbox aria-label={`تحديد ${r.customerName}`} checked={selected.has(r.key)} onCheckedChange={() => onToggle(r.key)} /></td>
               <td className="p-3">
                 <div className="text-base font-bold">{r.customerName}</div>
-                <div className="flex flex-wrap items-center gap-2 text-xs"><b className="tabular-nums">عقد #{r.contractId}</b><span className="text-muted-foreground">{r.adType}</span><span className={cn('rounded px-1.5', REMOVAL_STATUS[r.status].cls)}>{REMOVAL_STATUS[r.status].label}</span></div>
+                <div className="flex flex-wrap items-center gap-2 text-xs"><b className="tabular-nums">{r.amendmentNumber ? `ملحق ${r.amendmentNumber} · عقد #${r.contractId}` : `عقد #${r.contractId}`}</b><span className="text-muted-foreground">{r.adType}</span><span className={cn('rounded px-1.5', REMOVAL_STATUS[r.status].cls)}>{REMOVAL_STATUS[r.status].label}</span></div>
               </td>
               <td className="p-3 tabular-nums text-xs">{fmtDate(r.contractEnd)}</td>
               <td className="p-3 text-xs">{r.parts.map(p => <div key={p.taskId}>{p.teamName} <span className="tabular-nums text-muted-foreground">{p.done}/{p.items.length}</span></div>)}</td>

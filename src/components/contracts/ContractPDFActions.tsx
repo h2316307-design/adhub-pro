@@ -4,6 +4,7 @@ import { Switch } from '@/components/ui/switch';
 import { Printer, Download, Eye, Send, Upload } from 'lucide-react';
 
 interface ContractPDFActionsProps {
+  documentLabel?: string;
   isGenerating: boolean;
   sendingWhatsApp: boolean;
   hasPhone: boolean;
@@ -23,6 +24,7 @@ interface ContractPDFActionsProps {
 }
 
 export function ContractPDFActions({
+  documentLabel = 'العقد',
   isGenerating,
   sendingWhatsApp,
   hasPhone,
@@ -83,7 +85,7 @@ export function ContractPDFActions({
         
         {/* Contract Actions */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground w-14">العقد:</span>
+          <span className="text-xs text-muted-foreground w-14">{documentLabel}:</span>
           <div className="flex gap-2 flex-1 flex-wrap items-center">
             {onUnifiedPrint && (
               <Button 
@@ -93,7 +95,7 @@ export function ContractPDFActions({
                 disabled={sendingWhatsApp}
               >
                 <Printer className="h-3.5 w-3.5 ml-1.5" />
-                طباعة العقد
+                طباعة {documentLabel}
               </Button>
             )}
             {/* Stamp toggle */}

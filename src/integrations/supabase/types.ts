@@ -4880,6 +4880,7 @@ export type Database = {
       }
       installation_tasks: {
         Row: {
+          amendment_number: number | null
           contract_id: number
           contract_ids: number[] | null
           created_at: string
@@ -4897,6 +4898,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amendment_number?: number | null
           contract_id: number
           contract_ids?: number[] | null
           created_at?: string
@@ -4914,6 +4916,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amendment_number?: number | null
           contract_id?: number
           contract_ids?: number[] | null
           created_at?: string
@@ -8099,6 +8102,7 @@ export type Database = {
       }
       removal_tasks: {
         Row: {
+          amendment_number: number | null
           contract_id: number | null
           contract_ids: number[] | null
           created_at: string
@@ -8108,6 +8112,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          amendment_number?: number | null
           contract_id?: number | null
           contract_ids?: number[] | null
           created_at?: string
@@ -8117,6 +8122,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          amendment_number?: number | null
           contract_id?: number | null
           contract_ids?: number[] | null
           created_at?: string

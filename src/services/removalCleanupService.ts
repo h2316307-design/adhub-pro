@@ -25,12 +25,12 @@ export function removalRentalConflict(billboard: any, contracts: any[], referenc
 export async function cleanupRentedRemovalItems() {
   const [items, tasks, contracts, billboards] = await Promise.all([
     readRemovalPages((from, to) => supabase.from('removal_task_items').select('id, task_id, billboard_id').eq('status', 'pending').order('id').range(from, to)),
-    readRemovalPages((from, to) => supabase.from('removal_tasks').select('id, status').in('status', ['pending', 'in_progress']).order('id').range(from, to)),
+    readRemovalPages((from, to) => supabase.from('removal_tasks').select('id, status, amendment_number').in('status', ['pending', 'in_progress']).order('id').range(from, to)),
     readRemovalPages((from, to) => supabase.from('Contract').select('*').order('Contract_Number').range(from, to)),
     readRemovalPages((from, to) => supabase.from('billboards').select('*').order('ID').range(from, to)),
   ]);
 
-  const active = new Set(tasks.map(t => t.id));
+  const active = new Set(tasks.filter(t => !t.amendment_number).map(t => t.id));
   const byId = new Map(billboards.map(b => [Number(b.ID), b]));
 
   const candidates = items.filter(item => active.has(item.task_id)).flatMap(item => {
@@ -101,12 +101,12 @@ export const REMOVAL_LOOKBACK_START = '2025-10-01';
 export async function analyzeRemovalCleanup(): Promise<SmartCleanupAnalysis> {
   const [items, tasks, contracts, billboards] = await Promise.all([
     readRemovalPages((from, to) => supabase.from('removal_task_items').select('id, task_id, billboard_id, status').order('id').range(from, to)),
-    readRemovalPages((from, to) => supabase.from('removal_tasks').select('id, status, contract_id, contract_ids').order('id').range(from, to)),
+    readRemovalPages((from, to) => supabase.from('removal_tasks').select('id, status, contract_id, contract_ids, amendment_number').order('id').range(from, to)),
     readRemovalPages((from, to) => supabase.from('Contract').select('*').order('Contract_Number').range(from, to)),
     readRemovalPages((from, to) => supabase.from('billboards').select('*').order('ID').range(from, to)),
   ]) as any[][];
 
-  const activeTasks = new Set(tasks.filter(t => ['pending', 'in_progress'].includes(t.status)).map(t => t.id));
+  const activeTasks = new Set(tasks.filter(t => !t.amendment_number && ['pending', 'in_progress'].includes(t.status)).map(t => t.id));
   const contractsOfTask = new Map<string, number[]>(tasks.map(t => [t.id, [t.contract_id, ...(t.contract_ids || [])].map(Number).filter(Boolean)]));
   const byId = new Map(billboards.map(b => [Number(b.ID), b]));
 
@@ -128,7 +128,7 @@ export async function analyzeRemovalCleanup(): Promise<SmartCleanupAnalysis> {
   const pendingBoards = new Set<number>();
   items.forEach(i => {
     (contractsOfTask.get(i.task_id) || []).forEach(cn => hasRemoval.add(`${cn}:${Number(i.billboard_id)}`));
-    if (i.status === 'pending' && activeTasks.has(i.task_id)) pendingBoards.add(Number(i.billboard_id));
+    if (i.status === 'pending' && tasks.some(t => t.id === i.task_id && ['pending', 'in_progress'].includes(t.status))) pendingBoards.add(Number(i.billboard_id));
   });
 
   const groups = new Map<number, CleanupAddGroup>();

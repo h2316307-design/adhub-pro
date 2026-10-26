@@ -213,7 +213,7 @@ export async function executeInstantBillboardSwap(
   const stableSwapRequestId = params.swapRequestId || createRequestId();
 
   try {
-    const { data: rpcRes, error: rpcErr } = await supabase.rpc('execute_instant_billboard_swap', {
+    const { data: rpcRes, error: rpcErr } = await (supabase as any).rpc('replace_contract_billboard_lifecycle', {
       p_contract_number: Number(contractNumber),
       p_original_billboard_id: Number(originalBillboardId),
       p_replacement_billboard_id: Number(replacementBillboardId),

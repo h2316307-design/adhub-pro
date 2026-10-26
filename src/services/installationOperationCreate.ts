@@ -1,3 +1,5 @@
+import { getInstallationFaceIndices } from '@/lib/installationFaces';
+import { executedInstallationFaces } from '@/lib/campaignInstallationFaces';
 import { format } from 'date-fns';
 import { supabase } from '@/integrations/supabase/client';
 import { installationContractIsActive, blockedInstallationBillboards } from '@/lib/installationContractSelection';
@@ -12,16 +14,34 @@ import { syncOperationStatus } from '@/services/operationBoards';
  * حتى لا تظهر اللوحة في أمرين. الأمر الأصلي الذي يفرغ يُحذف مع أمر عمله، إلا إن كانت عليه
  * دفعات أو فاتورة فيبقى كما هو للمراجعة.
  */
-export async function pullFromOriginalTasks(contractIds: number[], boardIds: number[], keepTaskIds: string[]) {
+export async function pullFromOriginalTasks(contractIds: number[], boardIds: number[], keepTaskIds: string[], faceSelections?: Record<number, number[]>) {
   const nums = contractIds.join(',');
   const { data: tasks, error } = await supabase.from('installation_tasks').select('id, task_type')
     .or(`contract_id.in.(${nums}),contract_ids.ov.{${nums}}`);
   if (error) throw error;
   const others = (tasks || []).filter((t: any) => t.task_type !== 'reinstallation' && !keepTaskIds.includes(t.id)).map((t: any) => t.id);
   if (!others.length || !boardIds.length) return 0;
-  const { data: pulled, error: e2 } = await supabase.from('installation_task_items').delete()
-    .in('task_id', others).in('billboard_id', boardIds).neq('status', 'completed').select('task_id');
+  const { data: candidates, error: e2 } = await supabase.from('installation_task_items').select('*, billboard:billboards!installation_task_items_billboard_id_fkey(*)')
+    .in('task_id', others).in('billboard_id', boardIds).neq('status', 'completed');
   if (e2) throw e2;
+  const pulled: { task_id: string }[] = [];
+  for (const item of (candidates || []) as any[]) {
+    const board = (item as any).billboard;
+    const executed = executedInstallationFaces(item, board);
+    // Never delete partial installation evidence while moving the remaining work.
+    const moving = faceSelections?.[item.billboard_id] || getInstallationFaceIndices(item, board);
+    const remaining = getInstallationFaceIndices(item, board).filter(face => !moving.includes(face) || executed.includes(face));
+    if (remaining.length) {
+      if (remaining.length === getInstallationFaceIndices(item, board).length) continue;
+      const { error } = await supabase.from('installation_task_items').update({ selected_faces: remaining, faces_to_install: remaining.length,
+        status: remaining.every(face => executed.includes(face)) ? 'completed' : item.status } as any).eq('id',item.id);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from('installation_task_items').delete().eq('id',item.id).neq('status','completed');
+      if (error) throw error;
+    }
+    pulled.push({ task_id: item.task_id });
+  }
   for (const id of [...new Set((pulled || []).map((r: any) => r.task_id as string))]) {
     const { count } = await supabase.from('installation_task_items').select('id', { count: 'exact', head: true }).eq('task_id', id);
     if (count) { await syncOperationStatus([id]); continue; }
@@ -42,6 +62,9 @@ export interface CreateOperationInput {
   teamAssignments: { teamId: string; billboardIds: number[] }[];
   taskType: 'installation' | 'reinstallation';
   taskName?: string;
+  faceSelections?: Record<number, number[]>;
+  independent?: boolean;
+  validateOnly?: boolean;
   acceptedInactiveContractIds?: number[];
 }
 
@@ -128,6 +151,8 @@ export async function createInstallationOperation(input: CreateOperationInput): 
     byTeam.set(team.id, [...(byTeam.get(team.id) || []), id]);
   }
 
+  if (input.validateOnly) return { taskIds: [] };
+
   // 5) رقم إعادة التركيب للعملية
   let reinstallNumber: number | null = null;
   if (taskType === 'reinstallation') {
@@ -143,7 +168,7 @@ export async function createInstallationOperation(input: CreateOperationInput): 
   const taskIds: string[] = [];
   for (const [teamId, ids] of byTeam) {
     let taskId: string | undefined;
-    if (taskType === 'installation' && !multi) {
+    if (taskType === 'installation' && !multi && !input.independent) {
       const { data: existing } = await supabase.from('installation_tasks').select('id')
         .eq('contract_id', mainContract).eq('team_id', teamId).eq('task_type', 'installation').maybeSingle();
       taskId = existing?.id;
@@ -166,7 +191,8 @@ export async function createInstallationOperation(input: CreateOperationInput): 
     if (exErr) throw exErr;
     const have = new Set((existingItems || []).map((i: any) => Number(i.billboard_id)));
     const rows = ids.filter(id => !have.has(id)).map(id => ({
-      task_id: taskId!, billboard_id: id, status: 'pending', faces_to_install: Number((boardMap.get(id) as any)?.Faces_Count) || 2,
+      task_id: taskId!, billboard_id: id, status: 'pending', faces_to_install: input.faceSelections?.[id]?.length || Number((boardMap.get(id) as any)?.Faces_Count) || 2,
+      ...(input.faceSelections?.[id] ? { selected_faces: input.faceSelections[id], reinstalled_faces: input.faceSelections[id].length === 1 ? (input.faceSelections[id][0] === 2 ? 'face_b' : 'face_a') : 'both' } : {}),
     }));
     if (rows.length) {
       const { error } = await supabase.from('installation_task_items').insert(rows as any);
@@ -176,7 +202,7 @@ export async function createInstallationOperation(input: CreateOperationInput): 
   }
   if (taskType === 'installation') {
     const allIds = [...byTeam.values()].flat();
-    await pullFromOriginalTasks(contractIds, allIds, taskIds);
+    await pullFromOriginalTasks(contractIds, allIds, taskIds, input.faceSelections);
   }
   return { taskIds };
 }

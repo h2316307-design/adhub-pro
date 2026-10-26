@@ -72,7 +72,10 @@ export function QuickPauseBillboardDialog({
       if (!price) { toast.error('احفظ سعر اللوحة قبل إيقافها'); return; }
       const start = String(price.startDate || billboard.Rent_Start_Date || data['Contract Date']);
       const end = String(price.endDate || billboard.Rent_End_Date || data['End Date']);
-      setSaved({ ...price, currency: String(contractRecord.contract_currency || price.currency || 'LYD'), start, end, revision: Number(contractRecord.edit_revision || 0) });
+      setSaved({ ...price,
+        printCost: ['true', '1'].includes(String(data.print_cost_enabled)) ? Number(price.printCost || 0) : 0,
+        installationCost: !['false', '0'].includes(String(data.installation_enabled)) ? Number(price.installationCost || 0) : 0,
+        currency: String(contractRecord.contract_currency || price.currency || 'LYD'), start, end, revision: Number(contractRecord.edit_revision || 0) });
       setPauseDate(todayStr >= start && todayStr <= end ? todayStr : start);
     })();
     return () => { active = false; };

@@ -32,7 +32,6 @@ import { QuickPauseBillboardDialog } from './QuickPauseBillboardDialog';
 import { toast } from 'sonner';
 import { pauseBillboardFromContract } from '@/services/billboardPauseService';
 import { listReplacementsByContract } from '@/services/pausedBillboardReplacementService';
-import { useSystemDialog } from '@/contexts/SystemDialogContext';
 
 // Component to show friend company name
 function FriendCompanyBadge({ billboardId, billboard }: { billboardId: string; billboard: any }) {
@@ -204,67 +203,6 @@ export function SelectedBillboardsCard({
 }: SelectedBillboardsCardProps) {
   const { map: activeLoansByBillboard } = useActiveLoansByBillboard();
 
-  // ✅ Check if billboards have installation tasks in the current contract
-  const { data: billboardsWithTasks = new Set<string>() } = useQuery({
-    queryKey: ['contract-installation-tasks-billboards', contractNumber],
-    queryFn: async () => {
-      if (!contractNumber) return new Set<string>();
-      
-      const { data: tasks, error: tasksError } = await supabase
-        .from('installation_tasks')
-        .select('id')
-        .eq('contract_id', contractNumber);
-        
-      if (tasksError) throw tasksError;
-      const taskIds = (tasks || []).map((t: any) => t.id);
-      if (taskIds.length === 0) return new Set<string>();
-      
-      const { data: items, error: itemsError } = await supabase
-        .from('installation_task_items')
-        .select('billboard_id')
-        .in('task_id', taskIds);
-        
-      if (itemsError) throw itemsError;
-      
-      return new Set<string>((items || []).map((it: any) => String(it.billboard_id)));
-    },
-    enabled: !!contractNumber,
-  });
-
-  const computeCanDelete = (b: any): boolean => {
-    if (!contractNumber) return true;
-    
-    const billboardId = String(b.ID || b.id);
-    if (billboardsWithTasks.has(billboardId)) {
-      return false;
-    }
-
-    if (!startDate || !endDate) return true;
-
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-
-    const bStartStr = b.Rent_Start_Date || startDate;
-    const rentStart = new Date(bStartStr);
-    const today = new Date();
-
-    const todayDateOnly = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-    const rentStartDateOnly = new Date(rentStart.getFullYear(), rentStart.getMonth(), rentStart.getDate());
-
-    const diffTime = todayDateOnly.getTime() - rentStartDateOnly.getTime();
-    const elapsedDays = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-
-    const limit = Math.min(30, totalDays / 3);
-
-    if (elapsedDays > limit) {
-      return false;
-    }
-
-    return true;
-  };
-
-  const { confirm } = useSystemDialog();
   const [partnershipInfoMap, setPartnershipInfoMap] = useState<Map<string, PartnershipInfo>>(new Map());
   const [quickEditOpen, setQuickEditOpen] = useState(false);
   const [editingBillboard, setEditingBillboard] = useState<any>(null);
@@ -275,8 +213,6 @@ export function SelectedBillboardsCard({
   const [quickPauseOpen, setQuickPauseOpen] = useState(false);
   const [quickPausingBillboard, setQuickPausingBillboard] = useState<any>(null);
   const [pauseDialogOpen, setPauseDialogOpen] = useState(false);
-  const [deleteChoiceOpen, setDeleteChoiceOpen] = useState(false);
-  const [deletingBillboard, setDeletingBillboard] = useState<any>(null);
   const [pausingBillboard, setPausingBillboard] = useState<any>(null);
   const [pausingPrintCost, setPausingPrintCost] = useState(0);
   const [pausingInstallCost, setPausingInstallCost] = useState(0);
@@ -309,48 +245,12 @@ export function SelectedBillboardsCard({
 
   const handleBulkRemove = async () => {
     const ids = Array.from(bulkSelectedIds);
-    
-    // Find billboards that cannot be deleted
-    const nonDeletableBillboards = billboards.filter(b => ids.includes(String(b.ID)) && !computeCanDelete(b));
-    const deletableIds = ids.filter(id => {
-      const b = billboards.find(x => String(x.ID) === id);
-      return !b || computeCanDelete(b);
-    });
-
-    if (nonDeletableBillboards.length > 0) {
-      const ok = await confirm({
-        title: 'إزالة اللوحات من العقد',
-        message: `بعض اللوحات المحددة (${nonDeletableBillboards.map(b => b.Billboard_Name || b.name || `لوحة ${b.ID}`).join(', ')}) لها أوامر تركيب أو تجاوزت مدة الإزالة المباشرة. تُزال كلها من العقد دون تسوية مالية، وتُحرَّر عند حفظ العقد. متابعة؟`,
-        confirmText: 'إزالة الكل',
-        cancelText: 'إلغاء',
-        variant: 'destructive',
-      });
-      if (ok) {
-        if (onBulkRemove) {
-          onBulkRemove(ids);
-        } else {
-          ids.forEach(id => onRemoveSelected(id));
-        }
-        setBulkSelectedIds(new Set());
-        setBulkSelectMode(false);
-        toast.success(`أُزيلت ${ids.length} لوحة — احفظ العقد لاعتماد الإزالة`);
-      }
-      return;
-    }
-
-    if (deletableIds.length > 0) {
-      if (onBulkRemove) {
-        onBulkRemove(deletableIds);
-      } else {
-        deletableIds.forEach(id => onRemoveSelected(id));
-      }
-      toast.success(`أُزيلت ${deletableIds.length} لوحة — احفظ العقد لاعتماد الإزالة`);
-    }
-
+    if (onBulkRemove) await onBulkRemove(ids);
+    else for (const id of ids) await onRemoveSelected(id);
     setBulkSelectedIds(new Set());
     setBulkSelectMode(false);
   };
-  
+
   // حالة البحث والفلترة
   const [searchQuery, setSearchQuery] = useState('');
   const [sizeFilter, setSizeFilter] = useState<string>('all');
@@ -1290,7 +1190,6 @@ export function SelectedBillboardsCard({
                           title="إزالة من العقد"
                           onClick={() => {
                             if (bulkSelectedIds.size > 1 && bulkSelectedIds.has(billboardId)) { handleBulkRemove(); return; }
-                            if (!computeCanDelete(b)) { setDeletingBillboard(b); setDeleteChoiceOpen(true); return; }
                             onRemoveSelected(billboardId);
                           }}
                         />
@@ -1992,93 +1891,6 @@ export function SelectedBillboardsCard({
           }
         }}
       />
-
-      {/* Choice Dialog for Non-Deletable Billboard Removal */}
-      <Dialog open={deleteChoiceOpen} onOpenChange={setDeleteChoiceOpen}>
-        <DialogContent dir="rtl" className="sm:max-w-[500px] bg-card border-border">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-              <Trash2 className="w-5 h-5 text-destructive" />
-              خيارات إزالة اللوحة النشطة
-            </DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-3 text-right">
-            <div className="bg-amber-500/10 border border-amber-500/30 p-3 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-500 mt-0.5 shrink-0" />
-              <div className="text-sm">
-                <p className="font-semibold text-foreground">
-                  اللوحة <span className="text-primary font-bold">{deletingBillboard?.Billboard_Name || deletingBillboard?.name}</span> مرتبطة بأوامر تركيب أو تجاوزت مدة الحذف التلقائي.
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  الرجاء اختيار نوع الإزالة المناسب لمعالجة هذه اللوحة:
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="p-3 border border-border rounded-lg bg-muted/40 hover:bg-muted/60 transition-all">
-                <h4 className="text-sm font-bold text-foreground mb-1">1. إزالة من العقد فقط</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  تُزال اللوحة من العقد بلا تسوية مالية، وتُحرَّر وتُعالج مهامها عند حفظ العقد. يمكن التراجع قبل الحفظ.
-                </p>
-              </div>
-
-              <div className="p-3 border border-border rounded-lg bg-muted/40 hover:bg-muted/60 transition-all">
-                <h4 className="text-sm font-bold text-foreground mb-1">2. إيقاف اللوحة (إجراء تسوية)</h4>
-                <p className="text-xs text-muted-foreground leading-relaxed">
-                  تسجيل اللوحة كـ "موقوفة" لحساب المدة المستهلكة وإرجاع القيمة المتبقية كخصم إيقاف في العقد، وإتاحة اللوحة للإيجار مجدداً.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0 flex-row-reverse justify-start">
-            <Button
-              variant="outline"
-              onClick={() => {
-                if (deletingBillboard) {
-                  onRemoveSelected(String(deletingBillboard.ID || deletingBillboard.id));
-                }
-                setDeleteChoiceOpen(false);
-                setDeletingBillboard(null);
-                toast.success('أُزيلت اللوحة — احفظ العقد لاعتماد الإزالة');
-              }}
-              data-draft-operation
-              className="bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive hover:text-white"
-            >
-              إزالة من العقد فقط
-            </Button>
-            <Button
-              onClick={() => {
-                if (deletingBillboard) {
-                  setQuickPausingBillboard(deletingBillboard);
-                  const billboardId = String(deletingBillboard.ID || deletingBillboard.id);
-                  const pCost = printCostDetails.find(p => p.billboardId === billboardId)?.printCost || 0;
-                  setPausingPrintCost(pCost);
-                  const iCost = installationDetails.find(i => i.billboardId === billboardId)?.adjustedPrice || 0;
-                  setPausingInstallCost(iCost);
-                  setQuickPauseOpen(true);
-                }
-                setDeleteChoiceOpen(false);
-                setDeletingBillboard(null);
-              }}
-              className="bg-primary text-primary-foreground hover:bg-primary/95"
-            >
-              إيقاف اللوحة (إجراء تسوية)
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setDeleteChoiceOpen(false);
-                setDeletingBillboard(null);
-              }}
-            >
-              إلغاء
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Quick Edit Dialog - عرض جميع الأسعار */}
       <Dialog open={quickEditOpen} onOpenChange={(open) => { setQuickEditOpen(open); if (!open) setIsQuickEditMode(false); }}>

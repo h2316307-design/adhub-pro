@@ -28,5 +28,8 @@ export function historicalPauseContribution(row: {
       ? money(Math.max(0, fullPrice - replacementAllocation))
       : money(Number(row.consumed_amount ?? 0));
   }
+  if ((row.price_snapshot as Record<string, unknown> | null)?.retainExecutedServices === true) {
+    return money(Math.max(0, fullPrice - refund));
+  }
   return purePauseContribution(fullPrice, refund);
 }

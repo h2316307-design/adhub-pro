@@ -209,7 +209,7 @@ export function RemovalTaskCard({
                     variant="outline" 
                     className="font-bold text-sm bg-gradient-to-r from-red-500/10 to-red-400/5 border-red-400/30 text-red-600 dark:text-red-400"
                   >
-                    عقد #{task.contract_id}
+                    {task.amendment_number ? `إزالة ملحق ${task.amendment_number} · عقد #${task.contract_id}` : `عقد #${task.contract_id}`}
                   </Badge>
 
                   {/* نوع الإعلان */}

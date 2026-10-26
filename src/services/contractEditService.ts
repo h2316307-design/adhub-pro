@@ -15,12 +15,13 @@ export async function saveContractEditAtomic(contractNumber: string, updates: Re
   if (error) {
     if (error.message?.includes('CONTRACT_VERSION_CONFLICT')) throw new Error('تغيّر العقد منذ فتح الصفحة. أعد تحميله قبل الحفظ.');
     if (error.code === 'PGRST202') throw new Error('يلزم تطبيق تحديث قاعدة البيانات الخاص بحفظ العقود قبل استخدام الحفظ الجديد.');
+    if (error.message?.includes('INSTALLED_BILLBOARD_REQUIRES_PAUSE')) throw new Error('اللوحة مركبة؛ استخدم الإيقاف لحفظ تكاليف التركيب والطباعة على الزبون.');
     throw new Error(error.message || error.code || 'فشل حفظ التعديلات');
   }
   const custName = (updates['Customer Name'] ?? updates.customer_name) as string | undefined;
   const custId = (updates.customer_id ?? updates.customerId) as string | undefined;
   if (custName !== undefined || custId !== undefined) {
-    const compUpdates: Record<string, unknown> = {};
+    const compUpdates: { customer_name?: string; customer_id?: string } = {};
     if (custName !== undefined) compUpdates.customer_name = custName;
     if (custId !== undefined) compUpdates.customer_id = custId;
     try {
@@ -41,4 +42,10 @@ export async function executePauseAtomic(contractNumber: number, billboardId: nu
   if (error) throw error;
   window.dispatchEvent(new CustomEvent('paused-billboards-changed', { detail: { contractNumber, billboardId, action: 'paused' } }));
   return data as PauseAtomicResult;
+}
+
+export async function isContractBoardInstalled(contractNumber: number, billboardId: number): Promise<boolean> {
+  const { data, error } = await rpcClient.rpc('contract_board_is_installed', { p_contract: contractNumber, p_board: billboardId });
+  if (error) throw error;
+  return data === true;
 }

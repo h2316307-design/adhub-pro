@@ -1,3 +1,4 @@
+import { createCampaignInstallation } from '@/services/campaignInstallation';
 import { usePersistedState } from '@/hooks/usePersistedState';
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -426,10 +427,10 @@ export function CompositeOperationsView({ customerId, embedded = false }: { cust
           onTaskTypeChange={setCreateType}
           teams={teamsList as any}
           isSubmitting={creating}
-          onSubmit={async ({ contractIds, billboardIds, teamAssignments, task_name, acceptedInactiveContractIds }) => {
+          onSubmit={async ({ campaign, contractIds, billboardIds, teamAssignments, task_name, acceptedInactiveContractIds }) => {
             setCreating(true);
             try {
-              const res = await createInstallationOperation({ contractIds, billboardIds, teamAssignments, taskType: createType, taskName: task_name, acceptedInactiveContractIds });
+              const res = await (campaign ? createCampaignInstallation : createInstallationOperation)({ contractIds, billboardIds, teamAssignments, taskType: createType, taskName: task_name, acceptedInactiveContractIds });
               toast.success(`تم إنشاء العملية (${res.taskIds.length} ${res.taskIds.length === 1 ? 'فرقة' : 'فرق'})`);
               setCreateType(null);
               refresh();

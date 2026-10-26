@@ -1,3 +1,4 @@
+import { installationAmendmentLabel } from '@/lib/installationAmendment';
 import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -375,7 +376,7 @@ export function MobileTaskCard({
                 ) : (
                   <div className="flex items-center gap-1.5">
                     <Badge className="font-bold text-sm bg-primary/10 text-primary border-0">
-                      #{task.contract_id}
+                      {installationAmendmentLabel(task) || `#${task.contract_id}`}
                     </Badge>
                     {contract?.['Ad Type'] && (
                       <Badge variant="secondary" className="text-xs">

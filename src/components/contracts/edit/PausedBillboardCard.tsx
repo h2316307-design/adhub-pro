@@ -161,8 +161,9 @@ function PausedBillboardCardImpl({
   const effectiveRefund = !previewChanged ? item.effectiveRefund : deferredManualRefund === null
     ? previewRefundAuto
     : Math.min(rentalBase, Math.max(0, Number(deferredManualRefund)));
-  const effectiveConsumedRental = effectiveRefund === 0 && !item.hasReplacement ? 0 : Math.max(0, rentalBase - effectiveRefund);
-  const effectiveConsumed = previewChanged ? purePauseContribution(rentalBase + nonRefundable, effectiveRefund) : item.consumed;
+  const retainExecutedServices = (item.raw as any).price_snapshot?.retainExecutedServices === true;
+  const effectiveConsumedRental = effectiveRefund === 0 && !item.hasReplacement && !retainExecutedServices ? 0 : Math.max(0, rentalBase - effectiveRefund);
+  const effectiveConsumed = previewChanged ? (retainExecutedServices ? Math.max(0, rentalBase + nonRefundable - effectiveRefund) : purePauseContribution(rentalBase + nonRefundable, effectiveRefund)) : item.consumed;
 
   const dirty =
     pauseDate !== (raw.pause_date || '') ||

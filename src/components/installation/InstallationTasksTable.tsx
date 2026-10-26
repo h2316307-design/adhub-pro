@@ -1,3 +1,4 @@
+import { installationGroupKey, installationAmendmentLabel } from '@/lib/installationAmendment';
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { cn } from '@/lib/utils';
 import { usePersistedFilters } from '@/hooks/usePersistedFilters';
@@ -44,6 +45,7 @@ interface InstallationTask {
   id: string;
   contract_id: number;
   contract_ids?: number[];
+  amendment_number?: number | null;
   team_id: string;
   status: 'pending' | 'in_progress' | 'completed' | 'cancelled';
   task_type?: 'installation' | 'reinstallation';
@@ -440,7 +442,7 @@ const TaskCardRowInner = ({
                 </Badge>
               ) : (
                 <Badge className="bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 font-extrabold text-[10px] h-5 px-2.5 py-0 rounded-full">
-                  تركيب جديد
+                  {task.amendment_number ? `تركيب ملحق ${task.amendment_number}` : 'تركيب جديد'}
                 </Badge>
               )}
               {task.isMerged && (
@@ -1002,9 +1004,9 @@ export const InstallationTasksTable: React.FC<Props> = ({
     const displayStatus = getDisplayStatus(items);
     const installDate = items.find(i => i.installation_date)?.installation_date;
     // مشاركة التصاميم بين جميع الفرق في نفس المجموعة (نفس العقد + نوع المهمة + رقم إعادة التركيب)
-    const taskGroupKey = `${task.contract_id}-${task.task_type || 'installation'}-${(task as any).reinstallation_number ?? 'new'}`;
+    const taskGroupKey = installationGroupKey(task);
     const siblingTaskIds = tasks
-      .filter(t => `${t.contract_id}-${t.task_type || 'installation'}-${(t as any).reinstallation_number ?? 'new'}` === taskGroupKey)
+      .filter(t => installationGroupKey(t) === taskGroupKey)
       .map(t => t.id);
     const designs = siblingTaskIds
       .flatMap(id => designsByTask[id] || [])
@@ -1110,7 +1112,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
       } else if (task.task_type === 'reinstallation') {
         groupKey = getOperationalWeekKey(task.created_at);
       } else {
-        groupKey = `${task.contract_id}-${task.task_type || 'installation'}-${(task as any).reinstallation_number ?? 'new'}`;
+        groupKey = installationGroupKey(task);
       }
       if (!groups[groupKey]) groups[groupKey] = [];
       groups[groupKey].push(task);
@@ -1649,7 +1651,7 @@ export const InstallationTasksTable: React.FC<Props> = ({
                                 {getOperationalWeekRange(firstTask.created_at).label}
                               </span>
                             ) : (
-                              <span className="font-extrabold text-foreground text-base tracking-tight">عقد #{cid}</span>
+                              <span className="font-extrabold text-foreground text-base tracking-tight">{installationAmendmentLabel(firstTask) || `عقد #${cid}`}</span>
                             )}
                             {firstTask.designName && firstTask.designName !== '—' && (
                               <span 

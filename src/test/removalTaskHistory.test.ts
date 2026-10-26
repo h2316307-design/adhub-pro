@@ -24,3 +24,9 @@ describe('removal completion history', () => {
     expect(excludePreviouslyCompletedRemovals(items, tasks)).toEqual(items);
   });
 });
+
+it('keeps new amendment removal work separate from completed original work', () => {
+  const tasks = [{ id: 'original', contract_id: 10, status: 'completed' }, { id: 'amendment', contract_id: 10, amendment_number: 2, status: 'pending' }];
+  const items = [{ task_id: 'original', billboard_id: 1, status: 'completed' }, { task_id: 'amendment', billboard_id: 1, status: 'pending' }];
+  expect(excludePreviouslyCompletedRemovals(items, tasks)).toEqual(items);
+});

@@ -214,7 +214,7 @@ export function usePausedBillboardsPricing(
       const bb = billboardsMap[Number(r.billboard_id)] || null;
       const isSingleFace = singleFace.has(bbId);
       // Historical prices are immutable: editing today's catalog cannot reprice a pause.
-      if (options?.useStoredPrices !== false) {
+      if (options?.useStoredPrices !== false || (r as any).price_snapshot?.retainExecutedServices === true) {
         const snapshot = (r as any).price_snapshot || {};
         const fullPrice = Number(r.full_price ?? (r as any).net_after_discount ?? r.original_price ?? 0) || Number(r.consumed_amount || 0) + Number(r.refund_amount || 0);
         const printCost = Number(snapshot.printCost || 0);
@@ -380,7 +380,7 @@ export function usePausedBillboardsPricing(
   const totals = useMemo<PausedTotals>(() => {
     const purePaused = items.filter((i) => !i.hasReplacement);
     const replaced = items.filter((i) => i.hasReplacement);
-    const financialItems = items.filter((i) => i.hasReplacement || i.refund !== 0);
+    const financialItems = items.filter((i) => i.hasReplacement || i.refund !== 0 || (i.raw as any).price_snapshot?.retainExecutedServices === true);
     const financialPurePaused = financialItems.filter((i) => !i.hasReplacement);
 
     return {

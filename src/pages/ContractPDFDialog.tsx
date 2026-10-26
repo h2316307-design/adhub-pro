@@ -1,3 +1,5 @@
+import { listContractAmendments, loadContractAmendmentDocument } from '@/services/contractAmendmentService';
+import { contractDocumentHeading, buildFormalAmendmentPages, buildAmendmentHistoryPages, escapeDocumentText, type ContractAmendment } from '@/utils/contractAmendments';
 import { sortBillboardsStandardSync } from '@/lib/billboardSorter';
 import React, { useEffect, useState } from 'react';
 import { generateContractInvoiceHTML, ContractInvoiceData } from '@/lib/contractInvoiceGenerator';
@@ -294,7 +296,55 @@ interface ContractTerm {
   position_y: number;
 }
 
-export default function ContractPDFDialog({ open, onOpenChange, contract, liveBillboardPrices }: ContractPDFDialogProps) {
+export default function ContractPDFDialog(props: ContractPDFDialogProps) {
+  const [resolved, setResolved] = useState<{ source: unknown; contract: any } | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [bundle, setBundle] = useState<any>(null);
+  const [loadingBundle, setLoadingBundle] = useState(false);
+  const [retry, setRetry] = useState(0);
+  const isSnapshot = props.contract?._document_snapshot === true;
+  const isOffer = !props.contract?.Contract_Number || props.contract?.is_offer || props.contract?.offer_number;
+  useEffect(() => {
+    if (!props.open) { setResolved(null); setBundle(null); setFailed(false); return; }
+    if (isSnapshot || isOffer) return;
+    let active = true;
+    setFailed(false);
+    (async () => {
+      try {
+        const history = await listContractAmendments(Number(props.contract.Contract_Number));
+        const latest = history.filter(row => row.amendment_number > 0).slice(-1)[0];
+        const document = latest ? await loadContractAmendmentDocument(latest.id, history) : { ...props.contract, _amendment_history: [] };
+        if (active) setResolved({ source: props.contract, contract: document });
+      } catch { if (active) setFailed(true); }
+    })();
+    return () => { active = false; };
+  }, [props.open, props.contract, isSnapshot, isOffer, retry]);
+  if (!props.open) return null;
+  if (!isSnapshot && !isOffer && resolved?.source !== props.contract) return (
+    <UIDialog.Dialog open={props.open} onOpenChange={props.onOpenChange}>
+      <UIDialog.DialogContent dir="rtl"><UIDialog.DialogTitle>تحضير نسخة العقد للطباعة</UIDialog.DialogTitle>
+        <p role={failed ? 'alert' : 'status'}>{failed ? 'تعذر تحميل سجل الملاحق. أعد المحاولة لضمان طباعة النسخة الصحيحة.' : 'جارٍ تحميل النسخة المحفوظة وسجل التعديلات…'}</p>
+        {failed && <Button className="min-h-10 cursor-pointer transition-all duration-200 hover:opacity-90" onClick={() => setRetry(n => n + 1)}>إعادة المحاولة</Button>}
+      </UIDialog.DialogContent>
+    </UIDialog.Dialog>
+  );
+  const prepareBundle = async () => {
+    setLoadingBundle(true);
+    try {
+      const history = await listContractAmendments(Number(props.contract.Contract_Number));
+      const original = history.find(row => row.amendment_number === 0);
+      if (!original) { toast.info('لا توجد ملاحق محفوظة لهذا العقد بعد'); return; }
+      const saved = await loadContractAmendmentDocument(original.id, history);
+      setBundle({ ...saved, _print_all_amendments: true });
+      toast.success('تم تجهيز العقد الأصلي وجميع ملاحقه؛ اختر الطباعة أو المعاينة أو PDF');
+    } catch { toast.error('تعذر تحميل العقد وملاحقه؛ أعد المحاولة'); }
+    finally { setLoadingBundle(false); }
+  };
+  const document = bundle || (isSnapshot || isOffer ? props.contract : resolved?.contract);
+  return <ContractPDFDialogContent key={bundle ? 'bundle' : 'single'} {...props} onPrepareBundle={!isOffer ? prepareBundle : undefined} loadingBundle={loadingBundle} onExitBundle={bundle ? () => setBundle(null) : undefined} contract={document} liveBillboardPrices={document?._document_snapshot ? undefined : props.liveBillboardPrices} />;
+}
+
+function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardPrices, onPrepareBundle, loadingBundle, onExitBundle }: ContractPDFDialogProps & { onPrepareBundle?: () => void; loadingBundle?: boolean; onExitBundle?: () => void }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [printMode, setPrintMode] = useState<'auto' | 'manual'>('auto');
   const [useInstallationImages, setUseInstallationImages] = useState(false);
@@ -332,6 +382,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
 
   // ✅ جلب بنود العقد من قاعدة البيانات
   const loadContractTerms = async () => {
+    if (contract?._document_snapshot) { setContractTerms(contract._snapshot_terms || []); return; }
     try {
       const { data, error } = await supabase
         .from('contract_terms')
@@ -351,11 +402,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
     if (open) {
       loadContractTerms();
     }
-  }, [open]);
+  }, [open, contract]);
 
   // ✅ تحميل كود العقد السنوي عند فتح الحوار
   useEffect(() => {
     const loadYearlyCode = async () => {
+      if (contract?._document_snapshot && contract._snapshot_yearly_code) { setYearlyContractCode(contract._snapshot_yearly_code); return; }
       const contractDate = contract?.start_date || contract?.['Contract Date'];
       if (!contractDate) {
         setYearlyContractCode('');
@@ -442,7 +494,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
         const billboardIds = contract?.billboard_ids;
         let billboards: any[] = [];
 
-        if (billboardIds) {
+        if (contract?._document_snapshot) billboards = contract._snapshot_billboards || [];
+        if (billboardIds && !contract?._document_snapshot) {
           const idsArray = typeof billboardIds === 'string'
             ? billboardIds.split(',').map(id => id.trim()).filter(Boolean)
             : Array.isArray(billboardIds) ? billboardIds : [];
@@ -545,6 +598,11 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
 
   // ✅ REFACTORED: Load customer data
   const loadCustomerData = async () => {
+    if (contract?._document_snapshot) {
+      const saved = contract._snapshot_customer || {};
+      setCustomerData({ name: saved.name || contract['Customer Name'] || '', company: saved.company || null, phone: saved.phone || null });
+      return;
+    }
     try {
       const customerId = contract?.customer_id;
       const customerName = contract?.customer_name || contract?.['Customer Name'] || '';
@@ -612,6 +670,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
   }, [open, contract]);
   // ✅ حساب ترتيب العقد في السنة (مشترك بين جميع الدوال)
   const getYearlyCode = async (): Promise<string> => {
+    if (contract?._document_snapshot && contract._snapshot_yearly_code) return contract._snapshot_yearly_code;
     const contractDate = contract?.start_date || contract?.['Contract Date'];
     if (!contractDate) return '';
     const cDate = new Date(contractDate);
@@ -647,6 +706,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
     }
   };
 
+  const getAmendmentHistoryForPrint = async (): Promise<ContractAmendment[]> => {
+    if (Array.isArray(contract?._amendment_history)) return contract._amendment_history;
+    if (!contract?.Contract_Number || contract?.is_offer || contract?.offer_number) return [];
+    return (await listContractAmendments(Number(contract.Contract_Number))).filter(row => row.amendment_number > 0);
+  };
+
   // ✅ بناء عنوان وصفي مشترك لجميع دوال الطباعة/المعاينة/التحميل
   const buildDescriptiveTitle = async (overridePrefix?: string): Promise<string> => {
     const yearlyCode = await getYearlyCode();
@@ -654,7 +719,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
     const adTypeValue = adType;
     const isOfferByAdType = /^عرض(\s|سعر|$)/.test(adTypeValue.trim());
     const isOffer = contract?.is_offer === true || isOfferByAdType || !contract?.Contract_Number || contract?.offer_number;
-    const contractNumber = isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || '');
+    const contractNumber = isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || '');
     const customerName = customerData?.name || contract?.customer_name || contract?.['Customer Name'] || '';
     const currencyInfo = getCurrencyInfo();
 
@@ -705,7 +770,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
       currencySymbol: currencyInfo.symbol || currencyInfo.name || 'د.ل',
       totalAmount,
       isOffer: effectivePrefix.includes('عرض'),
-    });
+    }).replace('[عقد ', contract?._amendment_number ? `[ملحق ${contract._amendment_number} للعقد ` : '[عقد ');
   };
 
   // Calculate contract details
@@ -1032,11 +1097,11 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
 
   // ✅ REFACTORED: Get billboards data from various sources with installation images option
   const getBillboardsData = async () => {
-    let billboardsToShow = [];
+    let billboardsToShow = contract?._document_snapshot ? structuredClone(contract._snapshot_billboards || []) : [];
 
     // Try to get billboards from billboard_ids column
     const billboardIds = contract?.billboard_ids;
-    if (billboardIds) {
+    if (billboardIds && !contract?._document_snapshot) {
       try {
         const idsArray = typeof billboardIds === 'string'
           ? billboardIds.split(',').map(id => id.trim()).filter(Boolean)
@@ -1122,14 +1187,14 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
     try {
       const cn = (contract as any)?.Contract_Number ?? (contract as any)?.['Contract Number'];
       if (cn) {
-        const { data: pausedData } = await supabase
+        const { data: pausedData } = contract?._document_snapshot ? { data: contract._snapshot_paused || [] } : await supabase
           .from('paused_billboards' as any)
           .select('*')
           .eq('contract_number', Number(cn));
         const paused = (pausedData || []).filter((p: any) => p.lifecycle_state !== 'cancelled');
         if (Array.isArray(paused) && paused.length > 0) {
           // Fetch replacements for this contract
-          const { data: replacements } = await supabase
+          const { data: replacements } = contract?._document_snapshot ? { data: contract._snapshot_replacements || [] } : await supabase
             .from('paused_billboard_replacements' as any)
             .select('*')
             .eq('contract_number', Number(cn));
@@ -1141,18 +1206,18 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           });
           let replBbMap = new Map<string, any>();
           if (replBillboardIds.length > 0) {
-            const { data: replBbs } = await supabase
+            const { data: replBbs } = contract?._document_snapshot ? { data: contract._snapshot_catalog || [] } : await supabase
               .from('billboards')
               .select('*')
               .in('ID', replBillboardIds);
             replBbMap = new Map((replBbs || []).map((b: any) => [String(b.ID), b]));
           }
           const pausedIds = paused.map((p: any) => p.billboard_id);
-          const { data: pausedBbs } = await supabase
+          const { data: pausedBbs } = contract?._document_snapshot ? { data: contract._snapshot_catalog || [] } : await supabase
             .from('billboards')
             .select('*')
             .in('ID', pausedIds);
-          const bbMap = new Map((pausedBbs || []).map((b: any) => [String(b.ID), b]));
+          const bbMap = new Map<string, any>((pausedBbs || []).map((b: any): [string, any] => [String(b.ID), b]));
           const existingIds = new Set(billboardsToShow.map((b: any) => String(b.ID || b.id || '')));
           // Compute contract discount % for fallback when net_rent is missing
           const rawDiscount = Number(
@@ -1242,7 +1307,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
               : (originalBeforeDiscount > 0 ? originalBeforeDiscount : (fullPriceVal > 0 ? fullPriceVal : netRent));
 
             let pausedPrice = 0;
-            if (!repl && Number(p.manual_refund ?? p.refund_amount ?? 0) === 0) {
+            if (!repl && !p.price_snapshot?.retainExecutedServices && Number(p.manual_refund ?? p.refund_amount ?? 0) === 0) {
               pausedPrice = 0;
             } else if (repl && replAlloc > 0 && fullTargetPrice > 0) {
               // ✅ Complementary price: pausedPrice + replAlloc === fullTargetPrice
@@ -1775,7 +1840,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
 
       // Extract all contract data automatically (NO INSTALLATION COST)
       const contractData = {
-        contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || ''),
+        contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || ''),
         customerName: customerData.name,
         customerCompany: customerData.company || '',
         customerPhone: customerData.phone || '',
@@ -1801,6 +1866,8 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
 
       const norm = (b: any) => {
         const id = String(b.ID ?? b.id ?? b.code ?? '');
+        const historicalPrice = billboardPrices[id] ?? billboardPrices[Number(id)];
+        const num = Number(historicalPrice || 0);
 
         // ✅ FIX: Enhanced image handling - prioritize updated installation images
         let image = '';
@@ -1859,9 +1926,6 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           if (Number.isFinite(op) && op > 0) originalPriceBeforeDiscount = op;
         }
 
-        // Try to get price using different ID formats
-        const historicalPrice = billboardPrices[id] ?? billboardPrices[Number(id)];
-        const num = Number(historicalPrice || 0);
         // السعر المعروض قد يشمل الطباعة/التركيب، لذا نضيف الخصم عليه مباشرة كحل احتياطي
         if (originalPriceBeforeDiscount == null && itemDiscountAmount > 0 && num > 0) {
           originalPriceBeforeDiscount = num + itemDiscountAmount;
@@ -2403,7 +2467,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
                  onerror="console.warn('Failed to load contract template image')" />
             <svg class="overlay-svg" viewBox="0 0 2480 3508" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
               ${templateSettings.header.visible ? `
-              <text x="${templateSettings.header.x}" y="${templateSettings.header.y}" font-family="Doran, sans-serif" font-weight="bold" font-size="${templateSettings.header.fontSize}" fill="#000" text-anchor="${templateSettings.header.textAlign || 'end'}" dominant-baseline="middle" style="direction: rtl; text-align: right">${contractData.isOffer ? `عرض سعر رقم: ${contractData.contractNumber} - صالح لمدة 24 ساعة` : `عقد إيجار مواقع إعلانية رقم: ${contractData.contractNumber} سنة ${contractData.year}`}</text>
+              <text x="${templateSettings.header.x}" y="${templateSettings.header.y}" font-family="Doran, sans-serif" font-weight="bold" font-size="${templateSettings.header.fontSize}" fill="#000" text-anchor="${templateSettings.header.textAlign || 'end'}" dominant-baseline="middle" style="direction: rtl; text-align: right">${contractData.isOffer ? `عرض سعر رقم: ${contractData.contractNumber} - صالح لمدة 24 ساعة` : `${escapeDocumentText(contractDocumentHeading(contractData.contractNumber, contract?._amendment_number))} سنة ${contractData.year}`}</text>
               ` : ''}
                ${templateSettings.date.visible ? `
                <text x="${templateSettings.date.x}" y="${templateSettings.date.y}" font-family="Doran, sans-serif" font-weight="bold" font-size="${templateSettings.date.fontSize}" fill="#000" text-anchor="middle" dominant-baseline="middle">التاريخ: ${contractData.startDate}</text>
@@ -2540,6 +2604,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           </div>
 
           ${tablePagesHtml}
+          ${contract?._print_all_amendments ? buildFormalAmendmentPages(await getAmendmentHistoryForPrint(), tableBgUrl, contract?.Contract_Number || contract?.id, getCurrencyInfo().symbol) : buildAmendmentHistoryPages(await getAmendmentHistoryForPrint(), tableBgUrl, contract?.Contract_Number || contract?.id)}
           ${TERMS_RELAYOUT_SCRIPT}
         </body>
         </html>
@@ -2622,9 +2687,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
       const rawStartDate = contract?.start_date || contract?.['Contract Date'] || '';
 
       const htmlContent = await generateUnifiedPrintHTML({
+        amendmentHistory: await getAmendmentHistoryForPrint(),
+        printAllAmendments: Boolean(contract?._print_all_amendments),
         settings: templateSettings,
         contractData: {
-          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || ''),
+          amendmentNumber: contract?._amendment_number || undefined,
+          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || ''),
           yearlyCode: await getYearlyCode(),
           year: year.toString(),
           startDate: contractDetails.startDate,
@@ -2738,9 +2806,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
       const rawStartDate = contract?.start_date || contract?.['Contract Date'] || '';
 
       const htmlContent = await generateUnifiedPrintHTML({
+        amendmentHistory: await getAmendmentHistoryForPrint(),
+        printAllAmendments: Boolean(contract?._print_all_amendments),
         settings: templateSettings,
         contractData: {
-          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || ''),
+          amendmentNumber: contract?._amendment_number || undefined,
+          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || ''),
           yearlyCode: await getYearlyCode(),
           year: year.toString(),
           startDate: contractDetails.startDate,
@@ -3020,9 +3091,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
       const rawStartDate = contract?.start_date || contract?.['Contract Date'] || '';
 
       const htmlContent = await generateUnifiedPrintHTML({
+        amendmentHistory: await getAmendmentHistoryForPrint(),
+        printAllAmendments: Boolean(contract?._print_all_amendments),
         settings: templateSettings,
         contractData: {
-          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || ''),
+          amendmentNumber: contract?._amendment_number || undefined,
+          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || ''),
           yearlyCode: await getYearlyCode(),
           year: year.toString(),
           startDate: contractDetails.startDate,
@@ -3306,9 +3380,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
       const rawStartDate = contract?.start_date || contract?.['Contract Date'] || '';
 
       const htmlContent = await generateUnifiedPrintHTML({
+        amendmentHistory: await getAmendmentHistoryForPrint(),
+        printAllAmendments: Boolean(contract?._print_all_amendments),
         settings: templateSettings,
         contractData: {
-          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || ''),
+          amendmentNumber: contract?._amendment_number || undefined,
+          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || ''),
           yearlyCode: await getYearlyCode(), year: year.toString(),
           startDate: contractDetails.startDate, endDate: contractDetails.endDate, rawStartDate,
           duration: contractDetails.durationLabel,
@@ -3525,9 +3602,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
 
       const rawStartDate = contract?.start_date || contract?.['Contract Date'] || '';
       const htmlContent = await generateUnifiedPrintHTML({
+        amendmentHistory: await getAmendmentHistoryForPrint(),
+        printAllAmendments: Boolean(contract?._print_all_amendments),
         settings: templateSettings,
         contractData: {
-          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.id || contract?.Contract_Number || ''),
+          amendmentNumber: contract?._amendment_number || undefined,
+          contractNumber: isOffer ? (contract?.offer_number || contract?.id || '') : (contract?.Contract_Number || contract?.id || ''),
           yearlyCode: await getYearlyCode(),
           year: year.toString(),
           startDate: contractDetails.startDate,
@@ -3591,7 +3671,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
   return (
     <UIDialog.Dialog open={open} onOpenChange={onOpenChange}>
       <UIDialog.DialogContent aria-describedby={undefined} className="max-w-2xl max-h-[70vh] overflow-hidden p-0 bg-gradient-to-br from-background via-background to-primary/5 border-primary/20">
-        <UIDialog.DialogTitle className="sr-only">عقد #{contract?.Contract_Number || contract?.id}</UIDialog.DialogTitle>
+        <UIDialog.DialogTitle className="sr-only">{contract?._amendment_number ? `ملحق ${contract._amendment_number} للعقد` : 'عقد'} #{contract?.Contract_Number || contract?.id}</UIDialog.DialogTitle>
         <div className="flex flex-col h-full max-h-[70vh]">
           {/* Header */}
           <div className="relative bg-gradient-to-r from-primary via-primary to-primary-glow p-3 text-primary-foreground">
@@ -3601,7 +3681,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
                   <Printer className="h-4 w-4" />
                 </div>
                 <div>
-                  <h2 className="text-sm font-bold">عقد #{contract?.Contract_Number || contract?.id}{yearlyContractCode ? ` (${yearlyContractCode})` : ''} • {contract?.['Ad Type'] || 'غير محدد'}</h2>
+                  <h2 className="text-sm font-bold">{contract?._amendment_number ? `ملحق ${contract._amendment_number} للعقد` : 'عقد'} #{contract?.Contract_Number || contract?.id}{yearlyContractCode ? ` (${yearlyContractCode})` : ''} • {contract?.['Ad Type'] || 'غير محدد'}</h2>
                   <p className="text-xs text-primary-foreground/80">{customerData?.name || 'غير محدد'} • {contract?.billboards_count || contract?.billboard_ids?.split(',').length || 1} لوحة • {currencyInfo.name}</p>
                 </div>
               </div>
@@ -3731,6 +3811,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
                     <input
                       type="checkbox"
                       checked={useInstallationImages}
+                      disabled={!!contract?._document_snapshot}
                       onChange={(e) => setUseInstallationImages(e.target.checked)}
                       className="w-3.5 h-3.5 text-primary focus:ring-primary rounded"
                     />
@@ -3742,6 +3823,12 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
           </div>
 
           {/* Footer Actions */}
+          {onPrepareBundle && <div className="px-3 py-2 border-t border-primary/20 bg-primary/5" dir="rtl">
+            <Button variant="outline" disabled={isGenerating || loadingBundle || sendingWhatsApp} onClick={onExitBundle || onPrepareBundle} className="min-h-10 cursor-pointer transition-all duration-200 hover:bg-primary/10">
+              {loadingBundle ? 'جارٍ تجهيز الملاحق…' : onExitBundle ? 'العودة لطباعة النسخة منفردة' : 'تجهيز طباعة العقد مع جميع ملاحقه'}
+            </Button>
+            {onExitBundle && <p className="text-sm mt-2 text-primary">الطباعة والمعاينة وPDF تشمل العقد الأصلي ثم جميع الملاحق وقيمها وتغييراتها بالترتيب.</p>}
+          </div>}
           <ContractPDFActions
             isGenerating={isGenerating}
             sendingWhatsApp={sendingWhatsApp}
@@ -3757,6 +3844,7 @@ export default function ContractPDFDialog({ open, onOpenChange, contract, liveBi
             onPreviewContract={handlePreviewContract}
             onDownloadContract={handleDownloadContractPDF}
             onSendContractWhatsApp={handleSendContractWhatsApp}
+            documentLabel={contract?._print_all_amendments ? 'العقد وملاحقه' : contract?._amendment_number ? 'الملحق' : 'العقد'}
             onUnifiedPrint={handleUnifiedPrint}
             onUploadToDrive={handleUploadContractToDrive}
           />
