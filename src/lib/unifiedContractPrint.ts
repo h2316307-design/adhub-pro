@@ -1,3 +1,4 @@
+import { renderReplacementLabel } from '@/lib/contractReplacementLabel';
 import { contractDocumentHeading, buildFormalAmendmentPages, buildAmendmentHistoryPages, type ContractAmendment } from '@/utils/contractAmendments';
 /**
  * Unified Contract Print - يستخدم نفس بنية المعاينة من ContractTermsSettings
@@ -868,16 +869,7 @@ function buildTablePageHTML(
         case 'billboardName': {
           const nameVal = row.billboardName || '';
           if (row.isReplacement) {
-            const replacedName = row.replacedBillboardName || '';
-            cellContent = `
-              <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
-                <div style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:0.9em; font-weight:bold;">
-                  <span style="display:inline-block; background:#1d4ed8; color:#ffffff; font-size:0.85em; font-weight:bold; padding:1px 6px; border-radius:3px;">بديلة</span>
-                  ${replacedName ? `<span>عن: ${replacedName}</span>` : ''}
-                </div>
-                <span>${nameVal}</span>
-              </div>
-            `;
+            cellContent = renderReplacementLabel(nameVal, row.replacedBillboardName);
           } else if (row.isPaused) {
             cellContent = `
               <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">

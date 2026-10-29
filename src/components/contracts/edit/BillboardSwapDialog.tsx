@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeftRight, Search, Loader2, AlertTriangle, MapPin, Ruler, Image as ImageIcon, CheckCircle2, Wrench, Printer, Scissors, MoveRight } from 'lucide-react';
+import { ArrowLeftRight, Search, Loader2, AlertTriangle, MapPin, Ruler, Image as ImageIcon, CheckCircle2, Wrench, Printer, Scissors, MoveRight, X } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { addBillboardsToContract, removeBillboardFromContract } from '@/services/contractService';
@@ -86,6 +86,7 @@ export function BillboardSwapDialog({
   const [targetLinkedTasks, setTargetLinkedTasks] = useState<LinkedTasksSummary>({ hasInstallation: false, hasPrint: false, hasCutout: false });
   const [sizeMismatchAcknowledged, setSizeMismatchAcknowledged] = useState(false);
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchRequestRef = useRef(0);
 
   const normalizedSourceSize = normalizeSize(billboardSize);
   const displaySourceSize = displaySize(billboardSize);
@@ -103,24 +104,31 @@ export function BillboardSwapDialog({
     }
   }, [open]);
 
-  // Load target contract billboards when selected
+  // Load target contract billboards when selected; a new contract clears the previous billboard choice
   useEffect(() => {
+    setSelectedTargetBillboard(null);
+    setSizeMismatchAcknowledged(false);
+    setShowConfirmation(false);
     if (!selectedContract?.billboard_ids) {
       setTargetBillboards([]);
       return;
     }
     const ids = selectedContract.billboard_ids.split(',').map(Number).filter(Boolean);
     if (ids.length === 0) { setTargetBillboards([]); return; }
-    
+
+    let cancelled = false;
     setLoadingBillboards(true);
     supabase
       .from('billboards')
       .select('ID, Billboard_Name, Size, Image_URL, Nearest_Landmark')
       .in('ID', ids)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (cancelled) return;
+        if (error) toast.error('تعذر تحميل لوحات العقد: ' + error.message);
         setTargetBillboards((data as TargetBillboard[]) || []);
         setLoadingBillboards(false);
       });
+    return () => { cancelled = true; };
   }, [selectedContract]);
 
   // Check linked tasks for source billboard
@@ -190,15 +198,18 @@ export function BillboardSwapDialog({
     return targetNormalized.size > 0 && !targetNormalized.has(normalizedSourceSize);
   }, [selectedContract, targetBillboards, normalizedSourceSize]);
 
-  // Interactive search with debounce
+  // Interactive search with debounce; requestId guards against out-of-order responses
   const doSearch = useCallback(async (q: string) => {
-    if (!q.trim()) { setResults([]); return; }
+    const requestId = ++searchRequestRef.current;
+    // إزالة المحارف التي تكسر فلتر PostgREST (الفاصلة والأقواس وعلامات الاقتباس)
+    const trimmed = q.trim().replace(/[,()"\\*%]/g, '').trim();
+    if (!trimmed) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
     setSearching(true);
-    setSelectedContract(null);
     try {
-      const trimmed = q.trim();
-      const num = Number(trimmed);
-
       let query = supabase
         .from('Contract')
         .select('Contract_Number, "Customer Name", "Ad Type", "Contract Date", "End Date", billboards_count, billboard_ids')
@@ -206,27 +217,41 @@ export function BillboardSwapDialog({
         .order('Contract_Number', { ascending: false })
         .limit(20);
 
-      if (!isNaN(num) && trimmed.length > 0 && /^\d+$/.test(trimmed)) {
-        query = query.eq('Contract_Number', num);
+      if (/^\d+$/.test(trimmed)) {
+        query = query.eq('Contract_Number', Number(trimmed));
       } else {
         query = query.or(`"Customer Name".ilike.%${trimmed}%,"Ad Type".ilike.%${trimmed}%`);
       }
 
       const { data, error } = await query;
       if (error) throw error;
-      setResults((data as any[]) || []);
+      if (requestId !== searchRequestRef.current) return;
+      setResults((data as ContractSearchResult[]) || []);
     } catch (err: any) {
+      if (requestId !== searchRequestRef.current) return;
       toast.error('خطأ في البحث: ' + err.message);
     } finally {
-      setSearching(false);
+      if (requestId === searchRequestRef.current) setSearching(false);
     }
   }, [currentContractNumber]);
 
   const handleSearchChange = (value: string) => {
     setSearchQuery(value);
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
-    searchTimerRef.current = setTimeout(() => doSearch(value), 400);
+    searchTimerRef.current = setTimeout(() => doSearch(value), 300);
   };
+
+  const clearSearch = () => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchRequestRef.current++;
+    setSearchQuery('');
+    setResults([]);
+    setSearching(false);
+  };
+
+  useEffect(() => () => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+  }, []);
 
   const hasAnyLinkedTask = linkedTasks.hasInstallation || linkedTasks.hasPrint || linkedTasks.hasCutout;
   const hasAnyTargetLinkedTask = targetLinkedTasks.hasInstallation || targetLinkedTasks.hasPrint || targetLinkedTasks.hasCutout;
@@ -304,7 +329,7 @@ export function BillboardSwapDialog({
         ]);
         const allAdded = [...new Set([...sourceAdded.added, ...targetAdded.added])];
         const taskMsg = allAdded.length > 0 ? `\nتم تحديث: ${allAdded.join('، ')}` : '';
- toast.success(`تم التبديل بنجاح!\n"${billboardName}" "${selectedTargetBillboard!.Billboard_Name || '#' + targetBbId}"${taskMsg}`);
+        toast.success(`تم التبديل بنجاح!\n"${billboardName}" "${selectedTargetBillboard!.Billboard_Name || '#' + targetBbId}"${taskMsg}`);
       }
 
       onSwapComplete();
@@ -377,12 +402,29 @@ export function BillboardSwapDialog({
                 placeholder="رقم العقد، اسم العميل، أو نوع الإعلان..."
                 value={searchQuery}
                 onChange={(e) => handleSearchChange(e.target.value)}
-                className="pr-9"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') doSearch(searchQuery);
+                  if (e.key === 'Escape' && searchQuery) { e.stopPropagation(); clearSearch(); }
+                }}
+                className="pr-9 pl-9"
+                autoFocus
               />
-              {searching && (
+              {searching ? (
                 <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
-              )}
+              ) : searchQuery ? (
+                <button
+                  type="button"
+                  onClick={clearSearch}
+                  aria-label="مسح البحث"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:bg-muted"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              ) : null}
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              ابحث برقم العقد أو اسم العميل أو نوع الإعلان، واضغط Enter للبحث الفوري.
+            </p>
           </div>
 
           {/* Results */}
@@ -530,7 +572,7 @@ export function BillboardSwapDialog({
                   <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
                   <div className="text-xs space-y-1">
                     <p className="font-bold text-destructive">تحذير: المقاسات مختلفة!</p>
- <p><strong dir="ltr">{displaySourceSize}</strong> <strong dir="ltr">{displaySize(selectedTargetBillboard.Size)}</strong></p>
+                  <p><strong dir="ltr">{displaySourceSize}</strong> <strong dir="ltr">{displaySize(selectedTargetBillboard.Size)}</strong></p>
                     <p className="text-muted-foreground">المقاسات مختلفة. سيتم التبديل لكن تأكد أن هذا صحيح.</p>
                   </div>
                 </div>
@@ -538,12 +580,12 @@ export function BillboardSwapDialog({
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="p-2 rounded border bg-muted/30">
- <div className="font-semibold mb-1"> من العقد #{currentContractNumber}</div>
+                  <div className="font-semibold mb-1">من العقد #{currentContractNumber}</div>
                   <div>{billboardName}</div>
                   <div className="text-muted-foreground" dir="ltr">{displaySourceSize}</div>
                 </div>
                 <div className="p-2 rounded border bg-muted/30">
- <div className="font-semibold mb-1"> من العقد #{selectedContract?.Contract_Number}</div>
+                  <div className="font-semibold mb-1">من العقد #{selectedContract?.Contract_Number}</div>
                   <div>{selectedTargetBillboard.Billboard_Name || `#${selectedTargetBillboard.ID}`}</div>
                   <div className="text-muted-foreground" dir="ltr">{displaySize(selectedTargetBillboard.Size)}</div>
                 </div>
@@ -551,7 +593,7 @@ export function BillboardSwapDialog({
 
               {(hasAnyLinkedTask || hasAnyTargetLinkedTask) && (
                 <div className="text-xs space-y-1 bg-blue-50/50 dark:bg-blue-950/20 p-2 rounded border border-blue-300/30">
- <p className="font-semibold text-primary"> سيتم تبديل المهام تلقائياً:</p>
+                <p className="font-semibold text-primary">سيتم تبديل المهام تلقائياً:</p>
                   <div className="flex flex-wrap gap-1">
                     {taskLabels.filter(t => linkedTasks[t.key] || targetLinkedTasks[t.key]).map(t => (
                       <Badge key={t.key} className="text-[10px] gap-1 bg-blue-100 text-primary dark:bg-blue-900 dark:text-blue-200">
@@ -589,7 +631,7 @@ export function BillboardSwapDialog({
 
               {hasAnyLinkedTask && (
                 <div className="text-xs space-y-1 bg-blue-50/50 dark:bg-blue-950/20 p-2 rounded border border-blue-300/30">
- <p className="font-semibold text-primary"> سيتم نقل المهام تلقائياً:</p>
+                <p className="font-semibold text-primary">سيتم نقل المهام تلقائياً:</p>
                   <div className="flex flex-wrap gap-1">
                     {taskLabels.filter(t => linkedTasks[t.key]).map(t => (
                       <Badge key={t.key} className="text-[10px] gap-1 bg-blue-100 text-primary dark:bg-blue-900 dark:text-blue-200">
@@ -636,7 +678,7 @@ export function BillboardSwapDialog({
                   ? !selectedContract ? 'اختر العقد المستهدف' : `نقل إلى العقد #${selectedContract.Contract_Number}`
                   : !selectedTargetBillboard
                     ? 'اختر لوحة للتبديل'
- : `تبديل ${selectedTargetBillboard.Billboard_Name || '#' + selectedTargetBillboard.ID}`
+                    : `تبديل ${selectedTargetBillboard.Billboard_Name || '#' + selectedTargetBillboard.ID}`
               }
             </Button>
           </DialogFooter>

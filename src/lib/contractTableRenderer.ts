@@ -1,3 +1,4 @@
+import { renderReplacementLabel } from '@/lib/contractReplacementLabel';
 /**
  * Shared billboards table renderer for contract printing
  * Matches the exact rendering logic from ContractTermsSettings.tsx
@@ -175,16 +176,7 @@ function getCellContent(
     case 'billboardName': {
       const baseName = row.billboardName || '';
       if (row.isReplacement) {
-        const replacedName = row.replacedBillboardName || '';
-        return `
-          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; line-height:1.2;">
-            <div style="display:flex; align-items:center; justify-content:center; gap:4px; font-size:0.9em; font-weight:bold;">
-              <span style="display:inline-block; background:#1d4ed8; color:#ffffff; font-size:0.85em; font-weight:bold; padding:1px 6px; border-radius:3px;">بديلة</span>
-              ${replacedName ? `<span>عن: ${replacedName}</span>` : ''}
-            </div>
-            <span>${baseName}</span>
-          </div>
-        `;
+        return renderReplacementLabel(baseName, row.replacedBillboardName);
       }
       if (row.isPaused) {
         return `

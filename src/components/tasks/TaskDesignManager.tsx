@@ -13,6 +13,7 @@ import { uploadToImgbb } from '@/services/imgbbService';
 import { CustomDatePicker } from '@/components/ui/custom-date-picker';
 import { format } from 'date-fns';
 import { ar } from 'date-fns/locale';
+import { ImportPreviousDesignsPanel } from './ImportPreviousDesignsPanel';
 
 interface TaskDesign {
   id: string;
@@ -487,6 +488,14 @@ export function TaskDesignManager({ taskId, designs, onDesignsUpdate, contractNu
         </Button>
 
       </div>
+
+      <ImportPreviousDesignsPanel
+        taskId={taskId}
+        contractNumber={contractNumber}
+        replicateToTaskIds={replicateToTaskIds}
+        currentDesignCount={designs.length}
+        onImported={onDesignsUpdate}
+      />
 
       {dialogOpen && <section ref={editorRef} className="rounded-xl border border-primary/30 bg-card p-4" dir="rtl" aria-label="تحرير التصميم">
         <h4 className="mb-4 text-base font-bold">{editingDesign ? 'تعديل التصميم' : 'إضافة تصميم جديد'}</h4>

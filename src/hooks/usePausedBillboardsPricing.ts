@@ -388,7 +388,8 @@ export function usePausedBillboardsPricing(
       purePausedCount: purePaused.length,
       replacedCount: replaced.length,
       fullSum: financialItems.reduce((s, i) => s + i.fullPrice, 0),
-      consumedSum: items.reduce((s, i) => s + i.consumed, 0),
+      // الموقوفة المستبدلة: جزؤها المستهلك داخل سعر البديلة (وحدة واحدة)، فلا يُحسب مرة ثانية
+      consumedSum: purePaused.reduce((s, i) => s + i.consumed, 0),
       // ✅ RefundSum يشمل فقط اللوحات الموقوفة بدون استبدال
       refundSum: purePaused.reduce((s, i) => s + i.refund, 0),
       effectiveRefundSum: purePaused.reduce((s, i) => s + (i.effectiveRefund || 0), 0),

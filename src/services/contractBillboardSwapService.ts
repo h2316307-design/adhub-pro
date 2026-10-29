@@ -17,6 +17,8 @@ export interface InstantBillboardSwapParams {
   replacementBillboardId: number;
   userId?: string;
   swapRequestId?: string;
+  /** سبب التبديل (مثل: إزالة اللوحة، بناءً على رغبة الزبون) */
+  reason?: string;
 }
 
 export interface InstantBillboardSwapResult {
@@ -178,7 +180,7 @@ export async function checkBillboardAvailabilityForPeriod(
 export async function executeInstantBillboardSwap(
   params: InstantBillboardSwapParams
 ): Promise<InstantBillboardSwapResult> {
-  const { contractNumber, originalBillboardId, replacementBillboardId, userId } = params;
+  const { contractNumber, originalBillboardId, replacementBillboardId, userId, reason } = params;
 
   if (!contractNumber || !originalBillboardId || !replacementBillboardId) {
     return {
@@ -219,6 +221,7 @@ export async function executeInstantBillboardSwap(
       p_replacement_billboard_id: Number(replacementBillboardId),
       p_user_id: userId || null,
       p_swap_event_id: stableSwapRequestId || null,
+      p_reason: reason?.trim() || null,
     });
 
     if (rpcErr) {

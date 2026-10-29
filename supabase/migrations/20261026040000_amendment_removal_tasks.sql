@@ -1,6 +1,8 @@
 -- Create physical removal work for installed boards removed by a numbered amendment.
 ALTER TABLE public.removal_tasks ADD COLUMN IF NOT EXISTS amendment_number integer;
 CREATE INDEX IF NOT EXISTS removal_tasks_amendment ON public.removal_tasks(contract_id,amendment_number);
+
+-- Record already performed force-majeure removal, preserving contract settlement and evidence.
 CREATE OR REPLACE FUNCTION public.create_amendment_removal_tasks()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path=public AS $$
 DECLARE amendment_no integer; final_ids text[]; board_id bigint; task_uuid uuid; team_uuid uuid;
@@ -48,6 +50,15 @@ BEGIN
           source_item.installed_image_face_a_url,'إزالة لوحة بموجب ملحق رقم ' || amendment_no || ' للعقد رقم ' || NEW."Contract_Number");
     END IF;
   END LOOP;
+  UPDATE public.removal_task_items i SET status='completed',removal_date=p.pause_date,completed_at=now(),notes=p.notes
+    FROM public.removal_tasks t, public.paused_billboards p
+    WHERE i.task_id=t.id AND t.contract_id=NEW."Contract_Number" AND t.amendment_number=amendment_no
+      AND p.contract_number=t.contract_id AND p.billboard_id=i.billboard_id
+      AND p.notes LIKE '[PHYSICAL_REMOVAL]%' AND p.lifecycle_state<>'cancelled' AND i.status='pending';
+  UPDATE public.removal_tasks t SET status='completed'
+    WHERE t.contract_id=NEW."Contract_Number" AND t.amendment_number=amendment_no
+      AND EXISTS(SELECT 1 FROM public.removal_task_items i WHERE i.task_id=t.id)
+      AND NOT EXISTS(SELECT 1 FROM public.removal_task_items i WHERE i.task_id=t.id AND i.status<>'completed');
   RETURN NEW;
 END $$;
 REVOKE ALL ON FUNCTION public.create_amendment_removal_tasks() FROM PUBLIC;

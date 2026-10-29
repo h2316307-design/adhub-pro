@@ -301,11 +301,13 @@ export default function ContractPDFDialog(props: ContractPDFDialogProps) {
   const [failed, setFailed] = useState(false);
   const [bundle, setBundle] = useState<any>(null);
   const [loadingBundle, setLoadingBundle] = useState(false);
+  const [history, setHistory] = useState<ContractAmendment[]>([]);
+  const [printChoice, setPrintChoice] = useState('latest');
   const [retry, setRetry] = useState(0);
   const isSnapshot = props.contract?._document_snapshot === true;
   const isOffer = !props.contract?.Contract_Number || props.contract?.is_offer || props.contract?.offer_number;
   useEffect(() => {
-    if (!props.open) { setResolved(null); setBundle(null); setFailed(false); return; }
+    if (!props.open) { setResolved(null); setBundle(null); setHistory([]); setPrintChoice('latest'); setFailed(false); return; }
     if (isSnapshot || isOffer) return;
     let active = true;
     setFailed(false);
@@ -314,7 +316,7 @@ export default function ContractPDFDialog(props: ContractPDFDialogProps) {
         const history = await listContractAmendments(Number(props.contract.Contract_Number));
         const latest = history.filter(row => row.amendment_number > 0).slice(-1)[0];
         const document = latest ? await loadContractAmendmentDocument(latest.id, history) : { ...props.contract, _amendment_history: [] };
-        if (active) setResolved({ source: props.contract, contract: document });
+        if (active) { setHistory(history); setResolved({ source: props.contract, contract: document }); }
       } catch { if (active) setFailed(true); }
     })();
     return () => { active = false; };
@@ -328,23 +330,36 @@ export default function ContractPDFDialog(props: ContractPDFDialogProps) {
       </UIDialog.DialogContent>
     </UIDialog.Dialog>
   );
-  const prepareBundle = async () => {
+  // اختيار النسخة المطبوعة: "latest" = أحدث نسخة، "0" = العقد الأصلي، "N" = الملحق N، "all" = الأصل وجميع الملاحق
+  const choosePrint = async (value: string) => {
+    setPrintChoice(value);
+    if (value === 'latest') { setBundle(null); return; }
     setLoadingBundle(true);
     try {
-      const history = await listContractAmendments(Number(props.contract.Contract_Number));
-      const original = history.find(row => row.amendment_number === 0);
-      if (!original) { toast.info('لا توجد ملاحق محفوظة لهذا العقد بعد'); return; }
-      const saved = await loadContractAmendmentDocument(original.id, history);
-      setBundle({ ...saved, _print_all_amendments: true });
-      toast.success('تم تجهيز العقد الأصلي وجميع ملاحقه؛ اختر الطباعة أو المعاينة أو PDF');
-    } catch { toast.error('تعذر تحميل العقد وملاحقه؛ أعد المحاولة'); }
+      const list = await listContractAmendments(Number(props.contract.Contract_Number));
+      setHistory(list);
+      const target = value === 'all' || value === '0'
+        ? list.find(row => row.amendment_number === 0)
+        : list.find(row => String(row.amendment_number) === value);
+      if (!target) { toast.info('النسخة المختارة غير محفوظة'); setPrintChoice('latest'); setBundle(null); return; }
+      const saved = await loadContractAmendmentDocument(target.id, list);
+      setBundle(value === 'all' ? { ...saved, _print_all_amendments: true } : saved);
+    } catch { toast.error('تعذر تحميل النسخة المختارة؛ أعد المحاولة'); setPrintChoice('latest'); setBundle(null); }
     finally { setLoadingBundle(false); }
   };
+  const amendmentNumbers = history.filter(row => row.amendment_number > 0).map(row => row.amendment_number);
+  const hasOriginal = history.some(row => row.amendment_number === 0);
+  const printOptions = [
+    { value: 'latest', label: amendmentNumbers.length ? `أحدث نسخة (ملحق ${Math.max(...amendmentNumbers)})` : 'العقد الحالي' },
+    ...(hasOriginal ? [{ value: '0', label: 'العقد الأصلي' }] : []),
+    ...amendmentNumbers.map(n => ({ value: String(n), label: `الملحق رقم ${n}` })),
+    ...(hasOriginal && amendmentNumbers.length ? [{ value: 'all', label: 'العقد الأصلي وجميع ملاحقه' }] : []),
+  ];
   const document = bundle || (isSnapshot || isOffer ? props.contract : resolved?.contract);
-  return <ContractPDFDialogContent key={bundle ? 'bundle' : 'single'} {...props} onPrepareBundle={!isOffer ? prepareBundle : undefined} loadingBundle={loadingBundle} onExitBundle={bundle ? () => setBundle(null) : undefined} contract={document} liveBillboardPrices={document?._document_snapshot ? undefined : props.liveBillboardPrices} />;
+  return <ContractPDFDialogContent key={printChoice} {...props} printOptions={!isOffer && !isSnapshot ? printOptions : undefined} printChoice={printChoice} onChoosePrint={choosePrint} loadingBundle={loadingBundle} contract={document} liveBillboardPrices={document?._document_snapshot ? undefined : props.liveBillboardPrices} />;
 }
 
-function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardPrices, onPrepareBundle, loadingBundle, onExitBundle }: ContractPDFDialogProps & { onPrepareBundle?: () => void; loadingBundle?: boolean; onExitBundle?: () => void }) {
+function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardPrices, printOptions, printChoice, onChoosePrint, loadingBundle }: ContractPDFDialogProps & { printOptions?: { value: string; label: string }[]; printChoice?: string; onChoosePrint?: (value: string) => void; loadingBundle?: boolean }) {
   const [isGenerating, setIsGenerating] = useState(false);
   const [printMode, setPrintMode] = useState<'auto' | 'manual'>('auto');
   const [useInstallationImages, setUseInstallationImages] = useState(false);
@@ -941,14 +956,8 @@ function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardP
       hasDiscount = true;
     }
 
-    // Paused billboards: also show net (after-discount, pre-pause) as middle strikethrough
-    let prePausePrice = '';
-    if ((b as any)._paused) {
-      const np = Number((b as any)._paused_net_price);
-      if (Number.isFinite(np) && np > 0 && np !== priceNum && np !== origPriceNumResolved) {
-        prePausePrice = `${formatArabicNumber(np)} ${currencyInfo.symbol}`;
-      }
-    }
+    // الموقوفة: سعر واحد واضح فقط (بدون خط وسطي ثانٍ يربك القارئ)
+    const prePausePrice = '';
 
     let coords = String(b.GPS_Coordinates ?? b.coords ?? '');
     const gpsLink = coords ? `https://www.google.com/maps?q=${encodeURIComponent(coords)}` : (b.GPS_Link || '');
@@ -971,10 +980,19 @@ function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardP
       }
     }
 
-    // Replacement row: override price with allocated amount and end date
+    // Replacement row: the saved contract price (billboard_prices) is the agreed closed value;
+    // the allocation is used only when the contract has no saved price for this board.
     if ((b as any)._replacement) {
       const _alloc = Number((b as any)._replacement_allocated) || 0;
-      if (_alloc > 0) { price = `${formatArabicNumber(_alloc)} ${currencyInfo.symbol}`; }
+      if (_alloc > 0 && !(historicalPrice !== undefined && historicalPrice !== null && Number(historicalPrice) > 0)) {
+        price = `${formatArabicNumber(Math.round(_alloc))} ${currencyInfo.symbol}`;
+      }
+    }
+    // الموقوفة التي استُبدلت لوحتها: قيمتها ضمن البديلة، فلا نكرر رقماً
+    if ((b as any)._paused_replaced) {
+      price = 'مشمول بالبديلة';
+      originalPrice = '';
+      hasDiscount = false;
     }
 
     return {
@@ -1323,6 +1341,7 @@ function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardP
             }
             const pausedRowProps: any = {
               _paused: true,
+              _paused_replaced: !!repl,
               _pause_date: p.pause_date,
               _paused_price: pausedPrice,
               _paused_original_price: originalBeforeDiscount > 0 ? originalBeforeDiscount : undefined,
@@ -3823,11 +3842,13 @@ function ContractPDFDialogContent({ open, onOpenChange, contract, liveBillboardP
           </div>
 
           {/* Footer Actions */}
-          {onPrepareBundle && <div className="px-3 py-2 border-t border-primary/20 bg-primary/5" dir="rtl">
-            <Button variant="outline" disabled={isGenerating || loadingBundle || sendingWhatsApp} onClick={onExitBundle || onPrepareBundle} className="min-h-10 cursor-pointer transition-all duration-200 hover:bg-primary/10">
-              {loadingBundle ? 'جارٍ تجهيز الملاحق…' : onExitBundle ? 'العودة لطباعة النسخة منفردة' : 'تجهيز طباعة العقد مع جميع ملاحقه'}
-            </Button>
-            {onExitBundle && <p className="text-sm mt-2 text-primary">الطباعة والمعاينة وPDF تشمل العقد الأصلي ثم جميع الملاحق وقيمها وتغييراتها بالترتيب.</p>}
+          {printOptions && onChoosePrint && <div className="px-3 py-2 border-t border-primary/20 bg-primary/5 space-y-2" dir="rtl">
+            <label htmlFor="contract-print-choice" className="text-sm font-bold text-primary">اختر النسخة للطباعة</label>
+            <select id="contract-print-choice" value={printChoice} disabled={isGenerating || loadingBundle || sendingWhatsApp} onChange={e => onChoosePrint(e.target.value)} className="w-full min-h-10 rounded-md border border-input bg-background px-3 text-sm cursor-pointer">
+              {printOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            {loadingBundle && <p className="text-sm text-primary">جارٍ تجهيز النسخة المختارة…</p>}
+            {printChoice === 'all' && <p className="text-sm text-primary">الطباعة والمعاينة وPDF تشمل العقد الأصلي ثم جميع الملاحق وقيمها وتغييراتها بالترتيب.</p>}
           </div>}
           <ContractPDFActions
             isGenerating={isGenerating}

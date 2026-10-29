@@ -65,6 +65,23 @@ function PausedBillboardCardImpl({
   const { confirm } = useSystemDialog();
   const raw = item.raw;
   const [resumeOpen, setResumeOpen] = useState(false);
+  const [removalState, setRemovalState] = useState('جارٍ التحقق من الإزالة');
+  useEffect(() => {
+    if (raw.notes?.startsWith('[PHYSICAL_REMOVAL]')) { setRemovalState('تمت إزالة اللوحة من الموقع · ظروف قاهرة'); return; }
+    let active = true;
+    (async () => {
+      const { supabase } = await import('@/integrations/supabase/client');
+      const tasks = await supabase.from('removal_tasks').select('id,status').eq('contract_id', raw.contract_number).neq('status','cancelled');
+      if (tasks.error) { if (active) setRemovalState('تعذر التحقق من الإزالة'); return; }
+      if (!tasks.data?.length) { if (active) setRemovalState('مستبعدة من العقد'); return; }
+      const items = await supabase.from('removal_task_items').select('status,removal_date,completed_at').in('task_id',tasks.data.map(t=>t.id)).eq('billboard_id',raw.billboard_id).order('created_at',{ascending:false});
+      if (!active) return;
+      if (items.error) { setRemovalState('تعذر التحقق من الإزالة'); return; }
+      const latest = items.data?.[0];
+      setRemovalState(latest?.status === 'completed' ? `تمت الإزالة${latest.removal_date ? ` · ${latest.removal_date}` : ''}` : latest ? 'بانتظار تنفيذ الإزالة' : 'مستبعدة من العقد');
+    })();
+    return () => { active = false; };
+  }, [raw.id, raw.contract_number, raw.billboard_id, raw.notes]);
   const bb = item.billboard || {};
   const billboardId = String(raw.billboard_id);
 
@@ -258,6 +275,11 @@ function PausedBillboardCardImpl({
       }`}
     >
       {resumeOpen && <ResumePausedBillboardDialog row={raw} currency={currencySymbol} onClose={() => setResumeOpen(false)} onChanged={() => onChanged?.()} />}
+      <div className="px-4 py-2 flex flex-wrap gap-2 border-b border-border text-xs">
+        <Badge variant="outline">{removalState}</Badge>
+        <Badge className="bg-primary/10 text-primary">{replacement ? 'مع لوحة بديلة' : 'دون بديل · خصم الإيجار المتبقي'}</Badge>
+      </div>
+      {raw.notes?.startsWith('[PHYSICAL_REMOVAL]') && <p className="px-4 py-3 text-sm border-b border-border bg-primary/5">{raw.notes.replace('[PHYSICAL_REMOVAL] ', '')}</p>}
       {/* Header: Billboard Name, ID & Action Buttons */}
       <div className="px-4 py-3 flex items-center justify-between border-b border-border bg-muted/20 shrink-0">
         <div className="flex items-center gap-1.5 overflow-hidden">
@@ -690,6 +712,17 @@ function PausedBillboardCardImpl({
 
           {/* Added to contract — full width readout */}
           <div className="space-y-1 min-w-0">
+            {(replacement || item.hasReplacement) ? (
+              <>
+                <Label className="text-[11px] text-primary font-semibold">
+                  <span>قيمة اللوحة</span>
+                </Label>
+                <div className="h-10 px-3 rounded-md border border-primary/40 bg-primary/10 flex items-center justify-center font-bold text-primary text-sm w-full min-w-0 overflow-hidden">
+                  <span className="truncate">مشمول بالبديلة</span>
+                </div>
+              </>
+            ) : (
+              <>
             <Label className="text-[11px] text-primary font-semibold flex items-center justify-between gap-1">
               <span>المضاف للعقد</span>
               {nonRefundable > 0 && (
@@ -734,6 +767,8 @@ function PausedBillboardCardImpl({
             <div className="text-[10px] text-muted-foreground text-center" dir="ltr">
               إيجار: {formatAmount(Math.round(rentalBase / Math.max(1, item.totalDays)))} {currencySymbol} / يوم
             </div>
+              </>
+            )}
           </div>
 
         </div>

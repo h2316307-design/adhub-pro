@@ -84,6 +84,15 @@ export function isDimensionTextSimilar(
   return !!sOrig && sOrig === sCand;
 }
 
+/** أسباب جاهزة للتبديل، و"other" يفتح حقلاً لكتابة سبب مخصص */
+const SWAP_REASON_OPTIONS: { key: string; label: string }[] = [
+  { key: 'removed', label: 'تمت إزالة اللوحة' },
+  { key: 'customer_request', label: 'بناءً على رغبة الزبون' },
+  { key: 'damaged', label: 'لوحة متضررة / صيانة' },
+  { key: 'better_location', label: 'موقع أفضل' },
+  { key: 'other', label: 'سبب آخر' },
+];
+
 export function InstantBillboardSwapDialog({
   open,
   onOpenChange,
@@ -109,6 +118,11 @@ export function InstantBillboardSwapDialog({
   const [selectedCandidate, setSelectedCandidate] = useState<any | null>(null);
   const [isConfirmStep, setIsConfirmStep] = useState(false);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [swapReasonKey, setSwapReasonKey] = useState('');
+  const [customSwapReason, setCustomSwapReason] = useState('');
+  const swapReason = swapReasonKey === 'other'
+    ? customSwapReason.trim()
+    : SWAP_REASON_OPTIONS.find((o) => o.key === swapReasonKey)?.label ?? '';
   const swapRequestIdRef = useRef<string | null>(null);
 
   // Image Preview Modal State
@@ -292,6 +306,7 @@ export function InstantBillboardSwapDialog({
         originalBillboardId: Number(originalBillboard.ID),
         replacementBillboardId: Number(selectedCandidate.ID),
         swapRequestId: swapRequestIdRef.current || undefined,
+        reason: swapReason,
       });
 
       if (result.success) {
@@ -668,6 +683,37 @@ export function InstantBillboardSwapDialog({
                   </div>
                 </div>
 
+                {/* Swap reason (required) */}
+                <div className="p-3.5 rounded-xl bg-card border border-border space-y-2">
+                  <Label className="text-xs font-semibold text-foreground">سبب التبديل <span className="text-destructive">*</span></Label>
+                  <div className="flex flex-wrap gap-2">
+                    {SWAP_REASON_OPTIONS.map((o) => (
+                      <button
+                        key={o.key}
+                        type="button"
+                        onClick={() => setSwapReasonKey(o.key)}
+                        className={cn(
+                          'px-3 py-1.5 rounded-lg border text-xs transition-colors cursor-pointer',
+                          swapReasonKey === o.key
+                            ? 'border-primary bg-primary/10 text-primary font-semibold'
+                            : 'border-border text-muted-foreground hover:bg-muted/60'
+                        )}
+                      >
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                  {swapReasonKey === 'other' && (
+                    <Input
+                      value={customSwapReason}
+                      onChange={(e) => setCustomSwapReason(e.target.value)}
+                      placeholder="اكتب السبب"
+                      className="text-xs h-8"
+                      maxLength={200}
+                    />
+                  )}
+                </div>
+
                 {/* Clear Financial Invariant Confirmation */}
                 <div className="p-3.5 rounded-xl bg-primary/10 border border-primary/25 space-y-1.5 text-xs">
                   <div className="font-bold text-primary flex items-center gap-2">
@@ -720,7 +766,7 @@ export function InstantBillboardSwapDialog({
                 </Button>
                 <Button
                   size="sm"
-                  disabled={isExecuting}
+                  disabled={isExecuting || !swapReason}
                   onClick={handleExecuteSwap}
                   className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-bold shadow-md cursor-pointer"
                 >

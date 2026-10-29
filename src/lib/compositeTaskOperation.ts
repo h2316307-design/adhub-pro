@@ -11,6 +11,18 @@ export type OperationTaskLike = {
   _reinstallationNumber?: number | null;
   created_at?: string | null;
   operation_id?: string | null;
+  task_name?: string | null;
+};
+
+/** مهمة البديل الناتجة عن تبديل لوحة مركبة: اسمها يبدأ بـ«ملحق عقد» ويحمل سبب التبديل */
+const SWAP_ADDENDUM_PREFIX = 'ملحق عقد';
+const SWAP_REASON_SEPARATOR = ' — تبديل لوحة: ';
+
+export const getSwapAddendumReason = (task: OperationTaskLike): string | null => {
+  const name = task.task_name || '';
+  if (!name.startsWith(SWAP_ADDENDUM_PREFIX)) return null;
+  const idx = name.indexOf(SWAP_REASON_SEPARATOR);
+  return idx === -1 ? null : name.slice(idx + SWAP_REASON_SEPARATOR.length).trim() || null;
 };
 
 export type InstallationCostItemLike = {
@@ -132,7 +144,17 @@ export const getCompositeTaskOperationKey = (task: OperationTaskLike): string =>
   return `${contractKey}:reinstallation:task:${stableTaskId}`;
 };
 
+/** عنوان بطاقة الملحق إن كانت المهمة مهمة بديل، وإلا null */
+export const getAddendumOperationLabel = (taskName?: string | null): string | null => {
+  if (!taskName?.startsWith(SWAP_ADDENDUM_PREFIX)) return null;
+  const idx = taskName.indexOf(SWAP_REASON_SEPARATOR);
+  const reason = idx === -1 ? '' : taskName.slice(idx + SWAP_REASON_SEPARATOR.length).trim();
+  return reason ? `ملحق العقد · تركيب أول — ${reason}` : 'ملحق العقد · تركيب أول';
+};
+
 export const getOperationLabel = (task: OperationTaskLike): string => {
+  const addendumLabel = getAddendumOperationLabel(task.task_name);
+  if (addendumLabel) return addendumLabel;
   const isMulti = isMultiContractOperation(task);
   if (!isReinstallationOperation(task)) {
     return isMulti ? 'أمر تركيب مجمّع لعدة عقود' : 'التركيب الأول';

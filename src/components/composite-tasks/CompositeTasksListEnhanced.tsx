@@ -37,6 +37,7 @@ import {
   getOperationLabel,
   getTaskContractGroupKey,
   summarizeInstallationOperation,
+  getAddendumOperationLabel,
   isReinstallationOperation,
   normalizeCompositeTaskType,
   sortTasksNewestFirst,
@@ -1396,9 +1397,11 @@ export const CompositeTasksListEnhanced: React.FC<CompositeTasksListEnhancedProp
           };
         }
         reinstallCounter++;
+        // مهمة البديل تُعرض بعنوان الملحق وسبب التبديل بدل الترقيم
+        const addendumLabel = getAddendumOperationLabel(op.tasks?.[0]?.task_name);
         return {
           ...op,
-          label: isMultiContract ? `إعادة تركيب مجمعة (${reinstallCounter})` : `إعادة تركيب ${reinstallCounter}`,
+          label: addendumLabel ?? (isMultiContract ? `إعادة تركيب مجمعة (${reinstallCounter})` : `إعادة تركيب ${reinstallCounter}`),
         };
       });
 

@@ -82,5 +82,13 @@ try {
   await db.exec(`UPDATE "Contract" SET billboard_ids='' WHERE "Contract_Number"=2;`);
   const reused=(await removals()).filter(i=>Number(i.billboard_id)===4);
   assert.equal(reused.length,1); assert.equal(reused[0].amendment_number,1); assert.equal(reused[0].notes,'keep evidence');
-  console.log('Amendment removal integration checks passed');
+  await db.exec(fs.readFileSync('supabase/migrations/20261027010000_contract_physical_removal_record.sql','utf8'));
+  await db.exec(`INSERT INTO billboards("ID","Size","Faces_Count") VALUES(10,'3x4',2);
+    INSERT INTO "Contract"("Contract_Number","Contract Date","End Date",billboard_ids,billboard_prices,"Total") VALUES(3,'2026-10-01','2026-10-30','10','[{"billboardId":"10","finalPrice":1000,"startDate":"2026-10-01","endDate":"2026-10-30"}]',1000);
+    UPDATE billboards SET "Contract_Number"=3 WHERE "ID"=10; UPDATE installation_task_items SET status='completed' WHERE billboard_id=10;`);
+  await db.exec(`SELECT pause_contract_billboard_atomic(3,10,'2026-10-20','[PHYSICAL_REMOVAL] removed by authority',NULL,NULL);`);
+  const physical=(await removals()).find(i=>Number(i.billboard_id)===10);
+  assert.equal(physical.status,'completed');
+  assert.match(physical.notes,/PHYSICAL_REMOVAL/);
+  console.log('Amendment removal and physical removal integration checks passed');
 } finally { await db.close(); }

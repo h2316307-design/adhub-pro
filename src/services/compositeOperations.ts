@@ -109,6 +109,8 @@ export async function loadOperations(): Promise<OperationRow[]> {
       teamName: it?.installation_teams?.team_name || 'بدون فرقة',
       installationStatus: it?.status || null,
       installationTaskName: it?.task_name || null,
+      // اسم المهمة يحمل عنوان الملحق وسبب التبديل لعرضه في عنوان البطاقة
+      task_name: it?.task_name ?? t.task_name ?? null,
     };
   });
 
