@@ -192,6 +192,9 @@ export function useMapNavigation(): UseMapNavigationReturn {
     
     watchIdRef.current = navigator.geolocation.watchPosition(
       (position) => {
+        // Drop poor GPS fixes (they cause the marker to jump); keep the first fix so the marker still appears
+        if (prevLocationRef.current && position.coords.accuracy > 50) return
+
         const newLocation: LiveTrackingLocation = {
           lat: position.coords.latitude,
           lng: position.coords.longitude,

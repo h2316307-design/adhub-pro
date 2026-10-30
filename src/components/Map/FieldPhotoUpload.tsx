@@ -7,6 +7,7 @@ import { uploadWithAutoFallback } from '@/services/imageUploadService';
 import { supabase } from '@/integrations/supabase/client';
 import { Progress } from '@/components/ui/progress';
 import { compressImage } from '@/utils/imageCompressor';
+import LiveCameraCapture, { type LiveCaptureMeta } from './LiveCameraCapture';
 
 const DELAY_BETWEEN_UPLOADS = 2000;
 const RETRY_MAX = 3;
@@ -68,6 +69,7 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
   const [isPaused, setIsPaused] = useState(false);
   const [duplicateMode, setDuplicateMode] = useState<DuplicateMode>('skip');
   const [uploadProgress, setUploadProgress] = useState({ done: 0, total: 0 });
+  const [showLiveCamera, setShowLiveCamera] = useState(false);
 
   // Scanning state
   const [isScanning, setIsScanning] = useState(false);
@@ -156,6 +158,21 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
     setFiles(prev => [...prev, ...newFiles]);
   };
 
+  // Photo taken with the live camera: GPS and compass come from the capture itself
+  const handleLiveCapture = useCallback((file: File, meta: LiveCaptureMeta) => {
+    const entry: UploadingFile = {
+      file,
+      preview: URL.createObjectURL(file),
+      status: 'pending',
+      lat: meta.lat,
+      lng: meta.lng,
+      capturedAt: meta.capturedAt,
+      deviceModel: null,
+      direction: meta.direction,
+    };
+    setFiles(prev => [...prev, entry]);
+  }, []);
+
   const removeFile = (index: number) => {
     setFiles(prev => {
       if (prev[index].preview) URL.revokeObjectURL(prev[index].preview);
@@ -206,16 +223,17 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
       }
     }
 
+    // Live-camera photos have no EXIF, so their GPS/compass values come from the capture
     await insertPhoto.mutateAsync({
       file_name: f.file.name,
       file_path: publicUrl,
       bucket_url: publicUrl,
-      lat: exif.lat,
-      lng: exif.lng,
-      captured_at: exif.capturedAt,
+      lat: f.lat ?? exif.lat,
+      lng: f.lng ?? exif.lng,
+      captured_at: f.capturedAt ?? exif.capturedAt,
       device_make: exif.deviceMake,
       device_model: exif.deviceModel,
-      direction_degrees: exif.directionDegrees,
+      direction_degrees: f.direction ?? exif.directionDegrees,
       focal_length: exif.focalLength,
       zoom_ratio: exif.zoomRatio,
       orbit_radius_meters: exif.orbitRadiusMeters,
@@ -323,6 +341,9 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      {showLiveCamera && (
+        <LiveCameraCapture onCapture={handleLiveCapture} onClose={() => setShowLiveCamera(false)} />
+      )}
       <div className="bg-card border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-border bg-gradient-to-l from-amber-500/10 to-transparent">
@@ -344,6 +365,14 @@ export default function FieldPhotoUpload({ onClose, onUploadComplete }: FieldPho
         <div className="p-5 flex-1 overflow-y-auto">
           {/* Drop zone */}
           <div className="flex gap-3">
+            <div
+              onClick={() => !isScanning && !isUploading && setShowLiveCamera(true)}
+              className={`flex-1 border-2 border-dashed border-green-500/30 rounded-xl p-6 text-center cursor-pointer hover:border-green-500/60 hover:bg-green-500/5 transition-all ${isScanning || isUploading ? 'opacity-50 pointer-events-none' : ''}`}
+            >
+              <Camera className="w-8 h-8 mx-auto text-green-500/60 mb-2" />
+              <p className="text-foreground font-medium text-sm">التقاط مباشر</p>
+              <p className="text-[10px] text-muted-foreground mt-1">بالكاميرا مع GPS والبوصلة</p>
+            </div>
             <div
               onClick={() => !isScanning && !isUploading && fileInputRef.current?.click()}
               className={`flex-1 border-2 border-dashed border-amber-500/30 rounded-xl p-6 text-center cursor-pointer hover:border-amber-500/60 hover:bg-amber-500/5 transition-all ${isScanning || isUploading ? 'opacity-50 pointer-events-none' : ''}`}

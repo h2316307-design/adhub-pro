@@ -72,6 +72,27 @@ import * as XLSX from 'xlsx';
 
 const LIBYA_CENTER = { lat: 32.8872, lng: 13.1913 };
 
+// Glides a marker from its current position to the target; cancels any glide already running on it
+const glideFrames = new WeakMap<object, number>();
+function glideTo(
+  owner: object,
+  from: { lat: number; lng: number },
+  to: { lat: number; lng: number },
+  duration: number,
+  apply: (lat: number, lng: number) => void,
+) {
+  const previous = glideFrames.get(owner);
+  if (previous) cancelAnimationFrame(previous);
+  const start = performance.now();
+  const step = (now: number) => {
+    const t = Math.min((now - start) / duration, 1);
+    apply(from.lat + (to.lat - from.lat) * t, from.lng + (to.lng - from.lng) * t);
+    if (t < 1) glideFrames.set(owner, requestAnimationFrame(step));
+    else glideFrames.delete(owner);
+  };
+  glideFrames.set(owner, requestAnimationFrame(step));
+}
+
 export default function GoogleHomeMap({ 
   billboards, 
   onBillboardClick, 
@@ -435,20 +456,8 @@ export default function GoogleHomeMap({
   const smoothMoveGoogleMarker = useCallback((marker: google.maps.Marker, newPos: { lat: number; lng: number }) => {
     const oldPos = marker.getPosition();
     if (!oldPos) { marker.setPosition(newPos); return; }
-    const startLat = oldPos.lat(), startLng = oldPos.lng();
-    const deltaLat = newPos.lat - startLat, deltaLng = newPos.lng - startLng;
-    if (Math.abs(deltaLat) < 0.0000001 && Math.abs(deltaLng) < 0.0000001) return;
-    const duration = 300; // ms
-    const start = performance.now();
-    const animate = (now: number) => {
-      const elapsed = now - start;
-      const t = Math.min(elapsed / duration, 1);
-      // Ease-out cubic
-      const ease = 1 - Math.pow(1 - t, 3);
-      marker.setPosition({ lat: startLat + deltaLat * ease, lng: startLng + deltaLng * ease });
-      if (t < 1) requestAnimationFrame(animate);
-    };
-    requestAnimationFrame(animate);
+    // Duration matches the typical GPS fix interval so the marker moves continuously
+    glideTo(marker, { lat: oldPos.lat(), lng: oldPos.lng() }, newPos, 1000, (lat, lng) => marker.setPosition({ lat, lng }));
   }, []);
 
   // Premium tracking marker SVG — glass-morphic beacon with directional arrow
@@ -755,11 +764,12 @@ export default function GoogleHomeMap({
             if (trackingPointsRef.current.length <= 1) {
               leafMap.setView([loc.lat, loc.lng], 17, { animate: true, duration: 0.8 });
             } else {
-              leafMap.panTo([loc.lat, loc.lng], { animate: true, duration: 0.5 });
+              leafMap.panTo([loc.lat, loc.lng], { animate: true, duration: 1 });
             }
-            // Add/update Leaflet user marker
+            // Add/update Leaflet user marker (glides between fixes instead of jumping)
             if (leafletUserMarkerRef.current) {
-              leafletUserMarkerRef.current.setLatLng([loc.lat, loc.lng]);
+              const userMarker = leafletUserMarkerRef.current;
+              glideTo(userMarker, userMarker.getLatLng(), loc, 1000, (lat, lng) => userMarker.setLatLng([lat, lng]));
             } else {
               const icon = L.divIcon({
                 className: '',
@@ -1696,12 +1706,23 @@ export default function GoogleHomeMap({
       leafletMapInstanceRef.current.removeLayer(leafletUserMarkerRef.current);
       leafletUserMarkerRef.current = null;
     }
-    if (leafletLiveMarkerRef.current) {
-      leafletMapInstanceRef.current.removeLayer(leafletLiveMarkerRef.current);
+    const location = liveLocation || userLocation;
+    const liveMarker = leafletLiveMarkerRef.current;
+    if (liveMarker && location) {
+      // Update the existing marker and glide it, instead of recreating it on every fix
+      glideTo(liveMarker, liveMarker.getLatLng(), location, 1000, (lat, lng) => liveMarker.setLatLng([lat, lng]));
+      const arrow = liveMarker.getElement()?.querySelector('svg');
+      if (arrow) (arrow as SVGElement).style.transform = `rotate(${liveLocation?.heading || 0}deg)`;
+      if (isTracking) {
+        leafletMapInstanceRef.current.panTo([location.lat, location.lng], { animate: true, duration: 1 });
+      }
+      return;
+    }
+    if (liveMarker) {
+      leafletMapInstanceRef.current.removeLayer(liveMarker);
       leafletLiveMarkerRef.current = null;
     }
 
-    const location = liveLocation || userLocation;
     if (location) {
       const heading = liveLocation?.heading || 0;
       
@@ -1740,7 +1761,7 @@ export default function GoogleHomeMap({
       if (isTracking) {
         leafletMapInstanceRef.current.panTo([location.lat, location.lng], {
           animate: true,
-          duration: 0.3
+          duration: 1
         });
       }
     }
@@ -2605,13 +2626,14 @@ export default function GoogleHomeMap({
 
     const map = leafletMapInstanceRef.current;
 
+    // Photos sit below the billboard marker pane (600) so billboard pins stay clickable
     if (!map.getPane('field-photos-pane')) {
       const markerPane = map.createPane('field-photos-pane');
-      markerPane.style.zIndex = '680';
+      markerPane.style.zIndex = '550';
     }
     if (!map.getPane('field-photos-overlay-pane')) {
       const overlayPane = map.createPane('field-photos-overlay-pane');
-      overlayPane.style.zIndex = '670';
+      overlayPane.style.zIndex = '450';
     }
 
     const normalizedPhotos = fieldPhotos
@@ -3790,23 +3812,18 @@ export default function GoogleHomeMap({
         isActive={isTracking}
         onClose={stopTracking}
         billboards={billboards}
-        onLocationUpdate={(loc) => {
-          if (mapProvider === 'google' && googleMapInstanceRef.current && window.google?.maps) {
-            if (googleLiveMarkerRef.current) {
-              googleLiveMarkerRef.current.setPosition({ lat: loc.lat, lng: loc.lng });
-            }
-          } else if (mapProvider === 'openstreetmap' && leafletMapInstanceRef.current) {
-            if (leafletLiveMarkerRef.current) {
-              leafletLiveMarkerRef.current.setLatLng([loc.lat, loc.lng]);
-            }
-          }
-        }}
+        // The live marker moves from liveLocation (single source), so no direct position updates here
+        onLocationUpdate={() => {}}
         onZoomToLocation={(lat, lng, zoom) => {
+          // Pan smoothly on every fix; only change zoom when it actually differs
           if (mapProvider === 'google' && googleMapInstanceRef.current) {
-            googleMapInstanceRef.current.setCenter({ lat, lng });
-            googleMapInstanceRef.current.setZoom(zoom);
+            const map = googleMapInstanceRef.current;
+            if (map.getZoom() !== zoom) map.setZoom(zoom);
+            map.panTo({ lat, lng });
           } else if (mapProvider === 'openstreetmap' && leafletMapInstanceRef.current) {
-            leafletMapInstanceRef.current.setView([lat, lng], zoom);
+            const map = leafletMapInstanceRef.current;
+            if (map.getZoom() !== zoom) map.flyTo([lat, lng], zoom, { duration: 1 });
+            else map.panTo([lat, lng], { animate: true, duration: 1 });
           }
         }}
         onRequestLocation={requestUserLocation}
